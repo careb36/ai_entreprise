@@ -4,7 +4,7 @@ One code path for a Manager's ``POST /v1/specifications/{id}/approve`` and
 ``POST /v1/architectures/{id}/approve`` and for the Manager agent when the
 company's policy names ``approve_specification`` or ``approve_architecture``
 (issue #394): the deterministic check must not block, and the version it
-revises (any other approved architecture of the specification) becomes
+revises (for an architecture, every other approved version of the company's architecture) becomes
 superseded. The ids superseded are returned, so the agent's override can put
 them back. The caller commits.
 
@@ -24,7 +24,7 @@ from models import Architecture, DocumentationPack, Specification, Sprint
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from services.planning import arch_author, arch_check, spec_check, spec_planning
+from services.planning import arch_versions, spec_check, spec_planning
 
 
 class ApprovalRefused(Exception):
@@ -87,17 +87,18 @@ def approve_specification(
 def approve_architecture(
     session: Session, arch: Architecture, spec: Specification, actor: str
 ) -> list[int]:
-    """Approve the draft *arch*; the ids it superseded."""
-    _blocked(
-        arch_check.check(
-            arch_author.content_of(arch), arch_author.requirement_ids(spec)
-        )
-    )
+    """Approve the draft version *arch* of the company's architecture; the ids
+    it superseded. The check reads every specification the version covers;
+    every other approved version of the company is superseded, so the company
+    has one current architecture, and *spec* names the version it is planned
+    against."""
+    _blocked(arch_versions.check(session, arch, spec))
     superseded = []
     for previous in session.exec(
         select(Architecture).where(
-            Architecture.specification_id == spec.id,
+            Architecture.company_id == arch.company_id,
             Architecture.status == "approved",
+            Architecture.id != arch.id,
         )
     ).all():
         previous.status = "superseded"
@@ -109,6 +110,9 @@ def approve_architecture(
     arch.approved_at = _now()
     arch.updated_at = arch.approved_at
     session.add(arch)
+    spec.architecture_id = arch.id
+    spec.updated_at = arch.approved_at
+    session.add(spec)
     return superseded
 
 
@@ -195,3 +199,10 @@ def unapprove(
     doc.updated_at = _now()
     session.add(doc)
     _restore(session, type(doc), superseded)
+    if isinstance(doc, Architecture):
+        session.flush()
+        spec = session.get(Specification, doc.specification_id)
+        if spec is not None and spec.architecture_id == doc.id:
+            holds = arch_versions.for_specification(session, spec)
+            spec.architecture_id = holds.id if holds is not None else None
+            session.add(spec)

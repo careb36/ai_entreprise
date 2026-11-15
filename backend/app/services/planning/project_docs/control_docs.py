@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import texts
+from services.planning.project_docs import specs, texts
 from services.planning.project_docs.layout import (
     PMBOK,
     build,
@@ -95,10 +95,12 @@ def schedule(snapshot: dict[str, Any]) -> dict[str, Any]:
     src, missing = Sources(lang), []
     rows: list[str] = []
     spec, arch = snapshot.get("specification"), snapshot.get("architecture")
-    for name, record, mark in (
-        ("schedule.spec", spec, (lambda r: src.cite(spec_ref(r, lang)))),
-        ("schedule.arch", arch, (lambda r: src.cite(arch_ref(r, lang)))),
-    ):
+    milestones = [
+        ("schedule.spec", s, (lambda r: src.cite(spec_ref(r, lang))))
+        for s in (specs.approved(snapshot) if specs.several(snapshot) else [spec])
+    ]
+    milestones.append(("schedule.arch", arch, (lambda r: src.cite(arch_ref(r, lang)))))
+    for name, record, mark in milestones:
         if not record:
             continue
         state = (
@@ -106,8 +108,11 @@ def schedule(snapshot: dict[str, Any]) -> dict[str, Any]:
             if record.get("approved_at")
             else tr("schedule.pending", status=texts.status(lang, record.get("status")))
         )
+        label = tr(name)
+        if name == "schedule.spec" and specs.several(snapshot):
+            label = tr("schedule.spec_named", id=md_id(record.get("id")))
         rows.append(
-            f"| {tr(name)} | {date(record.get('approved_at'))} | {cell(state)} | {mark(record)} |"
+            f"| {label} | {date(record.get('approved_at'))} | {cell(state)} | {mark(record)} |"
         )
     for item in snapshot.get("integrations") or []:
         commit = item.get("tested_commit") or item.get("commit")
@@ -157,7 +162,8 @@ def schedule(snapshot: dict[str, Any]) -> dict[str, Any]:
     else:
         body.append(missing_line(lang, tr("schedule.no_sprints")))
         missing.append(tr("section.sprints"))
-    return build("schedule", PMBOK, body, src, snapshot, SCHEDULE_INPUTS, missing)
+    inputs = specs.inputs(snapshot, SCHEDULE_INPUTS)
+    return build("schedule", PMBOK, body, src, snapshot, inputs, missing)
 
 
 RACI_INPUTS = ("specification", "architecture", "sprints", "roles", "members")

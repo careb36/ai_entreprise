@@ -1714,7 +1714,8 @@
       "title": "Modules",
       "none": "No modules.",
       "dependsOn": "Depends on",
-      "covers": "Covers"
+      "covers": "Covers",
+      "coversIn": "Covers in {{title}}"
     },
     "interfaces": {
       "title": "Interfaces",
@@ -1791,6 +1792,20 @@
       "addConvention": "Add a convention",
       "removeConvention": "Remove convention {{n}}",
       "incomplete": "Every module needs a name and a path, every interface a name and its module, every decision a title."
+    },
+    "history": {
+      "title": "Versions of the company's architecture",
+      "loading": "Loading the versions…",
+      "loadError": "Could not load the versions: {{message}}",
+      "empty": "No version yet.",
+      "version": "v{{version}}",
+      "current": "Current",
+      "companyVersion": "Version {{version}} of the company's architecture",
+      "alsoCovers": "Also covers: {{titles}}",
+      "forSpecification": "drafted for {{title}}",
+      "covers_one": "covers {{count}} specification",
+      "covers_other": "covers {{count}} specifications",
+      "approvedOn": "approved on {{date}}"
     }
   },
   "procedures": {

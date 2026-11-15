@@ -6,13 +6,16 @@
  * asks the Architect to revise it or approves it; an approved one gets a new
  * draft version with Revise, and is written to the repository as
  * `docs/ARCHITECTURE.md` through the workspace daemon. The `new` route
- * renders the editor for an architecture a person writes.
+ * renders the editor for an architecture a person writes. The architecture
+ * is the company's: the page names the version, whether it is the current
+ * one, and lists every version of it (`ArchitectureHistory`).
  */
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, Loader2, Pencil, Send, Sparkles } from 'lucide-react'
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
+import { ArchitectureHistory, ArchitectureVersionLine } from '../components/ArchitectureHistory'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
 import { SourcesConsulted } from '../components/SourcesConsulted'
@@ -119,6 +122,11 @@ function QuestionRow({ architecture, index, canAnswer }: { architecture: Archite
   )
 }
 
+/** The title of an earlier specification the version covers, else its number. */
+function earlierTitle(architecture: Architecture, specId: string): string {
+  return architecture.earlier_specifications?.find(s => String(s.id) === specId)?.title ?? `#${specId}`
+}
+
 function Modules({ architecture }: { architecture: Architecture }) {
   const { t } = useTranslation()
   return (
@@ -148,6 +156,14 @@ function Modules({ architecture }: { architecture: Architecture }) {
                 ))}
               </p>
             )}
+            {Object.entries(module.earlier_covers ?? {}).map(([specId, ids]) => (
+              <p key={specId} className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                <span>{t('architectures.modules.coversIn', { title: earlierTitle(architecture, specId) })}</span>
+                {ids.map(id => (
+                  <Link key={id} to={specificationPath(Number(specId))} className="hover:underline"><Where where={id} /></Link>
+                ))}
+              </p>
+            ))}
           </li>
         ))}
       </ul>
@@ -411,6 +427,7 @@ export default function ArchitectureDetail() {
             <span className="text-sm text-gray-400">{t('specifications.version', { version: architecture.version })}</span>
             <StatusBadge status={architecture.status} />
           </div>
+          <ArchitectureVersionLine architecture={architecture} />
           <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
             {architecture.drafted_by && <span>{t('specifications.draftedBy', { who: architecture.drafted_by })}</span>}
             {architecture.approved_by && architecture.approved_at && (
@@ -476,6 +493,7 @@ export default function ArchitectureDetail() {
               </ul>
             )}
           </section>
+          <ArchitectureHistory architecture={architecture} />
           <MarkdownView architecture={architecture} />
         </>
       )}

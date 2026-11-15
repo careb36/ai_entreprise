@@ -121,6 +121,25 @@ company now has two diverging architectures of the same backend. The same
 assumption limits the pack: it documents the latest approved specification
 only, so La Fabrique's own #469 specification is absent from it.
 
+*Done (follow-up 3).* The architecture is now the company's, versioned
+(`services/planning/arch_versions.py`, migration `0038`): each approved
+revision is a new version numbered per company, approving one supersedes the
+company's other approved version, and the earlier versions stay readable
+(`GET /v1/companies/{id}/architecture`, `…/versions`, `…/versions/{n}`). A
+module's `covers` name the requirements of the specification the version was
+drafted for, and `earlier_covers` keep, by specification id, what it covers in
+the earlier ones; the revision for a new specification
+(`POST /v1/companies/{id}/architecture/revisions`, or a draft for a
+specification the current version does not cover) moves the own covers there,
+so no specification loses its covers. A specification names the version it
+was planned against (`architecture_id`). `arch_check` and the coverage read
+every specification a version covers, and the pack has a section per
+approved specification in its scope statement, WBS, traceability matrix,
+schedule and index. The harness's `issue` step posts the #535 revision as
+version 2 of La Fabrique's one architecture: the fixture adds #535's covers
+and no longer rewrites #469's, and the e2e step checks that both
+specifications share the record.
+
 ### F4. ADRs were not a product output
 
 The factory asked projects for ADRs but wrote decisions only inside
@@ -213,7 +232,7 @@ review before the local merge (`services/release/integration_review.py`,
    with `run_id`; the history check refuses a `verified` event without one.
    *Measure:* the pack's traceability matrix names a verification for every
    delivered task in the e2e.
-3. **A company architecture that specifications revise.**
+3. **A company architecture that specifications revise.** *Done* (see F3).
    *Problem:* F3. *Proposal:* the architecture becomes the company's, versioned;
    a specification names the version it was planned against, and the
    Architect's revision for a new specification is a new version of the

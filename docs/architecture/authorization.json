@@ -185,6 +185,15 @@
       "access": "public",
       "why": "What this deployment offers; no company data."
     },
+    "GET /v1/companies/{company_id}/architecture": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/architecture/versions": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/architecture/versions/{version}": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },
@@ -592,6 +601,9 @@
       "access": "Manager"
     },
     "POST /v1/board_notes/{note_id}/mark_wrong": {
+      "access": "Manager"
+    },
+    "POST /v1/companies/{company_id}/architecture/revisions": {
       "access": "Manager"
     },
     "POST /v1/companies/{company_id}/access-review": {

@@ -33,8 +33,7 @@ def _architecture(session: Session, row: BacklogItem) -> dict[str, Any] | None:
     sprint = session.get(Sprint, row.sprint_id)
     if sprint is None or sprint.specification_id is None:
         return None
-    arch = arch_author.approved_for(session, sprint.specification_id)
-    return arch_author.content_of(arch) if arch is not None else None
+    return arch_author.content_for(session, sprint.specification_id)
 
 
 def _deliveries(session: Session, task_id: int) -> int:
