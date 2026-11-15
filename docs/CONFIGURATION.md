@@ -425,6 +425,15 @@ Copy `.env.example` to `.env` and fill in:
   uses them (the daemon's `workspace.related`, from the repository map's
   parse cache), and the recent runs that wrote them, cut at that many
   characters; `0` leaves the section out and asks the daemon nothing.
+- `SPRINT_BOARD_MAX_CHARS` (2000) — the `## Sprint board` section of every
+  task prompt (`services/loop/worker/sprint_notes.py`, issue #439;
+  `docs/design/SPRINT_BOARD.md`): the sprint's active notes relevant to the
+  task (by the files, modules and requirements it touches), newest first,
+  each with what the Verifier's records observed about the files it names,
+  then how to write one; the whole section stays within that many
+  characters (the header and the format take about 800 and are always
+  there, the notes get the rest); `0` leaves the section out. Prompt priority 4: `PROMPT_BUDGET` cuts
+  it before the repository, the related code and the requirements.
 - `EDIT_LINT_ENABLED` (true), `EDIT_LINT_TIMEOUT_SECONDS` (60) — after a
   `workspace__edit`, the stack profile's lint command on that file
   (`services/tools/edit_lint.py`), its errors in the same turn as the edit's result.

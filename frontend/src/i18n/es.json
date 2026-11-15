@@ -1233,7 +1233,8 @@
       "board": "Tablero",
       "live": "En vivo",
       "analytics": "Analíticas",
-      "conversation": "Conversación"
+      "conversation": "Conversación",
+      "notes": "Notas del tablero"
     },
     "streamConnected": "Flujo conectado",
     "streamDisconnected": "Flujo desconectado",
@@ -2343,6 +2344,50 @@
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
       "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
+    }
+  },
+  "boardNotes": {
+    "title": "Notas del tablero",
+    "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
+    "showInactive": "Mostrar reemplazadas y marcadas como erróneas",
+    "metrics": "{{active}} activas · {{wrong}} marcadas como erróneas · retrabajo por contradecir otra tarea: {{contradictions}} de {{rework}}",
+    "loading": "Cargando las notas del tablero…",
+    "error": "No se pudieron cargar las notas del tablero.",
+    "empty": "Todavía no hay notas. Los agentes las dejan en sus entregas mientras trabajan.",
+    "listLabel": "Notas del tablero del sprint",
+    "addTitle": "Agregar una nota",
+    "kindLabel": "Tipo",
+    "filesLabel": "Archivos",
+    "filesPlaceholder": "src/store.py, src/api.py",
+    "requirementsLabel": "Requisitos",
+    "requirementsPlaceholder": "REQ-1.2",
+    "textLabel": "Nota",
+    "add": "Agregar nota",
+    "aPerson": "Una persona",
+    "task": "tarea #{{id}}",
+    "observed": "observado: modificado por la corrida verificada #{{run}}",
+    "notObserved": "no observado",
+    "supersedes": "Reemplaza la nota #{{id}}",
+    "markedWrongBy": "Marcada como errónea por {{by}}",
+    "markWrong": "Marcar como errónea",
+    "reasonLabel": "Por qué es errónea (opcional)",
+    "confirmWrong": "Confirmar que es errónea",
+    "kinds": {
+      "decision": "Decisión",
+      "interface_change": "Cambio de interfaz",
+      "schema_change": "Cambio de esquema",
+      "gotcha": "Trampa",
+      "question": "Pregunta"
+    },
+    "status": {
+      "active": "Activa",
+      "superseded": "Reemplazada",
+      "marked_wrong": "Marcada como errónea"
+    },
+    "links": {
+      "symbols": "Símbolos",
+      "requirements": "Requisitos",
+      "modules": "Módulos"
     }
   }
 }

@@ -165,6 +165,10 @@ class Settings(BaseSettings):
     # the files around the task's modules and earlier writes, from the
     # daemon's parse, and the recent runs that wrote them; 0 leaves it out.
     CODE_GRAPH_MAX_CHARS: int = 2500
+    # The sprint board in every task prompt (``services/loop/worker/sprint_notes.py``,
+    # issue #439): the notes of the sprint relevant to the task, newest first,
+    # within this many characters; 0 leaves the section out.
+    SPRINT_BOARD_MAX_CHARS: int = 2000
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True

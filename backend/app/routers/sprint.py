@@ -35,7 +35,7 @@ from services.loop import board_moves, sprint_archive
 from services.loop.carry_over import CarryOverError, carry_over
 from services.models import run_cost
 from services.planning import spec_check, spec_planning, sprint_team
-from services.tasks import dependencies, task_events
+from services.tasks import dependencies, sprint_board, task_events
 from services.tasks.board import (
     count_architect_advice,
     count_console_advice,
@@ -261,7 +261,10 @@ async def list_sprints(
     assistant advised on and those none did, with how many got done and how
     many rework requests each group drew, so whether that advice helps is a
     number too. ``architect_advice`` does the same for the Architect's
-    briefs. ``cost`` is the sprint's tokens and US cents (``run_cost``).
+    briefs. ``contradiction_rework`` counts the rework requests that say
+    they contradict another task of the same sprint
+    (``sprint_board.contradiction_rework``, issue #439). ``cost`` is the
+    sprint's tokens and US cents (``run_cost``).
     Archived sprints are left out unless ``include_archived``.
     """
     require_company_role(session, user, company_id, "Viewer")
@@ -275,6 +278,7 @@ async def list_sprints(
     attempts: dict[int, dict[str, int]] = {}
     advice: dict[int, dict[str, dict[str, int]]] = {}
     briefs: dict[int, dict[str, dict[str, int]]] = {}
+    contradictions: dict[int, int] = {}
     if sprint_ids:
         rows = session.exec(
             select(
@@ -293,11 +297,17 @@ async def list_sprints(
         # Rework requests live in the comments, so they are counted in Python;
         # together with the blocked share they are the numbers the procedures
         # are judged by, shown per sprint so a person sees the trend.
-        for sid, status, comments in session.exec(
+        tasks: dict[int, list[tuple]] = {}
+        for item_id, title, sid, status, comments in session.exec(
             select(
-                BacklogItem.sprint_id, BacklogItem.status, BacklogItem.comments
+                BacklogItem.id,
+                BacklogItem.title,
+                BacklogItem.sprint_id,
+                BacklogItem.status,
+                BacklogItem.comments,
             ).where(BacklogItem.sprint_id.in_(sprint_ids))
         ).all():
+            tasks.setdefault(sid, []).append((item_id, title, comments))
             rework[sid] = rework.get(sid, 0) + rework_request_count(comments)
             count_second_attempt(
                 attempts.setdefault(sid, no_second_attempts()), status, comments
@@ -308,6 +318,11 @@ async def list_sprints(
             count_architect_advice(
                 briefs.setdefault(sid, no_architect_advice()), status, comments
             )
+        notes = sprint_board.notes_by_sprint(session, sprint_ids)
+        contradictions = {
+            sid: sprint_board.contradiction_rework(items, notes.get(sid, []))
+            for sid, items in tasks.items()
+        }
     costs = run_cost.sprint_costs(session, company_id, sprint_ids)
     return [
         {
@@ -328,6 +343,7 @@ async def list_sprints(
             "done": counts.get(s.id, (0, 0, 0))[1],
             "blocked": counts.get(s.id, (0, 0, 0))[2],
             "rework": rework.get(s.id, 0),
+            "contradiction_rework": contradictions.get(s.id, 0),
             "second_attempts": attempts.get(s.id, no_second_attempts()),
             "console_advice": advice.get(s.id, no_console_advice()),
             "architect_advice": briefs.get(s.id, no_architect_advice()),

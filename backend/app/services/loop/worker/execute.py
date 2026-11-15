@@ -28,7 +28,14 @@ from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
-from services.loop.worker import board_writes, messages, prompt, prompt_budget, related
+from services.loop.worker import (
+    board_writes,
+    messages,
+    prompt,
+    prompt_budget,
+    related,
+    sprint_notes,
+)
 from services.models import model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
@@ -159,6 +166,14 @@ def _developer_prompt(
                 5,
             )
         )
+    # The sprint's notes that concern this task (claims, #439); cut before the code.
+    sections.append(
+        Section(
+            sprint_notes.SECTION_NAME,
+            sprint_notes.board_section(item, company_id, engine=engine),
+            sprint_notes.PRIORITY,
+        )
+    )
     if external_advice:
         sections.append(
             Section(

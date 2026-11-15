@@ -1,8 +1,8 @@
 /**
- * Sprint page — one page per sprint at `/sprints/:id`, with five tabs:
+ * Sprint page — one page per sprint at `/sprints/:id`, with six tabs:
  * Overview (`/sprints/:id`), Board (`/board`), Live (`/live`), Conversation
- * (`/conversation`) and Analytics (`/analytics`). An unknown tab falls back to
- * Overview.
+ * (`/conversation`), Board notes (`/notes`, the sprint board of issue #439)
+ * and Analytics (`/analytics`). An unknown tab falls back to Overview.
  *
  * The page validates the sprint before rendering any tab, and only remembers
  * it as the active sprint when it belongs to the selected company; a sprint of
@@ -18,6 +18,7 @@ import GlassRoom from '../components/GlassRoom'
 import KanbanBoard from '../components/KanbanBoard'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 import { Conversation } from '../components/Conversation'
+import { BoardNotes } from '../components/BoardNotes'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import SprintOverview from './Dashboard'
 import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
@@ -27,7 +28,7 @@ import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { parseRouteId } from '../lib/routeId'
 
-export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'analytics'] as const
+export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'notes', 'analytics'] as const
 export type SprintTab = typeof SPRINT_TABS[number]
 
 const TAB_LABELS: Record<SprintTab, { key: string; defaultValue: string }> = {
@@ -35,6 +36,7 @@ const TAB_LABELS: Record<SprintTab, { key: string; defaultValue: string }> = {
   board: { key: 'sprint.tabs.board', defaultValue: 'Board' },
   live: { key: 'sprint.tabs.live', defaultValue: 'Live' },
   conversation: { key: 'sprint.tabs.conversation', defaultValue: 'Conversation' },
+  notes: { key: 'sprint.tabs.notes', defaultValue: 'Board notes' },
   analytics: { key: 'sprint.tabs.analytics', defaultValue: 'Analytics' },
 }
 
@@ -226,6 +228,9 @@ export const SprintWorkspace: React.FC = () => {
             <LivePanel sprintId={sprintId} />
           ) : tab === 'conversation' ? (
             <Conversation companyId={board.sprint.company_id} sprintId={sprintId} live={board.sprint.status === 'active'} />
+          ) : tab === 'notes' ? (
+            <BoardNotes sprintId={sprintId} canManage={canManage && board.sprint.company_id === companyId}
+              live={board.sprint.status === 'active'} />
           ) : tab === 'analytics' ? (
             <AnalyticsDashboard sprintId={sprintId} />
           ) : (

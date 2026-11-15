@@ -4,6 +4,11 @@
 rework and QA failures on their boards; ``summary`` writes those numbers as the
 text the ScrumMaster's retrospective message, the memory engram and the
 procedure proposals carry. Best-effort: a failure returns no metrics.
+
+The sprint board (issue #439) adds its numbers and the notes worth keeping:
+the active decisions, interface and schema changes and gotchas nobody marked
+wrong (``promotable_notes``). The summary lists them as claims, so the memory
+engram keeps them and the ScrumMaster sees them when it proposes procedures.
 """
 
 from __future__ import annotations
@@ -15,9 +20,44 @@ from typing import Any
 from models import BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services.tasks import task_projection
+from services.contracts import board_notes
+from services.tasks import sprint_board, task_projection
 
 logger = logging.getLogger("fabrique-task-worker")
+
+# The notes a retrospective offers to keep: what later sprints must not
+# contradict. Questions are left out; they are not knowledge.
+PROMOTABLE_KINDS = ("decision", "interface_change", "schema_change", "gotcha")
+MAX_PROMOTABLE = 5
+
+
+def board_summary(session: Session, sprint_id: int, items: list[Any]) -> dict[str, Any]:
+    """The sprint board's counts, the contradiction measure and the notes to
+    keep; nothing when the board cannot be read (the rest still counts)."""
+    try:
+        notes = sprint_board.notes_of(session, sprint_id)
+    except Exception as exc:  # noqa: BLE001 - The board is an addition, best-effort.
+        logger.warning("Sprint board unreadable for sprint=%s: %s", sprint_id, exc)
+        session.rollback()
+        return {}
+    promotable = [
+        {
+            "id": n.id,
+            "kind": n.kind,
+            "text": n.text,
+            "author_role": n.author_role,
+            "author_task_id": n.author_task_id,
+        }
+        for n in notes
+        if n.status == board_notes.ACTIVE and n.kind in PROMOTABLE_KINDS
+    ][:MAX_PROMOTABLE]
+    return {
+        "board_notes": sprint_board.counts(notes),
+        "contradiction_rework": sprint_board.contradiction_rework(
+            [(i.id, i.title, i.comments) for i in items], notes
+        ),
+        "promotable_notes": promotable,
+    }
 
 
 def build(engine: Any, sprint_id: int) -> dict[str, Any]:
@@ -81,6 +121,7 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
                 "rework_cycles": rework_count,
                 "qa_failures": qa_fail_count,
                 "blocked_reasons": blocked_reasons[:5],
+                **board_summary(session, sprint_id, list(items)),
             }
     except Exception as exc:  # noqa: BLE001 - Retrospective context is best-effort.
         logger.warning(
@@ -99,4 +140,22 @@ def summary(metrics: dict[str, Any]) -> str:
     ]
     for reason in metrics.get("blocked_reasons") or []:
         lines.append(f"  • {reason}")
+    notes = (metrics.get("board_notes") or {}).get("total", 0)
+    if notes:
+        lines.append(
+            f"- Board notes: {notes} ({metrics['board_notes'].get('marked_wrong', 0)} "
+            "marked wrong); rework for a contradiction with another task: "
+            f"{metrics.get('contradiction_rework', 0)}"
+        )
+    promotable = metrics.get("promotable_notes") or []
+    if promotable:
+        lines.append(
+            "- Board notes worth keeping (agents' claims, not verified; "
+            "candidates for memory or a procedure):"
+        )
+        for note in promotable:
+            lines.append(
+                f"  • #{note['id']} {note['kind']} ({note['author_role']}): "
+                f"{str(note['text'])[:200]}"
+            )
     return "\n".join(lines)
