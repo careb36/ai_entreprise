@@ -1,5 +1,5 @@
 {
-  "$comment": "Who may call each route of the backend (issue #541; WSTG-v42-ATHZ-02, ATHZ-04; WSTG-APIT-02, APIT-04 at latest@87cf4a4). Keyed 'METHOD path' as app.openapi() names it. backend/tests/test_authorization_matrix.py fails on a route missing here (deny by default), on a stale entry, and when a call disagrees: anonymous gets 401 unless public, a role below the minimum 403, a member of another company 403 or 404, the minimum role gets past the check. 'body' and 'query' fill what the request builder cannot infer from the schema; 'allowed_status' lists a 401 or 403 the allowed caller may get for a reason that is not authorization; 'why' says why a route is public, signed or open to any signed-in caller. public_routes is the list SECURITY.md §3.2 documents; a change to it is a security decision for review.",
+  "$comment": "Who may call each route of the backend (issue #541; WSTG-v42-ATHZ-02, ATHZ-04; WSTG-APIT-02, APIT-04 at latest@87cf4a4). Keyed 'METHOD path' as app.openapi() names it. backend/tests/test_authorization_matrix.py fails on a route missing here (deny by default), on a stale entry, and when a call disagrees: anonymous gets 401 unless public, a role below the minimum 403, a member of another company 403 or 404, the minimum role gets past the check. 'body' and 'query' fill what the request builder cannot infer from the schema; 'allowed_status' lists a 401 or 403 the allowed caller may get for a reason that is not authorization; 'why' says why a route is public, signed or open to any signed-in caller. public_routes is the list SECURITY.md \u00a73.2 documents; a change to it is a security decision for review.",
   "access_levels": {
     "public": "Anyone.",
     "signed": "Anyone holding a valid signature, ticket, state or code; refused without one.",
@@ -362,7 +362,7 @@
     },
     "GET /v1/workspace/browse": {
       "access": "authenticated",
-      "why": "Any signed-in person browses the daemon machine's folders (the New company picker runs before a company exists); see SECURITY.md §3.2, known gaps."
+      "why": "Any signed-in person browses the daemon machine's folders (the New company picker runs before a company exists); see SECURITY.md \u00a73.2, known gaps."
     },
     "GET /v1/workspace/inspect": {
       "access": "authenticated",
@@ -729,6 +729,24 @@
     },
     "PUT /v1/specifications/{spec_id}": {
       "access": "Manager"
+    },
+    "GET /v1/tasks/{task_id}/relations": {
+      "access": "Viewer"
+    },
+    "POST /v1/tasks/{task_id}/relations": {
+      "access": "Manager"
+    },
+    "POST /v1/task_relations/{relation_id}/confirm": {
+      "access": "Manager"
+    },
+    "POST /v1/task_relations/{relation_id}/reject": {
+      "access": "Manager"
+    },
+    "POST /v1/task_relations/{relation_id}/remove": {
+      "access": "Manager"
+    },
+    "GET /v1/sprints/{sprint_id}/relations": {
+      "access": "Viewer"
     }
   }
 }

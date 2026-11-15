@@ -30,6 +30,7 @@ from models import (
     Company,
     CompanyMember,
     Sprint,
+    TaskRelation,
     User,
 )
 from models.api_token import ApiToken
