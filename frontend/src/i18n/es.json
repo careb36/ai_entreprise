@@ -32,7 +32,8 @@
     "teams": "Equipos",
     "usage": "Uso",
     "wiki": "Wiki",
-    "documentation": "Documentación"
+    "documentation": "Documentación",
+    "auditAnchors": "Anclajes de auditoría"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2655,6 +2656,60 @@
       "symbols": "Símbolos",
       "requirements": "Requisitos",
       "modules": "Módulos"
+    }
+  },
+  "auditAnchors": {
+    "title": "Anclajes de auditoría",
+    "subtitle": "La cabeza de la cadena de auditoría registrada fuera de La Fabrique, donde no puede reescribirla.",
+    "managersOnly": "Solo los propietarios y los gestores ven los anclajes de auditoría. Tu rol aquí es {{role}}.",
+    "coverage": "Cobertura",
+    "head": "Última fila de la cadena",
+    "verifiedThrough": "Verificada hasta la fila",
+    "coveredThrough": "Cubierta hasta la fila (con las declaraciones del webhook)",
+    "uncovered": "Las filas {{from}} a {{to}} aún no están cubiertas por ningún anclaje externo.",
+    "failure": "El anclaje {{kind}} de la fila {{seq}} ya no coincide: {{reason}}",
+    "anchorNow": "Anclar ahora",
+    "queued": "{{count}} anclaje(s) en cola.",
+    "settings": "Configuración",
+    "ownerEdits": "Solo un propietario cambia esta configuración.",
+    "enabled": "Anclar la cabeza de forma periódica",
+    "cadence": "Cada cuántos minutos (de 15 a 1440)",
+    "publishWebhook": "Enviar cada cabeza al webhook de la empresa",
+    "noWebhook": "La empresa no tiene un webhook habilitado: configúralo primero.",
+    "tsaUrl": "URL de la autoridad de sellado de tiempo RFC 3161",
+    "tsaCert": "El certificado de la autoridad (PEM)",
+    "tsaCertStored": "Certificado guardado, SHA-256 {{sha256}}. Pega uno nuevo para reemplazarlo.",
+    "customerKeys": "Claves del cliente (Ed25519)",
+    "customerKeysHelp": "Tu propio proceso firma cada cabeza con la clave privada, que nunca llega a La Fabrique; aquí solo se guarda la clave pública.",
+    "addKey": "Añadir una clave pública (PEM o base64)",
+    "retire": "Retirar",
+    "retired": "retirada",
+    "save": "Guardar",
+    "saved": "Guardado.",
+    "status": {
+      "empty": "La cadena está vacía.",
+      "no_anchors": "Ningún anclaje externo cubre la cadena todavía.",
+      "uncovered_tail": "Anclada, con filas más recientes aún sin cubrir.",
+      "covered": "Todas las filas hasta la cabeza están ancladas fuera.",
+      "anchor_mismatch": "Un anclaje ya no coincide con la cadena: se reescribió la cadena o el anclaje."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "tsa": "Sello de tiempo",
+      "customer_key": "Clave del cliente"
+    },
+    "state": {
+      "verified": "verificado",
+      "claim": "declaración (la copia del destino)",
+      "pending": "pendiente",
+      "undelivered": "no entregado",
+      "mismatch": "no coincide"
+    },
+    "columns": {
+      "kind": "Tipo",
+      "seq": "Fila",
+      "state": "Estado",
+      "anchoredAt": "Anclado el"
     }
   },
   "sprintProgress": {

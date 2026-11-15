@@ -71,14 +71,21 @@ def _public_address(host: str) -> bool:
     return egress.all_public(host)
 
 
-def check_url(url: str, *, resolve: bool = True) -> str:
-    """*url* as a webhook target, or ``InvalidWebhook`` with the reason."""
+def check_url(
+    url: str, *, resolve: bool = True, schemes: tuple[str, ...] = ("https",)
+) -> str:
+    """*url* as a webhook target, or ``InvalidWebhook`` with the reason.
+
+    *schemes* widens the scheme for a target whose answer is signed by itself
+    (an RFC 3161 timestamping authority, ``anchor_settings``); the address
+    check is the same.
+    """
     url = (url or "").strip()
     if not url or len(url) > MAX_URL_CHARS or any(ch.isspace() for ch in url):
         raise InvalidWebhook("url: not a URL")
     parts = urlsplit(url)
-    if parts.scheme != "https" or not parts.hostname:
-        raise InvalidWebhook("url: must be an https URL")
+    if parts.scheme not in schemes or not parts.hostname:
+        raise InvalidWebhook(f"url: must be an {' or '.join(schemes)} URL")
     if parts.username or parts.password:
         raise InvalidWebhook("url: credentials belong in the secret, not the URL")
     if resolve and not _allow_private() and not _public_address(parts.hostname):

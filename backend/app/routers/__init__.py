@@ -10,6 +10,7 @@ from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
 from routers.architectures import router as architectures_router
+from routers.audit_anchors import router as audit_anchors_router
 from routers.auth import router as auth_router
 from routers.board_moves import router as board_moves_router
 from routers.board_notes import router as board_notes_router
@@ -53,6 +54,7 @@ __all__ = [
     "agents_router",
     "api_tokens_router",
     "architectures_router",
+    "audit_anchors_router",
     "auth_router",
     "board_moves_router",
     "board_notes_router",

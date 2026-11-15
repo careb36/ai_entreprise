@@ -134,6 +134,18 @@
     "GET /v1/architectures/{arch_id}/document": {
       "access": "Viewer"
     },
+    "GET /v1/audit/anchors": {
+      "access": "Viewer"
+    },
+    "GET /v1/audit/anchors/settings": {
+      "access": "Manager"
+    },
+    "GET /v1/audit/anchors/statement": {
+      "access": "Viewer"
+    },
+    "GET /v1/audit/anchors/{anchor_id}/export": {
+      "access": "Viewer"
+    },
     "GET /v1/audit/chain": {
       "access": "Viewer"
     },
@@ -475,6 +487,18 @@
     "POST /v1/audit": {
       "access": "Manager"
     },
+    "POST /v1/audit/anchors": {
+      "access": "Manager"
+    },
+    "POST /v1/audit/anchors/signature": {
+      "access": "Viewer",
+      "body": {
+        "seq": 1,
+        "chain_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "anchored_at": "2026-01-01T00:00:00Z",
+        "signature": "AA=="
+      }
+    },
     "POST /v1/auth/login": {
       "access": "public",
       "why": "Password sign-in; limited per address and per account.",
@@ -702,6 +726,9 @@
     },
     "PUT /v1/architectures/{arch_id}": {
       "access": "Manager"
+    },
+    "PUT /v1/audit/anchors/settings": {
+      "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/autonomy": {
       "access": "Manager"

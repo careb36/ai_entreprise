@@ -24,6 +24,7 @@ from routers import (
     agents_router,
     api_tokens_router,
     architectures_router,
+    audit_anchors_router,
     auth_router,
     board_moves_router,
     board_notes_router,
@@ -63,7 +64,7 @@ from routers import (
     workspace_router,
 )
 from security import cors_allows_credentials, get_cors_origins, setup_security
-from services.integrations import chat_approvals, webhooks
+from services.integrations import anchoring, chat_approvals, webhooks
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -72,6 +73,8 @@ settings = Settings()
 webhooks.install()
 # A risk hold posts its approval to the company's Slack or Teams (issue #512).
 chat_approvals.install()
+# A closed sprint or a release anchors the audit chain's head (issue #542).
+anchoring.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
 integration_jobs.install()
 
@@ -139,6 +142,7 @@ app.include_router(sprint_crud_router)
 app.include_router(board_moves_router)
 app.include_router(costs_router)
 app.include_router(agents_router)
+app.include_router(audit_anchors_router)
 app.include_router(agent_runs_router)
 app.include_router(api_tokens_router)
 app.include_router(support_router)

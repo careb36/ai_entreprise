@@ -34,7 +34,7 @@ from database import engine
 from logging_config import logger
 from sqlmodel import Session, text
 
-from services.integrations import chat_approvals, webhooks
+from services.integrations import anchoring, chat_approvals, webhooks
 
 
 async def process_outbox(nats_client) -> None:
@@ -102,6 +102,11 @@ async def process_outbox(nats_client) -> None:
                             )
                         elif event_type == webhooks.EVENT_TYPE:
                             await webhooks.deliver(session, payload, event_id)
+                        elif event_type in anchoring.EVENT_TYPES:
+                            # Audit anchors (issue #542): taken, posted or timestamped.
+                            await anchoring.deliver(
+                                session, event_type, payload, event_id, retries
+                            )
                         elif event_type in chat_approvals.EVENT_TYPES:
                             await chat_approvals.deliver(
                                 session, event_type, payload, event_id

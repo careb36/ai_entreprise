@@ -32,7 +32,8 @@
     "teams": "Teams",
     "usage": "Usage",
     "wiki": "Wiki",
-    "documentation": "Documentation"
+    "documentation": "Documentation",
+    "auditAnchors": "Audit anchors"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2655,6 +2656,60 @@
       "symbols": "Symbols",
       "requirements": "Requirements",
       "modules": "Modules"
+    }
+  },
+  "auditAnchors": {
+    "title": "Audit anchors",
+    "subtitle": "The head of the audit chain recorded outside La Fabrique, where it cannot rewrite it.",
+    "managersOnly": "Only owners and managers see the audit anchors. Your role here is {{role}}.",
+    "coverage": "Coverage",
+    "head": "Last row of the chain",
+    "verifiedThrough": "Verified through row",
+    "coveredThrough": "Covered through row (with webhook claims)",
+    "uncovered": "Rows {{from}} to {{to}} are not covered by any external anchor yet.",
+    "failure": "{{kind}} anchor at row {{seq}} no longer matches: {{reason}}",
+    "anchorNow": "Anchor now",
+    "queued": "{{count}} anchor(s) queued.",
+    "settings": "Settings",
+    "ownerEdits": "Only an owner changes these settings.",
+    "enabled": "Anchor the head on a schedule",
+    "cadence": "Every how many minutes (15 to 1440)",
+    "publishWebhook": "Post each head to the company's webhook",
+    "noWebhook": "The company has no enabled webhook: set one up first.",
+    "tsaUrl": "RFC 3161 timestamping authority URL",
+    "tsaCert": "The authority's certificate (PEM)",
+    "tsaCertStored": "Stored certificate, SHA-256 {{sha256}}. Paste a new one to replace it.",
+    "customerKeys": "Customer keys (Ed25519)",
+    "customerKeysHelp": "Your own job signs each head with the private key, which never reaches La Fabrique; only the public key is stored here.",
+    "addKey": "Add a public key (PEM or base64)",
+    "retire": "Retire",
+    "retired": "retired",
+    "save": "Save",
+    "saved": "Saved.",
+    "status": {
+      "empty": "The chain is empty.",
+      "no_anchors": "No external anchor covers the chain yet.",
+      "uncovered_tail": "Anchored, with newer rows not covered yet.",
+      "covered": "Every row up to the head is anchored outside.",
+      "anchor_mismatch": "An anchor no longer matches the chain: the chain or the anchor was rewritten."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "tsa": "Timestamp",
+      "customer_key": "Customer key"
+    },
+    "state": {
+      "verified": "verified",
+      "claim": "claim (the endpoint's copy)",
+      "pending": "pending",
+      "undelivered": "undelivered",
+      "mismatch": "does not match"
+    },
+    "columns": {
+      "kind": "Kind",
+      "seq": "Row",
+      "state": "State",
+      "anchoredAt": "Anchored at"
     }
   },
   "sprintProgress": {

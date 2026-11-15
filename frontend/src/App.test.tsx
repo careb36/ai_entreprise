@@ -293,7 +293,7 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Teams', 'Usage', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Teams', 'Usage', 'Single sign-on', 'Chat approvals', 'Audit anchors', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })

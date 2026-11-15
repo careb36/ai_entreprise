@@ -197,6 +197,13 @@ Copy `.env.example` to `.env` and fill in:
   `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
   a deleted, inserted, reordered, altered or moved row breaks it). Without a
   key the chain is unkeyed and says so.
+  The factory holds this key, so the chain alone does not stop the factory
+  rewriting itself: anchor its head outside (issue #542,
+  `docs/design/AUDIT_ANCHORS.md`). Anchors have no environment variable; an
+  Owner sets them per company (`PUT /v1/audit/anchors/settings`, the Audit
+  anchors page): cadence (15 to 1440 minutes, 60 by default), posting to the
+  company's webhook, the RFC 3161 authority's URL and certificate, and the
+  customer's Ed25519 public keys.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
   the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
@@ -569,6 +576,8 @@ Copy `.env.example` to `.env` and fill in:
   resolves to public addresses, checked when it is saved and before every post,
   and the post goes to the address that was checked (`services/platform/egress.py`);
   `true` allows a private, loopback or link-local host (a receiver on the LAN).
+  The same check applies to a company's RFC 3161 timestamping authority
+  (`tsa_url` of the audit anchors), which may also be http.
 - `RESEARCH_TOOLS_ENABLED` (true), `RESEARCH_ROLES` (Architect, PO, SecOps,
   TechWriter, Designer), `RESEARCH_ALLOWED_HOSTS` (empty), `RESEARCH_TOOL_ROUNDS` (6) —
   the research tools (`services/tools/research_tools.py`): the roles that decide

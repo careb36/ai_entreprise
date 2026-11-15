@@ -27,6 +27,7 @@ import CompanySso from './pages/CompanySso'
 import ChatApprovals from './pages/ChatApprovals'
 import CompanyTeams from './pages/CompanyTeams'
 import Usage from './pages/Usage'
+import AuditAnchors from './pages/AuditAnchors'
 import SsoComplete from './pages/SsoComplete'
 import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
@@ -347,6 +348,7 @@ function NavBar() {
                   {canManage && <Link role="menuitem" to="/company/usage" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.usage')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso"className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   <Link role="menuitem" to="/company/chat" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.chatApprovals')}</Link>
+                  {canManage && <Link role="menuitem" to="/company/audit-anchors" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.auditAnchors')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
                   <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
@@ -458,6 +460,7 @@ function AppContent() {
               <Route path="/company/chat" element={<ChatApprovals />} />
               <Route path="/company/teams" element={<CompanyTeams />} />
               <Route path="/company/usage" element={<Usage />} />
+              <Route path="/company/audit-anchors" element={<AuditAnchors />} />
               <Route path="/company/procedures" element={<Procedures />} />
               <Route path="/company/wiki" element={<Wiki />} />
               <Route path="/company/models" element={<Models />} />
