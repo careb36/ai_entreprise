@@ -20,11 +20,12 @@ on:
       - '.github/pip-audit-ignore.txt'
 
 
-# Un único runner self-hosted atiende un job a la vez: al llegar un push nuevo
-# se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
+# The self-hosted runners are shared by every pull request and by main: a new
+# push cancels the runs of the commit it replaces, on main too (the newest
+# commit's run covers the ones merged before it), instead of queueing behind them.
 concurrency:
   group: backend-tests-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   test:
