@@ -14,13 +14,32 @@ the LangGraph graph is only an optional kickoff conversation.
    so assignments published while it was down are processed when it starts. It
    loads the item and the assigned agent
    (empty model → role default from `services/models/model_factory.py`) and calls the LLM proxy.
+   Before each attempt `services/loop/task_routing.py` estimates the task's
+   difficulty from its plan (`services/models/difficulty.py`: criteria
+   covered, the approved architecture's modules and files for them,
+   dependencies, the attempt, the rework requests and send-backs on its
+   board; a score 1..5 in a band `low`/`medium`/`high`, with its inputs and
+   weights), and, when the company or the deployment has a routing policy
+   (`services/models/routing_policy.py`, `AGENT_MODEL_POLICY`) and no person
+   chose the agent's model, requests the band's model instead of the role
+   default. The estimate and the routing (`{policy, source, band, requested,
+   chosen, reason}`) are stored on the task as an `estimated` event and on
+   the run's evidence as `difficulty` and `routing`, beside the model the
+   proxy reports serving (`AgentRun.model`, the observation); the request is
+   never recorded as the served model. No policy: the role default, as before.
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
    the company's past decisions from memory (scoped by `company_id`), and
    **Lessons from Recent Sprints**: the retrospective counts and the review
    requests from the company's last two completed sprints, read from the board
    (`_load_recent_lessons`), and the **Company Procedures** in force for the
-   agent's role (QA's go into its review prompt).
+   agent's role (QA's go into its review prompt). It also carries the
+   **Sprint board**: the notes the sprint's other tasks left that concern
+   this one (by the files, modules and requirements it touches; active ones
+   only, newest first, within `SPRINT_BOARD_MAX_CHARS`), each a claim with
+   what the Verifier's records observed beside the files it names, and how
+   to write a note (`services/loop/worker/sprint_notes.py`,
+   [design](design/SPRINT_BOARD.md)).
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files (a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
@@ -134,7 +153,10 @@ the LangGraph graph is only an optional kickoff conversation.
    - the ScrumMaster's retrospective to the team when a sprint closes.
 
    Messages are claims: comments still drive the review loop, and the evidence
-   decides. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
+   decides. So are the **sprint board's notes**: after a delivery is recorded,
+   its `NOTE kind=… files=…` … `END` blocks become notes of the sprint
+   (`sprint_notes.record_from_delivery`), each a `board_note` event with its
+   author; a person adds one or marks one wrong on the Board notes tab. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
    `kind`) feeds the sprint's Conversation tab and the task page.
 8. When a sprint closes, procedures are measured and proposed
    (`services/learning/procedures.py`):

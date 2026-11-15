@@ -100,16 +100,21 @@ async def test_streams_are_declared_with_the_namespaced_names_and_subjects(monke
     assert await client.enable_jetstream() is True
     names = sorted(config.name for config in fake_js.added)
     assert names == [
+        # The full logs' object store (services/workspace/run_logs.py).
+        "OBJ_e2e_FABRIQUE_RUN_LOGS",
         "e2e_FABRIQUE_DELIVERIES",
         "e2e_FABRIQUE_DELIVERY_RESULTS",
         "e2e_FABRIQUE_TASKS",
     ]
+    assert client.run_logs_bucket == "e2e_FABRIQUE_RUN_LOGS"
     # Without namespaced subjects both stacks would still capture each
     # other's messages, so the isolation would be cosmetic.
     subjects = sorted(
         subject for config in fake_js.added for subject in config.subjects
     )
     assert subjects == [
+        "$O.e2e_FABRIQUE_RUN_LOGS.C.>",
+        "$O.e2e_FABRIQUE_RUN_LOGS.M.>",
         "e2e.task.assign",
         "e2e.workspace.deliver",
         "e2e.workspace.delivered",

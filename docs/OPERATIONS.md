@@ -196,12 +196,73 @@ As a last resort the operator can switch the requirement off in the
 database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
 (that change is not in the audit chain; record it in the incident notes).
 
+## Approvals in Slack and Teams
+
+A delivery held for a person's acceptance (the risk hold) can be approved or
+sent back from Slack or Microsoft Teams (issue #512, phase 4). The design and
+threat model are in `docs/design/CHAT_APPROVALS.md`, the settings in
+`docs/CONFIGURATION.md`. The operator sets `FERNET_SECRET_KEY` (required),
+`PUBLIC_API_URL` (the public `https://` address Slack and Teams reach the
+backend at) and `CHAT_APP_URL` (the frontend the messages link to). The
+backend must be reachable from the internet at `/v1/integrations/` only; the
+rest of the API need not be.
+
+**Slack.** One Slack app per company, created by a workspace admin at
+api.slack.com/apps:
+
+1. *OAuth & Permissions*: bot token scopes `chat:write` (post and edit the
+   approval) and `commands` (the `/fabrique` command). No other scope is
+   needed: La Fabrique never reads profiles or emails. Install the app to the
+   workspace and copy the **Bot User OAuth Token**; invite the bot to the
+   channel (`/invite @app`).
+2. *Basic Information*: copy the **Signing Secret**.
+3. On La Fabrique's Chat approvals page (an Owner): the workspace (team) id,
+   the channel id, the bot token and the signing secret; save, then copy the
+   **Request URL** the page shows.
+4. *Interactivity & Shortcuts*: on, Request URL = that URL. *Slash Commands*:
+   create `/fabrique` with the same Request URL.
+5. *Test connection* on the page: it calls `auth.test` (the token must belong
+   to the workspace id entered) and posts a line to the channel.
+
+**Teams.** No Azure registration is needed (an outgoing webhook, not a bot):
+
+1. In the channel, *Workflows* → "Post to a channel when a webhook request is
+   received" (or a classic incoming webhook where still available); copy the
+   URL. It is a bearer credential: whoever holds it can post to the channel.
+2. On the Chat approvals page: the Microsoft Entra tenant id and that URL as
+   the incoming webhook URL; save, and copy the **Request URL**.
+3. In the team: *Manage team* → *Apps* → *Create an outgoing webhook*, name it
+   (people will mention it: `@Fabrique approve K7Q2M9PX`), callback URL = the
+   Request URL. Teams shows a **security token** once: paste it as the signing
+   secret and save.
+4. *Test connection* posts a card through the incoming webhook.
+
+**People.** Each member links their own account on the same page (*Link my
+Slack account* gives a ten-minute code to type as `/fabrique link CODE`, or
+`@Fabrique link CODE` in Teams). Only a linked account with the Manager role
+or above decides; a Viewer's click is refused and recorded.
+
+**Rotating the secrets.** Each is changed on the page by an Owner; an empty
+field keeps the stored value, and every change is audited by field name.
+
+| Secret | Where to get a new one | Effect while it changes |
+|---|---|---|
+| Slack signing secret | Slack app → *Basic Information* → *Regenerate* | Clicks are refused (401) between regenerating it in Slack and saving it here. |
+| Slack bot token | *OAuth & Permissions* → reinstall or rotate | Posts fail and are retried by the outbox (five attempts) until the new token is saved. |
+| Teams outgoing webhook token | delete and recreate the outgoing webhook (Teams shows the token only at creation) | Mentions are refused until the new token is saved. |
+| Teams incoming webhook URL | recreate the workflow or webhook | Posts fail and are retried until the new URL is saved. |
+
+If a signing secret leaked, rotate it first, then read the
+`chat_approval_*` audit rows since the leak: a forged request still needed a
+linked Manager's chat user id and a current approval, and each decision names
+both.
+
 ## Rotate keys
 
 | Key | Where | What rotating does | How |
 |-----|-------|--------------------|-----|
 | `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
-| `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets). Change the key, restart, and enter the values again. |
+| `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
 | `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
 | Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |

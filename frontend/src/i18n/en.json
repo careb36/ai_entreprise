@@ -27,7 +27,8 @@
     "procedures": "Procedures",
     "specifications": "Specifications",
     "models": "Models",
-    "sso": "Single sign-on"
+    "sso": "Single sign-on",
+    "chatApprovals": "Chat approvals"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1233,7 +1234,8 @@
       "board": "Board",
       "live": "Live",
       "analytics": "Analytics",
-      "conversation": "Conversation"
+      "conversation": "Conversation",
+      "notes": "Board notes"
     },
     "streamConnected": "Stream connected",
     "streamDisconnected": "Stream disconnected",
@@ -2081,7 +2083,25 @@
     },
     "statConnections": "Connections",
     "statModels": "Models",
-    "statValidated": "Validated"
+    "statValidated": "Validated",
+    "policy": {
+      "title": "Model by task difficulty",
+      "subtitle": "Before each attempt the task's difficulty is estimated from its plan (criteria, modules and files, dependencies, attempt and rework), never by a model. Name the model each band runs; an empty band keeps the role default. A model chosen for an agent, a role or the company is never re-routed.",
+      "sourceCompany": "This company's policy applies.",
+      "sourceDeployment": "No policy of the company's: the deployment's applies (shown as placeholders).",
+      "sourceNone": "No policy: every task runs on its role's model.",
+      "band": {
+        "low": "Low difficulty",
+        "medium": "Medium difficulty",
+        "high": "High difficulty"
+      },
+      "roleDefault": "Role default",
+      "label": "Policy name (shown in the records)",
+      "tiers": "A model id, a connection model (conn:<id>:<model>) or a proxy tier (fast, powerful…); a tier runs on the role default, and the run records why.",
+      "save": "Save the policy",
+      "clear": "Remove the policy",
+      "saved": "Policy saved."
+    }
   },
   "manager": {
     "suggestion": "Manager agent suggests: {{decision}}",
@@ -2179,7 +2199,36 @@
     "noDelivery": "no delivery",
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
     "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
-    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
+    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens.",
+    "split": {
+      "label": "Split the closed sprints by",
+      "by": {
+        "band": "By band",
+        "model": "By served model",
+        "policy": "By policy"
+      },
+      "caption": {
+        "band": "Tasks by difficulty band",
+        "model": "Tasks by served model",
+        "policy": "Tasks by routing policy"
+      },
+      "column": {
+        "band": "Band",
+        "model": "Served model",
+        "policy": "Policy"
+      },
+      "bandName": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "noPolicy": "no policy",
+      "done": "Done",
+      "cost": "Cost",
+      "costUnknown": "unknown",
+      "costUnpriced_one": "(+{{count}} task unpriced)",
+      "costUnpriced_other": "(+{{count}} tasks unpriced)"
+    }
   },
   "consoleProducers": {
     "title": "Console producers",
@@ -2343,6 +2392,92 @@
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
+    }
+  },
+  "chat": {
+    "title": "Chat approvals",
+    "subtitle": "Accept or send back held deliveries from Slack or Microsoft Teams.",
+    "linksTitle": "Your chat accounts",
+    "linksHelp": "Link your chat account so a decision you take in chat is recorded as yours, with your role here.",
+    "linkedAs": "Linked to {{user}} in {{workspace}}",
+    "link": "Link my {{provider}} account",
+    "unlink": "Unlink",
+    "notConnected": "Not connected by the company",
+    "codeIntro": "Your one-time code, valid for 10 minutes:",
+    "inboundUrl": "Request URL to give the platform:",
+    "secretSet": "Set — leave empty to keep it",
+    "secretUnset": "Not set",
+    "enabled": "Post approvals and accept decisions",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveError": "Could not save: {{message}}",
+    "test": "Test connection",
+    "testOk": "The platform answered: connected.",
+    "testFailed": "The platform did not answer as expected: {{detail}}",
+    "delete": "Remove",
+    "deleteConfirm": "Remove this connection? Messages already posted can no longer decide anything.",
+    "slack": {
+      "name": "Slack",
+      "title": "Slack",
+      "help": "A Slack app with a bot token (chat:write, commands) and its signing secret. Use the Request URL below for Interactivity and for the /fabrique slash command.",
+      "workspace": "Workspace (team) ID",
+      "channel": "Channel ID",
+      "postCredential": "Bot token",
+      "signingSecret": "Signing secret",
+      "codeHow": "In Slack, type: /fabrique link {{code}}"
+    },
+    "teams": {
+      "name": "Teams",
+      "title": "Microsoft Teams",
+      "help": "An incoming webhook (or Workflows) URL to post cards, and an outgoing webhook whose callback URL is the Request URL below; paste its security token as the signing secret.",
+      "workspace": "Tenant ID",
+      "postCredential": "Incoming webhook URL",
+      "signingSecret": "Outgoing webhook security token",
+      "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
+    }
+  },
+  "boardNotes": {
+    "title": "Board notes",
+    "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",
+    "showInactive": "Show superseded and marked wrong",
+    "metrics": "{{active}} active · {{wrong}} marked wrong · rework for a contradiction with another task: {{contradictions}} of {{rework}}",
+    "loading": "Loading the board notes…",
+    "error": "Could not load the board notes.",
+    "empty": "No notes yet. Agents leave them in their deliveries as they work.",
+    "listLabel": "Notes on the sprint board",
+    "addTitle": "Add a note",
+    "kindLabel": "Kind",
+    "filesLabel": "Files",
+    "filesPlaceholder": "src/store.py, src/api.py",
+    "requirementsLabel": "Requirements",
+    "requirementsPlaceholder": "REQ-1.2",
+    "textLabel": "Note",
+    "add": "Add note",
+    "aPerson": "A person",
+    "task": "task #{{id}}",
+    "observed": "observed: changed by verified run #{{run}}",
+    "notObserved": "not observed",
+    "supersedes": "Supersedes note #{{id}}",
+    "markedWrongBy": "Marked wrong by {{by}}",
+    "markWrong": "Mark wrong",
+    "reasonLabel": "Why it is wrong (optional)",
+    "confirmWrong": "Mark as wrong",
+    "kinds": {
+      "decision": "Decision",
+      "interface_change": "Interface change",
+      "schema_change": "Schema change",
+      "gotcha": "Gotcha",
+      "question": "Question"
+    },
+    "status": {
+      "active": "Active",
+      "superseded": "Superseded",
+      "marked_wrong": "Marked wrong"
+    },
+    "links": {
+      "symbols": "Symbols",
+      "requirements": "Requirements",
+      "modules": "Modules"
     }
   }
 }

@@ -22,13 +22,20 @@ from sqlmodel import Session, select
 
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
-from services.loop import edit_plan, sprint_control
+from services.loop import edit_plan, sprint_control, task_routing
 from services.loop.answers import BRIEF_MAX_TOKENS
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
-from services.loop.worker import board_writes, messages, prompt, prompt_budget, related
+from services.loop.worker import (
+    board_writes,
+    messages,
+    prompt,
+    prompt_budget,
+    related,
+    sprint_notes,
+)
 from services.models import model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
@@ -159,6 +166,14 @@ def _developer_prompt(
                 5,
             )
         )
+    # The sprint's notes that concern this task (claims, #439); cut before the code.
+    sections.append(
+        Section(
+            sprint_notes.SECTION_NAME,
+            sprint_notes.board_section(item, company_id, engine=engine),
+            sprint_notes.PRIORITY,
+        )
+    )
     if external_advice:
         sections.append(
             Section(
@@ -236,12 +251,18 @@ def _execute_task(
     measure["system_tokens"] = prompt_budget.estimate_tokens(system_prompt)
     agent["prompt_sections"] = measure
 
-    model = model_routing.resolve_agent_model(
+    # The model by difficulty (#319): the estimate and the routing are stored
+    # on the task and kept for the run's evidence; the served model stays apart.
+    decision = task_routing.route_task(
+        item,
         agent,
-        item=item,
+        company_id,
         rework=bool(rework_feedback),
         editor=bool(edit_plan.plan_in(architect_advice)),
+        engine=engine,
     )
+    model = decision["model"]
+    agent["difficulty"], agent["routing"] = decision["difficulty"], decision["routing"]
     role = agent.get("role", "Dev")
 
     who = agent.get("name") or role

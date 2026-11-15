@@ -13,6 +13,14 @@ from .agent_run import AgentRun, AgentRunApproval, Verification
 from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
+from .chat import (
+    ChatApprovalMessage,
+    ChatConnection,
+    ChatIdentity,
+    ChatInteraction,
+    ChatLinkCode,
+)
+from .board_note import SprintBoardNote
 from .company import (
     Agent,
     BusinessUnit,
@@ -51,6 +59,11 @@ __all__ = [
     "BacklogItem",
     "BugReport",
     "BusinessUnit",
+    "ChatApprovalMessage",
+    "ChatConnection",
+    "ChatIdentity",
+    "ChatInteraction",
+    "ChatLinkCode",
     "Company",
     "CompanyMember",
     "CompanyWebhook",
@@ -71,6 +84,7 @@ __all__ = [
     "SessionFamily",
     "Specification",
     "Sprint",
+    "SprintBoardNote",
     "SprintIntegration",
     "SsoConnection",
     "SsoFlowState",

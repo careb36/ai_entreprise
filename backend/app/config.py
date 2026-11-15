@@ -83,6 +83,20 @@ class Settings(BaseSettings):
     # managers' caches (vscode-daemon/sandbox_cache.py), kept after a run,
     # removed after a failed install, quarantined after three in a row.
     DELIVERY_SANDBOX_CACHE: bool = False
+    # Container mode: the image the application check runs in when its e2e
+    # command is a browser test (QA's smoke tests, or a ``web`` profile's
+    # e2e), e.g. one built from vscode-daemon/images/browser. Empty keeps
+    # DELIVERY_SANDBOX_IMAGE for it, as before.
+    DELIVERY_BROWSER_IMAGE: str = ""
+    # The whole output of the install, the tests and the application check,
+    # uploaded by the daemon to the JetStream object store FABRIQUE_RUN_LOGS
+    # and hashed here on receipt (services/workspace/run_logs.py). Objects
+    # expire after FULL_LOG_RETENTION_DAYS (0 keeps them) and the oldest go
+    # first beyond FULL_LOG_BUCKET_MAX_MB; the evidence keeps the sha256.
+    DELIVERY_FULL_LOGS: bool = True
+    DELIVERY_FULL_LOG_MAX_MB: int = 50
+    FULL_LOG_RETENTION_DAYS: int = 30
+    FULL_LOG_BUCKET_MAX_MB: int = 4096
     # Stack profiles (services/stack_profiles.py): the commands detected per
     # stack, overridden here for the deployment and per company
     # (Company.stack_profile). Empty means detect.
@@ -151,6 +165,10 @@ class Settings(BaseSettings):
     # the files around the task's modules and earlier writes, from the
     # daemon's parse, and the recent runs that wrote them; 0 leaves it out.
     CODE_GRAPH_MAX_CHARS: int = 2500
+    # The sprint board in every task prompt (``services/loop/worker/sprint_notes.py``,
+    # issue #439): the notes of the sprint relevant to the task, newest first,
+    # within this many characters; 0 leaves the section out.
+    SPRINT_BOARD_MAX_CHARS: int = 2000
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
@@ -249,6 +267,12 @@ class Settings(BaseSettings):
     SSO_ALLOW_PRIVATE_ISSUERS: bool = False
     SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
     SSO_CLOCK_SKEW_SECONDS: int = 60
+
+    # Approving from Slack or Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
+    # The frontend address the chat messages link to (the run's evidence, the
+    # task), and the rate limit of the public inbound endpoints per address.
+    CHAT_APP_URL: str = "http://localhost:5173"
+    CHAT_RATE_LIMIT: str = "120/minute"
 
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------

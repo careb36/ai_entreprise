@@ -48,6 +48,7 @@ import host_folders
 from host_folders import WorkspaceError, browse, filesystem_roots, inspect_project, project_snapshot  # noqa: F401 - re-exported
 import nats_connect
 import nats_scope
+import run_logs
 import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
 import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
@@ -215,7 +216,9 @@ async def handle_msg(nc, msg):
 
     elif subject == "workspace.execute":
         cmd = data.get("command")
-        result = await asyncio.to_thread(sprint_integration.while_active, workspace_path, execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"))
+        full_log = run_logs.wanted(data)  # The whole output to the object store (run_logs.py).
+        result = await asyncio.to_thread(sprint_integration.while_active, workspace_path, execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"), full_log is not None)
+        await run_logs.upload(nc, full_log, result)
 
         sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
         if sprint_id is not None and not shell_exec.is_assistant_command(cmd):

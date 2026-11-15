@@ -20,6 +20,7 @@ GLOBAL_TABLES = {
     "sso_flow_states": "one-time sign-in values for minutes; each names its connection, which carries company_id",
     "session_families": "a person's browser session, like users: it spans every company the person belongs to",
     "refresh_tokens": "a session family's rotations; each names its family, which names the person",
+    "chat_interactions": "a replay store of chat platforms' interaction ids; each names its connection, which carries company_id",
 }
 
 # Tables whose company_id may be empty, and why.

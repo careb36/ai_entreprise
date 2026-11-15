@@ -3,8 +3,8 @@
 expiry and revocation) and ``refresh_tokens`` (each rotation's token, stored
 as sha256). New tables only; Bearer callers are untouched.
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0026
+Revises: 0025
 Create Date: 2026-11-15 18:00:00 UTC
 """
 
@@ -15,8 +15,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0023"
-down_revision = "0022"
+revision = "0026"
+down_revision = "0025"
 branch_labels = None
 depends_on = None
 

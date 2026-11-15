@@ -162,6 +162,43 @@ def test_execute_reply_is_recorded_as_a_passing_test_run():
     assert evidence["ci"]["conclusion"] == "success"
 
 
+def test_execute_full_log_reply_is_read_back_and_hashed_by_the_backend(monkeypatch):
+    import hashlib
+    from types import SimpleNamespace
+
+    from config import settings
+    from services.workspace import run_logs
+
+    monkeypatch.setattr(settings, "DELIVERY_FULL_LOGS", True)
+    reply = _reply("workspace.execute", "uploads-the-full-log")
+    stored = {
+        "run-0123456789abcdef/stdout": b"hello\n",
+        "run-0123456789abcdef/stderr": b"",
+    }
+
+    class Store:
+        async def get_info(self, name):
+            return SimpleNamespace(size=len(stored[name]))
+
+        async def get(self, name, writeinto=None):
+            if stored[name]:
+                writeinto.write(stored[name])
+
+    async def object_store(_bucket):
+        return Store()
+
+    nats = SimpleNamespace(
+        js=SimpleNamespace(object_store=object_store),
+        run_logs_bucket="FABRIQUE_RUN_LOGS",
+    )
+    spec = {"bucket": "FABRIQUE_RUN_LOGS", "name": "run-0123456789abcdef"}
+    record = asyncio.run(run_logs.observe(nats, spec, reply))
+    out, err = record["objects"]
+    assert record["observed_by"] == "backend"
+    assert out["sha256"] == hashlib.sha256(b"hello\n").hexdigest() and out["size"] == 6
+    assert err["sha256"] == hashlib.sha256(b"").hexdigest()
+
+
 def test_read_tool_replies_are_rendered_for_the_model():
     listing = developer_tool_replies.list_text(
         _reply("workspace.list", "lists-the-tree")

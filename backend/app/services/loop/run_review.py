@@ -247,8 +247,13 @@ def submit_review(
     body: str | None,
     author_name: str,
     author_user_id: int | None,
+    via: str | None = None,
 ) -> RunReview:
-    """Record a review, carry its open comments, and do what its decision asks."""
+    """Record a review, carry its open comments, and do what its decision asks.
+
+    *via* names where the person decided when it is not the web (``slack``,
+    ``teams``; ``routers/chat_interactions.py``); the audit row carries it.
+    """
     comments = open_comments(session, run)
     if event == "request_changes" and not body and not comments:
         raise ReviewRefused(
@@ -293,6 +298,8 @@ def submit_review(
             "company_id": str(run.company_id),
             "agent_run_id": run.id,
             "review_id": review.id,
+            "user_id": author_user_id,
+            "via": via or "web",
         },
         result={"outcome": review.outcome, "comments": len(comments), "body": body},
         decision_signature=None,

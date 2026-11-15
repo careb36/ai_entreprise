@@ -118,6 +118,7 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "done": 0,
             "blocked": 0,
             "rework": 0,
+            "contradiction_rework": 0,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
             "console_advice": {
                 "advised": {"total": 0, "done": 0, "rework": 0},
@@ -146,6 +147,7 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "done": 1,
             "blocked": 1,
             "rework": 2,
+            "contradiction_rework": 0,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
             "console_advice": {
                 "advised": {"total": 0, "done": 0, "rework": 0},
