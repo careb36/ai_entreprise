@@ -32,8 +32,10 @@ In container mode the report also says which image ran (``image_identity``,
 ``sandbox_image.py``: its content ID and registry digest, observed by the
 daemon, the container run from that ID) and, with ``cache`` in the request,
 the project's dependency cache volume and its lifecycle (``cache``,
-``sandbox_cache.py``). A request's ``purpose`` (``test``, ``install`` or
-``check``) says what the command is for: a failed install resets the cache.
+``sandbox_cache.py``). A request's ``purpose`` (``test``, ``install``,
+``check`` or ``assistant``) says what the command is for: a failed install
+resets the cache. A ``workspace.execute`` without ``sandbox`` is normalized as
+``host`` (``shell_exec``), so the floor reaches it too.
 """
 
 from __future__ import annotations
@@ -74,7 +76,9 @@ MAX_OUTPUT_BYTES = 1024 * 1024
 RUNTIME_FAILURE_EXIT = 125
 _BWRAP_RO = ("/usr", "/bin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/sbin")
 # What a request may say a command is for; anything else reads as ``test``.
-PURPOSES = ("test", "install", "check")
+# ``assistant``: a console assistant's consultation (the backend's
+# ``console_assistants``), advice rather than agent-written code.
+PURPOSES = ("test", "install", "check", "assistant")
 
 
 class SandboxUnavailable(RuntimeError):

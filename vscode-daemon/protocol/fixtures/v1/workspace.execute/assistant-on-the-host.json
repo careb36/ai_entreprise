@@ -1,0 +1,34 @@
+{
+  "description": "A console assistant's consultation (purpose assistant) for a company whose sandbox is host, on a daemon without a floor: it runs on the host as before, and the reply says what was applied.",
+  "subject": "workspace.execute",
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "command": "echo advice",
+    "sprint_id": 5,
+    "sandbox": {
+      "mode": "host",
+      "purpose": "assistant",
+      "network": false,
+      "env": ["ASSISTANT_PROVIDER_KEY"],
+      "cache": false
+    }
+  },
+  "reply": {
+    "success": true,
+    "stdout": "advice\n",
+    "stderr": "",
+    "exit_code": 0,
+    "sandbox": {
+      "mode": "host",
+      "forced_by_daemon": false,
+      "isolated": false,
+      "network": "host",
+      "env": "inherited",
+      "image_identity": {
+        "id": null,
+        "digest": null,
+        "reason": "host mode runs no image: the daemon's own machine ran it"
+      }
+    }
+  }
+}

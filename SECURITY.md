@@ -469,9 +469,11 @@ as the user who started it (`./scripts/start-daemon.sh`), and answers
 
 1. **The command policy** (`vscode-daemon/command_policy.py`, issue #357)
    decides whether the command runs at all.
-2. **The sandbox** (`vscode-daemon/sandbox.py`) decides where it runs, when
-   the request carries a `sandbox`.
-3. Otherwise it runs in the host shell, with the daemon's privileges.
+2. **The sandbox** (`vscode-daemon/sandbox.py`) decides where it runs. A
+   request without a `sandbox` is read as `host` (issue #525), so the
+   daemon's floor below applies to every command.
+3. Only when that leaves it on the host does it run in the host shell
+   (`shell_exec.run_on_host`), with the daemon's privileges.
 
 **The sandbox is the boundary.** Modes (`DELIVERY_SANDBOX` for the
 deployment, or a company's own, `GET`/`PUT /v1/companies/{id}/sandbox`,
@@ -495,15 +497,40 @@ reason, and the tests read as unverified, not passed. The Verifier records
 the report as the `sandbox` check (`backend/app/services/workspace/sandbox.py`);
 a host run is a finding, never a refutation. The person running the daemon
 can refuse the host: `FABRIQUE_SANDBOX_REQUIRED=container` (or `bwrap`) runs
-a `host` request in that mode instead and says so (`forced_by_daemon`).
+a `host` request, and one that names no sandbox, in that mode instead and
+says so (`forced_by_daemon`); when that mode cannot run, the command is
+refused with the reason, never run on the host. Without the floor a request
+that names no sandbox runs on the host as before and its reply is unchanged.
+`backend/tests/test_sandbox_floor.py` also checks that nothing else in the
+daemon builds a host shell command: only `shell_exec` (after `normalize`) and
+the application check's host path (after `normalize`). The daemon's other
+subprocesses are fixed argv it chose itself (`git` with hooks disabled, the
+container runtime, `node --check` on a copy, `gh` / `glab api`), never a
+command from a request.
 
 Requests that carry a `sandbox`: the delivery test run
 (`services/loop/delivery_checks.py`), the Developer's test tool
 (`services/tools/developer_tools.py`), the lint after an edit
 (`services/tools/edit_lint.py`), the dependency install
 (`services/workspace/dependency_install.py`), a console producer's run
-(`services/producers/console_producer.py`) and the application check
-(`vscode-daemon/app_run.py`).
+(`services/producers/console_producer.py`), a console assistant's
+consultation and the application check (`vscode-daemon/app_run.py`).
+
+**Console assistants** (`services/producers/console_assistants.py`,
+`assistant_sandbox.py`; issue #525) send the company's sandbox with purpose
+`assistant`: its mode, the network as `DELIVERY_SANDBOX_NETWORK` sets it (off
+by default), no dependency cache, and only the variable *names* in the
+company's `sandbox_env` and `console_env` (the provider's key is listed in
+`console_env`; its value stays on the daemon's machine). In a `container` or
+`bwrap` sandbox with the network off the assistant is not asked; when the
+daemon's reply shows its sandbox stopped the CLI (the floor's runtime
+missing, the CLI not in the image, no network to the provider) the
+consultation is skipped and cools down. Either way the Glassroom says why
+(`skipped_sandbox`, with the daemon's sandbox report), and the task goes on:
+the advice is optional and never evidence. A company on `host` with a daemon
+without a floor runs them on the host, as before. No command policy is sent
+for this path: the backend has none for it (the console producer's allow
+list names a producer CLI's own argv, not an assistant's template).
 
 **Which image ran, and the dependency cache** (issue #315,
 `docs/design/EXECUTION_ENVIRONMENT.md`; the cache and its quarantine are
@@ -571,17 +598,17 @@ agent-written, which is what the sandbox is for.
 - `host` is still the default and an allowed mode. A deployment that runs
   agent code sets `DELIVERY_SANDBOX=container` and, on the daemon's machine,
   `FABRIQUE_SANDBOX_REQUIRED=container` (§10.8).
-- `FABRIQUE_SANDBOX_REQUIRED` applies only to a request that carries a
-  `sandbox`. The console assistants' consultations
-  (`services/producers/console_assistants.py`, a configured CLI template run
-  with the agent's prompt) send `workspace.execute` with neither a `sandbox`
-  nor a `command_policy`, so they run on the host; only the daemon's own
-  `FABRIQUE_COMMAND_DENY` applies to them (#525).
 - The backend does not send a per-company command policy yet
   (`docs/CONFIGURATION.md`): the only policy it sends is the console
   producer's, which allows only that CLI's own command
   (`services/producers/console_clis.py`, `command_policy`). Without a policy
   and without `FABRIQUE_COMMAND_DENY`, every command runs.
+- A console assistant's sandbox mounts the project folder (the person's
+  checkout, not a task worktree) read-write, as every sandboxed run mounts its
+  folder; on the host it had the whole machine, so this is narrower, but the
+  advice needs only a read-only mount. With the network on and the provider's
+  key in its environment, a prompt-injected assistant can reach any host the
+  sandbox allows.
 - The sandbox's network is on or off; there is no egress allowlist.
 - The dependency cache is writable by every run of a project, so one run can
   leave something for the next; that is why it is off by default and removed

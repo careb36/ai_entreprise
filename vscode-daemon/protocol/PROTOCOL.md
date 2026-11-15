@@ -229,6 +229,28 @@ browser sandbox image's own pinned Playwright, `FABRIQUE_PLAYWRIGHT_DIR`;
 with `exit_code`. Without an e2e command, or without the field, no probe runs
 and the reply has no `browser_probe`.
 
+### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
+
+Every
+request goes through the command policy and then the sandbox's rules
+(`shell_exec.execute_shell_command`, `sandbox.normalize`). A request without
+`sandbox` is read as `{"mode": "host"}`, so on a daemon with
+`FABRIQUE_SANDBOX_REQUIRED=container` (or `bwrap`) it runs in that mode and
+the reply carries `sandbox` with `forced_by_daemon: true`. When that mode
+cannot run (no Docker or Podman, no bubblewrap), the reply is
+`{"success": false, "error": "sandbox unavailable: <reason>"}` and nothing
+ran: never the host. Without a floor nothing changes: the host, and **no
+`sandbox` in the reply of a request that did not ask**, so a backend from
+before this change reads the same replies. The report appears whenever the
+command left the host, because then the evidence must say where it ran.
+`sandbox.purpose` takes `test`, `install`, `check` or `assistant` (a console
+assistant's consultation, sent by `services/producers/console_assistants.py`
+with the company's sandbox, its network setting and the names in
+`sandbox_env` and `console_env`); anything else reads as `test`, so an older
+daemon treats `assistant` as `test`. Both are additive: protocol version 1.
+The application check (`workspace.app.check`) already normalized a missing
+`sandbox` the same way.
+
 ## 6. Conformance fixtures
 
 `fixtures/v1/<subject>/<scenario>.json`, one recorded exchange per file, in
@@ -247,6 +269,9 @@ plain JSON:
 
 - `workspace.files` is written into a fresh temporary folder before the
   request; `$WORKSPACE` stands for that folder in the request and the reply.
+- `daemon_env` (optional) sets the daemon machine's own settings for the
+  replay, today `FABRIQUE_SANDBOX_REQUIRED` and `FABRIQUE_SANDBOX_RUNTIME`
+  (`DAEMON_ENV` in the test); without it both are unset.
 - `reply` is what the daemon answered (for a published subject, what it
   published). The daemon's side replays the request against the real handler
   and requires the same reply, except at the JSON pointers in `volatile`
@@ -264,8 +289,10 @@ Fixtures cover `workspace.status`, `workspace.heartbeat`,
 `workspace.hash`, `workspace.sandbox.reset`, `workspace.inspect` and
 `workspace.browse` (`workspace.execute` also with `full_log`, replayed
 against an in-memory object store, and read back and hashed by the backend's
-side); the other subjects are covered by their schema, and their handlers by
-their own tests (`workspace.app.check`'s probe and full log in
+side; a console assistant's consultation on the host; and a request without
+`sandbox` refused by a floor whose runtime is missing); the other subjects are
+covered by their schema, and their handlers by their own tests
+(`workspace.app.check`'s probe and full log in
 `backend/tests/test_browser_image.py` and `test_run_logs.py`). To add one, write the file with the request and
 an empty `reply`, run the daemon-side test, and copy the actual reply it
 prints after checking it.

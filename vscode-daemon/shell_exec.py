@@ -7,6 +7,12 @@ case where there is no exit, because the command ran past its wall clock.
 
 That last distinction is the point of ``timed_out``. The backend verifies what a
 producer says it did, and "the suite hung" is a result, not a missing one.
+
+Every ``workspace.execute`` passes through ``execute_shell_command``: the
+command policy first, then the sandbox's rules (``sandbox.normalize``) whether
+or not the request named a sandbox, so the daemon's
+``FABRIQUE_SANDBOX_REQUIRED`` reaches every command; only then the host shell
+(``run_on_host``).
 """
 
 from __future__ import annotations
@@ -124,8 +130,11 @@ def execute_shell_command(
     """Execute a shell command and return a structured result.
 
     Args:
-        command: Shell command string (passed to the host shell).
+        command: Shell command string.
         cwd:     Working directory for the command.
+        sandbox: The request's ``sandbox``. Without one the request reads as
+                 ``{"mode": "host"}``, so the daemon's
+                 ``FABRIQUE_SANDBOX_REQUIRED`` applies to it as well.
         policy:  The request's ``command_policy``; with it, or with the
                  daemon's ``FABRIQUE_COMMAND_DENY``, a command the policy
                  refuses is not run (``command_policy.py``) and the result
@@ -146,21 +155,33 @@ def execute_shell_command(
     if refused:
         logger.warning(f"Not running {command!r}: {refused}")
         return {"success": False, "refused": True, "error": refused}
-    if sandbox is not None:
-        # Agent-written code: run it as the request's sandbox says
-        # (``sandbox.py``), and report what was applied. A mode that cannot
-        # run is an error, never a quiet run on the host.
-        import sandbox as sandbox_runner
+    # Every command goes through the sandbox's rules (``sandbox.py``), the
+    # daemon's own floor included: a request without ``sandbox`` is a
+    # ``host`` request, which ``FABRIQUE_SANDBOX_REQUIRED`` raises to its mode
+    # (issue #525). A mode that cannot run is an error, never a quiet run on
+    # the host.
+    import sandbox as sandbox_runner
 
-        try:
-            box = sandbox_runner.normalize(sandbox)
-            if box["mode"] != "host":
-                return sandbox_runner.run_sandboxed(command, cwd, sandbox, seconds, keep_full)
-        except sandbox_runner.SandboxUnavailable as exc:
-            return {"success": False, "error": f"sandbox unavailable: {exc}"}
-        result = execute_shell_command(command, cwd, timeout=seconds, keep_full=keep_full)
+    asked = sandbox is not None
+    request = sandbox if asked else {"mode": "host"}
+    try:
+        box = sandbox_runner.normalize(request)
+        if box["mode"] != "host":
+            return sandbox_runner.run_sandboxed(command, cwd, request, seconds, keep_full)
+    except sandbox_runner.SandboxUnavailable as exc:
+        return {"success": False, "error": f"sandbox unavailable: {exc}"}
+    result = run_on_host(command, cwd, seconds, keep_full)
+    if asked:
+        # Only a request that asked is told what was applied on the host; one
+        # that did not gets the reply it always got. A run the floor moved
+        # off the host always carries its report (``run_sandboxed``).
         result["sandbox"] = sandbox_runner.report(box)
-        return result
+    return result
+
+
+def run_on_host(command: str, cwd: str, seconds: int, keep_full: bool = False) -> dict[str, Any]:
+    """*command* in the host shell; called only by ``execute_shell_command``,
+    once the command policy and the sandbox's rules leave it on the host."""
     logger.info(f"Executing: {command} in {cwd}")
     try:
         result = subprocess.run(
