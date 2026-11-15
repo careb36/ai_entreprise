@@ -258,11 +258,11 @@
       "test_acceptance.py": [
         "loop"
       ],
-      "test_affected_tests.py": [
-        "repo"
-      ],
       "test_access_review.py": [
         "management"
+      ],
+      "test_affected_tests.py": [
+        "repo"
       ],
       "test_agent_access.py": [
         "loop"
@@ -365,6 +365,9 @@
       ],
       "test_command_policy.py": [
         "workspace"
+      ],
+      "test_company_architecture.py": [
+        "loop"
       ],
       "test_company_models.py": [
         "management"
@@ -489,6 +492,9 @@
       ],
       "test_integration_flows.py": [
         "management"
+      ],
+      "test_integration_review.py": [
+        "release"
       ],
       "test_jetstream_durability.py": [
         "loop"
