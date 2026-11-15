@@ -15,7 +15,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from models import User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.platform import access_review, service_accounts
 from sqlmodel import Session
 
@@ -26,13 +27,13 @@ router = APIRouter(prefix="/v1", tags=["Company"])
 NO_STORE = {"Cache-Control": "no-store"}
 
 
-class Decision(BaseModel):
+class Decision(RequestModel):
     kind: str = Field(pattern="^(member|token)$")
     id: int
     decision: str = Field(pattern="^(confirm|remove)$")
 
 
-class ReviewCompletion(BaseModel):
+class ReviewCompletion(RequestModel):
     decisions: list[Decision] = Field(max_length=2000)
     note: str | None = Field(default=None, max_length=access_review.NOTE_MAX)
 

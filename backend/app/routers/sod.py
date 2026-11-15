@@ -19,7 +19,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from models import User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.management import sod_report
 from services.platform import sod
 from services.platform.agent_service import AgentService
@@ -28,7 +29,7 @@ from sqlmodel import Session
 router = APIRouter(prefix="/v1", tags=["Company"])
 
 
-class PolicyUpdate(BaseModel):
+class PolicyUpdate(RequestModel):
     mode: str | None = Field(default=None, pattern="^(off|high_risk|all)$")
     review_interval_days: int | None = Field(
         default=None, ge=sod.INTERVAL_RANGE[0], le=sod.INTERVAL_RANGE[1]
@@ -38,7 +39,7 @@ class PolicyUpdate(BaseModel):
     )
 
 
-class ExceptionGrant(BaseModel):
+class ExceptionGrant(RequestModel):
     reason: str = Field(min_length=10, max_length=sod.REASON_MAX)
 
 

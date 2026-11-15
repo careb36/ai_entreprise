@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useServiceAccounts } from '../hooks/useDuties'
 import { errorDetail, type ServiceAccount } from '../services/api'
+import type { Translate } from '../i18n/translate'
 
 /**
  * The credentials that act without a person (issue #543): API tokens, the
@@ -53,7 +54,7 @@ export default function ServiceAccountsPanel({ companyId }: { companyId: number 
   )
 }
 
-function deploymentLine(row: ServiceAccount, t: (key: string, options?: Record<string, unknown>) => string): string {
+function deploymentLine(row: ServiceAccount, t: Translate): string {
   if (row.kind === 'llm_proxy_token') {
     return t(row.present ? 'duties.accounts.proxyPresent' : 'duties.accounts.proxyMissing')
   }
