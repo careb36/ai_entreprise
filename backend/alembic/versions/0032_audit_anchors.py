@@ -5,8 +5,8 @@ came back; and ``audit_anchor_settings``, the Owner's cadence, timestamping
 authority and customer keys. New tables only: the chain's rows are not
 changed.
 
-Revision ID: 0099
-Revises: 0027
+Revision ID: 0032
+Revises: 0031
 Create Date: 2026-11-15 20:00:00 UTC
 """
 
@@ -17,8 +17,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0027"
+revision = "0032"
+down_revision = "0031"
 branch_labels = None
 depends_on = None
 

@@ -25,7 +25,7 @@ from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS
 from sqlmodel import Session, select
 
 from services.learning import retrospective
-from services.loop import replicas, sprint_control
+from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
 from services.loop.sprint_close import RECLOSED
 from services.loop.sprint_close import (
@@ -40,7 +40,7 @@ from services.planning.sprint_planner import (
 )
 from services.platform import hooks
 from services.platform.glassroom import publish_glassroom
-from services.tasks import dependencies
+from services.tasks import dependencies, progress_snapshot
 from services.tasks.board import SCRUM_MASTER_ROLE
 
 logger = setup_logger("fabrique-task-worker")
@@ -455,6 +455,11 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     )
     if not result.get("completed"):
         return
+    # The progress as it stood at this close, sealed in the audit chain
+    # (issue #531); a reclose adds a snapshot and keeps the first.
+    await asyncio.to_thread(
+        progress_snapshot.seal_at_close, engine, sprint_id, retro_metrics
+    )
     # What leaves the factory starts from the event: release integrates (issue #314).
     hooks.emit(
         hooks.SPRINT_CLOSED, nats_client=nats_client, engine=engine, sprint_id=sprint_id
@@ -463,6 +468,8 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
         retro_metrics = None  # learned once, at the first close
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await _learn_from_close(sprint_id, retro_metrics)
+        # The project wiki: compiled from the sprint's evidence, linted (#445).
+        await wiki_close.after_close(nats_client, sprint_id, retro_metrics)
 
     if retro_metrics:
         _burn_retrospective_engram(sprint_id, retro_metrics)

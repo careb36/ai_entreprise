@@ -38,6 +38,7 @@ from services.loop.worker import (
     messages,
     prompt,
     quality_gate,
+    wiki_section,
 )
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
@@ -232,8 +233,14 @@ async def _gather_context(
         requirements_ctx,
         assistant_context,
     ) = await asyncio.gather(
+        # The project wiki first; the vector memory only as its fallback (#445).
         asyncio.to_thread(
-            prompt._fetch_memory_context, item, agent, sprint["company_id"]
+            wiki_section.wiki_then_memory,
+            item,
+            agent,
+            sprint["company_id"],
+            engine=engine,
+            fetch_memory=prompt._fetch_memory_context,
         ),
         asyncio.to_thread(
             prompt._load_recent_lessons, sprint["company_id"], sprint["id"]
@@ -254,7 +261,8 @@ async def _gather_context(
         ),
     )
     return {
-        "memory": memory_ctx,
+        "memory": memory_ctx["memory"],
+        "wiki": memory_ctx["wiki"],
         "lessons": lessons_ctx,
         "procedures": procedures_ctx,
         "completed": completed_ctx,
@@ -274,7 +282,7 @@ async def _announce_context(
     context: dict[str, Any],
 ) -> None:
     """The memory event when there was memory, and the assistants' board note."""
-    if context["memory"] or context["lessons"]:
+    if context["memory"] or context.get("wiki") or context["lessons"]:
         await publish_glassroom(
             nats_client,
             sprint["id"],
@@ -353,6 +361,7 @@ async def _produce(
         context["lessons"] or None,
         context["procedures"] or None,
         requirements_ctx or None,
+        context.get("wiki") or "",
     )
     deliverable = execute._sanitize_deliverable_text(deliverable)
 

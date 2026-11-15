@@ -5,8 +5,9 @@ The company learns by changing its procedures, and the board decides whether
 a change helped (POSITIONING rule 5: deterministic checks decide, a model may
 only propose). After adoption, the next ``MEASURE_AFTER_SPRINTS`` completed
 sprints are compared with the ones before it. A procedure under which rework
-per task or the share of blocked tasks got clearly worse is reverted, and the
-version it replaced comes back; otherwise it is kept.
+per task, the share of blocked tasks or the share of tasks claimed done and not
+verified (issue #531) got clearly worse is reverted, and the version it
+replaced comes back; otherwise it is kept.
 
 Every function takes the caller's session and leaves committing to it.
 """
@@ -20,13 +21,14 @@ from models import BacklogItem, Procedure, Sprint
 from models.procedure import ALL_ROLES
 from sqlmodel import Session, select
 
-from services.tasks import task_projection
+from services.tasks import progress_snapshot, task_projection
 
 BASELINE_SPRINTS = 2
 MEASURE_AFTER_SPRINTS = 2
 # How much worse counts as worse, so one unlucky task does not revert a rule.
 REWORK_TOLERANCE = 0.25  # extra rework requests per task
 BLOCKED_TOLERANCE = 0.10  # extra share of blocked tasks
+GAP_TOLERANCE = 0.10  # extra share of tasks claimed done and not verified
 MAX_PROPOSALS = 2
 TITLE_LIMIT = 120
 BODY_LIMIT = 2000
@@ -47,7 +49,9 @@ _PROPOSAL = re.compile(
 
 
 def board_metrics(session: Session, sprint_ids: list[int]) -> dict[str, Any]:
-    """Rework requests per task and the share of blocked tasks in *sprint_ids*."""
+    """Rework requests per task, the share of blocked tasks and the share of
+    tasks claimed delivered but not verified (``claim_gap_rate``, issue #531,
+    from the sprints' sealed progress or their task events) in *sprint_ids*."""
     items = (
         session.exec(
             select(BacklogItem).where(BacklogItem.sprint_id.in_(sprint_ids))
@@ -67,11 +71,13 @@ def board_metrics(session: Session, sprint_ids: list[int]) -> dict[str, Any]:
         for item in items
         if item.status == "blocked" and not records[item.id].awaits_risk_acceptance()
     )
+    gap = progress_snapshot.claim_gap(session, sprint_ids)["gap"]
     return {
         "sprints": len(sprint_ids),
         "tasks": tasks,
         "rework_per_task": round(rework / tasks, 3) if tasks else 0.0,
         "blocked_rate": round(blocked / tasks, 3) if tasks else 0.0,
+        "claim_gap_rate": round(gap / tasks, 3) if tasks else 0.0,
     }
 
 
@@ -271,10 +277,16 @@ def history_prompt(session: Session, company_id: int) -> str:
 def _numbers(procedure: Procedure) -> str:
     outcome = procedure.outcome or {}
     baseline = procedure.baseline or {}
-    return (
+    numbers = (
         f"rework per task {baseline.get('rework_per_task', 0)} → {outcome.get('rework_per_task', 0)}, "
         f"blocked {baseline.get('blocked_rate', 0)} → {outcome.get('blocked_rate', 0)}"
     )
+    if "claim_gap_rate" in baseline:
+        numbers += (
+            f", claimed but not verified {baseline['claim_gap_rate']} → "
+            f"{outcome.get('claim_gap_rate', 0)}"
+        )
+    return numbers
 
 
 # ── Decisions ────────────────────────────────────────────────────────────────
@@ -359,6 +371,7 @@ def evaluate(session: Session, company_id: int) -> list[Procedure]:
         elif (
             measured["rework_per_task"] > baseline["rework_per_task"] + REWORK_TOLERANCE
             or measured["blocked_rate"] > baseline["blocked_rate"] + BLOCKED_TOLERANCE
+            or _gap_worse(baseline, measured)
         ):
             procedure.outcome = {**measured, "result": "reverted"}
             procedure.status = "retired"
@@ -378,6 +391,14 @@ def evaluate(session: Session, company_id: int) -> list[Procedure]:
         session.add(procedure)
         decided.append(procedure)
     return decided
+
+
+def _gap_worse(baseline: dict[str, Any], measured: dict[str, Any]) -> bool:
+    """Whether more tasks were claimed done without being verified; a baseline
+    recorded before the gap was measured has nothing to compare with."""
+    if "claim_gap_rate" not in baseline:
+        return False
+    return measured["claim_gap_rate"] > baseline["claim_gap_rate"] + GAP_TOLERANCE
 
 
 def describe_outcome(procedure: Procedure) -> str:
