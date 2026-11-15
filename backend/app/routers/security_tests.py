@@ -20,7 +20,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, CompanyMember, User, WstgReview
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from schemas import RequestModel
 from services.planning import wstg_plan
 from services.planning.project_docs import collect, wstg_status
 from services.planning.project_docs.refs import digest
@@ -31,7 +32,7 @@ from sqlmodel import Session, select
 router = APIRouter(tags=["Core"])
 
 
-class ReviewRequest(BaseModel):
+class ReviewRequest(RequestModel):
     wstg_id: str = Field(min_length=5, max_length=40)
     result: Literal["pass", "fail", "not_applicable"]
     reviewer_name: str = Field(min_length=1, max_length=120)
