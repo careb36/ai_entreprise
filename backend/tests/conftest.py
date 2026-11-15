@@ -27,6 +27,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 # Appended, not prepended: nothing under ``bench/`` may shadow a backend module.
 sys.path.append(str(Path(__file__).resolve().parents[2] / "bench"))
 
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_cmdline_main(config):
+    """Run in parallel by default: ``-n auto --dist loadgroup`` when
+    pytest-xdist is installed and the command did not choose ``-n`` itself.
+
+    A hook rather than ``addopts``: ``addopts = "-n auto"`` would make every
+    run that turns the plugin off (``-p no:xdist``) or lacks it fail with
+    "unrecognized arguments: -n". ``-n 0`` runs in one process (for ``--pdb``,
+    which xdist refuses, the default is not applied either). It runs before
+    xdist's own hook, which turns ``auto`` into the core count. Called for
+    this conftest when the run names ``tests`` or a path inside it.
+    """
+    if not config.pluginmanager.hasplugin("xdist"):
+        return
+    # A worker calls this hook too, with ``-n`` cleared: without this guard
+    # every worker would start workers of its own, without end.
+    if hasattr(config, "workerinput"):
+        return
+    if config.option.numprocesses is not None or config.option.usepdb:
+        return
+    config.option.numprocesses = "auto"
+    if config.option.dist == "no":
+        # loadgroup: tests marked ``xdist_group`` share one worker.
+        config.option.dist = "loadgroup"
+
+
+def pytest_configure(config):
+    # xdist registers the mark itself; this keeps a run without it
+    # (``-p no:xdist``) free of "unknown mark" warnings.
+    config.addinivalue_line(
+        "markers", "xdist_group(name): run on the same xdist worker as the group"
+    )
+
+
 from config import settings
 
 # The tests never call models.dev: the catalogue stays on its snapshot.
@@ -93,7 +128,9 @@ from sso_fake_idp import fake_idp  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine — shared across all tests within a session via
-# StaticPool so every Session sees the same in-memory database.
+# StaticPool so every Session sees the same in-memory database. An in-memory
+# database belongs to its process, so under pytest-xdist each worker has its
+# own and no worker sees another's rows.
 # ---------------------------------------------------------------------------
 _SQLITE_URL = "sqlite://"
 
@@ -267,6 +304,35 @@ def sqlite_session():
     with Session(_engine) as session:
         yield session
         session.rollback()  # isolate each test
+    _empty_shared_database()
+
+
+def _empty_shared_database():
+    """Delete every row a test committed to the shared database.
+
+    A rollback undoes only what was never committed, and most tests commit.
+    Left in place, the rows of every earlier test were read again by each
+    later worker cycle that scans all the tasks of all sprints (the review
+    cycle reviewed other tests' tasks): one such test took 49 s at the end of
+    a serial run and under a second alone, and which test paid depended on
+    the order, so on how xdist spread the tests over its workers.
+    """
+    # Every table in the database, not only the ones created above: some
+    # tests create the tables they need (``AssistantRuntimeState``...) on the shared engine.
+    with _engine.begin() as connection:
+        names = connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master"
+            " WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).scalars()
+        for name in list(names):
+            connection.exec_driver_sql(f'DELETE FROM "{name}"')
+    # Emptied tables hand out their ids again, so what the process remembers
+    # by a row's id goes too: a later test's task 1 is not this test's.
+    from services.loop.worker import intake
+    from services.management import manager_observe
+
+    intake.LAST_AUTONOMOUS_QUEUE_AT.clear()
+    manager_observe._last_credit_probe.clear()
 
 
 class _FakeNATSClient:
