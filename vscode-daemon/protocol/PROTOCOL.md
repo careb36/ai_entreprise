@@ -33,8 +33,9 @@ request that makes them (§7).
   JSON object is read as `{}`.
 - **Replies arrive under `_INBOX.backend`.** With the broker configuration
   `scripts/nats_config.py` writes, the daemon may publish only its replies
-  there, `workspace.delivered`, `workspace.heartbeat`, `glassroom.*` and the
-  JetStream calls of its own consumer; it may never send a request.
+  there, `workspace.delivered`, `workspace.heartbeat`, `glassroom.*`, the
+  JetStream calls of its own consumer and a run's full log into the object
+  store `FABRIQUE_RUN_LOGS` (§5.1); it may never send a request.
 - **Subjects** are not namespaced, except the JetStream ones
   (`workspace.deliver`, `workspace.delivered`), which carry `NATS_NAMESPACE`
   (`vscode-daemon/nats_scope.py`).
@@ -154,7 +155,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.heartbeat` | published | `daemon_status.py` | — | §3 |
 | `workspace.capabilities` | request | `daemon.py` | `commands`? | `assistants` |
 | `workspace.generate` | request | `daemon.py`, `delivery.py` | `workspace_root`, `files` (`path` with `content` or `edits`), `git`?, `sprint_id`? | `ok`, `workspace_root`, `files` (per file `status`, `sha256` read back, the diff), `snapshot` or `git`, `project_files` |
-| `workspace.execute` | request | `daemon.py`, `shell_exec.py`, `sandbox.py` | `command`, `workspace_root`, `sandbox`?, `command_policy`?, `timeout_seconds`? | `success`, `stdout`, `stderr`, `exit_code`, `timed_out`?, `sandbox`? |
+| `workspace.execute` | request | `daemon.py`, `shell_exec.py`, `sandbox.py`, `run_logs.py` | `command`, `workspace_root`, `sandbox`?, `command_policy`?, `timeout_seconds`?, `full_log`? | `success`, `stdout`, `stderr`, `exit_code`, `timed_out`?, `sandbox`?, `full_log`? |
 | `workspace.browse` | request | `host_folders.py` | `path`? | `host`, `path`, `parent`, `entries`, `shortcuts`, `roots`, `truncated` |
 | `workspace.inspect` | request | `host_folders.py` | `path`, `snapshot`? | `host`, `path`, `name`, `exists`, `is_dir`, `git`, `snapshot`? |
 | `workspace.hash` | request | `file_hash.py` | `workspace_root`, `paths` | `files` (`present` with `sha256`, `missing`, `rejected`, `workspace_missing`) |
@@ -175,7 +176,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
 | `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`? | `is_repo`, and how the base stands against its remote |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider` | `ok`, `url`, `comments`, `truncated` |
-| `workspace.app.check` | request | `app_run.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`? | `listening`, probes, the e2e run, or `error` |
+| `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `full_log`?, or `error` |
 | `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge` | `ok`, the integration branch and its merges, or the conflict |
 | `workspace.deliver` | JetStream, consumed | `daemon.py` | — | A delivery queued while the daemon was offline: `job_id`, `workspace_root`, `files`, `git`? |
 | `workspace.delivered` | JetStream, published | `daemon.py` | — | The `workspace.generate` reply with `job_id`, `company_id`, `sprint_id`, `item_id`, `host` |
@@ -183,6 +184,50 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 
 The schemas allow fields they do not name: a reader ignores what it does not
 know, which is what lets a field be added without a new version (§7).
+
+### 5.1 Full logs and the browser probe (additive, issue #315)
+
+Two optional request fields, added within version 1 (§7): a daemon that
+predates them ignores them and replies as before, and the backend records
+that as not observed, with the reason.
+
+**`full_log`** on `workspace.execute` and `workspace.app.check`:
+`{"bucket": "FABRIQUE_RUN_LOGS", "name": "run-<hex>"}` (letters, digits, `_`
+and `-`, at most 64 each; the bucket carries `NATS_NAMESPACE` as
+`<namespace>_FABRIQUE_RUN_LOGS`). The daemon keeps each stream whole, up to
+`FABRIQUE_FULL_LOG_MAX_MB` (50 MiB) on its machine, and uploads it after the
+run as the object `<name>/<stream>` in that JetStream object store (the
+standard layout: stream `OBJ_<bucket>`, subjects `$O.<bucket>.C.>` and
+`$O.<bucket>.M.>`). The streams are `stdout` and `stderr` for
+`workspace.execute`; `log` (host) or `log.stdout` / `log.stderr` (container)
+and `e2e.stdout` / `e2e.stderr` for `workspace.app.check`. The reply's
+`full_log`:
+
+| Field | Meaning |
+| --- | --- |
+| `bucket`, `max_bytes` | Where it uploaded, and its cap per stream. |
+| `objects` | Per stream: `stream`, `object`, `bytes` (what the object holds), `total_bytes` (what the stream printed in all), `truncated` (cut at the cap). |
+| `error` | The upload failed (no bucket, no permission, a broker error); `objects` is then empty or partial. |
+| `reason` | Nothing to upload: the command did not run (refused, no such folder). |
+
+The reply never carries a hash, and the schema refuses one (`sha256`,
+`digest`) in an object's entry: the backend reads each object back and
+computes its size and sha256 itself (rule 6 of `docs/POSITIONING.md`). The
+broker lets the daemon's user write chunks and metadata in that one bucket,
+read the bucket's info and an object's metadata, and nothing else there: no
+purge, no delete. The bucket is the backend's to create (with JetStream),
+with its retention (`FULL_LOG_RETENTION_DAYS`, `FULL_LOG_BUCKET_MAX_MB`).
+
+**`browser_probe: true`** on `workspace.app.check`: when the application
+listens and an e2e command is about to run, the daemon first runs
+`images/browser/probe-browser.js` with `node -e` where the command runs (the
+project's folder, or inside the container) and replies `browser_probe`:
+`available` (a browser launched, painted a page and read it back),
+`observed_by: daemon`, and as the probe found them `from` (`image`: the
+browser sandbox image's own pinned Playwright, `FABRIQUE_PLAYWRIGHT_DIR`;
+`project`: the project's), `package`, `playwright`, `browser`, or `reason`,
+with `exit_code`. Without an e2e command, or without the field, no probe runs
+and the reply has no `browser_probe`.
 
 ## 6. Conformance fixtures
 
@@ -217,8 +262,11 @@ Fixtures cover `workspace.status`, `workspace.heartbeat`,
 `workspace.list`, `workspace.read`, `workspace.search`, `workspace.find`,
 `workspace.map`, `workspace.related`, `workspace.signatures`,
 `workspace.hash`, `workspace.sandbox.reset`, `workspace.inspect` and
-`workspace.browse`; the other subjects are covered by their schema, and their
-handlers by their own tests. To add one, write the file with the request and
+`workspace.browse` (`workspace.execute` also with `full_log`, replayed
+against an in-memory object store, and read back and hashed by the backend's
+side); the other subjects are covered by their schema, and their handlers by
+their own tests (`workspace.app.check`'s probe and full log in
+`backend/tests/test_browser_image.py` and `test_run_logs.py`). To add one, write the file with the request and
 an empty `reply`, run the daemon-side test, and copy the actual reply it
 prints after checking it.
 

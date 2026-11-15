@@ -118,7 +118,10 @@ def test_durable_subjects_are_stored_in_jetstream_with_their_id():
 
     asyncio.run(scenario())
 
-    assert js.added == [s.name for s in nats_client_module.DURABLE_STREAMS]
+    # The durable streams, then the full logs' object store (run_logs.py).
+    assert js.added == [s.name for s in nats_client_module.DURABLE_STREAMS] + [
+        "OBJ_FABRIQUE_RUN_LOGS"
+    ]
     assert js.published == [
         ("task.assign", {"backlog_item_id": 1}, {"Nats-Msg-Id": "a-1"})
     ]
@@ -131,7 +134,9 @@ def test_existing_streams_with_other_settings_are_updated():
     client = _client(js)
 
     assert asyncio.run(client.enable_jetstream())
-    assert js.updated == [s.name for s in nats_client_module.DURABLE_STREAMS]
+    assert js.updated == [s.name for s in nats_client_module.DURABLE_STREAMS] + [
+        "OBJ_FABRIQUE_RUN_LOGS"
+    ]
 
 
 def test_without_jetstream_everything_uses_core_nats():

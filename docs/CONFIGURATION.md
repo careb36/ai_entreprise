@@ -234,7 +234,34 @@ Copy `.env.example` to `.env` and fill in:
   mounted or removed. Daemon side, `FABRIQUE_SANDBOX_CACHE=off` refuses the
   cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
   `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
-  quarantine.
+  quarantine. The application check's container mounts the same cache.
+- `DELIVERY_BROWSER_IMAGE` — optional, default empty (the application check
+  runs in `DELIVERY_SANDBOX_IMAGE`, as before). In container mode, the image the
+  application check runs in when its e2e command drives a browser (QA's smoke
+  suite, or the e2e command of a profile that serves pages): one built from
+  `vscode-daemon/images/browser` (Node, Playwright 1.64.1 from its lockfile and
+  the Chrome Headless Shell it launches, each download checked by sha256 for
+  amd64 and arm64; `docker build vscode-daemon/images/browser`, and behind a
+  TLS-intercepting proxy `--secret id=extra_ca,src=<CA bundle>`). Pin it by
+  digest (`registry/name@sha256:…`); the run records the content ID and digest
+  it started from either way. Before a browser e2e command the daemon also
+  probes for a browser (`vscode-daemon/browser_probe.py`) and `e2e_run` says
+  whether one was present.
+- `DELIVERY_FULL_LOGS` — optional, default `true`. The install, the test run
+  and the application check ask the daemon for their whole output: it uploads
+  each stream (up to `FABRIQUE_FULL_LOG_MAX_MB` on the daemon's machine,
+  default `50`, 1 to 1024; beyond it the object is cut and says `truncated`)
+  to the JetStream object store `FABRIQUE_RUN_LOGS` (prefixed with
+  `NATS_NAMESPACE`), and the backend reads each object back and records its
+  size and sha256, computed here, as `full_log` on the evidence. Needs
+  JetStream; without it, with the setting off or with an older daemon the
+  evidence says `full_log: {observed: false, reason}`.
+  `DELIVERY_FULL_LOG_MAX_MB` (default `50`) is the largest object the backend
+  reads back. Retention is the bucket's, set when the backend starts:
+  `FULL_LOG_RETENTION_DAYS` (default `30`; `0` keeps objects) and
+  `FULL_LOG_BUCKET_MAX_MB` (default `4096`; beyond it the oldest objects go
+  first; `0` for no limit). The janitor does not touch the bucket: the
+  evidence keeps each object's sha256 after the object itself expires.
   The daemon also applies a **command policy** before `workspace.execute`
   runs anything (`vscode-daemon/command_policy.py`, issue #357): the
   request's `command_policy` (`{"mode": "allow"|"deny", "allow": [...],
