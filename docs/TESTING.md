@@ -263,7 +263,12 @@ too (`.github/workflows/e2e.yml`) on every pull request that touches
 `backend/`, `vscode-daemon/`, `scripts/e2e/` or the workflow itself, and on
 pushes to `main`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
-artifact. After the loop (host matrix entry), the same job backs up the e2e
+artifact, with the self-hosting harness's logs and reports
+(`$E2E_WORKDIR/self-host/*.log` and `*.json`, step 9d), even when the job is
+cancelled or times out. Every local git call of `scripts/self_host/self_host.py`
+is bounded (`GIT_TIMEOUT_SECONDS`, 120 s) and fails naming the command, so a
+hung host fails that step loudly instead of silently until the job's timeout
+(as on #575). After the loop (host matrix entry), the same job backs up the e2e
 database with `scripts/backup.sh`, restores it into a scratch database and
 compares its tables and audit rows, then runs `test_replicas.py`'s Postgres
 races against it (`REPLICAS_POSTGRES_URL`); a change to `scripts/backup.sh`

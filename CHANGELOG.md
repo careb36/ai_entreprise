@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The e2e self-hosting step fails loudly and keeps its logs.** Every local git call of `scripts/self_host/self_host.py` now times out after `GIT_TIMEOUT_SECONDS` (120 s) and raises `GitTimeoutError` naming the command, and the `e2e-logs` artifact also keeps the harness's `self-host/*.log` and `*.json`, so a step that hangs (as on #575, 18 minutes with nothing to diagnose) leaves its output.
+
 * **The runners' docker state is swept weekly.** `e2e.yml` started a pgvector
 container per job, that image declares a `VOLUME`, and both cleanup sites used
 `docker rm -f`: every run on this machine left an anonymous volume behind, and
