@@ -10,6 +10,14 @@ listened, answered and with which status, how the e2e command ended, the
 tail of the application's log, and the sandbox applied. Never the agent's
 word; the backend's Verifier reads this reply.
 
+With ``browser_probe: true`` the daemon first checks, where the e2e command
+is about to run, that a browser Playwright can launch is there
+(``browser_probe.py``) and reports it as ``browser_probe``. With
+``full_log`` the application's whole log and the e2e command's whole output
+go to the object store (``run_logs.py``), the reply saying which objects. In
+container mode with the request's ``cache``, the project's dependency cache
+volume is mounted as for a test run (``sandbox_cache.py``) and kept after.
+
 The same rules as ``workspace.execute``: the command policy (the request's
 and the daemon's own ``FABRIQUE_COMMAND_DENY``) refuses a start or e2e
 command before anything runs, and a sandbox the daemon cannot apply is an
@@ -33,8 +41,11 @@ import urllib.request
 import uuid
 from typing import Any, Dict, Optional
 
+import browser_probe
 import command_policy
+import run_logs
 import sandbox
+import sandbox_cache
 import sandbox_image
 import shell_exec
 import win_job
@@ -207,14 +218,18 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
             if out.get("listening"):
                 out["probe"] = http_probe(req["app_url"] + req["probe_path"])
                 if req.get("e2e"):
+                    if req["browser_probe"]:
+                        out["browser_probe"] = browser_probe.on_host(cwd, env)
                     # Its own group: a timed-out runner's children go with it.
                     run = sandbox.run_bounded(
                         shell_exec.build_shell_command(req["e2e"]), req["e2e_seconds"],
-                        cwd=cwd, env=env, own_group=True,
+                        cwd=cwd, env=env, own_group=True, keep_full=req["keep_full"],
                     )
-                    out["e2e"] = _e2e_record(req, run)
+                    out["e2e"] = _e2e_record(req, run, out)
         finally:
             out["stopped"] = _stop_host(process, port, job)
+        if req["keep_full"]:
+            run_logs.keep(out, "log", run_logs.spool_of_file(log))
         log.seek(0, os.SEEK_END)
         size = log.tell()
         log.seek(max(0, size - LOG_TAIL_CHARS))
@@ -222,7 +237,12 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _e2e_record(req: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
+def _e2e_record(req: Dict[str, Any], run: Dict[str, Any], out: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    for stream, spool in (run.pop(run_logs.KEY, None) or {}).items():
+        if out is None:
+            spool.close()
+        else:
+            run_logs.keep(out, f"e2e.{stream}", spool)
     text = f"{run.get('stdout') or ''}{run.get('stderr') or ''}"
     record = {"command": req["e2e"], "exit_code": run.get("exit_code"), "timed_out": bool(run.get("timed_out"))}
     if record["timed_out"]:
@@ -254,7 +274,9 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     name = f"fabrique-app-{uuid.uuid4().hex[:12]}"
     # From the image's content ID, observed now; reported below (``sandbox_image``).
     run_box, identity = sandbox_image.pinned(runtime, box)
-    argv = sandbox.container_command(runtime, run_box, req["start"], req["cwd"], name)
+    # The project's dependency cache, as a test run mounts it (``sandbox_cache``).
+    cache = sandbox_cache.prepare(runtime, run_box["image"], req["cwd"]) if box["cache"] else None
+    argv = sandbox.container_command(runtime, run_box, req["start"], req["cwd"], name, (cache or {}).get("args"))
     argv.remove("--rm")  # Kept until its log is read; removed below.
     argv[2:2] = ["-d", "-e", f"PORT={req['port']}", "-e", f"APP_URL={req['app_url']}"]
     out: Dict[str, Any] = {"sandbox": sandbox.report(box, runtime)}
@@ -281,13 +303,26 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     finally:
         try:
             if out.get("started"):
-                logs = _docker(runtime, "logs", "--tail", "400", name)
-                out["log"] = _tail(f"{logs.stdout}{logs.stderr}")
+                out["log"] = _container_log(runtime, name, req, out)
         except (OSError, subprocess.SubprocessError) as exc:
             out["log"] = _tail(f"(the container's log could not be read: {exc})")
         finally:
             out["stopped"] = _remove(runtime, name)
+            if cache is not None:
+                out["sandbox"]["cache"] = sandbox_cache.finish(runtime, cache, "check", bool(out.get("listening")), req["cwd"])
     return out
+
+
+def _container_log(runtime: str, name: str, req: Dict[str, Any], out: Dict[str, Any]) -> Dict[str, Any]:
+    """The tail of the container's log; with a full log asked for, all of it
+    (up to the cap) kept for the object store too."""
+    if not req["keep_full"]:
+        logs = _docker(runtime, "logs", "--tail", "400", name)
+        return _tail(f"{logs.stdout}{logs.stderr}")
+    run = sandbox.run_bounded([runtime, "logs", name], RUNTIME_CALL_SECONDS, keep_full=True)
+    for stream, spool in (run.pop(run_logs.KEY, None) or {}).items():
+        run_logs.keep(out, f"log.{stream}", spool)
+    return _tail(f"{run['stdout']}{run['stderr']}")
 
 
 def _watch_container(runtime: str, name: str, req: Dict[str, Any], out: Dict[str, Any]) -> None:
@@ -313,14 +348,19 @@ def _watch_container(runtime: str, name: str, req: Dict[str, Any], out: Dict[str
             break
         time.sleep(POLL_SECONDS)
     if out.get("listening") and req.get("e2e"):
+        if req["browser_probe"]:
+            out["browser_probe"] = browser_probe.in_container(runtime, name, env_args)
         run = sandbox.run_bounded(
-            [runtime, "exec", *env_args, name, "/bin/sh", "-c", req["e2e"]], req["e2e_seconds"]
+            [runtime, "exec", *env_args, name, "/bin/sh", "-c", req["e2e"]], req["e2e_seconds"],
+            keep_full=req["keep_full"],
         )
-        out["e2e"] = _e2e_record(req, run)
+        out["e2e"] = _e2e_record(req, run, out)
 
 
-def check_application(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Start, wait, probe, e2e, stop; the reply ``workspace.app.check`` sends."""
+def check_application(data: Dict[str, Any], keep_full: bool = False) -> Dict[str, Any]:
+    """Start, wait, probe, e2e, stop; the reply ``workspace.app.check`` sends.
+    With *keep_full* the whole log and e2e output stay under ``run_logs.KEY``
+    for ``handle_app_check`` to upload."""
     start = data.get("start_command")
     cwd = data.get("workspace_root")
     port = data.get("port")
@@ -343,6 +383,8 @@ def check_application(data: Dict[str, Any]) -> Dict[str, Any]:
         "app_url": f"http://127.0.0.1:{port}",
         "ready_seconds": _bounded(data.get("ready_timeout_seconds"), DEFAULT_READY_SECONDS, MAX_READY_SECONDS),
         "e2e_seconds": _bounded(data.get("e2e_timeout_seconds"), DEFAULT_E2E_SECONDS, MAX_E2E_SECONDS),
+        "browser_probe": data.get("browser_probe") is True,
+        "keep_full": bool(keep_full),
     }
     try:
         box = sandbox.normalize(data.get("sandbox"))
@@ -359,6 +401,10 @@ def check_application(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_app_check(nc, msg, reply, request_body) -> None:
-    """``workspace.app.check`` → what ``check_application`` observed."""
-    body = await asyncio.to_thread(check_application, request_body(msg))
+    """``workspace.app.check`` → what ``check_application`` observed, the
+    whole log uploaded first when the request asks (``run_logs``)."""
+    data = request_body(msg)
+    full_log = run_logs.wanted(data)
+    body = await asyncio.to_thread(check_application, data, full_log is not None)
+    await run_logs.upload(nc, full_log, body)
     await reply(nc, msg, body)
