@@ -120,11 +120,12 @@ What pushing the tag runs:
   only, on the self-hosted runner with plain `docker build`. A sixth image,
   `browser-sandbox` (`vscode-daemon/images/browser`, issue #529), is
   published from the same tag by a job of its own, outside that list:
-  `linux/amd64,linux/arm64` with buildx under QEMU, the same `:X.Y.Z` (plus
-  `:latest` for a stable release), the same SBOM and the same keyless
-  signature as the rest. `.github/workflows/browser-image-probe.yml` (manual,
-  `workflow_dispatch`) is the check that the runner can build and run both
-  architectures before a release tag relies on it. A new package on GHCR is
+  `linux/amd64` only with buildx, the same `:X.Y.Z` (plus `:latest` for a
+  stable release), the same SBOM and the same keyless signature as the rest.
+  Its arm64 variant builds under QEMU, but its browser aborts under emulation
+  (`.github/workflows/browser-image-probe.yml`, manual `workflow_dispatch`),
+  so it is not published until it has been run, with its probe, on arm64
+  hardware. A new package on GHCR is
   private until its visibility is changed in the package's settings.
 
 Each release also records what it is made of and who built it (issue #522,
@@ -140,11 +141,9 @@ part C):
 - **SBOMs of the images.** `images.yml` scans each image it pushed (the base
   image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
   artifact `sbom-<image>` for 90 days and attached to the image in the
-  registry as a signed CycloneDX attestation. The multi-arch `browser-sandbox`
-  is scanned by its digest in the registry (a manifest list is never in the
-  Docker daemon) and its SBOM catalogs the `linux/amd64` variant; the arm64
-  one differs only in the browser binary, which the Dockerfile checks against
-  its own pinned sha256.
+  registry as a signed CycloneDX attestation. `browser-sandbox` is scanned by
+  its digest in the registry (buildx pushes it without loading it into the
+  Docker daemon).
 - **Signatures.** `images.yml` signs each image by its digest with keyless
   [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
   (`id-token: write`, on the two publish jobs only) gets a short-lived

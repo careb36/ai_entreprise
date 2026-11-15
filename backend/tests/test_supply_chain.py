@@ -161,10 +161,11 @@ def test_images_are_signed_by_digest_and_carry_their_sbom():
     assert keep["with"]["if-no-files-found"] == "error"
 
 
-def test_the_browser_sandbox_publishes_multi_arch_signed_and_attested():
-    """The sixth image (issue #529): buildx under QEMU for linux/amd64 and
-    linux/arm64, outside the five-image matrix, signed and attested as the
-    five others."""
+def test_the_browser_sandbox_publishes_amd64_signed_and_attested():
+    """The sixth image (issue #529): buildx for linux/amd64 only, outside the
+    five-image matrix, signed and attested as the five others. Its arm64
+    variant's browser aborts under QEMU, so it is not published until it has
+    been run on arm64 hardware."""
     job = _workflow("images.yml")["jobs"]["publish-browser"]
     assert job["needs"] == "version"
     assert job["permissions"] == {
@@ -173,10 +174,10 @@ def test_the_browser_sandbox_publishes_multi_arch_signed_and_attested():
         "id-token": "write",
     }
     uses = [s["uses"] for s in job["steps"] if "uses" in s]
-    assert any(u.startswith("docker/setup-qemu-action@") for u in uses)
+    assert not any(u.startswith("docker/setup-qemu-action@") for u in uses)
     assert any(u.startswith("docker/setup-buildx-action@") for u in uses)
     text = _run(job)
-    assert "--platform linux/amd64,linux/arm64" in text
+    assert "--platform linux/amd64 " in text and "arm64" not in text
     assert "--push" in text
     assert "ghcr.io/${GITHUB_REPOSITORY,,}/${NAME}" in text
     # The digest signed is buildx's, from its metadata file: a manifest list

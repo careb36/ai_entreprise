@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The browser sandbox image is published for linux/amd64 only (#529).** Its arm64 variant builds under QEMU on the runner, but its browser aborts under emulation (the first `browser-image-probe.yml` run), so nobody has seen it work; `images.yml` no longer sets up QEMU or publishes arm64 until it has been run with its probe on arm64 hardware.
+
 * **The runners' docker state is swept weekly.** `e2e.yml` started a pgvector
 container per job, that image declares a `VOLUME`, and both cleanup sites used
 `docker rm -f`: every run on this machine left an anonymous volume behind, and
