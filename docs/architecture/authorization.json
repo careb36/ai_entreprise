@@ -318,6 +318,9 @@
     "GET /v1/specifications/{spec_id}/impact": {
       "access": "Viewer"
     },
+    "GET /v1/specifications/{spec_id}/progress": {
+      "access": "Viewer"
+    },
     "GET /v1/sprints": {
       "access": "Viewer"
     },
@@ -334,6 +337,12 @@
       "access": "Viewer"
     },
     "GET /v1/sprints/{sprint_id}/integration": {
+      "access": "Viewer"
+    },
+    "GET /v1/sprints/{sprint_id}/progress": {
+      "access": "Viewer"
+    },
+    "GET /v1/sprints/{sprint_id}/relations": {
       "access": "Viewer"
     },
     "GET /v1/standards": {
@@ -358,6 +367,9 @@
       "access": "Viewer"
     },
     "GET /v1/tasks/{task_id}/events": {
+      "access": "Viewer"
+    },
+    "GET /v1/tasks/{task_id}/relations": {
       "access": "Viewer"
     },
     "GET /v1/workspace/browse": {
@@ -669,6 +681,18 @@
     "POST /v1/support/report_bug": {
       "access": "public",
       "why": "Anyone can report a bug."
+    },
+    "POST /v1/task_relations/{relation_id}/confirm": {
+      "access": "Manager"
+    },
+    "POST /v1/task_relations/{relation_id}/reject": {
+      "access": "Manager"
+    },
+    "POST /v1/task_relations/{relation_id}/remove": {
+      "access": "Manager"
+    },
+    "POST /v1/tasks/{task_id}/relations": {
+      "access": "Manager"
     },
     "POST /v1/wiki_versions/{version_id}/accept": {
       "access": "Manager"

@@ -37,6 +37,7 @@ from .integration import SprintIntegration
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
+from .progress import SprintProgressSnapshot
 from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
@@ -91,6 +92,7 @@ __all__ = [
     "Sprint",
     "SprintBoardNote",
     "SprintIntegration",
+    "SprintProgressSnapshot",
     "SsoConnection",
     "SsoFlowState",
     "SsoIdentity",

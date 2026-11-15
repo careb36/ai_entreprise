@@ -67,6 +67,7 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
+from models.progress import SprintProgressSnapshot
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
@@ -235,6 +236,7 @@ SQLModel.metadata.create_all(
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
         SprintBoardNote.__table__,
+        SprintProgressSnapshot.__table__,
         TaskRelation.__table__,
         Team.__table__,
         TeamMember.__table__,
