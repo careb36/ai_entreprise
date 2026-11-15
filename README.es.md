@@ -554,7 +554,8 @@ la-fabrique/
 ├── llm-proxy/                        # Gateway de presupuesto de tokens y auditoría (Flask :5100)
 ├── vscode-daemon/                    # Suscriptor NATS local para operaciones en el IDE
 ├── scripts/
-│   └── verify_infra.py               # Script de verificación de salud de la infraestructura
+│   ├── verify_infra.py               # Script de verificación de salud de la infraestructura (CLI)
+│   └── infra_checks/                 # Sus comprobaciones: Neo4j, Postgres/pgvector, OpenProject
 ├── db/
 │   └── init-db/init.sql              # DDL de bootstrap de Postgres
 ├── docker-compose.yml                # Definición del stack local (8 servicios)

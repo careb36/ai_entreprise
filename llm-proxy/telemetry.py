@@ -1,87 +1,61 @@
 """
-OpenTelemetry SDK bootstrap for the La Fabrique LLM Proxy.
+OpenTelemetry tracing for the LLM proxy.
 
-Call ``configure_telemetry()`` once at Flask application startup.  The proxy
-registers as service ``fabrique-llm-proxy`` so its spans appear as a distinct
-service node in the Jaeger service graph, downstream of the backend agents.
-
-Instrumentation applied by ``configure_telemetry()``:
-- ``FlaskInstrumentor``    — auto-spans every HTTP request with method, path,
-                             status code, and W3C traceparent propagation.
-- ``RequestsInstrumentor`` — auto-injects ``traceparent`` into every outbound
-                             ``requests`` call (Gemini / DeepSeek APIs), making
-                             the full LLM round-trip visible in traces.
+``instrument(app)`` runs once, when ``app.py`` is imported: it registers the
+proxy as service ``llm-proxy``, spans every inbound Flask request and injects
+``traceparent`` into every outbound ``requests`` call, so a provider round
+trip shows up under the backend's trace. Spans are exported over OTLP/HTTP
+only when an endpoint is configured.
 
 Environment variables
 ---------------------
-``OTEL_EXPORTER_OTLP_ENDPOINT``
-    Base URL of the OTLP/HTTP collector (default: ``http://localhost:4318``).
-``OTEL_SERVICE_NAME``
-    Runtime override for the service name.
+``OTEL_SDK_DISABLED``
+    Truthy turns the exporter off whatever else is set.
+``OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`` / ``OTEL_EXPORTER_OTLP_ENDPOINT``
+    Base URL of the OTLP/HTTP collector; ``/v1/traces`` is appended.
+``OTEL_EXPORTER_OTLP_ENABLED``
+    Truthy with no endpoint exports to ``http://localhost:4318``.
 """
 
 import os
-import logging
 
 from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
-logger = logging.getLogger(__name__)
-
-_DEFAULT_SERVICE_NAME = "fabrique-llm-proxy"
-_DEFAULT_OTLP_ENDPOINT = "http://localhost:4318"
-
-_provider_configured: bool = False
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 
-def configure_telemetry(flask_app) -> None:
+def _is_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_otlp_endpoint() -> str | None:
+    """The collector's base URL, or ``None`` when nothing is exported."""
+    if _is_truthy(os.getenv("OTEL_SDK_DISABLED")):
+        return None
+    explicit_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if explicit_endpoint:
+        return explicit_endpoint.rstrip("/")
+    if _is_truthy(os.getenv("OTEL_EXPORTER_OTLP_ENABLED")):
+        return "http://localhost:4318"
+    return None
+
+
+def instrument(flask_app) -> str | None:
+    """Set the tracer provider and instrument Flask and ``requests``.
+
+    Returns the collector's base URL, or ``None`` when export is off (the
+    instrumentation still runs, so trace context still propagates).
     """
-    Wire up OTel tracing for the Flask proxy application.
-
-    Sets the global ``TracerProvider``, then instruments Flask (inbound HTTP)
-    and ``requests`` (outbound HTTP to Gemini / DeepSeek).
-
-    Args:
-        flask_app: The Flask application instance to instrument.
-    """
-    global _provider_configured
-    if _provider_configured:
-        return
-
-    service_name = os.getenv("OTEL_SERVICE_NAME", _DEFAULT_SERVICE_NAME)
-    endpoint_base = os.getenv(
-        "OTEL_EXPORTER_OTLP_ENDPOINT", _DEFAULT_OTLP_ENDPOINT
-    ).rstrip("/")
-
-    resource = Resource.create({SERVICE_NAME: service_name})
-    exporter = OTLPSpanExporter(endpoint=f"{endpoint_base}/v1/traces")
-
-    provider = TracerProvider(resource=resource)
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-
-    # Instrument Flask — auto-creates a server span for every inbound request
-    # and reads the W3C traceparent header to continue distributed traces
-    # started by the backend agents.
+    tracer_provider = TracerProvider(resource=Resource.create({SERVICE_NAME: "llm-proxy"}))
+    endpoint_base = resolve_otlp_endpoint()
+    if endpoint_base:
+        otlp_exporter = OTLPSpanExporter(endpoint=endpoint_base + "/v1/traces")
+        tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+    trace.set_tracer_provider(tracer_provider)
     FlaskInstrumentor().instrument_app(flask_app)
-
-    # Instrument requests — auto-injects traceparent into every outbound call
-    # so Gemini / DeepSeek calls appear as child spans in the trace.
     RequestsInstrumentor().instrument()
-
-    _provider_configured = True
-    logger.info(
-        "OpenTelemetry configured: service=%s endpoint=%s/v1/traces",
-        service_name,
-        endpoint_base,
-    )
-
-
-def get_tracer(name: str) -> trace.Tracer:
-    """Return an OTel Tracer bound to *name* (typically ``__name__``)."""
-    return trace.get_tracer(name)
+    return endpoint_base
