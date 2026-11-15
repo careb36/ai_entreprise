@@ -59,6 +59,7 @@ Primary trust boundaries:
 5. **Services ↔ PostgreSQL/Neo4j** — database compromise, unauthorized queries, data leakage.
 6. **CI/CD ↔ Kubernetes/Registry** — malicious images, leaked secrets, supply chain compromise.
 7. **Backend ↔ NATS ↔ workspace daemon ↔ the user's disk** — anything that can publish a request can ask the daemon to write files and run commands on the machine that holds the projects (§8.3, §8.6).
+8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`).
 
 Key threat actors: malicious end users, compromised external content, malicious model output, insider developers, CI/CD attackers.
 
@@ -107,14 +108,40 @@ provider yet.
 - **Rotation.** Changing `JWT_SECRET_KEY` ends every session and stream
   ticket; API tokens keep working (`docs/OPERATIONS.md`, Rotate keys).
 
-**Planned** (issue #512, phase 3, single sign-on): sign-in through Google,
-Microsoft Entra ID and a per-company generic OIDC connection, the provider's
-ID token validated by the backend. Until it lands, the following are
-**targets, not present**: OIDC/OAuth 2.1 with an external IdP,
-Authorization Code with PKCE in the frontend, validation of `iss` and `aud`,
-access tokens of 15 minutes or less, and server-side refresh tokens rotated
-on use. A deployment that needs a shorter session lowers
-`ACCESS_TOKEN_EXPIRE_MINUTES`.
+- **Single sign-on** (issue #512, phase 3; design and threat model in
+  `docs/design/SSO.md`). An Owner configures one OpenID Connect connection
+  per company (`/v1/companies/{id}/sso`, `backend/app/routers/sso_admin.py`);
+  Google and Microsoft Entra ID are presets of the same mechanism. The client
+  secret is encrypted with `FERNET_SECRET_KEY` and never returned. Sign-in
+  (`backend/app/routers/sso.py`, `services/platform/sso_flow.py`) is
+  Authorization Code with PKCE, a one-time `state` bound to the browser by an
+  `HttpOnly` cookie, and a nonce. The backend validates the ID token itself
+  (`services/platform/oidc.py`): signature with asymmetric algorithms only,
+  `iss`, `aud`, `exp`/`iat` with `SSO_CLOCK_SKEW_SECONDS` of leeway, the nonce,
+  and `email_verified` when present. The person is identified by
+  `(issuer, sub)`; the provider's claims establish identity only, and the role
+  always comes from La Fabrique's membership. A provider is trusted only for
+  its own company: an existing account is linked by email only when it
+  belongs to that company alone, auto-join never adopts an existing account,
+  one company at most lists a given domain, and public mail domains are
+  refused. The provider is reached only through
+  `services/platform/oidc_client.py` (https, public addresses re-checked
+  before each fetch unless `SSO_ALLOW_PRIVATE_ISSUERS`, no redirects, a 1 MiB
+  cap). A one-time, 60-second code is exchanged for the same access token the
+  password login issues. An Owner can require SSO for the company's members
+  once the connection is enabled and an Owner has signed in through it;
+  Owners listed in `SSO_BREAK_GLASS_EMAILS` keep their password, and each
+  such sign-in is audited. Every sign-in and every configuration change
+  writes an audit row (never the secret); the public routes are limited by
+  `SSO_RATE_LIMIT`.
+- **Known gaps.** Allowed domains are not verified by DNS (the first company
+  to list one holds it); sessions already issued stay valid until they
+  expire when SSO becomes required or a person is removed at the provider;
+  the password login itself has no rate limit. Still **targets, not
+  present**: access tokens of 15 minutes or less and server-side refresh
+  tokens rotated on use (with #524, the token out of `localStorage`). A
+  deployment that needs a shorter session lowers
+  `ACCESS_TOKEN_EXPIRE_MINUTES`.
 
 ### 3.2 API Authorization: what is built
 
@@ -682,7 +709,7 @@ Every PR that touches backend, frontend, agents, or infrastructure must pass thi
 
 - [ ] New endpoints enforce authentication unless explicitly public and approved
 - [ ] Authorization checked server-side for every role/permission
-- [ ] Token validation includes signature, a single allowed algorithm, expiry and token type (`backend/app/auth_tokens.py`); issuer and audience too once OIDC lands (§3.1)
+- [ ] Token validation includes signature, a single allowed algorithm, expiry and token type (`backend/app/auth_tokens.py`); for an SSO ID token, also the issuer, audience, nonce and an asymmetric algorithm (`services/platform/oidc.py`, §3.1)
 - [ ] No default `admin` or insecure fallback credentials
 - [ ] Agent inherits caller permissions and cannot exceed them
 
@@ -744,6 +771,11 @@ Before the stack serves anyone but the person running it:
       no longer used. A token cannot create tokens, and the audit rows its
       requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set and
       `AUTH_REQUIRED` on.
+- [ ] **Single sign-on.** `SSO_CALLBACK_URL` and `SSO_FRONTEND_URL` are the
+      public https addresses; `SSO_BREAK_GLASS_EMAILS` names at least one
+      Owner before any company requires SSO; `SSO_ALLOW_PRIVATE_ISSUERS`
+      stays off; `FERNET_SECRET_KEY` is set, so client secrets are encrypted
+      (§3.1, `docs/OPERATIONS.md`).
 - [ ] **Secrets at rest.** `FERNET_SECRET_KEY` set, so provider keys, MCP
       secrets, run secrets and project credentials are encrypted (the backend
       warns at startup without it); `AUDIT_SIGNING_KEY` keys the audit chain.

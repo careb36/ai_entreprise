@@ -42,6 +42,28 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- Single sign-on over OpenID Connect (issue #512; `docs/design/SSO.md`; setup in
+  `docs/OPERATIONS.md`, Single sign-on). Each company's connection is stored in
+  the database by its Owner, not in the environment; these settle the deployment:
+  - `SSO_CALLBACK_URL` — default `http://localhost:8000/v1/auth/sso/callback`.
+    The redirect URI every company registers at its provider; it must be the
+    address the browser reaches the backend's `/v1/auth/sso/callback` at. With
+    an `https://` value the binding cookie is `Secure`.
+  - `SSO_FRONTEND_URL` — default `http://localhost:5173`. Where the callback
+    sends the browser afterwards (`/login/sso`, with a one-time code or an
+    error code).
+  - `SSO_RATE_LIMIT` — default `20/minute`, per client address, on the start,
+    callback and exchange routes (slowapi, `RATE_LIMIT_STORAGE_URI`).
+  - `SSO_BREAK_GLASS_EMAILS` — optional, comma-separated. Owners listed here
+    may still sign in with a password when their company requires SSO; each
+    such sign-in writes an `sso_break_glass_login` audit row.
+  - `SSO_ALLOW_PRIVATE_ISSUERS` — default `false`. An issuer (and its token
+    and JWKS endpoints) must be https on a host that resolves to public
+    addresses; set this for a provider on a private network.
+  - `SSO_HTTP_TIMEOUT_SECONDS` (10) and `SSO_CLOCK_SKEW_SECONDS` (60, the leeway
+    on the ID token's `exp` and `iat`).
+  - The client secret is encrypted with `FERNET_SECRET_KEY`; without that key
+    it is stored with a `plaintext:` prefix, as other credentials are.
 - API tokens (`/v1/auth/tokens`, `services/platform/api_tokens.py`, issue #327): a
   Manager creates one per company, accepted beside the JWT, with a `role`
   (`Viewer` by default, `Manager` at most, never above the creator's own) and

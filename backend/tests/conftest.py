@@ -63,10 +63,14 @@ from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
+from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
 from models.webhook import CompanyWebhook
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
+
+# The fake OpenID Connect provider of the SSO tests, as a shared fixture.
+from sso_fake_idp import fake_idp  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine — shared across all tests within a session via
@@ -186,6 +190,9 @@ SQLModel.metadata.create_all(
         SprintIntegration.__table__,
         ManagerPolicy.__table__,
         ManagerDecision.__table__,
+        SsoConnection.__table__,
+        SsoIdentity.__table__,
+        SsoFlowState.__table__,
     ],
 )
 

@@ -16,6 +16,8 @@ GLOBAL_TABLES = {
     "bug_reports": "help-desk tickets are not company data: a support admin sees all of them",
     "outbox_events": "a transport queue; each event's payload names its sprint and company",
     "backlog_items": "scoped through sprint_id, whose sprint carries company_id",
+    "sso_identities": "a person's identity at a provider, like users: it names the account, not a company",
+    "sso_flow_states": "one-time sign-in values for minutes; each names its connection, which carries company_id",
 }
 
 # Tables whose company_id may be empty, and why.

@@ -23,6 +23,8 @@ import Generate from './pages/Generate'
 import NotFound from './pages/NotFound'
 import TaskDetails from './pages/TaskDetails'
 import CompanyMembers from './pages/CompanyMembers'
+import CompanySso from './pages/CompanySso'
+import SsoComplete from './pages/SsoComplete'
 import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
@@ -334,6 +336,7 @@ function NavBar() {
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
+                  {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
                   <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
@@ -423,6 +426,7 @@ function AppContent() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/login/sso" element={<SsoComplete />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Navigate to="/evidence" replace />} />
               <Route path="/sprints" element={<Sprints />} />
@@ -440,6 +444,7 @@ function AppContent() {
               <Route path="/companies/select" element={<CompanySelect />} />
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
               <Route path="/company/members" element={<CompanyMembers />} />
+              <Route path="/company/sso" element={<CompanySso />} />
               <Route path="/company/procedures" element={<Procedures />} />
               <Route path="/company/models" element={<Models />} />
               <Route path="/company/specifications" element={<Specifications />} />
