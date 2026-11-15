@@ -21,11 +21,13 @@ export default function Register() {
     setError('')
     setSubmitting(true)
     try {
+      // The answer is the same whether or not the email already had an
+      // account, so the page never says which (issue #541).
       await api.register({ email, full_name: fullName, password })
       navigate('/login?registered=true', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 400
-        ? t('auth.emailExists', { defaultValue: 'An account with this email already exists.' })
+      setError(err instanceof ApiError && err.status === 429
+        ? t('auth.tooManyAttempts', { defaultValue: 'Too many attempts. Please wait a minute and try again.' })
         : err instanceof Error ? err.message : t('auth.registerError', {
           defaultValue: 'Unable to register. Please try again.',
         }))

@@ -147,9 +147,13 @@ def test_the_pkce_challenge_is_the_s256_of_the_verifier():
     assert len(verifier) >= 43 and challenge == s256(verifier)
 
 
-def test_the_adapter_reads_a_bounded_body_and_follows_no_redirect():
+def test_the_adapter_reads_a_bounded_body_and_follows_no_redirect(monkeypatch):
     import httpx
-    from services.platform import oidc_client
+    from egress_fakes import FakeResolver
+    from services.platform import egress, oidc_client
+
+    # idp.test resolves to a public address (the adapter pins it).
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
 
     huge = httpx.MockTransport(
         lambda request: httpx.Response(200, content=b"x" * (oidc_client.MAX_BYTES + 10))

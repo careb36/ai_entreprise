@@ -432,11 +432,13 @@ def test_company_mutations_require_manager(
     # en el client de Starlette 1.x, y estos casos prueban el orden entre la
     # validación del cuerpo y la autorización.
     url = f"{path}{'&' if '?' in path else '?'}company_id={company_id}"
-    response = test_client.post(
-        url,
-        json={**payload, "company_id": company_id} if payload is not None else None,
-        headers=identity[2],
-    )
+    # The body names the company only where its model declares the field;
+    # ``POST /v1/audit`` takes it from the query, and an undeclared
+    # ``company_id`` in a body is refused with 422 since issue #541
+    # (test_mass_assignment.py).
+    if payload is not None and path != "/v1/audit":
+        payload = {**payload, "company_id": company_id}
+    response = test_client.post(url, json=payload, headers=identity[2])
     assert response.status_code == 403
     assert response.json() == {
         "detail": "Requires Manager role" if role else "Not a member of this company"

@@ -21,7 +21,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import ProviderConnection, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.models import model_catalog
 from services.models import provider_connections as connections
 from sqlmodel import Session, select
@@ -29,7 +30,7 @@ from sqlmodel import Session, select
 router = APIRouter(prefix="/v1", tags=["Providers"])
 
 
-class ProviderCreate(BaseModel):
+class ProviderCreate(RequestModel):
     provider: str
     name: str | None = Field(default=None, max_length=64)
     base_url: str | None = None
@@ -38,7 +39,7 @@ class ProviderCreate(BaseModel):
     enabled: bool = True
 
 
-class ProviderPatch(BaseModel):
+class ProviderPatch(RequestModel):
     name: str | None = Field(default=None, max_length=64)
     base_url: str | None = None
     api_key: str | None = None

@@ -17,12 +17,67 @@ from typing import Any, Literal
 from passwords import BCRYPT_MAX_BYTES
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# Fields that decide who may do what or whose data it is. A request body may
+# carry one only where its model declares it (``company_id`` on a route that
+# checks the caller's role in that company, ``role`` on an API token); an
+# undeclared one is refused with 422 rather than silently dropped, so a client
+# that tries to grant itself something learns it cannot (issue #541,
+# WSTG-INJT-20 at latest@87cf4a4, mass assignment).
+PRIVILEGED_FIELDS = frozenset(
+    {
+        "company_id",
+        "owner_id",
+        "user_id",
+        "role",
+        "human_role",
+        "roles",
+        "is_admin",
+        "admin",
+        "support_admin",
+        "is_superuser",
+        "permissions",
+        "created_by",
+        "password_hash",
+        "api_token_id",
+        "member_id",
+    }
+)
+
+
+class RequestModel(BaseModel):
+    """The base of every JSON request body.
+
+    Unknown fields are ignored, as before, except those in
+    ``PRIVILEGED_FIELDS``, which are refused unless the model declares them.
+    A model whose clients are known to send exactly its fields (the sign-in
+    and membership routes) sets ``extra="forbid"`` and refuses every unknown
+    field.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_undeclared_privileged_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            declared = set(cls.model_fields)
+            declared.update(
+                f.alias for f in cls.model_fields.values() if f.alias is not None
+            )
+            refused = sorted(
+                k for k in data if k in PRIVILEGED_FIELDS and k not in declared
+            )
+            if refused:
+                raise ValueError(f"field(s) not accepted here: {', '.join(refused)}")
+        return data
+
+
+STRICT = ConfigDict(extra="forbid")
+
 # ---------------------------------------------------------------------------
 # Request schemas (Pydantic — not persisted directly, used for API validation)
 # ---------------------------------------------------------------------------
 
 
-class AgentRunCreate(BaseModel):
+class AgentRunCreate(RequestModel):
     model_config = ConfigDict(extra="allow")
 
     company_id: int
@@ -37,12 +92,12 @@ class AgentRunCreate(BaseModel):
     finished_at: datetime | None = None
 
 
-class AgentRunVerificationRequest(BaseModel):
+class AgentRunVerificationRequest(RequestModel):
     company_id: int
     evidence: dict[str, Any] | None = None
 
 
-class CompanyInitRequest(BaseModel):
+class CompanyInitRequest(RequestModel):
     """Payload for ``POST /v1/init_company`` — bootstraps a new tenant."""
 
     company_name: str
@@ -91,7 +146,7 @@ class BacklogItemIn(BaseModel):
     kind: str | None = None
 
 
-class SprintStartRequest(BaseModel):
+class SprintStartRequest(RequestModel):
     """Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."""
 
     company_id: int
@@ -118,7 +173,7 @@ class SprintStartRequest(BaseModel):
     suggested_team: list[str] | None = None
 
 
-class SprintPlanRequest(BaseModel):
+class SprintPlanRequest(RequestModel):
     """Payload for ``POST /v1/plan_sprint`` — turns a strategic prompt into a sprint backlog."""
 
     company_id: int
@@ -131,7 +186,7 @@ class SprintPlanRequest(BaseModel):
     team: list[str] | None = None
 
 
-class SelfImprovementSprintRequest(BaseModel):
+class SelfImprovementSprintRequest(RequestModel):
     """Payload for ``POST /v1/plan_self_improvement_sprint`` — plans an autonomous improvement sprint."""
 
     company_id: int
@@ -140,7 +195,7 @@ class SelfImprovementSprintRequest(BaseModel):
     team: list[str] | None = None
 
 
-class GenerateRequest(BaseModel):
+class GenerateRequest(RequestModel):
     """Payload for ``POST /v1/generate`` — triggers the LangGraph agent workflow."""
 
     company_id: int
@@ -150,7 +205,7 @@ class GenerateRequest(BaseModel):
     interaction_id: str | None = None  # Client-supplied UUID for idempotency
 
 
-class AuditRequest(BaseModel):
+class AuditRequest(RequestModel):
     """Payload for ``POST /v1/audit`` — records an agent decision to the audit log."""
 
     interaction_id: str | None = None
@@ -162,14 +217,14 @@ class AuditRequest(BaseModel):
     cost_tokens: int = 0  # Token cost billed to the business unit
 
 
-class DiscoveryRequest(BaseModel):
+class DiscoveryRequest(RequestModel):
     """Payload for ``POST /v1/discover_team`` — analyses a project path."""
 
     project_path: str  # Absolute or relative path to the project root
     company_id: int | None = None  # Optional for pre-creation discovery
 
 
-class ReviewCommentCreate(BaseModel):
+class ReviewCommentCreate(RequestModel):
     """Payload for ``POST /v1/agent_runs/{id}/comments``: a note on a line of a changed file."""
 
     company_id: int
@@ -192,7 +247,7 @@ class ReviewCommentCreate(BaseModel):
         return self
 
 
-class RunReviewCreate(BaseModel):
+class RunReviewCreate(RequestModel):
     """Payload for ``POST /v1/agent_runs/{id}/reviews``: a submitted review."""
 
     company_id: int
@@ -208,7 +263,7 @@ class RunReviewCreate(BaseModel):
         return self
 
 
-class AgentRunApprovalRequest(BaseModel):
+class AgentRunApprovalRequest(RequestModel):
     """Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."""
 
     company_id: int
@@ -236,8 +291,10 @@ class AgentRunApprovalRequest(BaseModel):
         return self
 
 
-class UserCreateRequest(BaseModel):
+class UserCreateRequest(RequestModel):
     """Payload for ``POST /v1/auth/register`` — creates a human platform user."""
+
+    model_config = STRICT
 
     email: str
     full_name: str
@@ -258,8 +315,10 @@ class UserCreateRequest(BaseModel):
         return value
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(RequestModel):
     """Payload for ``POST /v1/auth/login`` — authenticates a human user."""
+
+    model_config = STRICT
 
     email: str
     password: str
@@ -269,15 +328,17 @@ class LoginRequest(BaseModel):
     token_delivery: Literal["cookie", "bearer"] = "cookie"
 
 
-class InviteMemberRequest(BaseModel):
+class InviteMemberRequest(RequestModel):
     """Payload for ``POST /v1/company/invite`` — adds a user to a company."""
+
+    model_config = STRICT
 
     company_id: int
     email: str
     human_role: str  # "Owner" | "Manager" | "Viewer"
 
 
-class BacklogItemUpdate(BaseModel):
+class BacklogItemUpdate(RequestModel):
     """Payload for ``PATCH /v1/backlog/{item_id}`` — partial backlog item update."""
 
     status: str | None = None  # See VALID_STATUSES in sprint router
@@ -286,7 +347,7 @@ class BacklogItemUpdate(BaseModel):
     comment: str | None = None  # When provided, a new comment is appended
 
 
-class BugReportRequest(BaseModel):
+class BugReportRequest(RequestModel):
     """Payload for ``POST /v1/support/report_bug`` — creates a support ticket."""
 
     title: str
@@ -303,7 +364,7 @@ class BugReportRequest(BaseModel):
     browser_info: dict[str, Any] | None = None  # User-agent, viewport, etc.
 
 
-class BugStatusUpdateRequest(BaseModel):
+class BugStatusUpdateRequest(RequestModel):
     """Payload for ``PATCH /v1/support/tickets/{ticket_num}`` — updates ticket state."""
 
     status: str  # "open" | "in_progress" | "waiting" | "resolved" | "closed"
@@ -322,7 +383,7 @@ class ChatMessage(BaseModel):
     content: str  # Message text
 
 
-class SupportChatRequest(BaseModel):
+class SupportChatRequest(RequestModel):
     """Payload for ``POST /v1/support/chat`` — multi-turn LLM support conversation."""
 
     messages: list[ChatMessage]  # Full conversation history (oldest first)
@@ -368,7 +429,7 @@ class OrchestrationHealthResponse(BaseModel):
     summary: OrchestrationHealthSummaries
 
 
-class AgentCreateRequest(BaseModel):
+class AgentCreateRequest(RequestModel):
     """Payload for POST /v1/agents — create an agent for a company."""
 
     company_id: int
@@ -382,7 +443,7 @@ class AgentCreateRequest(BaseModel):
     token_budget: int = Field(default=500000, ge=0)
 
 
-class AgentUpdateRequest(BaseModel):
+class AgentUpdateRequest(RequestModel):
     """Payload for PATCH /v1/agents/{id} — partial agent update."""
 
     name: str | None = None
@@ -395,7 +456,7 @@ class AgentUpdateRequest(BaseModel):
     token_budget: int | None = Field(default=None, ge=0)
 
 
-class AgentPromptRequest(BaseModel):
+class AgentPromptRequest(RequestModel):
     """Payload for POST /v1/agents/generate_prompt — auto-generate a system prompt."""
 
     role: str

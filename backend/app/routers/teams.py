@@ -24,7 +24,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, Team, TeamMember, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.platform import teams
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, delete, select
@@ -32,13 +33,13 @@ from sqlmodel import Session, delete, select
 router = APIRouter(prefix="/v1", tags=["Company"])
 
 
-class TeamCreate(BaseModel):
+class TeamCreate(RequestModel):
     name: str = Field(min_length=1, max_length=teams.NAME_MAX)
     description: str | None = Field(default=None, max_length=teams.DESCRIPTION_MAX)
     role: str = Field(default="Viewer", pattern="^(Viewer|Manager)$")
 
 
-class TeamUpdate(BaseModel):
+class TeamUpdate(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=teams.NAME_MAX)
     description: str | None = Field(default=None, max_length=teams.DESCRIPTION_MAX)
     role: str | None = Field(default=None, pattern="^(Viewer|Manager)$")

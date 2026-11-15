@@ -85,15 +85,36 @@ OpenID Connect provider (single sign-on, below).
   72-byte limit instead of truncating it (`backend/app/schemas.py`), and a
   successful login re-hashes a stored hash whose cost is below the current one
   (`backend/app/routers/auth.py`).
+- **Guessing and enumeration** (issue #541; WSTG-v42-ATHN-03, IDNT-04).
+  `POST /v1/auth/login` is limited per client address (`LOGIN_RATE_LIMIT`,
+  10/minute) and per account: after `LOGIN_FAILURES_BEFORE_BACKOFF` (5)
+  failures within `LOGIN_FAILURE_WINDOW_SECONDS` the account's password
+  sign-in is locked for 2 s, then twice as long after each further failure, at
+  most `LOGIN_BACKOFF_MAX_SECONDS` (15 minutes); a locked account answers 429
+  with `Retry-After` before its password is checked, and a success clears the
+  record (`services/platform/login_throttle.py`, keyed by the sha256 of the
+  email whether or not an account exists). `POST /v1/auth/register` is limited
+  per address (`REGISTER_RATE_LIMIT`, 5/minute) and answers the same body for
+  a new and an existing email, after a bcrypt hash either way, leaving the
+  existing account untouched. Login answers an unknown email, an account
+  without a password and a wrong password alike, after a bcrypt check against
+  a throwaway hash for the first two (`passwords.burn_verify`).
 - **Access tokens.** A JWT signed with **HS256** and the shared secret
   `JWT_SECRET_KEY` (`backend/app/auth_tokens.py`, `backend/app/config.py`).
-  Claims: `sub`, `email`, `iat`, `exp`, `typ: access`, and for a browser
-  session `sid` (its family) and `csrf` (the digest of its CSRF token). It
-  lives `ACCESS_TOKEN_EXPIRE_MINUTES`, **15 minutes** by default. Validation
-  checks the signature, the single configured algorithm, `exp`, and that
-  `sub`, `exp` and `typ` are present and `typ` is `access`; a token with a
-  `sid` is refused once its family is revoked or expired, on every request.
-  There is no `iss`, `aud` or `nbf` claim.
+  Claims: `sub`, `email`, `iat`, `exp`, `typ: access`, `iss` (`JWT_ISSUER`,
+  `la-fabrique`), `aud` (`JWT_AUDIENCE`, `la-fabrique-api`), and for a
+  browser session `sid` (its family) and `csrf` (the digest of its CSRF
+  token). It lives `ACCESS_TOKEN_EXPIRE_MINUTES`, **15 minutes** by default.
+  Validation checks the signature, the single configured algorithm (which must
+  be HS256, HS384 or HS512: `none` or an asymmetric name refuses to sign or
+  verify), `exp`, `iss`, `aud`, and that `sub`, `exp`, `typ`, `iss` and `aud`
+  are present and `typ` is `access`; a token with a `sid` is refused once its
+  family is revoked or expired, on every request. The Glassroom ticket has
+  its own audience (`<JWT_AUDIENCE>:glassroom`), so neither passes for the
+  other (issue #541, WSTG-SESS-10 at latest@87cf4a4). Tokens issued before
+  `iss` and `aud` existed are refused: a browser renews its access token from
+  the refresh cookie without noticing, a script's 15-minute Bearer token logs
+  in again. There is no `nbf` claim.
 - **Browser sessions** (issue #524; design and threat model in
   `docs/design/SESSIONS.md`). Password login and the SSO exchange set three
   cookies and return no token (`backend/app/session_cookies.py`):
@@ -173,7 +194,12 @@ OpenID Connect provider (single sign-on, below).
   until it reaches its absolute expiry or an Owner removes them here; a Bearer
   access token from `"token_delivery": "bearer"` has no family, so logout and
   revocation do not reach it (it lives `ACCESS_TOKEN_EXPIRE_MINUTES`); the
-  password login itself has no rate limit.
+  login limits and the per-account backoff are per process (several replicas
+  each keep their own), and someone who knows an address can keep its owner's
+  password sign-in locked while they keep failing (SSO and open sessions are
+  unaffected); registration is open and unverified, so the answer of the
+  following login still tells a new address from a taken one (closing that
+  needs a confirmation mail, not built).
 
 ### 3.2 API Authorization: what is built
 
@@ -198,15 +224,43 @@ OpenID Connect provider (single sign-on, below).
   Creating a company makes its creator the Owner; inviting a member requires
   Owner. Help-desk administrators are a separate, deployment-wide list
   (`SUPPORT_ADMIN_EMAILS`, `is_support_admin`).
-- **Public routes** are an explicit list: `/health`, registration and login,
-  the HMAC-signed GitHub webhook, support bug reporting and chat,
-  `/v1/models`, `/v1/capabilities` and the retired `/v1/approve_task` (410)
-  (`docs/contexts/platform.md`, Auth and multi-tenancy).
+- **Every route declares who may call it** (issue #541; WSTG-v42-ATHZ-02,
+  ATHZ-04; WSTG-APIT-02, APIT-04 at latest@87cf4a4), in
+  `docs/architecture/authorization.json`: `public`, `signed`,
+  `authenticated`, `support_admin` or the minimum company role.
+  `backend/tests/test_authorization_matrix.py` fails on a route missing from
+  it (deny by default) and calls every route as an anonymous caller, a
+  Viewer, a Manager and an Owner of one company and the Owner of another,
+  expecting 401, 403 below the minimum, 403 or 404 across companies and the
+  minimum let through.
+- **Public routes** are that file's `public_routes`, and a change to them is
+  a security decision: `/health`, `/health/deep`, `/metrics` (keep it on the
+  internal network), registration, login, refresh, logout and the CSRF echo,
+  the SSO start and exchange, `/v1/capabilities`, `/v1/models` and the model
+  catalogue, `/v1/standards`, support bug reporting and chat, and the retired
+  `/v1/approve_task` (410); and, refused without their signature, ticket or
+  state, the GitHub webhook, the Slack and Teams endpoints, the SSO callback
+  and the Glassroom stream (`docs/contexts/platform.md`, Auth and
+  multi-tenancy). `POST /v1/agents/generate_prompt` was public by omission
+  until #541; it now needs a signed-in caller.
+- **Request bodies** are `schemas.RequestModel`s: an undeclared privileged
+  field (`company_id`, `role`, `human_role`, `owner_id`, `is_admin`...) is
+  refused with 422 instead of being dropped, and the sign-in and membership
+  bodies refuse every unknown field (issue #541, WSTG-INJT-20 at
+  latest@87cf4a4; `backend/tests/test_mass_assignment.py`).
 - **Company scoping.** Data is namespaced by `company_id`; audit writes and
   memory stores take the company from the caller's membership, never from the
   request's payload.
-- **Rate limiting.** `slowapi`, `RATE_LIMIT_DEFAULT` (100/minute by default,
-  `backend/app/security.py`).
+- **Rate limiting.** `slowapi` on the routes that declare a limit (login,
+  registration, refresh, SSO, the chat endpoints), per client address
+  (`backend/app/security.py`); `RATE_LIMIT_DEFAULT` is configured but no
+  middleware applies it to the other routes.
+- **Known gap.** `GET /v1/workspace/browse` and `/inspect` are open to any
+  signed-in person (the New company folder picker runs before the person
+  belongs to a company), and registration is open: on a deployment shared by
+  people who do not trust each other, any account can list folders on the
+  daemon's machine. Restrict registration (a reverse proxy, SSO only) there
+  until the picker is tied to a company or an operator role.
 
 Requirements that still hold for every change: deny by default (a new route
 is protected unless it is added to the public list on purpose); route-level
@@ -233,13 +287,26 @@ fallback credential.
 ### 3.3 Frontend Exposure
 
 **Where the code stands.** The backend's `SecurityHeadersMiddleware`
-(`backend/app/security.py`, `SECURITY_HEADERS_ENABLED`) sends
-`Content-Security-Policy: default-src 'self'` (a looser policy only on
-`/docs`, `/redoc` and `/openapi.json`), `X-Content-Type-Options: nosniff`,
-`X-Frame-Options: DENY`, `Strict-Transport-Security`,
-`Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy`
-that turns off geolocation, microphone and camera; it does not send
-`Cross-Origin-Opener-Policy`. CORS allows only `CORS_ORIGINS`, with
+(`backend/app/security.py`, `SECURITY_HEADERS_ENABLED`; issue #541,
+WSTG-CONF-14 and CONF-12 at latest@87cf4a4, WSTG-v42-CLNT-09 and ATHN-06)
+sends on every answer, errors and the unhandled-error 500 included:
+`Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
+base-uri 'none'; form-action 'none'` (the API renders no page; the
+documentation gets a policy that lets Swagger UI and ReDoc load, with
+`frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `X-XSS-Protection: 0` (the legacy auditor off),
+`Strict-Transport-Security`, `Referrer-Policy: no-referrer`,
+`Cross-Origin-Opener-Policy: same-origin` and a `Permissions-Policy` that
+turns off geolocation, microphone and camera; and `Cache-Control: no-store`
+on every answer but the documentation, unless the route set its own (the
+Glassroom stream's `no-cache`), so no authenticated answer stays in a cache.
+`API_DOCS_ENABLED=false` answers 404 on `/docs`, `/redoc` and
+`/openapi.json` (WSTG-v42-CONF-05); it is on by default for development and
+should be off where the API faces the internet. The repository ships no
+production server for the frontend (the compose service runs the Vite dev
+server; the built `dist/` is served by whatever the operator puts in front),
+so the frontend's headers are the ingress's job, with the list below; a CI
+check waits for that server to exist. CORS allows only `CORS_ORIGINS`, with
 credentials only when they are explicit origins. The frontend holds no
 credential (#524): the access and refresh tokens are `HttpOnly` cookies
 (§3.1), and `frontend/src/store/useAuthStore.ts` persists only the profile,
@@ -321,6 +388,38 @@ in `.env`, not in a secret manager.
 - Container images scanned with `trivy image` or `grype` before push and before deploy.
 - Generate an **SBOM** for each production image (CycloneDX/SPDX).
 - Dependency update automation: Renovate or Dependabot enabled with security updates.
+
+**Next: a weekly DAST of the running API (issue #541, item 12; not built).**
+There is no dynamic scan yet. The job is not written because the image could
+not be pinned by digest and the job run on the self-hosted runner from where
+#541 was done; the plan, so the next pull request is mechanical:
+
+1. A `dast` job in `security-baseline.yml` (weekly, `workflow_dispatch`), on
+   `[self-hosted, linux, x64, lafabrique]`, `permissions: contents: read`,
+   `timeout-minutes: 30`.
+2. Start the backend the way the e2e does, not the compose stack (the e2e is
+   the pattern that already runs on that runner): the runner's Postgres with a
+   database of its own (`factory_dast`, dropped at the end), `alembic upgrade
+   head`, uvicorn on a free port with `AUTH_REQUIRED=true`, a random
+   `JWT_SECRET_KEY`, `API_DOCS_ENABLED=true` (the scan reads
+   `/openapi.json`) and NATS absent (the routes that need it answer 503).
+3. Seed one user and company and log in with `"token_delivery": "bearer"`; pass
+   the token to ZAP as `ZAP_AUTH_HEADER=Authorization` and
+   `ZAP_AUTH_HEADER_VALUE="Bearer …"` so the scan reaches the Viewer routes.
+4. `docker run --rm --network host -v "$RUNNER_TEMP/zap:/zap/wrk"
+   ghcr.io/zaproxy/zaproxy@sha256:<digest of the stable tag> zap-api-scan.py
+   -t http://127.0.0.1:$PORT/openapi.json -f openapi -c rules.tsv -J
+   report.json -r report.html`, the digest written in the workflow with the
+   tag in a comment (`backend/tests/test_workflow_pinning.py` holds `uses:` to
+   shas; the image reference is held to a digest by review until the test
+   learns `docker run`), and `.github/zap/rules.tsv` mapping each alert to
+   `FAIL`, `WARN` or `IGNORE` with its reason.
+5. Upload `report.json` and `report.html` as an artifact
+   (`actions/upload-artifact` by sha); a `FAIL` alert fails the job, which
+   does not gate pull requests, like the rest of the baseline.
+6. `if: always()` cleanup: stop uvicorn, drop the database, remove the
+   container and `$RUNNER_TEMP/zap` (the runner is not ephemeral and hosts
+   the daemon).
 
 ### 5.3 Supply Chain
 
@@ -795,18 +894,26 @@ Every PR that touches backend, frontend, agents, or infrastructure must pass thi
 - [ ] Dependency and container scans pass
 - [ ] No secret patterns in logs
 - [ ] Error messages do not leak stack traces or internal details
+      (`backend/tests/test_error_bodies.py` fuzzes every route; an unhandled
+      error answers an error id only, WSTG-v42-ERRH-01/02)
 
 ### 10.2 Authentication and Authorization
 
-- [ ] New endpoints enforce authentication unless explicitly public and approved
+- [ ] New endpoints enforce authentication unless explicitly public and approved,
+      and are declared in `docs/architecture/authorization.json` (the matrix
+      test fails otherwise)
 - [ ] Authorization checked server-side for every role/permission
-- [ ] Token validation includes signature, a single allowed algorithm, expiry and token type (`backend/app/auth_tokens.py`); for an SSO ID token, also the issuer, audience, nonce and an asymmetric algorithm (`services/platform/oidc.py`, §3.1)
+- [ ] Token validation includes signature, a single allowed HMAC algorithm, expiry, token type, issuer and audience (`backend/app/auth_tokens.py`); for an SSO ID token, also the nonce and an asymmetric algorithm (`services/platform/oidc.py`, §3.1)
 - [ ] No default `admin` or insecure fallback credentials
 - [ ] Agent inherits caller permissions and cannot exceed them
 
 ### 10.3 Input and Injection
 
-- [ ] All user and agent input validated and sanitized
+- [ ] All user and agent input validated and sanitized; a request body is a
+      `schemas.RequestModel` (no undeclared privileged field)
+- [ ] A URL a company chooses is fetched only through `services/platform/egress.py`
+      (public addresses, resolved once and pinned, no redirects followed;
+      `backend/tests/test_ssrf_vectors.py`)
 - [ ] SQL/Cypher queries parameterized; no string concatenation
 - [ ] No dynamic evaluation of model output (`eval`, `exec`, shell, raw SQL)
 - [ ] File uploads validated by content type and size; stored outside web root
@@ -867,6 +974,12 @@ Before the stack serves anyone but the person running it:
       frontend's origins (never `*`), and `ACCESS_TOKEN_EXPIRE_MINUTES` and
       `REFRESH_TOKEN_ABSOLUTE_DAYS` no longer than the defaults (15 minutes,
       7 days) unless the owner accepts more (§3.1, `docs/design/SESSIONS.md`).
+- [ ] **Exposure.** `API_DOCS_ENABLED=false` where the API faces the
+      internet; `/metrics` and `/health/deep` reachable only from the
+      internal network; `ERROR_REPORT_URL` unset or an https endpoint the
+      operator controls; the frontend's ingress sends the headers of §3.3;
+      `JWT_ISSUER`/`JWT_AUDIENCE` distinct from any other deployment sharing
+      `JWT_SECRET_KEY`.
 - [ ] **Single sign-on.** `SSO_CALLBACK_URL` and `SSO_FRONTEND_URL` are the
       public https addresses; `SSO_BREAK_GLASS_EMAILS` names at least one
       Owner before any company requires SSO; `SSO_ALLOW_PRIVATE_ISSUERS`
@@ -990,3 +1103,48 @@ How a fix ships:
 
 Operators upgrade by the steps in `docs/OPERATIONS.md`, Upgrade; a migration
 that cannot be rolled back is named in the release notes.
+
+
+## 16. Yearly Person-Led Penetration Test
+
+The automated checks (§10.7, the matrix, the SSRF vectors, the error fuzz,
+the weekly scans) find what they were written to find. Once a year, and before
+a release that changes authentication, roles or the workspace daemon, a person
+who did not write the code tests the deployed stack. The scope, by the OWASP
+Web Security Testing Guide (ids as `WSTG-v42-…`, or `latest@87cf4a4` where
+v4.2 lacks the test):
+
+1. **Business logic** (WSTG-v42-BUSL-01 to BUSL-07): approvals and holds (a
+   held delivery accepted without the role, twice, after it changed, from a
+   stale message); autonomy levels and the Manager agent's policy (what it may
+   decide alone); undo and carry-over (undoing another company's delivery,
+   undoing twice, racing a publish); sprint control (start, pause, stop,
+   archive) out of order.
+2. **Identity across tenants** (WSTG-v42-ATHN-04, ATHZ-02, ATHZ-04,
+   IDNT-01/02): a hostile identity provider run by an Owner asserting another
+   company's people, account pre-hijacking by email, `require_sso` and
+   break-glass, API tokens beyond their company or role, invitations and
+   member removal; every route of `docs/architecture/authorization.json`
+   re-tested by hand on a deployed stack with real cookies and CSRF.
+3. **The bus and the daemon** (`SECURITY.md` §8.3, §8.6): a NATS client with
+   stolen or no credentials, subjects outside a user's permissions, replayed
+   or forged daemon replies, the command policy and the sandbox floor
+   (`FABRIQUE_SANDBOX_REQUIRED`), path traversal and symlinks through the
+   workspace tools.
+4. **Chat spoofing** (WSTG-v42-BUSL-02, latest@87cf4a4 SESS-10 where a
+   signed value is involved): forged or replayed Slack and Teams
+   interactions, a link code claimed by someone else, a click on an old
+   message.
+5. **Prompt injection through agent output** (§8.1–§8.5): repository content,
+   research pages and tool results that try to steer tools, approvals or the
+   Verifier; agent output rendered in the frontend (WSTG-v42-CLNT-01, CLNT-03).
+6. **The deployment** (WSTG-v42-CRYP-01, CONF-07, latest@87cf4a4 CONF-14):
+   TLS configuration of the frontend, the API and NATS, HSTS, the headers the
+   ingress adds, `/metrics` and `/docs` exposure, cookie flags over https.
+
+The report follows the WSTG reporting structure (chapter 5): an executive
+summary, the test parameters (scope, dates, tester, the commit and the
+configuration tested), and findings, each with its WSTG id, severity by §9.2,
+the steps to reproduce, the evidence, and a fix; plus the tests that were not
+run and why. Findings are filed as issues; each fix ships with a test that
+reproduces it, added to the suite for its area.

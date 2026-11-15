@@ -21,7 +21,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import SsoConnection, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.platform import sessions, sso_flow
 from services.platform import sso_connections as conns
 from services.platform.agent_service import AgentService
@@ -43,7 +44,7 @@ AUDITED_FIELDS = (
 )
 
 
-class SsoConnectionIn(BaseModel):
+class SsoConnectionIn(RequestModel):
     slug: str = Field(max_length=40)
     preset: str = Field(default="generic", max_length=16)
     tenant: str | None = Field(default=None, max_length=64)
