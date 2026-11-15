@@ -156,6 +156,32 @@ moves the totals (more tasks, more tokens), so it is kept as the reference
 in the pull request that adds them: `20261114T201804Z` is the first v3 card,
 the five specifications with the fake.
 
+## The project wiki against vector memory alone
+
+The project wiki (issue #445, `docs/design/PROJECT_WIKI.md`) is measured by
+the prompt tokens and the rework per task, with the wiki on and off. Every
+prompt measure already carries its sections; the card's prompt object also
+counts `wiki_prompts` (prompts that sent a `wiki` section) and
+`memory_prompts` (prompts that sent the vector memory, the wiki's fallback),
+and `compare.py` shows both, before → after, beside the per-section table and
+rework per task (shown, never judged; `--prompt-tokens` judges the mean).
+Both counts are optional: an older card reads as zero.
+
+```bash
+WIKI_ENABLED=false BENCH_POLICY=wiki-off scripts/bench/run.sh --out /tmp/bench-off
+WIKI_ENABLED=true  BENCH_POLICY=wiki-on  scripts/bench/run.sh --out /tmp/bench-on
+python3 scripts/bench/compare.py /tmp/bench-on/<stamp>.json --previous /tmp/bench-off/<stamp>.json --prompt-tokens 0.2
+```
+
+The wiki is compiled when a sprint closes and read by the next sprint's
+tasks, so the comparison needs specifications that run more than one sprint
+(or a second pass over the same company). With the fake models the compiled
+pages are whatever the fake answers (usually refused for want of known
+citations), so a fake run only checks that the counts flow; the real
+measure is the nightly real-model run (`BENCH_LLM_URL`) made twice, with the
+flag off and on, compared as above: lower `tokens_mean` with the same or
+lower `rework_per_task` is the result the issue asks for.
+
 ## The nightly real-model run
 
 `.github/workflows/bench.yml` has a second job, `bench-real`, apart from the

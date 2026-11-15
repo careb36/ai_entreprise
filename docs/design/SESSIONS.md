@@ -95,11 +95,7 @@ the SSO exchange setting the cookies), `test_cors_credentials.py`, and
   encoding stay the controls for that.
 - The rate limiter's storage is per process by default
   (`RATE_LIMIT_STORAGE_URI`); `/v1/auth/login` has no limit of its own yet.
-- The packaged desktop app loads the frontend from `file://`; a page there
-  is not same-site with the API, so `SameSite=Strict` cookies are not sent
-  and sign-in does not hold (the Electron dev mode, served from the Vite dev
-  server on localhost, works). Serving the packaged app from a local http
-  origin or a privileged custom scheme is the follow-up.
+- The desktop app's own residual risks are under Desktop app, below.
 - A person invited into a company that already requires SSO keeps a
   password-started session until it expires or is revoked; only turning the
   requirement on revokes.
@@ -127,6 +123,123 @@ the SSO exchange setting the cookies), `test_cors_credentials.py`, and
 - **Access token claims** gain `sid` (the family's public id) and `csrf` (the
   CSRF digest) for the browser flow; a token without `sid` is a Bearer token.
 
+## Desktop app
+
+Status: draft, written with the `threat-model` skill; a person reviews it ·
+SDL practice 3
+
+**What is built.** The packaged Electron app used to load the frontend from
+`file://`, which is not the API's site, so the `SameSite=Strict` cookies were
+never sent and sign-in did not hold. Its main process now starts a small HTTP
+server (`frontend/electron/local-server.ts`, Node's `http` only, no new
+dependency) bound to `127.0.0.1` on a port the system picks at each launch. It
+serves the built frontend (`dist/`, `index.html` for the app's routes) and
+forwards `/v1/*` to the backend the app is configured with (`BACKEND_URL`,
+default `http://localhost:8000`), then the window loads
+`http://127.0.0.1:<port>/`. The page and the API share that origin: the
+cookies are first-party, the page reads `fabrique_csrf` for the double
+submit, and the desktop build calls the API on its own origin
+(`vite build --mode electron` sets `VITE_API_SAME_ORIGIN`, so `API_BASE` is
+empty). The Electron dev mode is unchanged (the Vite dev server on localhost
+and the backend on localhost are the same site).
+
+- **Cookies.** `Set-Cookie` comes back with its `Domain` removed, so the
+  cookie binds to `127.0.0.1`; `Path`, `HttpOnly`, `SameSite`, `Max-Age` and
+  `Secure` are kept. Electron's Chromium treats `http://127.0.0.1` as a secure
+  context and stores `Secure` cookies from it (checked in the smoke run
+  below), so nothing changes on the backend: `SESSION_COOKIE_SECURE` stays on.
+- **Who may call it.** A request whose `Host` is not exactly
+  `127.0.0.1:<port>` is refused (DNS rebinding); so is one whose `Origin` is
+  any other origin, one whose `Sec-Fetch-Site` is `cross-site` or `same-site`
+  (another port of 127.0.0.1 is the same site, and `SameSite=Strict` would let
+  its requests carry the cookies), and an unsafe method without the local
+  `Origin`. The target must be origin-form (`/path`), never `http://other/…`
+  or `//other/…`. The forwarded request drops `Origin`, `Referer`,
+  `Forwarded`, `X-Forwarded-*`, `Sec-Fetch-*` and hop-by-hop headers and sets
+  `Host` to the backend's; the response drops `Access-Control-*` and
+  `Strict-Transport-Security`, so the server never grants another origin a
+  read even when the backend's `CORS_ORIGINS` would.
+- **No open proxy.** Only `/v1` and `/v1/*` are forwarded, always to the one
+  configured backend; everything else is a file under `dist/` (GET and HEAD
+  only; a decoded `..`, a backslash or NUL is refused, and the resolved path
+  must stay under `dist/`).
+- **Headers on the page.** `Content-Security-Policy` (`script-src 'self'`
+  without `unsafe-inline`, `connect-src 'self'`, `object-src 'none'`,
+  `frame-ancestors 'none'`, `base-uri` and `form-action 'self'`; the `<meta>`
+  policy in `index.html` also applies), `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Resource-Policy: same-origin`, as `SECURITY.md` §3.3 asks.
+- **Windows.** `contextIsolation`, `sandbox`, no `nodeIntegration`, never
+  `webSecurity: false`. The main window stays on the local origin; any other
+  web link opens in the system browser, and no new Electron window opens
+  (`frontend/electron/navigation.ts`). IPC answers only a page on the local
+  origin.
+- **Single sign-on.** The login page's navigation to
+  `/v1/auth/sso/<key>/start` opens a separate window with no preload script.
+  It goes through the local server (the binding cookie binds to the local
+  origin), visits the identity provider, and the provider's redirect to the
+  backend's callback (`SSO_CALLBACK_URL`, any host, path
+  `/v1/auth/sso/callback`) is loaded through the local origin instead, with
+  the same query; the backend checks `state` against the binding cookie, so a
+  forged callback gains nothing. The backend's redirect to
+  `SSO_FRONTEND_URL/login/sso` is rewritten by the server to the local
+  `/login/sso` (only on the `/v1/auth/sso/*` routes; a `Location` on the
+  backend's own origin is moved to the local origin too), and the SSO window
+  hands that URL to the main window and closes. No `SSO_FRONTEND_URL` change
+  is needed for the desktop app.
+
+**New boundary B10: other software on the user's computer ↔ the desktop
+app's local server.** Any local process, and any web page in any browser on
+the machine, can send requests to a port on 127.0.0.1.
+
+```
+Electron main window ─(http://127.0.0.1:<port>, same origin)─▶ local server ─B1─▶ backend
+                                                        ▲
+Other local processes, pages in other browsers ──B10────┘
+SSO window ─▶ local /v1/auth/sso/<key>/start ─▶ provider (B8) ─▶ local /v1/auth/sso/callback ─▶ main window /login/sso
+```
+
+| ID | Boundary | STRIDE | Threat | L | I | Sev | Mitigation |
+|---|---|---|---|---|---|---|---|
+| D1 | B10 | S | A page in another browser or another local server makes requests to the port that carry the app's session | L | H | Medium | The cookies live in Electron's own cookie store, never another browser's; inside the app, `Origin` must be the local origin if present and on every unsafe method, and `Sec-Fetch-Site` must be `same-origin` or `none` (another port of 127.0.0.1 is same-site); tests |
+| D2 | B10 | S/T | DNS rebinding: a site whose name resolves to 127.0.0.1 talks to the port as its own origin | L | H | Medium | `Host` must be exactly `127.0.0.1:<port>`; tests |
+| D3 | B10 | E | The server used as an open proxy to reach other hosts or other backend paths | L | M | Low | Only `/v1/*`, only to the configured backend, origin-form targets only; tests |
+| D4 | B10 | I | The server reflects the backend's CORS grant to another origin | L | H | Medium | `Origin` is not forwarded, `Access-Control-*` is dropped from responses; tests |
+| D5 | B10 | I | Path traversal reads files beside the build | L | M | Low | Decoded `..`, backslash and NUL refused; resolved path must stay under `dist/`; tests |
+| D6 | B10 | S | Another program takes the port first | L | L | Low | The system picks a free port at each launch, so the app never assumes one; the server listens before the window loads |
+| D7 | B8 | E | The identity provider's pages reach the app's privileged API (`window.electronAPI`) | L | H | Medium | The SSO window has no preload script; IPC refuses a sender not on the local origin (test); the main window never leaves the local origin |
+| D8 | B8 | S | A forged callback is loaded through the local origin | L | M | Low | The callback carries the provider's `state`, checked by the backend against the binding cookie set at start (`services/platform/sso_flow.py`) |
+| D9 | B1 | I | `Secure` cookies refused on `http://127.0.0.1`, pushing an operator to turn `SESSION_COOKIE_SECURE` off globally | L | M | Low | Electron's Chromium accepts them (smoke run); the backend setting is not touched |
+| D10 | B1 | I | `BACKEND_URL` on plain http to another machine sends the cookies across the network in clear | M | H | High | New (from the sdl-review of this change): the server refuses to start unless `BACKEND_URL` is https, or http on localhost, 127.0.0.0/8 or `[::1]`; the app shows the reason and quits; test |
+
+Assume breach: a process running as the user can read Electron's cookie
+store from the profile on disk whatever the proxy does; the session's
+15-minute access token and revocable refresh family (above) bound that. The
+server holds no credential and adds no authority: a request through it is a
+request to the backend with whatever cookies the app's own page holds.
+
+**Tests.** `frontend/electron/local-server.test.ts`,
+`frontend/electron/navigation.test.ts`,
+`frontend/electron/ipc-handlers.test.ts` (`npm run test:run`), and
+`src/viteConfig.test.ts` for the same-origin build. A smoke run on 2026-11-15
+under Xvfb launched the packaged-mode app (`dist/` from
+`npm run build -- --mode electron`, Electron 45) against a real backend on
+Postgres: sign-in through the login form, the three cookies stored for
+`127.0.0.1` with `Secure`, `HttpOnly` and `SameSite=Strict` kept, a reload
+still signed in (`GET /v1/auth/me` 200), `POST /v1/auth/refresh` 200 with the
+CSRF header and 403 without; an SSO start for an unknown company went through
+the SSO window and landed the main window on the local
+`/login/sso?error=unknown_connection`; `window.open` to an external page
+opened no window. A full sign-in at a real identity provider was not run.
+
+**Residual risks.** The callback is recognised by its path on any host, so an
+`SSO_CALLBACK_URL` with another path breaks desktop SSO (the default and
+documented path work). A local process running as the user can read the
+cookie store (assume breach, above). The SSO window shows the provider's
+pages inside the app, not the system browser, so a person sees no address bar
+there.
+
 ## What was taken
 
 From AixleHQ/flow (Apache-2.0, design only), `docs/design/federated-identity.md`
@@ -138,3 +251,10 @@ cookie request). From OAuth 2.0 Security BCP (RFC 9700 §4.14): refresh-token
 rotation with reuse detection that revokes the family. From the OWASP CSRF
 Cheat Sheet: the signed double-submit cookie and the custom header. Not
 taken: Flow's appended proofs and step-up gate, device lists, the Rails code.
+
+For the desktop app: from Electron's security checklist (design only), the
+limits on navigation and new windows, context isolation and the sandbox, and
+checking the IPC sender; from Jupyter Server's local server (design only),
+refusing any `Host` but the expected one against DNS rebinding; from the
+Fetch Metadata guidance, refusing what `Sec-Fetch-Site` marks as sent by
+another site.

@@ -28,6 +28,7 @@
     "specifications": "Especificaciones",
     "models": "Modelos",
     "sso": "Inicio de sesión único",
+    "wiki": "Wiki",
     "documentation": "Documentación",
     "chatApprovals": "Aprobaciones por chat"
   },
@@ -2566,5 +2567,81 @@
       "requirements": "Requisitos",
       "modules": "Módulos"
     }
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "Lo que el proyecto sabe: páginas que los agentes compilan a partir de ejecuciones verificadas, retrospectivas y el tablero del sprint, cada afirmación con sus fuentes. Una página desactualizada queda fuera de los prompts hasta que se revise.",
+    "loading": "Cargando la wiki…",
+    "loadError": "No se pudo cargar la wiki: {{message}}",
+    "empty": "Todavía no hay páginas. Se compilan al cerrar un sprint, o las escribe un Manager.",
+    "pages": "Páginas de la wiki",
+    "kinds": {
+      "module": "Módulo",
+      "concept": "Concepto",
+      "glossary": "Glosario",
+      "decisions": "Decisiones"
+    },
+    "kindsPlural": {
+      "module": "Módulos",
+      "concept": "Conceptos",
+      "glossary": "Glosario",
+      "decisions": "Decisiones vigentes"
+    },
+    "status": {
+      "current": "Vigente",
+      "stale": "Desactualizada",
+      "proposed": "Propuesta"
+    },
+    "versionStatus": {
+      "current": "vigente",
+      "proposed": "propuesta",
+      "rejected": "rechazada",
+      "superseded": "reemplazada"
+    },
+    "verdict": {
+      "verified": "verificada",
+      "refuted": "refutada",
+      "unverifiable": "no verificable"
+    },
+    "lintRule": {
+      "file_missing": "Archivo ausente",
+      "file_changed": "Archivo cambiado",
+      "module_changed": "Módulo cambiado",
+      "contradiction": "Contradicción"
+    },
+    "lintTitle": "Desactualizada: fuera de los prompts hasta que se revise",
+    "claimNote": "Una página es una afirmación, no una evidencia. Junto a cada afirmación están las fuentes que sus citas encontraron en los registros.",
+    "sources": "Fuentes",
+    "unknownSource": "no encontrada",
+    "noSource": "sin fuente",
+    "personLocked": "Editada por una persona: la próxima compilación solo propone cambios.",
+    "modulePath": "Ruta del módulo: {{path}}",
+    "edit": "Editar",
+    "save": "Guardar",
+    "saveError": "No se pudo guardar: {{message}}",
+    "titleLabel": "Título",
+    "bodyLabel": "Contenido (Markdown)",
+    "syntaxHelp": "Cita las fuentes como [run:12], [task:7], [note:3], [retro:5], [file:ruta@sha256], [REQ-1.2] o [ADR-3]. Los hechos van en un bloque ```facts, un clave: valor por línea.",
+    "noBody": "Esta página todavía no tiene texto vigente.",
+    "proposalTitle": "Versión propuesta",
+    "proposalNote": "Versión {{number}}, propuesta por {{who}}. No está vigente hasta que un Manager la acepte.",
+    "uncitedLine": "La línea {{line}} no tiene fuente: {{excerpt}}",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "rejectReason": "Motivo (opcional)",
+    "history": "Historial",
+    "byPerson": "por {{who}}",
+    "byAgent": "compilada por {{who}}",
+    "sprint": "sprint {{id}}",
+    "newPage": "Nueva página",
+    "slugLabel": "Identificador",
+    "kindLabel": "Tipo",
+    "create": "Crear",
+    "settings": "Ajustes de la wiki",
+    "writeToRepo": "Escribir también las páginas en docs/wiki/ del repositorio al cerrar un sprint",
+    "runLint": "Revisar las páginas ahora",
+    "lintDone_one": "{{count}} página marcada como desactualizada.",
+    "lintDone_other": "{{count}} páginas marcadas como desactualizadas.",
+    "version": "v{{number}}"
   }
 }

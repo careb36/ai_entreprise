@@ -20,6 +20,10 @@ before → after table ``compare.py`` shows and never judges.
 from typing import Any
 
 RELATED_CODE = "related_code"
+# The project wiki (#445) and the vector memory it is the first choice over:
+# how many prompts carried each, to compare a run with the wiki on and off.
+WIKI, MEMORY = "wiki", "memory"
+OPTIONAL_COUNTS = ("wiki_prompts", "memory_prompts")
 
 
 def empty() -> dict[str, Any]:
@@ -34,6 +38,8 @@ def empty() -> dict[str, Any]:
         "cut_prompts": 0,
         "cut": {},
         "related_code_prompts": 0,
+        "wiki_prompts": 0,
+        "memory_prompts": 0,
     }
 
 
@@ -103,6 +109,12 @@ def weigh(measures: list[Any]) -> dict[str, Any]:
             for s in measure["sections"]
         ):
             out["related_code_prompts"] += 1
+        for name, key in ((WIKI, "wiki_prompts"), (MEMORY, "memory_prompts")):
+            if any(
+                s["name"] == name and not s.get("cut") and s["tokens"]
+                for s in measure["sections"]
+            ):
+                out[key] += 1
     return _finish(out)
 
 
@@ -121,6 +133,8 @@ def merge(objects: list[dict[str, Any] | None]) -> dict[str, Any]:
             "related_code_prompts",
         ):
             out[key] += obj[key]
+        for key in OPTIONAL_COUNTS:  # absent on a card before #445
+            out[key] += obj.get(key) or 0
         for name, section in obj["sections"].items():
             row = out["sections"].setdefault(name, {"tokens": 0, "prompts": 0})
             row["tokens"] += section["tokens"]
@@ -152,7 +166,9 @@ def summary(obj: dict[str, Any] | None) -> str:
         f"{obj['prompts']} prompts, {obj['tokens_mean']:.0f} estimated tokens per task "
         f"({obj['tokens_estimated']} in all, system prompt {obj['system_tokens_estimated']} apart); "
         f"{obj['cut_prompts']} with sections cut ({cut}); "
-        f"{obj['related_code_prompts']} with related code"
+        f"{obj['related_code_prompts']} with related code; "
+        f"{obj.get('wiki_prompts', 0)} with the wiki, "
+        f"{obj.get('memory_prompts', 0)} with vector memory"
     )
     if obj["prompt_sections_missing"]:
         line += (
@@ -215,6 +231,8 @@ def render_table(previous: dict[str, Any], current: dict[str, Any]) -> list[str]
             f"Mean per task {mean(before)} → {mean(after)}; "
             f"prompts with sections cut {before['cut_prompts']} → {after['cut_prompts']}; "
             f"with related code {before['related_code_prompts']} → {after['related_code_prompts']}; "
+            f"with the wiki {before.get('wiki_prompts', 0)} → {after.get('wiki_prompts', 0)}; "
+            f"with vector memory {before.get('memory_prompts', 0)} → {after.get('memory_prompts', 0)}; "
             f"runs without a measure {before['prompt_sections_missing']} → {after['prompt_sections_missing']}."
         ),
         "",
