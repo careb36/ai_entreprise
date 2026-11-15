@@ -26,6 +26,8 @@ from routers import (
     architectures_router,
     auth_router,
     board_moves_router,
+    chat_approvals_router,
+    chat_interactions_router,
     console_producers_router,
     costs_router,
     enterprise_agents_router,
@@ -54,13 +56,15 @@ from routers import (
     workspace_router,
 )
 from security import get_cors_origins, setup_security
-from services.integrations import webhooks
+from services.integrations import chat_approvals, webhooks
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
 settings = Settings()
 # A delivery for the company's webhook joins every change it reports.
 webhooks.install()
+# A risk hold posts its approval to the company's Slack or Teams (issue #512).
+chat_approvals.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
 integration_jobs.install()
 
@@ -145,6 +149,8 @@ app.include_router(mcp_router)
 app.include_router(providers_router)
 app.include_router(model_settings_router)
 app.include_router(webhooks_router)
+app.include_router(chat_approvals_router)
+app.include_router(chat_interactions_router)
 
 # Register exception handlers
 register_exception_handlers(app)

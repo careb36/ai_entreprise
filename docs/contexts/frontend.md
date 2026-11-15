@@ -53,3 +53,4 @@ It is a step of `.github/workflows/frontend-build.yml`, which runs on a change t
 - The frontend's checks (`npm run lint`, Vitest) and the table of its test files: [testing](../TESTING.md).
 - A page or component is described with the backend service it shows: the Models page in [models](models.md), the Review page and the Manager policy in [management](management.md), Files changed, reviews and the sprint's controls in [evidence](evidence.md), [loop](loop.md), [release](release.md) and [workspace](workspace.md).
 - Running the dev server and the production build: [`CLAUDE.md`](../../CLAUDE.md), Running the System.
+- The Chat approvals page (`pages/ChatApprovals.tsx`, `components/ChatConnectionForm.tsx`, `hooks/useChat.ts`, `services/api/chat.ts`): [integrations](integrations.md#approvals-in-slack-and-teams).

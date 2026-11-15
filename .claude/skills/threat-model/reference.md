@@ -12,7 +12,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
                   │   └──B4── LLM proxy ──B4── Model providers
                   └── Postgres / Neo4j (inside the backend's trust zone)
  Agent and producer output enters at B5, wherever it is read.
- CI on the self-hosted runner is B7; a company's identity provider is B8.
+ CI on the self-hosted runner is B7; a company's identity provider is B8;
+ Slack and Microsoft Teams (approvals in chat) are B9.
 ```
 
 ## B1 — Browser ↔ backend
@@ -133,6 +134,36 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   "require SSO" only after an Owner signed in through it, with break-glass;
   audit rows; `docs/design/SSO.md`.
 - **Known gaps:** domains not verified by DNS; issued sessions not revoked.
+
+## B9 — The backend and Slack or Microsoft Teams
+
+- **Crosses:** approval messages the outbox posts with a company's bot token
+  (Slack, the fixed `https://slack.com/api/`) or incoming webhook URL (Teams);
+  interactions and commands those platforms post back to the public
+  `/v1/integrations/{slack|teams}/{public_id}/…` endpoints.
+- **Threats:** a forged or replayed interaction accepting a held delivery; a
+  chat user acting as another person; a role or user id read from the
+  payload; a click on an old message deciding a task that changed; one
+  company's workspace deciding for another; SSRF through the Teams URL; the
+  bot token, signing secret or webhook URL leaking through the API or logs.
+- **Controls:** signature over the raw body before parsing, Slack v0 with the
+  timestamp within 300 s, the Teams outgoing webhook's HMAC with the signed
+  activity's timestamp within 300 s, `hmac.compare_digest`
+  (`services/integrations/chat_signatures.py`); interaction ids stored once
+  (`chat_interactions`, unique); the connection's workspace or tenant
+  required; identity only from a link made by a one-time code typed in chat
+  (`chat_links.py`), the role from `CompanyMember` through
+  `require_company_role`, the decision through `run_review.submit_review`
+  with `via`; the hold event's hash and the run's version re-checked and the
+  message claimed by a conditional update (`chat_approvals.claim`);
+  credentials Fernet-encrypted and never returned, Owner-only settings, API
+  tokens refused (`routers/chat_approvals.py`); Teams URL on a Microsoft host
+  with public addresses re-checked per post, Slack calls to one host
+  (`chat_client.py`); `docs/design/CHAT_APPROVALS.md`,
+  `backend/tests/test_chat_inbound.py`.
+- **Known gaps:** a stolen link code claimed within ten minutes binds the
+  thief's chat account (the victim sees the link); Teams refusals are thread
+  replies, not ephemeral.
 
 ## Data stores (inside the backend's zone)
 
