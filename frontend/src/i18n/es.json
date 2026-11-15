@@ -27,7 +27,8 @@
     "procedures": "Procedimientos",
     "specifications": "Especificaciones",
     "models": "Modelos",
-    "sso": "Inicio de sesión único"
+    "sso": "Inicio de sesión único",
+    "chatApprovals": "Aprobaciones por chat"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2391,6 +2392,48 @@
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
       "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
+    }
+  },
+  "chat": {
+    "title": "Aprobaciones por chat",
+    "subtitle": "Acepta o devuelve entregas retenidas desde Slack o Microsoft Teams.",
+    "linksTitle": "Tus cuentas de chat",
+    "linksHelp": "Vincula tu cuenta de chat para que una decisión tomada en el chat quede registrada como tuya, con tu rol aquí.",
+    "linkedAs": "Vinculada a {{user}} en {{workspace}}",
+    "link": "Vincular mi cuenta de {{provider}}",
+    "unlink": "Desvincular",
+    "notConnected": "La empresa no lo ha conectado",
+    "codeIntro": "Tu código de un solo uso, válido durante 10 minutos:",
+    "inboundUrl": "URL de solicitud que debes dar a la plataforma:",
+    "secretSet": "Configurado: déjalo vacío para conservarlo",
+    "secretUnset": "Sin configurar",
+    "enabled": "Publicar aprobaciones y aceptar decisiones",
+    "save": "Guardar",
+    "saved": "Guardado.",
+    "saveError": "No se pudo guardar: {{message}}",
+    "test": "Probar la conexión",
+    "testOk": "La plataforma respondió: conectado.",
+    "testFailed": "La plataforma no respondió como se esperaba: {{detail}}",
+    "delete": "Quitar",
+    "deleteConfirm": "¿Quitar esta conexión? Los mensajes ya publicados dejarán de poder decidir.",
+    "slack": {
+      "name": "Slack",
+      "title": "Slack",
+      "help": "Una app de Slack con un token de bot (chat:write, commands) y su secreto de firma. Usa la URL de solicitud de abajo para Interactividad y para el comando /fabrique.",
+      "workspace": "ID del espacio de trabajo (team)",
+      "channel": "ID del canal",
+      "postCredential": "Token del bot",
+      "signingSecret": "Secreto de firma",
+      "codeHow": "En Slack, escribe: /fabrique link {{code}}"
+    },
+    "teams": {
+      "name": "Teams",
+      "title": "Microsoft Teams",
+      "help": "Una URL de webhook entrante (o de Workflows) para publicar tarjetas, y un webhook saliente cuya URL de devolución es la URL de solicitud de abajo; pega su token de seguridad como secreto de firma.",
+      "workspace": "ID del inquilino (tenant)",
+      "postCredential": "URL del webhook entrante",
+      "signingSecret": "Token de seguridad del webhook saliente",
+      "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
     }
   },
   "boardNotes": {

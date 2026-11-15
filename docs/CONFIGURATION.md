@@ -64,6 +64,18 @@ Copy `.env.example` to `.env` and fill in:
     on the ID token's `exp` and `iat`).
   - The client secret is encrypted with `FERNET_SECRET_KEY`; without that key
     it is stored with a `plaintext:` prefix, as other credentials are.
+- Approvals in Slack and Teams (issue #512, phase 4; `docs/design/CHAT_APPROVALS.md`,
+  set up per company on the Chat approvals page; `docs/OPERATIONS.md`):
+  - `CHAT_APP_URL` — default `http://localhost:5173`. The frontend address the
+    chat messages link to (the run's evidence, the task).
+  - `CHAT_RATE_LIMIT` — default `120/minute`, per client address, on the
+    public inbound endpoints (`/v1/integrations/slack/…`, `/v1/integrations/teams/…`).
+  - `FERNET_SECRET_KEY` is required: a connection is refused without it, since
+    its bot token, webhook URL and signing secret are stored encrypted.
+  - Teams incoming webhook URLs must be https on a Microsoft webhook host
+    (`*.webhook.office.com`, `*.logic.azure.com`, `*.powerplatform.com`,
+    `*.powerautomate.com`) that resolves to public addresses
+    (`WEBHOOK_ALLOW_PRIVATE_HOSTS` relaxes only the address check).
 - API tokens (`/v1/auth/tokens`, `services/platform/api_tokens.py`, issue #327): a
   Manager creates one per company, accepted beside the JWT, with a `role`
   (`Viewer` by default, `Manager` at most, never above the creator's own) and
@@ -138,7 +150,9 @@ Copy `.env.example` to `.env` and fill in:
   hour. One replica sends at a time (`locks.MANAGER_BRIEF`).
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
-  the GitHub page shows it as the webhook Payload URL.
+  the GitHub page shows it as the webhook Payload URL. It is also the base of
+  the Request URLs the Chat approvals page shows for Slack and Teams
+  (`http://localhost:8000` when unset).
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256, and keys
   each company's audit hash chain (`audit_chain.py`: every company row carries
   `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where

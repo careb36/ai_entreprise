@@ -38,6 +38,13 @@ from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
 from models.board_note import SprintBoardNote
+from models.chat import (
+    ChatApprovalMessage,
+    ChatConnection,
+    ChatIdentity,
+    ChatInteraction,
+    ChatLinkCode,
+)
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -194,6 +201,11 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        ChatConnection.__table__,
+        ChatIdentity.__table__,
+        ChatLinkCode.__table__,
+        ChatApprovalMessage.__table__,
+        ChatInteraction.__table__,
         SprintBoardNote.__table__,
     ],
 )

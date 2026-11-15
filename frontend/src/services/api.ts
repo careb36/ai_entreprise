@@ -4,6 +4,7 @@ import { createHttp } from './api/client'
 import { agentEndpoints } from './api/agents'
 import { analyticsEndpoints } from './api/analytics'
 import { authEndpoints } from './api/auth'
+import { chatEndpoints } from './api/chat'
 import { boardNoteEndpoints } from './api/boardNotes'
 import { companyEndpoints } from './api/companies'
 import { evidenceEndpoints } from './api/evidence'
@@ -20,6 +21,7 @@ export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, se
 export * from './api/agents'
 export * from './api/analytics'
 export * from './api/auth'
+export * from './api/chat'
 export * from './api/boardNotes'
 export * from './api/companies'
 export * from './api/evidence'
@@ -54,6 +56,7 @@ const endpoints = {
   ...supportEndpoints(http),
   ...githubEndpoints(http),
   ...ssoEndpoints(http),
+  ...chatEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)

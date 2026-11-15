@@ -60,6 +60,7 @@ Primary trust boundaries:
 6. **CI/CD ↔ Kubernetes/Registry** — malicious images, leaked secrets, supply chain compromise.
 7. **Backend ↔ NATS ↔ workspace daemon ↔ the user's disk** — anything that can publish a request can ask the daemon to write files and run commands on the machine that holds the projects (§8.3, §8.6).
 8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`).
+9. **Backend ↔ Slack and Microsoft Teams** — a public inbound endpoint that can accept a held delivery: forged or replayed interactions, a chat user acting as someone else, a role read from the payload, a stale click deciding a changed task, leaked bot tokens or signing secrets. Each request is verified by the platform's HMAC (Slack v0 with a five-minute timestamp; the Teams outgoing webhook's HMAC with the activity's timestamp), its id is stored once, the chat user must be linked by a one-time code to a La Fabrique account, the role comes from that account's membership exactly as on the web, and the decision is the web's own function, audited with `via` (`docs/design/CHAT_APPROVALS.md`).
 
 Key threat actors: malicious end users, compromised external content, malicious model output, insider developers, CI/CD attackers.
 

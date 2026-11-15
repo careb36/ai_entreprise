@@ -27,7 +27,8 @@
     "procedures": "Procedures",
     "specifications": "Specifications",
     "models": "Models",
-    "sso": "Single sign-on"
+    "sso": "Single sign-on",
+    "chatApprovals": "Chat approvals"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2391,6 +2392,48 @@
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
+    }
+  },
+  "chat": {
+    "title": "Chat approvals",
+    "subtitle": "Accept or send back held deliveries from Slack or Microsoft Teams.",
+    "linksTitle": "Your chat accounts",
+    "linksHelp": "Link your chat account so a decision you take in chat is recorded as yours, with your role here.",
+    "linkedAs": "Linked to {{user}} in {{workspace}}",
+    "link": "Link my {{provider}} account",
+    "unlink": "Unlink",
+    "notConnected": "Not connected by the company",
+    "codeIntro": "Your one-time code, valid for 10 minutes:",
+    "inboundUrl": "Request URL to give the platform:",
+    "secretSet": "Set — leave empty to keep it",
+    "secretUnset": "Not set",
+    "enabled": "Post approvals and accept decisions",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveError": "Could not save: {{message}}",
+    "test": "Test connection",
+    "testOk": "The platform answered: connected.",
+    "testFailed": "The platform did not answer as expected: {{detail}}",
+    "delete": "Remove",
+    "deleteConfirm": "Remove this connection? Messages already posted can no longer decide anything.",
+    "slack": {
+      "name": "Slack",
+      "title": "Slack",
+      "help": "A Slack app with a bot token (chat:write, commands) and its signing secret. Use the Request URL below for Interactivity and for the /fabrique slash command.",
+      "workspace": "Workspace (team) ID",
+      "channel": "Channel ID",
+      "postCredential": "Bot token",
+      "signingSecret": "Signing secret",
+      "codeHow": "In Slack, type: /fabrique link {{code}}"
+    },
+    "teams": {
+      "name": "Teams",
+      "title": "Microsoft Teams",
+      "help": "An incoming webhook (or Workflows) URL to post cards, and an outgoing webhook whose callback URL is the Request URL below; paste its security token as the signing secret.",
+      "workspace": "Tenant ID",
+      "postCredential": "Incoming webhook URL",
+      "signingSecret": "Outgoing webhook security token",
+      "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
     }
   },
   "boardNotes": {

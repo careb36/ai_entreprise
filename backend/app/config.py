@@ -258,6 +258,12 @@ class Settings(BaseSettings):
     SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
     SSO_CLOCK_SKEW_SECONDS: int = 60
 
+    # Approving from Slack or Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
+    # The frontend address the chat messages link to (the run's evidence, the
+    # task), and the rate limit of the public inbound endpoints per address.
+    CHAT_APP_URL: str = "http://localhost:5173"
+    CHAT_RATE_LIMIT: str = "120/minute"
+
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------
     AUDIT_SIGNING_KEY: str | None = None

@@ -13,6 +13,8 @@ from routers.architectures import router as architectures_router
 from routers.auth import router as auth_router
 from routers.board_moves import router as board_moves_router
 from routers.board_notes import router as board_notes_router
+from routers.chat_approvals import router as chat_approvals_router
+from routers.chat_interactions import router as chat_interactions_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.enterprise import router as enterprise_router
@@ -48,6 +50,8 @@ __all__ = [
     "auth_router",
     "board_moves_router",
     "board_notes_router",
+    "chat_approvals_router",
+    "chat_interactions_router",
     "console_producers_router",
     "costs_router",
     "enterprise_agents_router",
