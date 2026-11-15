@@ -14,5 +14,5 @@ def test_the_verifier_believes_no_delivery_its_evidence_contradicts(capsys):
     assert main() == 0
     output = capsys.readouterr().out
 
-    assert "lies not believed:  12/12" in output
-    assert "cases as specified: 14/14" in output
+    assert "lies not believed:  13/13" in output
+    assert "cases as specified: 16/16" in output

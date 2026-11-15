@@ -367,11 +367,13 @@ Copy `.env.example` to `.env` and fill in:
   or container; bwrap and a port already in use are refused, a required
   sandbox is never replaced by the host, the command policy applies), wait
   for its port (`DELIVERY_APP_READY_TIMEOUT_SECONDS`, 60), GET the probe path
-  (below 500 passes), run the profile's e2e command with `APP_URL`
-  (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and reply with the log's
-  tail: the `application_started` and `e2e_run` checks. The backend waits
-  for the reply beyond those bounds for the container's launch (120 s) and
-  teardown; the container is removed by name whatever happens after its
+  (below 500 passes), send it the security probe (headers, cookies, CORS,
+  methods, error bodies, `/.git/HEAD` and `/.env`, at most 40 s; the
+  `security_probe` check, `docs/contexts/evidence.md`), run the profile's e2e
+  command with `APP_URL` (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and
+  reply with the log's tail: the `application_started` and `e2e_run` checks.
+  The backend waits for the reply beyond those bounds for the container's
+  launch (120 s), the security probe (60 s) and teardown; the container is removed by name whatever happens after its
   launch; on the host the application's process group is stopped (on
   Windows the Job Object it was started suspended into, created with
   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, which also holds the children of a
@@ -541,3 +543,20 @@ Copy `.env.example` to `.env` and fill in:
   answers on the evidence as `registry_lookups`; verification then reads them
   and never reaches the network. Off, or over the bound, a dependency without
   an answer is a finding, never a refutation.
+
+## The desktop app
+
+Read by the Electron main process (`frontend/electron/`) when it starts, not
+by the backend:
+
+- `BACKEND_URL` — default `http://localhost:8000`. The backend the packaged
+  app's local server forwards `/v1/*` to (issue #524; `docs/design/SESSIONS.md`,
+  Desktop app). It must be https, or plain http only on this machine
+  (`localhost`, 127.0.0.0/8, `[::1]`), since the session cookies travel on that
+  connection; anything else stops the app at launch with the reason. The app serves its page and that API from one origin,
+  `http://127.0.0.1:<port>` with a port picked at each launch, so the backend
+  needs no `CORS_ORIGINS` or `SSO_FRONTEND_URL` entry for it and
+  `SESSION_COOKIE_SECURE` stays on. For SSO, `SSO_CALLBACK_URL` must keep the
+  path `/v1/auth/sso/callback`.
+- `ELECTRON_DEV_URL` — default `http://localhost:5173`. The Vite dev server
+  `npm run electron:dev` loads.
