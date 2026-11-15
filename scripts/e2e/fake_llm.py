@@ -64,9 +64,31 @@ VIOLATIONS_LOG = os.environ.get("FAKE_LLM_VIOLATIONS", "fake_llm.violations.log"
 CONNECTIONS_LOG = os.environ.get("FAKE_LLM_CONNECTIONS", "fake_llm.connections.log")
 INTERNAL_TOKEN = os.environ.get("FAKE_LLM_INTERNAL_TOKEN", "")
 PROVIDER_KEY = "e2e-provider-key"
-# The module each requirement's implementation task writes (its slug), so
-# QA's acceptance tests, written first, import what the Developer will deliver.
-ACCEPTANCE_MODULES = {"REQ-1": "add_greeting", "REQ-2": "add_greeting_counter"}
+# The module each requirement's implementation task writes (its slug), by the
+# requirement's title, so QA's acceptance tests, written first, import what
+# the Developer will deliver. The last three are the self-hosting run's
+# specification of issue #535 (scripts/self_host/fixtures/).
+ACCEPTANCE_MODULES = {
+    "Greet by name": "add_greeting",
+    "Count the greetings": "add_greeting_counter",
+    "Filter expressions over an allowlist of fields": "add_task_filter",
+    "The filtered list agrees with the board": "add_filtered_task_list",
+    "Saved views, private or for the company": "add_saved_views",
+}
+# The self-hosting run's specification (scripts/self_host/): the PO plans one
+# task per requirement, the filtered list after the filter.
+SELF_HOST_SPEC = "Saved views of a sprint's tasks, filtered on the evidence"
+SELF_HOST_PLAN = {
+    "sprint_name": "Saved views 1",
+    "goal": "Filter a sprint's tasks on the evidence, and keep the filter as a view",
+    "tasks": [
+        {"title": "Add task filter", "description": "parse_filter over the allowlist, with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
+        {"title": "Add filtered task list", "description": "The list from the projections, with its tests.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"], "depends_on": ["Add task filter"]},
+        {"title": "Add saved views", "description": "The saved views and their access, with their tests.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-3.1", "REQ-3.2"]},
+    ],
+    "team": ["Developer"],
+    "team_reasons": {"Developer": "the filter and the views are code to write and test"},
+}
 
 # Per task title: how many deliveries the fake wrote, how many reviews it was
 # asked for, and the paths of the last delivery.
@@ -181,6 +203,8 @@ def answer(prompt: str) -> str:
                 "questions": [] if revision else ["Is the counter per process or shared?"],
             }
         )
+    if ", the PO. Plan a sprint from the specification below" in prompt and SELF_HOST_SPEC in prompt:
+        return json.dumps(SELF_HOST_PLAN)
     if ", the PO. Plan a sprint from the specification below" in prompt:
         return json.dumps(
             {
@@ -242,8 +266,8 @@ def answer(prompt: str) -> str:
         # QA writes one failing test per criterion, named after it, importing
         # the module the implementation task will write inside each test.
         title = task.group(1).strip()
-        req = re.match(r"Acceptance tests for (REQ-\d+)", title).group(1)
-        module = ACCEPTANCE_MODULES[req]
+        heading = re.match(r"Acceptance tests for (REQ-\d+): (.+)", title)
+        req, module = heading.group(1), ACCEPTANCE_MODULES[heading.group(2).strip()]
         criteria = list(dict.fromkeys(re.findall(rf"\b({req}\.\d+):", prompt)))
         path = f"tests/test_{req.lower().replace('-', '_')}.py"
         tests = "".join(

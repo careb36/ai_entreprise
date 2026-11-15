@@ -11,16 +11,27 @@ or the status code.
 
 from __future__ import annotations
 
+from typing import Any
+
 from services.platform import rfc3161
+from services.platform.egress import Target
+
+TRANSPORT: Any = None
 
 
 class TsaRequestError(RuntimeError):
     """The request could not be sent, or the authority did not answer with a response."""
 
 
-async def request(url: str, body: bytes, timeout: float) -> bytes:
-    """POST the ``TimeStampReq`` *body* to *url*; the ``TimeStampResp`` bytes."""
+async def request(target: Target | str, body: bytes, timeout: float) -> bytes:
+    """POST the ``TimeStampReq`` *body* to *target*; the ``TimeStampResp`` bytes.
+
+    Sent to the address the caller pinned (``egress.pin``, #541 INJT-19), with
+    the original host in ``Host`` and TLS SNI."""
     import httpx
+
+    if isinstance(target, str):
+        target = Target.unpinned(target)
 
     limit = rfc3161.MAX_TOKEN_BYTES
     headers = {
@@ -30,8 +41,16 @@ async def request(url: str, body: bytes, timeout: float) -> bytes:
     }
     try:
         async with (
-            httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
-            client.stream("POST", url, content=body, headers=headers) as response,
+            httpx.AsyncClient(
+                timeout=timeout, follow_redirects=False, transport=TRANSPORT
+            ) as client,
+            client.stream(
+                "POST",
+                target.connect_url,
+                content=body,
+                headers={**headers, **target.headers()},
+                extensions=target.extensions(),
+            ) as response,
         ):
             if not 200 <= response.status_code < 300:
                 raise TsaRequestError(f"HTTP {response.status_code}")

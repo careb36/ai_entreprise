@@ -13,14 +13,14 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import User
-from pydantic import BaseModel
+from schemas import RequestModel
 from services.integrations import webhooks
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
 
 
-class WebhookRequest(BaseModel):
+class WebhookRequest(RequestModel):
     url: str
     secret: str | None = None
     events: list[str] | None = None

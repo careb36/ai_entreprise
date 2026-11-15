@@ -19,8 +19,12 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, User
-from pydantic import BaseModel
-from schemas import SCOPE_LIMITS, SelfImprovementSprintRequest, SprintPlanRequest
+from schemas import (
+    SCOPE_LIMITS,
+    RequestModel,
+    SelfImprovementSprintRequest,
+    SprintPlanRequest,
+)
 from services.planning import spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
@@ -184,7 +188,7 @@ async def plan_self_improvement_sprint(
     )
 
 
-class TeamSelectionRequest(BaseModel):
+class TeamSelectionRequest(RequestModel):
     team_selection: str
 
 

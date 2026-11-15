@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Boxes, Cpu, Plug } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { CalibrationReport } from '../components/CalibrationReport'
 import ConsoleProducers from '../components/ConsoleProducers'
 import GitWorkflowPanel from '../components/GitWorkflowPanel'
 import ModelChoices from '../components/ModelChoices'
@@ -64,6 +65,7 @@ export default function Models() {
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
           <RoutingPolicy companyId={companyId} canManage={canManage} />
+          <CalibrationReport companyId={companyId} />
           <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>

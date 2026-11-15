@@ -165,6 +165,19 @@ def host_allowed(url: str, hosts: set[str]) -> tuple[bool, str]:
     return False, host
 
 
+def operator_named(host: str) -> bool:
+    """Whether the deployment itself named *host* in ``RESEARCH_ALLOWED_HOSTS``:
+    the only hosts a fetch may reach on a private address (a local mirror,
+    the e2e's fake registry). A default host or one on a company's list never
+    may (WSTG-v42-INPV-19)."""
+    named = {
+        h.strip().lower()
+        for h in settings.RESEARCH_ALLOWED_HOSTS.split(",")
+        if h.strip()
+    }
+    return host.lower() in named
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -283,6 +296,7 @@ class ResearchToolbox:
                 current,
                 body,
                 settings.RESEARCH_TIMEOUT_SECONDS,
+                allow_private=operator_named(host),
             )
             extra.update(
                 {"status": status, "sha256": _sha256(data), "bytes": len(data)}

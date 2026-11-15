@@ -17,7 +17,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Procedure, User
 from models.procedure import PROCEDURE_STATUSES
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.evidence import standards
 from services.learning import procedures
 from sqlmodel import Session, select
@@ -25,7 +26,7 @@ from sqlmodel import Session, select
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
 
-class ProcedureCreateRequest(BaseModel):
+class ProcedureCreateRequest(RequestModel):
     company_id: int
     role: str = Field(min_length=1, max_length=100)
     title: str = Field(min_length=1, max_length=procedures.TITLE_LIMIT)

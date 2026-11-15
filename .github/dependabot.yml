@@ -43,6 +43,9 @@ updates:
         applies-to: version-updates
         update-types: [minor, patch]
 
+  # The daemon's lock is requirements.txt, compiled with hashes from
+  # requirements.in by `uv pip compile` (its header names the command, which
+  # is how Dependabot recompiles it rather than editing pins by hand).
   - package-ecosystem: pip
     directory: /vscode-daemon
     target-branch: main

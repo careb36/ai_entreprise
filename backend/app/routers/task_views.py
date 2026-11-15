@@ -24,12 +24,40 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from models import SavedView, User
+from pydantic import ConfigDict
+from schemas import RequestModel
 from services.contracts import task_filters
 from services.platform.agent_service import AgentService
 from services.tasks import saved_views, task_filter
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
+
+
+class ViewSettingsBody(RequestModel):
+    """A view's settings. The values are checked by
+    ``task_filters.parse_settings``, which names the refused setting, so they
+    are typed loosely here; a field left out keeps the view's own (PUT)."""
+
+    name: Any = None
+    filters: Any = None
+    group_by: Any = None
+    order_by: Any = None
+    layout: Any = None
+    visible_columns: Any = None
+    access: Any = None
+    locked: Any = None
+
+
+class ViewPreferencesBody(RequestModel):
+    """One person's display preferences. Extra keys are kept so that
+    ``saved_views.check_display`` refuses them by name."""
+
+    model_config = ConfigDict(extra="allow")
+
+    collapsed_groups: Any = None
+    column_widths: Any = None
+    density: Any = None
 
 
 def _user_id(user: User | None) -> int | None:
@@ -160,7 +188,7 @@ async def list_views(
 @router.post("/companies/{company_id}/views", status_code=201)
 async def create_view(
     company_id: int,
-    body: dict[str, Any],
+    body: ViewSettingsBody,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -171,7 +199,7 @@ async def create_view(
         view = saved_views.create(
             session,
             company_id,
-            body,
+            body.model_dump(exclude_unset=True),
             user_id=uid,
             actor=_actor(user),
             is_manager=manager,
@@ -210,7 +238,7 @@ async def get_view(
 @router.put("/views/{view_id}")
 async def update_view(
     view_id: int,
-    body: dict[str, Any],
+    body: ViewSettingsBody,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -219,7 +247,12 @@ async def update_view(
     uid, manager = _user_id(user), _is_manager(session, user, view.company_id)
     try:
         saved_views.update(
-            session, view, body, user_id=uid, actor=_actor(user), is_manager=manager
+            session,
+            view,
+            body.model_dump(exclude_unset=True),
+            user_id=uid,
+            actor=_actor(user),
+            is_manager=manager,
         )
     except task_filters.FilterRefused as exc:
         session.rollback()
@@ -266,13 +299,15 @@ async def get_preferences(
 @router.put("/views/{view_id}/preferences")
 async def put_preferences(
     view_id: int,
-    body: dict[str, Any],
+    body: ViewPreferencesBody,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """This person's display preferences; the view itself is not changed."""
     view = _readable(session, view_id, user)
     try:
-        return saved_views.set_preferences(session, view, _user_id(user), body)
+        return saved_views.set_preferences(
+            session, view, _user_id(user), body.model_dump(exclude_unset=True)
+        )
     except saved_views.ViewError as exc:
         raise _view_error(exc) from exc

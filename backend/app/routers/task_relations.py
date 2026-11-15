@@ -25,7 +25,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, TaskRelation, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.platform.agent_service import AgentService
 from services.tasks import dependencies, relations
 from sqlmodel import Session
@@ -33,14 +34,14 @@ from sqlmodel import Session
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
 
-class RelationCreateRequest(BaseModel):
+class RelationCreateRequest(RequestModel):
     related_task_id: int
     relation: str = Field(min_length=1, max_length=40)
     # A person may write it confirmed in one step.
     confirm: bool = False
 
 
-class RelationReasonRequest(BaseModel):
+class RelationReasonRequest(RequestModel):
     reason: str | None = Field(default=None, max_length=relations.REASON_LIMIT)
 
 

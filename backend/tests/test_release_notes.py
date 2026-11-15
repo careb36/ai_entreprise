@@ -231,15 +231,25 @@ def test_the_workflow_refuses_a_tag_off_main(name, job):
     assert "develop" not in text
 
 
+# The actions a tag workflow may use beside checkout: the cosign installer
+# and the artifact upload for the images' signatures and SBOMs (issue #522,
+# part C; backend/tests/test_supply_chain.py).
+_TAG_ACTIONS = (
+    "actions/checkout@",
+    "actions/upload-artifact@",
+    "sigstore/cosign-installer@",
+)
+
+
 @pytest.mark.parametrize("name", ["release.yml", "images.yml"])
 def test_the_workflow_runs_on_the_self_hosted_runner_and_pins_checkout(name):
     data = _workflow(name)
     for job in data["jobs"].values():
         assert job["runs-on"] == ["self-hosted", "linux", "x64", "lafabrique"]
         uses = [step["uses"] for step in job["steps"] if "uses" in step]
-        assert uses and all(
-            u.startswith("actions/checkout@") and len(u.split("@")[1]) == 40
-            for u in uses
+        assert uses and uses[0].startswith("actions/checkout@")
+        assert all(
+            u.startswith(_TAG_ACTIONS) and len(u.split("@")[1]) == 40 for u in uses
         )
 
 
@@ -275,7 +285,11 @@ def test_images_move_latest_only_for_a_stable_release():
     data = _workflow("images.yml")
     assert data["concurrency"]["cancel-in-progress"] is False
     publish = data["jobs"]["publish"]
-    assert publish["permissions"] == {"contents": "read", "packages": "write"}
+    assert publish["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+    }
     text = _steps_text(publish)
     assert "ghcr.io/${GITHUB_REPOSITORY,,}/${NAME}" in text
     assert 'if [ "$STABLE" = "true" ]; then docker push "${image}:latest"; fi' in text

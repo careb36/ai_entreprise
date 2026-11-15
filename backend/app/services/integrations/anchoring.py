@@ -47,7 +47,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session, select
 
 from services.integrations import tsa_client, webhook_client, webhooks
-from services.platform import audit_anchors, locks, rfc3161
+from services.platform import audit_anchors, egress, locks, rfc3161
 
 EVENT_TAKE = "audit_anchor_take"
 EVENT_WEBHOOK = "audit_anchor_webhook"
@@ -164,9 +164,10 @@ async def deliver_webhook(
     }
     send = post or webhook_client.post_for_receipt
     try:
-        await asyncio.to_thread(webhooks.check_url, hook.url)
+        # Checked, resolved once and pinned, as webhooks.deliver posts (#541).
+        target = await asyncio.to_thread(webhooks._target, hook.url)
         status_code, answer = await send(
-            hook.url, body, headers, webhooks.TIMEOUT_SECONDS, RECEIPT_MAX_BYTES
+            target, body, headers, webhooks.TIMEOUT_SECONDS, RECEIPT_MAX_BYTES
         )
         if not 200 <= status_code < 300:
             raise RuntimeError(f"HTTP {status_code}")
@@ -215,8 +216,13 @@ async def deliver_tsa(
     send = request or tsa_client.request
     try:
         await asyncio.to_thread(webhooks.check_url, url, schemes=("https", "http"))
+        # Resolved once and pinned: a company's TSA URL must not reach a
+        # private address (#541, INJT-19), unless the operator allows it.
+        target = await asyncio.to_thread(
+            egress.pin, url, allow_private=webhooks._allow_private()
+        )
         answer = await send(
-            url, rfc3161.build_request(digest, nonce), TSA_TIMEOUT_SECONDS
+            target, rfc3161.build_request(digest, nonce), TSA_TIMEOUT_SECONDS
         )
         token = rfc3161.token_from_response(answer)
         facts = rfc3161.verify_token(token, digest, cert_pem, nonce=nonce)

@@ -41,6 +41,9 @@ curl -X POST http://localhost:8000/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "securepass123", "full_name": "John Doe"}'
 
+# The answer is the same whether or not the email already had an account:
+# {"status": "accepted", "detail": "...", "email": "user@example.com"}
+
 curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "securepass123", "token_delivery": "bearer"}'
@@ -72,7 +75,7 @@ The authentication endpoints:
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/v1/auth/register` | Create the user and its first company membership |
+| `POST` | `/v1/auth/register` | Create a user; the answer does not say whether the email already had an account (rate-limited) |
 | `POST` | `/v1/auth/login` | Start a browser session (cookies), or issue a Bearer JWT with `"token_delivery": "bearer"` |
 | `POST` | `/v1/auth/refresh` | Rotate the session's refresh cookie (CSRF header; rate-limited); 409 when another tab just did |
 | `POST` | `/v1/auth/logout` | Revoke the session and clear its cookies (CSRF header) |

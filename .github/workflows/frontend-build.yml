@@ -25,9 +25,12 @@ on:
       - '.github/workflows/frontend-build.yml'
   workflow_dispatch:
 
+# The self-hosted runners are shared by every pull request and by main: a new
+# push cancels the runs of the commit it replaces, on main too (the newest
+# commit's run covers the ones merged before it), instead of queueing behind them.
 concurrency:
   group: frontend-build-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -135,6 +135,58 @@ def test_an_unreadable_or_empty_report_leaves_every_criterion_missing(text):
     assert scorecard.criteria_from_junit(text, ["REQ-1.1"]) == {"REQ-1.1": "missing"}
 
 
+# The report is written inside a project the agents produced, so a conftest
+# there can rewrite it (issue #522, Semgrep's use-defused-xml): a document type
+# is refused before any entity is expanded or any file is read.
+_BOMB = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lol">
+ <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+]>
+<testsuites><testsuite><testcase name="test_req_1_1_&lol3;"/></testsuite></testsuites>"""
+
+
+def _external(path: Path) -> str:
+    return f"""<?xml version="1.0"?>
+<!DOCTYPE t [<!ENTITY secret SYSTEM "file://{path}">]>
+<testsuites><testsuite><testcase name="test_req_1_1_a">&secret;</testcase>
+</testsuite></testsuites>"""
+
+
+def test_a_report_with_a_document_type_is_refused_before_expansion(tmp_path):
+    import junit_xml
+
+    secret = tmp_path / "secret.txt"
+    secret.write_text("never read")
+    for text in (
+        _BOMB,
+        _external(secret),
+        '<!DOCTYPE t SYSTEM "http://example.invalid/t.dtd"><testsuites/>',
+    ):
+        with pytest.raises(junit_xml.JUnitError):
+            junit_xml.testcases(text)
+        assert scorecard.criteria_from_junit(text, ["REQ-1.1"]) == {
+            "REQ-1.1": "missing"
+        }
+    # An entity no DTD declares is malformed XML, not an empty name.
+    with pytest.raises(junit_xml.JUnitError):
+        junit_xml.testcases('<testcase name="test_req_1_1_&x;"/>')
+
+
+def test_the_junit_reader_looks_only_at_direct_children_of_a_case():
+    import junit_xml
+
+    text = """<testsuites><testsuite>
+<testcase name="test_req_1_1_a"><system-out><failure/></system-out></testcase>
+<testcase name="test_req_1_2_a"><failure/></testcase>
+</testsuite></testsuites>"""
+    assert junit_xml.testcases(text) == [
+        ("test_req_1_1_a", True),
+        ("test_req_1_2_a", False),
+    ]
+
+
 def test_grading_the_fake_producers_files_passes_every_criterion():
     spec_dir = BENCH / "specs" / "02-lib-roman"
     graded = scorecard.grade(spec_dir, spec_dir / "fake" / "files", sys.executable)
