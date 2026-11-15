@@ -22,6 +22,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .documentation import DocumentationPack
 from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .integration import SprintIntegration
@@ -53,6 +54,7 @@ __all__ = [
     "Company",
     "CompanyMember",
     "CompanyWebhook",
+    "DocumentationPack",
     "GitHubRepoBinding",
     "ManagerDecision",
     "ManagerPolicy",

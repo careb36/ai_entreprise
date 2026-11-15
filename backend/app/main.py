@@ -28,6 +28,7 @@ from routers import (
     board_moves_router,
     console_producers_router,
     costs_router,
+    documentation_router,
     enterprise_agents_router,
     enterprise_analytics_router,
     enterprise_router,
@@ -140,6 +141,7 @@ app.include_router(reviews_router)
 app.include_router(run_secrets_router)
 app.include_router(specifications_router)
 app.include_router(architectures_router)
+app.include_router(documentation_router)
 app.include_router(workspace_router)
 app.include_router(mcp_router)
 app.include_router(providers_router)

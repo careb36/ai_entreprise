@@ -52,6 +52,7 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.documentation import DocumentationPack
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.integration import SprintIntegration
@@ -193,6 +194,7 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        DocumentationPack.__table__,
     ],
 )
 

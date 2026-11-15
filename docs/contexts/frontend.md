@@ -10,6 +10,8 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
 
+- **Documentation** (`pages/Documentation.tsx`, `/company/documentation`; `services/documentation.ts`, `components/PackMarkdown.tsx`, `components/C4DiagramView.tsx`, `lib/c4Layout.ts`; issue #530) — The project's documentation packs: the versions, the drift lint, each document as Markdown (`react-markdown` with `remark-gfm` for tables, raw HTML skipped, no images, only `#` and http(s) links kept) with its PMBOK 8th edition domain and focus area, sources, claims and person sections, and the C4 diagrams drawn as SVG from their data (the Mermaid source shown as text, never run). A Manager compiles and writes an approved pack; an Owner approves while the lint finds no drift.
+
 ## Layout of the larger views
 
 A view too large for one file keeps its entry file, with the same exports, and puts its parts in a folder beside it, named after it in lower camel case: subcomponents with one job each, and `useXxx` hooks for the state that separates cleanly. Every source file stays at or under 600 lines (`scripts/check_file_sizes.py`).

@@ -1,4 +1,4 @@
-"""Approving a specification or an architecture, and taking an approval back.
+"""Approving a specification, an architecture or a documentation pack, and taking an approval back.
 
 One code path for a Manager's ``POST /v1/specifications/{id}/approve`` and
 ``POST /v1/architectures/{id}/approve`` and for the Manager agent when the
@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from models import Architecture, Specification, Sprint
+from models import Architecture, DocumentationPack, Specification, Sprint
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -109,6 +109,35 @@ def approve_architecture(
     arch.approved_at = _now()
     arch.updated_at = arch.approved_at
     session.add(arch)
+    return superseded
+
+
+def approve_pack(
+    session: Session, pack: DocumentationPack, lint: dict[str, Any], actor: str
+) -> list[int]:
+    """Approve the draft *pack* (issue #530); the ids it superseded.
+
+    The same rule as a specification's: the deterministic check, here the
+    pack's drift lint (``project_docs.pack.lint``), must not block, so a pack
+    whose records changed since it was compiled is compiled again first.
+    """
+    _blocked(lint)
+    superseded = []
+    for previous in session.exec(
+        select(DocumentationPack).where(
+            DocumentationPack.company_id == pack.company_id,
+            DocumentationPack.status == "approved",
+        )
+    ).all():
+        previous.status = "superseded"
+        previous.updated_at = _now()
+        session.add(previous)
+        superseded.append(previous.id)
+    pack.status = "approved"
+    pack.approved_by = actor
+    pack.approved_at = _now()
+    pack.updated_at = pack.approved_at
+    session.add(pack)
     return superseded
 
 
