@@ -440,6 +440,29 @@ turns whose usage the provider reported, so the provider's own spending
 limit is still the last guard (`bench/README.md`, "The nightly real-model
 run").
 
+**The runners stop taking jobs, or their disk fills up.** The runner services
+are user services on this machine: `systemctl --user is-active
+'actions-runner-lafabrique*'` answers `active` for all seven while GitHub shows
+some `offline`, or `online` and `busy=false` with the queue growing and nothing
+dispatched (`gh run list --status in_progress` empty). A runner whose job died
+mid-run — usually under disk pressure — keeps its session wedged: the service
+stays up, the connection does not. Check `df -h /` first, then restart the
+wedged services, and only once `gh run list --status in_progress` is empty, or
+you cancel a running e2e job:
+
+```bash
+systemctl --user restart 'actions-runner-lafabrique*'
+```
+
+`runner-hygiene.yml` keeps the disk bounded daily (#566): this repository's
+stopped e2e and smoke containers with their volumes, dangling images older than
+a week, and anonymous dangling volumes older than a week are removed, and the
+buildkit cache is kept under 2 GB. It never prunes by name: the named volumes
+`la-fabrique_*` hold a person's development data (they show `dangling` while
+that stack is down), and the named images belong to the other repositories
+sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
+a finished run leaks nothing.
+
 ## Backups
 
 `scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`
