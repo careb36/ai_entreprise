@@ -2,8 +2,8 @@
 source, the Support agent's suggestion, a person's decision and the task or
 specification version they became. A new table only: nothing existing changes.
 
-Revision ID: 0099
-Revises: 0028
+Revision ID: 0035
+Revises: 0034
 Create Date: 2026-11-15 22:00:00 UTC
 """
 
@@ -14,8 +14,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0028"
+revision = "0035"
+down_revision = "0034"
 branch_labels = None
 depends_on = None
 

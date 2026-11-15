@@ -178,6 +178,12 @@ async def _observe_signatures(
         logger.warning("Signature lookups failed for a delivery: %s", e)
 
 
+def _verdict_payload(recorded: tuple[int, str] | None) -> dict[str, Any] | None:
+    """The Verifier's verdict on the ``verified`` event (issue #531), the
+    backend's own reading, so the sprint's progress replays it from the events."""
+    return {"verification": recorded[1]} if recorded else None
+
+
 def _heartbeat_note() -> str:
     """What the backend observed of the daemon's heartbeat, when it explains a missing reply."""
     beat = daemon_liveness.liveness()
@@ -322,6 +328,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         "System",
         "verified",
         run_id=recorded[0] if recorded else None,
+        payload=_verdict_payload(recorded),
     )
     if sprint_id is not None:
         await publish_glassroom(
@@ -462,6 +469,7 @@ async def _deliver_artifacts(
             comment_author="System",
             kind="verified",
             run_id=recorded[0] if recorded else None,
+            payload=_verdict_payload(recorded),
         )
         await publish_glassroom(
             nats_client,

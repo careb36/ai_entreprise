@@ -435,6 +435,11 @@ over a status:
   workflow. Moving it to a column of another status is the status move it is
   today (`PATCH /v1/backlog`, `board_moves`), with its rules (a move to To do
   starts the task, other moves stay refused where they are refused today).
+- A custom column is a saved view of issue #535
+  ([`design/SAVED_VIEWS.md`](design/SAVED_VIEWS.md)): a filter with `status`
+  `eq` its status, refined if the company wishes (a verdict, a risk tier, a
+  producer), shown in the `board` layout. The filter is evaluated from the
+  task projections, so the column and the board never disagree.
 - A status with no custom column shows as today's column. Deleting a custom
   column moves its cards to the status's default column; a column that a
   binding names cannot be deleted until the binding is removed, as in Flow.

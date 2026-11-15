@@ -492,5 +492,7 @@ export function useLineage(filePath: string, companyId: number | null) {
 export function useCurrentRole(): CompanyRole | null {
   const companyId = useAppStore(state => state.companyId)
   const memberships = useAuthStore(state => state.memberships)
-  return memberships.find(m => m.company_id === companyId)?.human_role ?? null
+  const membership = memberships.find(m => m.company_id === companyId)
+  // What the backend checks: the own role raised by the member's teams.
+  return membership?.effective_role ?? membership?.human_role ?? null
 }

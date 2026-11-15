@@ -24,3 +24,28 @@ async def post(url: str, body: bytes, headers: dict[str, str], timeout: float) -
     except Exception as exc:  # Every transport failure, named and re-raised.
         raise WebhookPostError(f"{type(exc).__name__}: {exc}") from exc
     return response.status_code
+
+
+async def post_for_receipt(
+    url: str, body: bytes, headers: dict[str, str], timeout: float, max_bytes: int
+) -> tuple[int, bytes]:
+    """POST *body* to *url*; the status code and at most *max_bytes* of the answer.
+
+    For the audit anchors (issue #542), whose endpoint may answer with a
+    receipt: the answer is read up to the limit and the rest dropped.
+    """
+    import httpx
+
+    try:
+        async with (
+            httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
+            client.stream("POST", url, content=body, headers=headers) as response,
+        ):
+            received = bytearray()
+            async for chunk in response.aiter_bytes():
+                received.extend(chunk[: max_bytes - len(received)])
+                if len(received) >= max_bytes:
+                    break
+            return response.status_code, bytes(received)
+    except Exception as exc:  # Every transport failure, named and re-raised.
+        raise WebhookPostError(f"{type(exc).__name__}: {exc}") from exc
