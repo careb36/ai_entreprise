@@ -54,6 +54,8 @@ from routers import (
     sso_admin_router,
     sso_router,
     support_router,
+    teams_router,
+    usage_router,
     webhooks_router,
     wiki_router,
     workspace_router,
@@ -158,6 +160,8 @@ app.include_router(model_settings_router)
 app.include_router(webhooks_router)
 app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
+app.include_router(teams_router)
+app.include_router(usage_router)
 
 # Register exception handlers
 register_exception_handlers(app)

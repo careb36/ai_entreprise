@@ -185,7 +185,8 @@ dependencies.is_ready(session, item) -> bool
 company_models.resolve(session, company_id, role, configured) -> str
 model_routing.estimate_difficulty(...) -> int
 model_suggestions.suggest(...) -> one suggestion per role
-routing_record / model_record over completed sprints
+routing_record / model_record / calibration over completed sprints
+effort.record_sprint(session, sprint_id) -> int (at sprint close)
 ```
 
 ### IF-8: Verification

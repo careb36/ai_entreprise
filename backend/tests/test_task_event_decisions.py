@@ -91,7 +91,13 @@ def _item(session: Session, sprint: Sprint, **fields) -> BacklogItem:
 
 
 def _kinds(session: Session, item_id: int) -> list[str]:
-    return [e.event_type for e in task_events.for_task(session, item_id)]
+    """The task's transitions; the effort observed at sprint close (issue
+    #534, ``test_calibration.py``) is not one."""
+    return [
+        e.event_type
+        for e in task_events.for_task(session, item_id)
+        if e.event_type != "effort_observed"
+    ]
 
 
 def _alter(session: Session, item_id: int, index: int, **changes) -> None:
