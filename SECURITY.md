@@ -171,7 +171,7 @@ that turns off geolocation, microphone and camera; it does not send
 `Cross-Origin-Opener-Policy`. CORS allows only `CORS_ORIGINS`. The frontend
 keeps its access token in `localStorage` (`frontend/src/store/useAuthStore.ts`,
 zustand `persist`, key `fabrique-auth-storage`), which the rule below forbids:
-a known gap until the token moves to memory or an `HttpOnly` cookie.
+a known gap until the token moves to memory or an `HttpOnly` cookie (#524).
 
 The rules:
 
@@ -212,8 +212,9 @@ The rules:
 - Alerts on secret exposure trigger the incident response process.
 
 **Where the code stands.** gitleaks (pinned, downloaded with a checksum,
-`.gitleaks.toml`) runs in the weekly baseline (`.github/workflows/security-baseline.yml`),
-not on every pull request; running it on pull requests is issue #522, part B.
+`.gitleaks.toml`) runs over each pull request's own commits
+(`.github/workflows/security-scan.yml`, job `secrets-pr`) and over the full
+history in the weekly baseline (`.github/workflows/security-baseline.yml`).
 The pre-commit hooks (`.pre-commit-config.yaml`) refuse a committed `.env`
 but do not run a secret scanner. Stored secrets (provider keys, MCP secrets,
 run secrets, project credentials) are encrypted with `FERNET_SECRET_KEY`;
@@ -253,20 +254,28 @@ in `.env`, not in a secret manager.
 **Where the code stands** (§5.2 and §5.3). Lockfiles are committed
 (`backend/poetry.lock`, `llm-proxy/poetry.lock`, `frontend/package-lock.json`,
 `vscode-daemon/requirements.txt`) and Dependabot covers pip, npm, docker,
-docker-compose and GitHub Actions (`.github/dependabot.yml`). Trivy scans the
-files on every pull request (`.github/workflows/security-scan.yml`) and
-uploads SARIF without failing the job; the gating Trivy, Semgrep and
-gitleaks scans run weekly (`.github/workflows/security-baseline.yml`). The
-Python dependency step in `security-scan.yml` ends in `|| true` and never
-fails; `npm audit` is not run in CI. A SLSA provenance workflow exists
+docker-compose and GitHub Actions (`.github/dependabot.yml`). Every pull request
+runs, in `.github/workflows/security-scan.yml`: Trivy over the files (SARIF,
+not gating); a dependency audit that fails on a known vulnerability —
+`pip-audit` over the hashed export of `backend/poetry.lock` and
+`llm-proxy/poetry.lock`, and `npm audit --omit=dev --audit-level=high` over
+`frontend/package-lock.json`, with exceptions only in
+`.github/pip-audit-ignore.txt` (each with a reason and a review date that
+fails the job once passed); gitleaks over the pull request's commits; and
+Semgrep failing on the findings the pull request adds. The gating Trivy and
+the full Semgrep and gitleaks scans run weekly
+(`.github/workflows/security-baseline.yml`). Every third-party action is
+pinned by commit sha, checked by `backend/tests/test_workflow_pinning.py`
+(the SLSA generator is the one exception: it runs only from a release tag).
+`vscode-daemon/requirements.txt` is a version range, not a lock, so the audit
+does not cover the daemon yet. A SLSA provenance workflow exists
 (`generator-generic-ossf-slsa3-publish.yml`, on a created GitHub Release or
 by hand), but it hashes images it builds itself rather than the ones
 `images.yml` publishes, and a Release created by `release.yml` with the
 workflow's own token does not start it; the five published images have no
 SBOM and are not signed, and commits and tags are not
-required to be signed. The CI changes (actions pinned by sha, a dependency
-audit that can fail, scanners on pull requests) are issue #522, part B; SBOMs
-and image signing are noted there for later.
+required to be signed. SBOMs and image signing are noted in issue #522 for
+later.
 
 ### 5.4 Open advisories and their triage
 
@@ -540,7 +549,7 @@ agent-written, which is what the sandbox is for.
   (`services/producers/console_assistants.py`, a configured CLI template run
   with the agent's prompt) send `workspace.execute` with neither a `sandbox`
   nor a `command_policy`, so they run on the host; only the daemon's own
-  `FABRIQUE_COMMAND_DENY` applies to them.
+  `FABRIQUE_COMMAND_DENY` applies to them (#525).
 - The backend does not send a per-company command policy yet
   (`docs/CONFIGURATION.md`): the only policy it sends is the console
   producer's, which allows only that CLI's own command
