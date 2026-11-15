@@ -13,8 +13,9 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
                   └── Postgres / Neo4j (inside the backend's trust zone)
  Agent and producer output enters at B5, wherever it is read.
  CI on the self-hosted runner is B7; a company's identity provider is B8;
- Slack and Microsoft Teams (approvals in chat) are B9; an RFC 3161
- timestamping authority (audit anchors) is B10.
+ Slack and Microsoft Teams (approvals in chat) are B9; the desktop app's
+ local server on 127.0.0.1, which other local software can reach, is B10; an
+ RFC 3161 timestamping authority (audit anchors) is B11.
 ```
 
 ## B1 — Browser ↔ backend
@@ -171,7 +172,25 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   thief's chat account (the victim sees the link); Teams refusals are thread
   replies, not ephemeral.
 
-## B10 — The backend and an RFC 3161 timestamping authority
+## B10 — Other software on the user's computer and the desktop app's local server
+
+- **Crosses:** HTTP to the packaged Electron app's server on
+  `127.0.0.1:<port>`, which serves the frontend and forwards `/v1/*` to the
+  backend; any local process or any browser page on the machine can reach it.
+- **Threats:** requests that carry the app's session from another local
+  origin (another port of 127.0.0.1 is the same site); DNS rebinding; an open
+  proxy; a CORS grant reflected to another origin; path traversal; the
+  identity provider's pages reaching the app's IPC.
+- **Controls:** exact `Host`, `Origin` and `Sec-Fetch-Site` checks and the
+  local `Origin` on unsafe methods; only `/v1/*`, only to `BACKEND_URL`;
+  `Origin` not forwarded, `Access-Control-*` dropped; paths kept under
+  `dist/`; the SSO window without preload and IPC checking the sender's origin
+  (`frontend/electron/local-server.ts`, `navigation.ts`, `ipc-handlers.ts`;
+  `docs/design/SESSIONS.md`, Desktop app).
+- **Known gaps:** a process running as the user can read Electron's cookie
+  store on disk.
+
+## B11 — The backend and an RFC 3161 timestamping authority
 
 - **Crosses:** the audit chain's head (a statement's SHA-256 with a nonce) sent
   to the authority the Owner chose; the time-stamp token it answers

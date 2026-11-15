@@ -144,11 +144,11 @@ choice of authority and keys; availability of the outbox.
 
 ```
  Customer job ──B1── Backend ──B6── Company webhook (customer)
-   (Ed25519 key)       │  └──B10── RFC 3161 authority (Owner's choice)
+   (Ed25519 key)       │  └──B11── RFC 3161 authority (Owner's choice)
                        └── Postgres: audit_log, audit_anchors, audit_anchor_settings
 ```
 
-B10 is new: the backend to a timestamping authority. It is a boundary because
+B11 is new: the backend to a timestamping authority. It is a boundary because
 the authority's answer is trusted to prove a time, so the answer is checked
 against a certificate the Owner pinned, never against what the answer says.
 
@@ -158,9 +158,9 @@ against a certificate the Owner pinned, never against what the answer says.
 | T2 | Postgres | T | The newest rows are dropped | M | H | High | New: `row_missing` for any anchor past the head |
 | T3 | Postgres | T, R | The insider also rewrites the anchor rows | M | H | High | New: tokens and signatures are over the rebuilt statement; the factory holds neither the TSA's nor the customer's private key (`test_rewriting_the_anchor_too_breaks_its_proof`) |
 | T4 | Postgres | T | The insider replaces the pinned TSA certificate or registers its own customer key, then forges anchors | L | H | Medium | Settings are Owner-only, by a person, audited with fingerprints; the auditor verifies with the authority's published certificate and the customer's own public key, not the export's. Residual: the backend's own check trusts its database (below) |
-| T5 | B10 | S | A fake authority, or a man in the middle on http | M | M | Medium | Pinned certificate; signature, imprint, nonce, EKU and validity checked (`test_rfc3161.py`); http allowed only because the token authenticates itself |
-| T6 | B10 | T, D | A malformed or huge answer exploits the parser | M | M | Medium | Answer capped at 64 KiB in the adapter and the reader; DER reader refuses indefinite lengths, high tags, trailing bytes and truncation (parametrised test); crypto by `cryptography` |
-| T7 | B10, B6 | I | SSRF through `tsa_url` or the webhook URL | M | M | Medium | Existing: `webhooks.check_url` at save and before each request, no redirects |
+| T5 | B11 | S | A fake authority, or a man in the middle on http | M | M | Medium | Pinned certificate; signature, imprint, nonce, EKU and validity checked (`test_rfc3161.py`); http allowed only because the token authenticates itself |
+| T6 | B11 | T, D | A malformed or huge answer exploits the parser | M | M | Medium | Answer capped at 64 KiB in the adapter and the reader; DER reader refuses indefinite lengths, high tags, trailing bytes and truncation (parametrised test); crypto by `cryptography` |
+| T7 | B11, B6 | I | SSRF through `tsa_url` or the webhook URL | M | M | Medium | Existing: `webhooks.check_url` at save and before each request, no redirects |
 | T8 | B6 | S, R | The endpoint's receipt is taken as proof | M | M | Medium | Stored as a claim (`state: claim`, `strength: claim`); verified only if signed by a registered customer key |
 | T9 | B1 | S, E | A Viewer forges a customer anchor | L | L | Low | The signature must verify with an active Owner-registered key and the head must match the chain; audited |
 | T10 | B1 | E | A Manager or a token changes who verifies the chain | L | H | Medium | Owner role and a person (tokens refused, as for SSO); audited |

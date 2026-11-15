@@ -1,4 +1,7 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// The packaged desktop app serves the page and forwards /v1 from one local
+// origin (frontend/electron/local-server.ts), so its build calls the API on
+// the page's own origin; `vite build --mode electron` sets the flag.
+export const API_BASE = import.meta.env.VITE_API_SAME_ORIGIN === 'true' ? '' : import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
 
