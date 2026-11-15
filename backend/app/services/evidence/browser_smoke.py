@@ -22,6 +22,15 @@ A browser runtime missing on the daemon's machine (no Playwright, no
 browser, missing system libraries) is recorded as ``runtime_missing`` and
 makes the ``e2e_run`` check unverifiable with the reason: never a pass, and
 never a refutation of the delivery.
+
+Whether a browser was there is the daemon's observation too: before a
+browser e2e command it runs a probe where the command runs
+(``vscode-daemon/browser_probe.py``), and ``e2e_run`` says "browser present:
+yes / no / not observed" from that report (``browser_presence``), never from
+an assumption. A probe of the browser sandbox image's own Playwright that
+found no browser turns an e2e failure the output does not explain into
+``runtime_missing``; a probe of the project's Playwright (which the
+project's own ``node_modules`` shape) only annotates.
 """
 
 from __future__ import annotations
@@ -94,6 +103,12 @@ FAILING_CAP = 50
 _RUNNING = re.compile(r"^\s*Running (\d+) tests? using", re.MULTILINE)
 _TEST_INDEX = re.compile(r"^\s*(?:✓|✔|✘|ok|x)\s+(\d+)\s+.*\S:\d+:\d+\s+›", re.MULTILINE)
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def is_browser_e2e(e2e: Any, profile: dict[str, Any], source: Any) -> bool:
+    """Whether the e2e command drives a browser: QA's smoke suite, or the e2e
+    command of a profile that serves pages (``web``)."""
+    return bool(e2e) and (source == SOURCE_SMOKE or bool((profile or {}).get("web")))
 
 
 def smoke_path(criterion_id: str) -> str:
@@ -265,6 +280,19 @@ def read_back(evidence: dict[str, Any]) -> None:
     missing = (
         None if raw.get("timed_out") else runtime_missing(text, raw.get("exit_code"))
     )
+    probe = app.get("browser_probe")
+    if (
+        not missing
+        and not raw.get("timed_out")
+        and raw.get("exit_code") != 0
+        and isinstance(probe, dict)
+        and probe.get("available") is False
+        and probe.get("from") == "image"
+    ):
+        missing = (
+            "the browser sandbox image's probe launched no browser: "
+            f"{probe.get('reason') or 'no reason given'}"
+        )
     acceptance = evidence.get("acceptance")
     if missing:
         derived["runtime_missing"] = missing
@@ -313,6 +341,48 @@ def unobserved_reason(engine: Any, company_id: int, item_id: int) -> str | None:
     return None
 
 
+def browser_presence(app: dict[str, Any]) -> dict[str, Any] | None:
+    """Whether a browser was present where the e2e command ran, from the
+    daemon's probe (``browser_probe``); ``present: None`` when the probe was
+    asked for and no answer came (an older daemon), ``None`` when no probe
+    was asked for (an e2e command that drives no browser)."""
+    probe = app.get("browser_probe")
+    if isinstance(probe, dict) and isinstance(probe.get("available"), bool):
+        keep = ("from", "browser", "playwright", "reason")
+        return {
+            "present": probe["available"],
+            "observed_by": "daemon",
+            **{k: probe[k] for k in keep if probe.get(k)},
+        }
+    if app.get("browser_probe_requested"):
+        return {
+            "present": None,
+            "reason": "the daemon did not probe for a browser (a daemon from before the probe)",
+        }
+    return None
+
+
+def _presence_text(presence: dict[str, Any] | None) -> str:
+    if not presence:
+        return ""
+    if presence["present"] is None:
+        return f"; browser present: not observed ({presence['reason']})"
+    if not presence["present"]:
+        return f"; browser present: no ({presence.get('reason') or 'no reason given'})"
+    found = ", ".join(
+        part
+        for part in (
+            presence.get("browser"),
+            f"Playwright {presence['playwright']}"
+            if presence.get("playwright")
+            else "",
+            f"from the {presence['from']}" if presence.get("from") else "",
+        )
+        if part
+    )
+    return f"; browser present: yes ({found})" if found else "; browser present: yes"
+
+
 def _tail(record: dict[str, Any], limit: int = 400) -> str:
     tail = (record.get("output_tail") or "").strip()[-limit:]
     return f": {tail}" if tail else ""
@@ -332,15 +402,20 @@ def check_e2e(evidence: dict[str, Any]) -> dict[str, Any] | None:
     extra: dict[str, Any] = {}
     if e2e.get("criteria"):
         extra["results"] = e2e["criteria"]
+    presence = browser_presence(app)
+    present = _presence_text(presence)
+    if presence:
+        extra["browser"] = presence
     if e2e.get("runtime_missing"):
         return {
             "name": CHECK_E2E,
             "outcome": VERDICT_UNVERIFIABLE,
             "observation": (
                 f"{target} observed nothing in a browser: {e2e['runtime_missing']}"
-                f"{_tail(e2e, 200)}"
+                f"{_tail(e2e, 200)}{present}"
             ),
             "runtime_missing": True,
+            **({"browser": presence} if presence else {}),
         }
     if e2e.get("timed_out"):
         outcome = VERDICT_REFUTED
@@ -363,4 +438,9 @@ def check_e2e(evidence: dict[str, Any]) -> dict[str, Any] | None:
     else:
         outcome = VERDICT_UNVERIFIABLE
         observation = f"{target} reported no exit status"
-    return {"name": CHECK_E2E, "outcome": outcome, "observation": observation, **extra}
+    return {
+        "name": CHECK_E2E,
+        "outcome": outcome,
+        "observation": observation + present,
+        **extra,
+    }

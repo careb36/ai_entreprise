@@ -14,7 +14,9 @@ broker gives each component its own user, with only the subjects it needs:
   ``_INBOX.backend.>``, where the backend's replies arrive; it may also
   publish its results (``workspace.delivered``), its heartbeat
   (``workspace.heartbeat``, which nobody answers), Glassroom status lines and
-  the JetStream calls of its own consumer on the deliveries stream. It may
+  the JetStream calls of its own consumer on the deliveries stream, and a
+  run's full log into the ``FABRIQUE_RUN_LOGS`` object store (write an
+  object, read an object's metadata; never purge or delete). It may
   not send a request (``workspace.execute``…), assign a task, read the
   backend's replies, or create, change or delete a stream.
 
@@ -69,11 +71,18 @@ def _subject(namespace: str, subject: str) -> str:
     return f"{namespace}.{subject}" if namespace else subject
 
 
+def run_log_bucket(namespace: str = "") -> str:
+    """The object store of runs' full logs (``backend/app/services/workspace/run_logs.py``)."""
+    return _name(namespace, "FABRIQUE_RUN_LOGS")
+
+
 def backend_permissions(namespace: str = "") -> dict:
     work = ["workspace.>", "task.>", "glassroom.>", "audit.>", "system.>"]
     durable = [_subject(namespace, s) for s in ("task.>", "workspace.>")] if namespace else []
     return {
-        "publish": {"allow": [*work, *durable, "$JS.API.>", "$JS.ACK.>"]},
+        # ``$JS.FC.>``: the flow-control answers of the ordered consumer that
+        # reads a full log back from the object store.
+        "publish": {"allow": [*work, *durable, "$JS.API.>", "$JS.ACK.>", "$JS.FC.>"]},
         "subscribe": {
             "allow": [f"{BACKEND_INBOX}.>", "glassroom.>", "workspace.>", "task.>", *durable]
         },
@@ -85,6 +94,7 @@ def daemon_permissions(namespace: str = "") -> dict:
     results = _name(namespace, "FABRIQUE_DELIVERY_RESULTS")
     consumer = _name(namespace, "workspace-daemon")
     deliver = _subject(namespace, "workspace.deliver")
+    logs = run_log_bucket(namespace)
     api = "$JS.API"
     return {
         "publish": {
@@ -104,6 +114,14 @@ def daemon_permissions(namespace: str = "") -> dict:
                 f"{api}.CONSUMER.DURABLE.CREATE.{stream}.{consumer}",
                 f"{api}.CONSUMER.MSG.NEXT.{stream}.{consumer}",
                 f"$JS.ACK.{stream}.{consumer}.>",
+                # A run's full log into the one object store (vscode-daemon/run_logs.py):
+                # its chunks and metadata, the bucket's info and an object's
+                # metadata. Never a purge or a delete: the backend reads each
+                # object back and hashes it on receipt.
+                f"$O.{logs}.C.>",
+                f"$O.{logs}.M.>",
+                f"{api}.STREAM.INFO.OBJ_{logs}",
+                f"{api}.STREAM.MSG.GET.OBJ_{logs}",
             ]
         },
         "subscribe": {"allow": ["workspace.>", f"{DAEMON_INBOX}.>"]},

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.execute",
   "title": "workspace.execute",
-  "description": "Run a command in the project, in the sandbox the request names (daemon.py, shell_exec.py, sandbox.py). A command that could not run is an observation in the reply (`error`), not a refusal.",
+  "description": "Run a command in the project, in the sandbox the request names (daemon.py, shell_exec.py, sandbox.py). A command that could not run is an observation in the reply (`error`), not a refusal. With `full_log` the whole output goes to the object store and the reply says which objects.",
   "x-protocol-version": 1,
   "x-subject": "workspace.execute",
   "x-kind": "request",
@@ -30,6 +30,24 @@
             "integer",
             "string",
             "null"
+          ]
+        },
+        "full_log": {
+          "type": "object",
+          "description": "Upload the whole output to this JetStream object store bucket, as `<name>/<stream>` (run_logs.py). Names are letters, digits, `_` and `-`.",
+          "properties": {
+            "bucket": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          "required": [
+            "bucket",
+            "name"
           ]
         }
       },
@@ -69,6 +87,72 @@
         },
         "sandbox": {
           "type": "object"
+        },
+        "full_log": {
+          "type": "object",
+          "description": "What the daemon uploaded for the request's `full_log`: the objects, their byte counts, or `error`. Never a hash: the backend reads each object back and computes the sha256 itself (rule 6, docs/POSITIONING.md).",
+          "properties": {
+            "bucket": {
+              "type": "string"
+            },
+            "max_bytes": {
+              "type": "integer"
+            },
+            "objects": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string"
+                  },
+                  "object": {
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "total_bytes": {
+                    "type": "integer"
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "stream",
+                  "object",
+                  "bytes",
+                  "total_bytes",
+                  "truncated"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "sha256"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "digest"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "error": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bucket",
+            "objects"
+          ]
         }
       },
       "required": [
