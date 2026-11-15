@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.planning.project_docs import texts
+from services.planning.project_docs import specs, texts
 from services.planning.project_docs.layout import (
     PMBOK,
     build,
@@ -70,19 +70,18 @@ def task_ref(task: dict[str, Any], sprint_id: Any, lang: str) -> dict[str, Any]:
 
 def tasks_of(snapshot: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """Every (sprint, task) pair, in sprint then task order."""
-    return [
-        (sprint, task)
-        for sprint in snapshot.get("sprints") or []
-        for task in sprint.get("tasks") or []
-    ]
+    return specs.tasks_of(snapshot)
 
 
-def covering(snapshot: dict[str, Any], req_id: str) -> list[tuple[dict, dict]]:
-    """The tasks whose ``covers`` names *req_id* or one of its criteria."""
+def covering(
+    snapshot: dict[str, Any], req_id: str, spec: dict[str, Any] | None = None
+) -> list[tuple[dict, dict]]:
+    """The tasks whose ``covers`` names *req_id* or one of its criteria; with
+    several specifications, only the tasks of *spec*'s sprints."""
     prefix = f"{req_id}."
     return [
         (sprint, task)
-        for sprint, task in tasks_of(snapshot)
+        for sprint, task in specs.tasks_of(snapshot, spec)
         if any(
             str(c) == req_id or str(c).startswith(prefix)
             for c in task.get("covers") or []
@@ -205,9 +204,9 @@ def _criterion(spec: dict, req: dict, criterion: dict, src: Sources) -> str:
     )
 
 
-def _delivery(snapshot: dict, req_id: str, src: Sources) -> str:
+def _delivery(snapshot: dict, req_id: str, src: Sources, spec: dict) -> str:
     tr = texts.translator(src.lang)
-    tasks = covering(snapshot, req_id)
+    tasks = covering(snapshot, req_id, spec)
     if not tasks:
         return tr("scope.no_delivery")
     parts = [
@@ -219,12 +218,27 @@ def _delivery(snapshot: dict, req_id: str, src: Sources) -> str:
 
 
 def scope(snapshot: dict[str, Any]) -> dict[str, Any]:
-    """The scope statement: what is in, how each part is accepted, what is open."""
-    spec = snapshot.get("specification")
-    if not spec:
+    """The scope statement: what is in, how each part is accepted, what is open;
+    a section per approved specification when there are several."""
+    listed = specs.documented(snapshot)
+    if not listed:
         return _no_spec("scope", snapshot, SCOPE_INPUTS)
-    lang, tr = tr_of(snapshot)
+    lang = tr_of(snapshot)[0]
     src, missing = Sources(lang), []
+    if len(listed) == 1:
+        body = _scope_of(snapshot, listed[0], src, missing)
+    else:
+        body = specs.intro(snapshot, src)
+        for spec in listed:
+            body += [specs.heading(spec, src.cite(spec_ref(spec, lang)), lang), ""]
+            body += [*specs.deeper(_scope_of(snapshot, spec, src, missing)), ""]
+        missing = list(dict.fromkeys(missing))
+    inputs = specs.inputs(snapshot, SCOPE_INPUTS)
+    return build("scope", PMBOK, body, src, snapshot, inputs, missing)
+
+
+def _scope_of(snapshot: dict, spec: dict, src: Sources, missing: list) -> list[str]:
+    lang, tr = src.lang, texts.translator(src.lang)
     s = src.cite(spec_ref(spec, lang))
     body = [tr("scope.in"), ""]
     for req in spec.get("requirements") or []:
@@ -240,7 +254,7 @@ def scope(snapshot: dict[str, Any]) -> dict[str, Any]:
         body += [_criterion(spec, req, c, src) for c in criteria]
         if not criteria:
             body.append(f"  - {missing_line(lang, tr('scope.no_criterion'))}")
-        body += [_delivery(snapshot, str(req.get("id")), src), ""]
+        body += [_delivery(snapshot, str(req.get("id")), src, spec), ""]
     if not spec.get("requirements"):
         body += [missing_line(lang, tr("no_requirement")), ""]
         missing.append(tr("section.in_scope"))
@@ -281,7 +295,7 @@ def scope(snapshot: dict[str, Any]) -> dict[str, Any]:
     body += [f"- {md_inline(q.get('question'))} {s}" for q in open_questions]
     if not open_questions:
         body.append(tr("scope.no_questions", mark=s))
-    return build("scope", PMBOK, body, src, snapshot, SCOPE_INPUTS, missing)
+    return body
 
 
 WBS_INPUTS = ("specification", "sprints")
@@ -301,8 +315,47 @@ def _task_line(code: str, sprint: dict, task: dict, src: Sources) -> str:
     )
 
 
+def _wbs_several(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """The work breakdown of several approved specifications: one branch each."""
+    lang, tr = tr_of(snapshot)
+    src, missing = Sources(lang), []
+    body = [tr("wbs.intro"), "", *specs.intro(snapshot, src)]
+    mapped: set[Any] = set()
+    listed = specs.approved(snapshot)
+    for k, spec in enumerate(listed, 1):
+        mark = src.cite(spec_ref(spec, lang))
+        body += [f"## {k} {md_inline(spec.get('title'))} {mark}", ""]
+        for n, req in enumerate(spec.get("requirements") or [], 1):
+            rmark = src.cite(requirement_ref(spec, req, lang))
+            body += [
+                f"### {k}.{n} {md_id(req.get('id'))}: {md_inline(req.get('title'))} {rmark}",
+                "",
+            ]
+            tasks = covering(snapshot, str(req.get("id")), spec)
+            for m, (sprint, task) in enumerate(tasks, 1):
+                body.append(_task_line(f"{k}.{n}.{m}", sprint, task, src))
+                mapped.add(task.get("id"))
+            if not tasks:
+                body.append(missing_line(lang, tr("wbs.no_task")))
+            body.append("")
+    rest = [(sp, t) for sp, t in tasks_of(snapshot) if t.get("id") not in mapped]
+    k = len(listed) + 1
+    body += [f"## {k} {tr('wbs.unmapped')}", ""]
+    for m, (sprint, task) in enumerate(rest, 1):
+        body.append(_task_line(f"{k}.{m}", sprint, task, src))
+    if not tasks_of(snapshot):
+        body.append(missing_line(lang, tr("wbs.no_tasks")))
+        missing.append(tr("section.tasks"))
+    elif not rest:
+        body.append(tr("wbs.all_mapped"))
+    inputs = specs.inputs(snapshot, WBS_INPUTS)
+    return build("wbs", PMBOK, body, src, snapshot, inputs, missing)
+
+
 def wbs(snapshot: dict[str, Any]) -> dict[str, Any]:
     """The work breakdown: requirements as work packages, the tasks under them."""
+    if specs.several(snapshot):
+        return _wbs_several(snapshot)
     lang, tr = tr_of(snapshot)
     spec = snapshot.get("specification")
     src, missing = Sources(lang), []

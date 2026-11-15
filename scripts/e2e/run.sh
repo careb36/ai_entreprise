@@ -58,7 +58,8 @@
 #  9d. The factory builds itself (issue #329, scripts/e2e/self_host_step.sh):
 #      a "La Fabrique" company on a snapshot of this repository, its own
 #      specification and architecture imported and rendered back unchanged
-#      (docs/ARCHITECTURE.md, docs/adr/), issue #535 specified, planned with
+#      (docs/ARCHITECTURE.md, docs/adr/), issue #535 specified, its revision
+#      version 2 of the one architecture (#469's covers kept), planned with
 #      the acceptance tests first and run, the integration read by a person,
 #      the documentation pack compiled in English and Spanish.
 #  10. Every task's history is legal, read by app/history_check.py, which

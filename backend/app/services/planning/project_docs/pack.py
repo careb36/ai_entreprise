@@ -36,6 +36,7 @@ from services.planning.project_docs import (
     log_docs,
     scope_docs,
     security_docs,
+    specs,
     texts,
 )
 from services.planning.project_docs.layout import (
@@ -83,7 +84,12 @@ def _index(snapshot: dict[str, Any], documents: list[dict[str, Any]]) -> dict[st
 
     body = [
         tr("index.project", name=md_inline(snapshot["project"]["name"])),
-        tr("index.spec", value=version_of(spec)),
+        tr(
+            "index.spec",
+            value=", ".join(version_of(s) for s in specs.approved(snapshot))
+            if specs.several(snapshot)
+            else version_of(spec),
+        ),
         tr("index.arch", value=version_of(arch)),
         "",
         tr("index.documents"),

@@ -17,6 +17,7 @@ from routers.board_moves import router as board_moves_router
 from routers.board_notes import router as board_notes_router
 from routers.chat_approvals import router as chat_approvals_router
 from routers.chat_interactions import router as chat_interactions_router
+from routers.company_architecture import router as company_architecture_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.documentation import router as documentation_router
@@ -28,6 +29,7 @@ from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
 from routers.integration import router as integration_router
+from routers.integration_reviews import router as integration_reviews_router
 from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
@@ -66,6 +68,7 @@ __all__ = [
     "board_notes_router",
     "chat_approvals_router",
     "chat_interactions_router",
+    "company_architecture_router",
     "console_producers_router",
     "costs_router",
     "documentation_router",
@@ -76,6 +79,7 @@ __all__ = [
     "github_router",
     "inbox_router",
     "intake_router",
+    "integration_reviews_router",
     "integration_router",
     "manager_router",
     "mcp_router",

@@ -70,9 +70,8 @@ def task_scope(
     modules: list[str] = []
     sprint = session.get(Sprint, item.sprint_id)
     if sprint is not None and sprint.specification_id is not None:
-        arch = arch_author.approved_for(session, sprint.specification_id)
-        if arch is not None:
-            content = arch_author.content_of(arch)
+        content = arch_author.content_for(session, sprint.specification_id)
+        if content is not None:
             wanted = set(covers) | {c.split(".")[0] for c in covers}
             for module in content.get("modules") or []:
                 if isinstance(module, dict) and wanted & set(

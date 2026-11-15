@@ -263,6 +263,29 @@ class RunReviewCreate(RequestModel):
         return self
 
 
+class IntegrationCommentCreate(ReviewCommentCreate):
+    """Payload for ``POST /v1/sprints/{id}/integration/comments``: a note on a
+    line of the integration's diff. The company is the sprint's; the diff and
+    its hashes are the daemon's (``services/release/integration_review.py``)."""
+
+    company_id: int | None = None
+    # The integration the person read; refused when a newer one replaced it.
+    integration_id: int | None = None
+
+
+class IntegrationReviewCreate(RunReviewCreate):
+    """Payload for ``POST /v1/sprints/{id}/integration/reviews``: a submitted review."""
+
+    company_id: int | None = None
+    integration_id: int | None = None
+
+
+class IntegrationReviewSetting(RequestModel):
+    """Payload for ``PUT /v1/companies/{id}/integration_review`` (Owner)."""
+
+    required: bool
+
+
 class AgentRunApprovalRequest(RequestModel):
     """Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."""
 

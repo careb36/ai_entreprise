@@ -174,6 +174,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root` | `volume`, `volume_reset`, `quarantine_cleared`, … |
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`? | `ok`, the branch, commit and request URL |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
+| `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
 | `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`? | `is_repo`, and how the base stands against its remote |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider` | `ok`, `url`, `comments`, `truncated` |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
