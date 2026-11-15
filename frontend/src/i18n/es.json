@@ -2578,6 +2578,41 @@
       "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
     }
   },
+  "taskRelations": {
+    "title": "Tareas relacionadas",
+    "claimsNote": "Vínculos con otras tareas, de este sprint o de otros. Una relación propuesta es una afirmación hasta que un Manager la confirma; solo un «bloqueada por» confirmado dentro de un mismo sprint retiene la tarea.",
+    "loading": "Cargando las tareas relacionadas…",
+    "error": "No se pudieron cargar las tareas relacionadas.",
+    "empty": "No hay tareas relacionadas.",
+    "listLabel": "Relaciones con otras tareas",
+    "names": {
+      "blocked_by": "Bloqueada por",
+      "blocking": "Bloquea a",
+      "duplicate": "Duplicada de",
+      "relates_to": "Relacionada con"
+    },
+    "states": {
+      "proposed": "Propuesta",
+      "confirmed": "Confirmada"
+    },
+    "task": "tarea n.º {{id}}",
+    "taskWithTitle": "tarea n.º {{id}}: {{title}}",
+    "inSprint": "en {{sprint}}",
+    "drivesDispatch": "Espera a que termine antes de empezar",
+    "proposedBy": "Propuesta por {{by}}",
+    "confirmedBy": "confirmada por {{by}}",
+    "theSystem": "el Sistema",
+    "aRule": "la regla {{rule}}",
+    "confirm": "Confirmar",
+    "reject": "Rechazar",
+    "remove": "Quitar",
+    "addTitle": "Relacionar con otra tarea",
+    "relationLabel": "Relación",
+    "otherLabel": "Tarea n.º",
+    "otherPlaceholder": "42",
+    "confirmNow": "Confirmar ahora",
+    "add": "Añadir relación"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",

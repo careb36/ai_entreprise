@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 
 from services.learning import scrum_master
 from services.planning import sprint_team
-from services.tasks import dependencies, task_events, task_projection
+from services.tasks import dependencies, relations, task_events, task_projection
 from services.tasks.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
@@ -217,6 +217,17 @@ def carry_over(
             text=f'{CARRIED_TO_PREFIX} {new_sprint.id} ("{new_sprint.sprint_name}") as task {clone.id} by {by}.',
             payload={"direction": "to", "task": clone.id, "sprint": new_sprint.id},
             created_at=now.isoformat(),
+        )
+        # A queryable link between the two attempts (issue #533), confirmed by
+        # the rule that made it: the new attempt relates to the original.
+        relations.propose(
+            session,
+            clone,
+            item,
+            relations.RELATES_TO,
+            by=task_events.SYSTEM,
+            role=task_events.SYSTEM,
+            confirmed_by=relations.RULE_CARRY_OVER,
         )
 
         if not held[clone.id]:

@@ -2578,6 +2578,41 @@
       "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
     }
   },
+  "taskRelations": {
+    "title": "Related tasks",
+    "claimsNote": "Links to other tasks, in this sprint or others. A proposed relation is a claim until a Manager confirms it; only a confirmed “blocked by” within one sprint holds the task back.",
+    "loading": "Loading the related tasks…",
+    "error": "Could not load the related tasks.",
+    "empty": "No related tasks.",
+    "listLabel": "Relations to other tasks",
+    "names": {
+      "blocked_by": "Blocked by",
+      "blocking": "Blocking",
+      "duplicate": "Duplicate of",
+      "relates_to": "Relates to"
+    },
+    "states": {
+      "proposed": "Proposed",
+      "confirmed": "Confirmed"
+    },
+    "task": "task #{{id}}",
+    "taskWithTitle": "task #{{id}}: {{title}}",
+    "inSprint": "in {{sprint}}",
+    "drivesDispatch": "Waits for it before it starts",
+    "proposedBy": "Proposed by {{by}}",
+    "confirmedBy": "confirmed by {{by}}",
+    "theSystem": "the System",
+    "aRule": "the {{rule}} rule",
+    "confirm": "Confirm",
+    "reject": "Reject",
+    "remove": "Remove",
+    "addTitle": "Relate to another task",
+    "relationLabel": "Relation",
+    "otherLabel": "Task #",
+    "otherPlaceholder": "42",
+    "confirmNow": "Confirm now",
+    "add": "Add relation"
+  },
   "boardNotes": {
     "title": "Board notes",
     "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",

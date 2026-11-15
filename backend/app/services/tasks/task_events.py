@@ -43,6 +43,8 @@ Kinds:
 - ``board_note``: a note on the sprint board (``services/tasks/sprint_board.py``)
   written or marked wrong, with its author: a claim, never a verdict; and
   ``board_note_rejected``: the blocks of a delivery that were not notes, and why;
+- ``relation``: a typed relation to another task proposed, confirmed, rejected
+  or removed (``services/tasks/relations.py``), written on both tasks; no comment;
 - ``legacy``: the migration found a thread it could not read back whole.
 
 Each event with text carries the flags the board's questions read
@@ -94,6 +96,7 @@ KINDS = frozenset(
         "effort_observed",
         "board_note",
         "board_note_rejected",
+        "relation",
         "legacy",
     }
 )
