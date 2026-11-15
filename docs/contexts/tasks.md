@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/tasks/`
 - **Responsibility:** A task's record: its events and their hash chain (task_events), the projections that answer the board's questions (task_projection, TaskRecord), the comment-thread readers (board), the dependencies between a sprint's tasks. It records and answers; it never dispatches, reviews or calls a model.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `board`, `dependencies`, `events`, `sprint_board`, `task_events`, `task_projection`.
+- **Modules:** `board`, `dependencies`, `events`, `saved_views`, `sprint_board`, `task_events`, `task_filter`, `task_projection`.
 
 ## Components
 
@@ -24,6 +24,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ### The sprint board
 
 **`backend/app/services/tasks/sprint_board.py`** / **`models/board_note.py`** / **`routers/board_notes.py`** (issue #439, [design](../design/SPRINT_BOARD.md)) — The short, typed notes a sprint's tasks leave each other (`sprint_board_notes`, migration `0023`): `add` writes a note checked by `services/contracts/board_notes.check` and a `board_note` event with its author (on the author task's chain, or the sprint's own for a person; no comment, no change to the task's state: `task_projection._ADVICE_KINDS`), and marks the note it supersedes `superseded`; `mark_wrong` is a person's, with who, when and why; `rejected` records the blocks of a delivery that were not notes (`board_note_rejected`); `notes_of`, `notes_by_sprint` and `counts` read; `contradiction_rework` is the issue's measure, the `NEEDS WORK:` requests that say they contradict another task of the same sprint. A note is a claim: nothing here reads or writes an observation. `GET /v1/sprints/{id}/board_notes` (Viewer) lists a sprint's notes with what was observed beside each file and the board's numbers; `POST /v1/sprints/{id}/board_notes` and `POST /v1/board_notes/{id}/mark_wrong` (Manager) are audited under `sprint:<id>:board`. A sprint with notes is archived, never deleted (`sprint_archive.evidence_of`).
+
+### Filters and saved views of a company's tasks
+
+**`backend/app/services/tasks/task_filter.py`** / **`saved_views.py`** / **`models/saved_view.py`** / **`routers/task_views.py`** (issue #535, [design](../design/SAVED_VIEWS.md)) — `task_filter.query` evaluates a filter (`services/contracts/task_filters`: a JSON tree of conditions under AND/OR groups over the allowlist `status`, `verdict`, `risk_tier`, `producer`, `assignee_role`, `rework_count`, `waits_for_person`, `covers`, `sprint_id`) over a company's tasks from the records the board reads: the row (a status outside the five read as `todo`, as the board places it), `TaskRecord` (`rework_request_count`, `waits_for_a_person`) and the Verifier's latest verification of the task's latest run (`verdict`, the `risk_tier` check; never the run's claims), with `producer` from that run. The query is the company's tasks narrowed to the filter's sprints by bound parameters; every condition is evaluated in Python, and only the facts the filter, order and grouping need are loaded for every task. `saved_views` keeps a `SavedView` (`filters`, `group_by`, `order_by`, `layout`, `visible_columns`, `access` private or company, `locked`; migration `0099`) and each person's `SavedViewPreference` apart: a private view is its author's alone, a company view its author's or a Manager's to change, a locked one a Manager's; a stored filter that no longer parses is reported `valid: false`. `GET /v1/tasks` (Viewer; 422 naming a field outside the allowlist), `GET`/`POST /v1/companies/{id}/views`, `GET`/`PUT`/`DELETE /v1/views/{id}` and `GET`/`PUT /v1/views/{id}/preferences`, audited under `company:<id>:views`.
 
 ## Described elsewhere
 

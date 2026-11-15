@@ -70,6 +70,7 @@ from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
+from models.saved_view import SavedView, SavedViewPreference
 from models.session import RefreshToken, SessionFamily
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
@@ -217,6 +218,8 @@ SQLModel.metadata.create_all(
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
         SprintBoardNote.__table__,
+        SavedView.__table__,
+        SavedViewPreference.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,
         WikiLink.__table__,

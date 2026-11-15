@@ -54,6 +54,7 @@ from routers import (
     sso_admin_router,
     sso_router,
     support_router,
+    task_views_router,
     webhooks_router,
     wiki_router,
     workspace_router,
@@ -144,6 +145,7 @@ app.include_router(integration_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
+app.include_router(task_views_router)
 app.include_router(wiki_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
