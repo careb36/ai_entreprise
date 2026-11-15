@@ -2657,6 +2657,40 @@
       "modules": "Modules"
     }
   },
+  "sprintProgress": {
+    "title": "Claimed done versus verified",
+    "claimed": "Delivered (claimed)",
+    "verified": "Verified",
+    "gap": "Claimed, not verified",
+    "done": "Done",
+    "at": "When",
+    "tasks": "Tasks",
+    "state": "State",
+    "requirement": "Requirement",
+    "legend": "Legend",
+    "table": "Show as a table",
+    "noEvents": "No task events yet.",
+    "chartLabel": "{{claimed}} of {{tasks}} tasks claimed delivered, {{verified}} verified",
+    "gapSummary": "{{gap}} of {{claimed}} tasks claimed delivered are not verified.",
+    "live": "Live, from the task events",
+    "sealed": "Sealed at close {{n}}; digest and audit chain verified",
+    "sealBroken": "Sealed at close {{n}}; the digest or the audit chain does not verify",
+    "loadError": "Could not load the sprint’s progress.",
+    "coverageTitle": "Requirements across the specification’s sprints",
+    "verdict": {
+      "verified": "Verified",
+      "refuted": "Refuted",
+      "unverifiable": "Unverifiable",
+      "none": "No verdict"
+    },
+    "coverage": {
+      "verified": "Verified",
+      "done": "Done",
+      "claimed": "Claimed",
+      "open": "Open",
+      "uncovered": "Uncovered"
+    }
+  },
   "teams": {
     "title": "Teams",
     "subtitle": "Group members and grant a role to the whole team instead of person by person.",
