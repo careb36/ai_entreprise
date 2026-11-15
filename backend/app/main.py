@@ -55,7 +55,10 @@ from routers import (
     sso_router,
     support_router,
     task_relations_router,
+    teams_router,
+    usage_router,
     webhooks_router,
+    wiki_router,
     workspace_router,
 )
 from security import cors_allows_credentials, get_cors_origins, setup_security
@@ -145,6 +148,7 @@ app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
 app.include_router(task_relations_router)
+app.include_router(wiki_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
 app.include_router(run_secrets_router)
@@ -158,6 +162,8 @@ app.include_router(model_settings_router)
 app.include_router(webhooks_router)
 app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
+app.include_router(teams_router)
+app.include_router(usage_router)
 
 # Register exception handlers
 register_exception_handlers(app)

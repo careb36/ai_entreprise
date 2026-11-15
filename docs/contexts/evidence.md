@@ -27,6 +27,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 ## Described elsewhere
 
+- `touched.verified_writes` (the writes of the latest verified task-worker runs, optionally of some tasks, with the daemon's sha256 and diff and when they were observed): what the project wiki compiles from and lints against, [the project wiki](../design/PROJECT_WIKI.md).
 - `touched.verified_writers` (per file, the latest verified task-worker run that wrote it, or none): what the sprint board shows beside a note, [the sprint board](../design/SPRINT_BOARD.md).
 
 - `verification`, `acceptance`, `criteria_tests`, `risk` and `delivery_gate` at work: steps 4 to 6 of [the sprint loop](../SPRINT_LOOP.md).

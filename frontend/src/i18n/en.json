@@ -28,8 +28,11 @@
     "specifications": "Specifications",
     "models": "Models",
     "sso": "Single sign-on",
-    "documentation": "Documentation",
-    "chatApprovals": "Chat approvals"
+    "chatApprovals": "Chat approvals",
+    "teams": "Teams",
+    "usage": "Usage",
+    "wiki": "Wiki",
+    "documentation": "Documentation"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2601,5 +2604,154 @@
       "requirements": "Requirements",
       "modules": "Modules"
     }
+  },
+  "teams": {
+    "title": "Teams",
+    "subtitle": "Group members and grant a role to the whole team instead of person by person.",
+    "ownerOnly": "Only owners manage teams. Your role here is {{role}}.",
+    "none": "No teams yet.",
+    "newTeam": "New team",
+    "name": "Name",
+    "description": "Description",
+    "role": "Role",
+    "roles": {
+      "Viewer": "Viewer",
+      "Manager": "Manager"
+    },
+    "roleHint": "A team's role applies to its members in this company. A member keeps the higher of their own role and their teams' roles; a team never makes anyone an owner.",
+    "create": "Create team",
+    "delete": "Delete team {{name}}",
+    "confirmDelete": "Delete the team {{name}}? Its members keep only their own roles.",
+    "noMembers": "No members in this team.",
+    "remove": "Remove",
+    "addMember": "Add a member",
+    "pickMember": "Choose a member",
+    "add": "Add",
+    "memberRoles": "Members and their roles",
+    "member": "Member",
+    "ownRole": "Own role",
+    "effectiveRole": "Effective role",
+    "inTeams": "Teams"
+  },
+  "usage": {
+    "title": "Usage",
+    "subtitle": "Who used what: tasks, runs, verdicts, rework, decisions, and the tokens and cost the model proxy reported.",
+    "managerOnly": "Only managers and owners read the usage report. Your role here is {{role}}.",
+    "filters": "Report range",
+    "since": "From",
+    "until": "To",
+    "period": "Period",
+    "periods": {
+      "day": "Day",
+      "week": "Week (from Monday)",
+      "month": "Month"
+    },
+    "utc": "Days are UTC; both dates are included.",
+    "export": "Export CSV",
+    "groupBy": "Group by",
+    "dimensions": {
+      "period": "Period",
+      "person": "Person",
+      "team": "Team",
+      "role": "Agent role",
+      "producer": "Producer",
+      "model": "Served model"
+    },
+    "columns": {
+      "tasks": "Tasks",
+      "rework": "Rework",
+      "runs": "Runs",
+      "verified": "Verified / refuted",
+      "verifiedShort": "Verified",
+      "refutedShort": "Refuted",
+      "decisions": "Decisions",
+      "tokens": "Reported tokens",
+      "estimated": "Estimated tokens",
+      "cost": "Cost"
+    },
+    "costUnknown": "unknown",
+    "plusUnknown_one": "+ {{count}} turn at unknown cost",
+    "plusUnknown_other": "+ {{count}} turns at unknown cost",
+    "unattributed": "Unattributed",
+    "noTeam": "No team",
+    "empty": "Nothing recorded in this range.",
+    "generated": "Generated {{at}} from the records.",
+    "costNote": "The cost counts only turns the proxy reported and the catalogue prices; the others are counted apart, never as zero. A person in two teams counts in both."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "What the project knows: pages the agents compile from verified runs, retrospectives and the sprint board, each statement with its sources. A stale page stays out of prompts until it is revised.",
+    "loading": "Loading the wiki…",
+    "loadError": "Could not load the wiki: {{message}}",
+    "empty": "No pages yet. They are compiled when a sprint closes, or a Manager writes one.",
+    "pages": "Wiki pages",
+    "kinds": {
+      "module": "Module",
+      "concept": "Concept",
+      "glossary": "Glossary",
+      "decisions": "Decisions"
+    },
+    "kindsPlural": {
+      "module": "Modules",
+      "concept": "Concepts",
+      "glossary": "Glossary",
+      "decisions": "Decisions in force"
+    },
+    "status": {
+      "current": "Current",
+      "stale": "Stale",
+      "proposed": "Proposed"
+    },
+    "versionStatus": {
+      "current": "in force",
+      "proposed": "proposed",
+      "rejected": "rejected",
+      "superseded": "superseded"
+    },
+    "verdict": {
+      "verified": "verified",
+      "refuted": "refuted",
+      "unverifiable": "unverifiable"
+    },
+    "lintRule": {
+      "file_missing": "File missing",
+      "file_changed": "File changed",
+      "module_changed": "Module changed",
+      "contradiction": "Contradiction"
+    },
+    "lintTitle": "Stale: left out of prompts until revised",
+    "claimNote": "A page is a claim, not evidence. Beside each statement are the sources its citations resolved to in the records.",
+    "sources": "Sources",
+    "unknownSource": "not found",
+    "noSource": "no source",
+    "personLocked": "Edited by a person: the next compilation only proposes changes.",
+    "modulePath": "Module path: {{path}}",
+    "edit": "Edit",
+    "save": "Save",
+    "saveError": "Could not save: {{message}}",
+    "titleLabel": "Title",
+    "bodyLabel": "Body (Markdown)",
+    "syntaxHelp": "Cite sources as [run:12], [task:7], [note:3], [retro:5], [file:path@sha256], [REQ-1.2] or [ADR-3]. Facts go in a ```facts block, one key: value per line.",
+    "noBody": "This page has no text in force yet.",
+    "proposalTitle": "Proposed version",
+    "proposalNote": "Version {{number}}, proposed by {{who}}. It is not in force until a Manager accepts it.",
+    "uncitedLine": "Line {{line}} has no source: {{excerpt}}",
+    "accept": "Accept",
+    "reject": "Reject",
+    "rejectReason": "Reason (optional)",
+    "history": "History",
+    "byPerson": "by {{who}}",
+    "byAgent": "compiled by {{who}}",
+    "sprint": "sprint {{id}}",
+    "newPage": "New page",
+    "slugLabel": "Slug",
+    "kindLabel": "Kind",
+    "create": "Create",
+    "settings": "Wiki settings",
+    "writeToRepo": "Also write the pages to docs/wiki/ in the repository when a sprint closes",
+    "runLint": "Check the pages now",
+    "lintDone_one": "{{count}} page marked stale.",
+    "lintDone_other": "{{count}} pages marked stale.",
+    "version": "v{{number}}"
   }
 }

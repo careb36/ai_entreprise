@@ -3,8 +3,8 @@ one row per pair of tasks of one company (``blocked_by``, ``duplicate``,
 ``relates_to``), proposed or confirmed. A new table only: nothing existing
 changes.
 
-Revision ID: 0099
-Revises: 0027
+Revision ID: 0030
+Revises: 0029
 Create Date: 2026-11-15 20:00:00 UTC
 """
 
@@ -15,8 +15,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0027"
+revision = "0030"
+down_revision = "0029"
 branch_labels = None
 depends_on = None
 
