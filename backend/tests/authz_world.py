@@ -30,6 +30,7 @@ from models import (
     Company,
     CompanyMember,
     Sprint,
+    TaskRelation,
     User,
 )
 from models.api_token import ApiToken
@@ -110,6 +111,20 @@ def build_world(session) -> World:
         Sprint(company_id=cid, sprint_name="Authz sprint", business_unit_id=unit.id),
     )
     item = _add(session, BacklogItem(sprint_id=sprint.id, title="Authz task"))
+    other = _add(session, BacklogItem(sprint_id=sprint.id, title="Authz other task"))
+    relation = _add(
+        session,
+        TaskRelation(
+            company_id=cid,
+            task_id=item.id,
+            related_task_id=other.id,
+            pair_low=min(item.id, other.id),
+            pair_high=max(item.id, other.id),
+            kind="relates_to",
+            proposed_by="Authz",
+            proposed_role="person",
+        ),
+    )
     run = _add(
         session,
         AgentRun(
@@ -233,6 +248,7 @@ def build_world(session) -> World:
         "agent_id": agent.id,
         "sprint_id": sprint.id,
         "task_id": item.id,
+        "relation_id": relation.id,
         "item_id": item.id,
         "backlog_item_id": item.id,
         "run_id": run.id,
