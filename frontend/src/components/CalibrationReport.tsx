@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Target } from 'lucide-react'
 import { useCalibration, type CalibrationNumbers, type CalibrationReport as Report } from '../services/calibration'
+import type { Translate } from '../i18n/translate'
 
 type Split = 'band' | 'role' | 'producer' | 'model' | 'sprint'
 const SPLITS: Split[] = ['band', 'role', 'producer', 'model', 'sprint']
@@ -10,7 +11,7 @@ function pct(value: number | null) {
   return value === null ? '–' : `${Math.round(value * 100)}%`
 }
 
-function groups(data: Report, split: Split, t: (key: string, options?: Record<string, unknown>) => string) {
+function groups(data: Report, split: Split, t: Translate) {
   const none = t('calibration.none')
   switch (split) {
     case 'band':

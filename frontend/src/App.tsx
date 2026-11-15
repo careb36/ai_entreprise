@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
 import { useCapabilities, useCurrentRole, useInbox } from './hooks/useQueries'
+import type { Translate } from './i18n/translate'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ function LegacyTaskRedirect() {
 // ── Status pill (live backend health) ────────────────────────────────────────
 const HEALTH_COMPONENTS = ['postgres', 'nats', 'llm_proxy', 'neo4j'] as const
 
-function StatusPill({ t }: { t: (k: string, o?: any) => string }) {
+function StatusPill({ t }: { t: Translate }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const { isError } = useQuery({
