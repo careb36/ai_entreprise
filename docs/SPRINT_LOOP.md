@@ -59,7 +59,10 @@ the LangGraph graph is only an optional kickoff conversation.
    them and reports on `workspace.delivered`, and the run is re-verified against
    the hashes the backend recorded (`_on_delivery_result`).
 4. Optionally (`DELIVERY_TESTS_ENABLED`) the daemon runs the project's tests via
-   `workspace.execute` and returns the exit status. In a sprint planned from a
+   `workspace.execute` and returns the exit status. In a repository with a
+   profile per folder it also runs the suites of the folders the daemon saw
+   the delivery write in and the company's every-delivery commands
+   (`services/loop/delivery_suites.py`), each judged by `required_commands`. In a sprint planned from a
    specification, the plan puts a **test-writing task per requirement**
    (`BacklogItem.kind == "acceptance_tests"`, assigned to QA) before the
    implementation tasks, which depend on it: one test per acceptance criterion,

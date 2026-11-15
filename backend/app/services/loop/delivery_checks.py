@@ -9,7 +9,9 @@ Verifier then judges, each reply kept on the run's evidence:
   (``workspace/dependency_install.py``);
 - the project's tests (``workspace.execute``): ``test_run`` and ``ci``, with
   the runner's per-test lines read back per criterion
-  (``evidence/criteria_tests.py``);
+  (``evidence/criteria_tests.py``); then the suites of the folders the
+  delivery wrote in and the company's every-delivery commands, each in
+  ``command_runs`` (``delivery_suites.py``);
 - opt-in (``DELIVERY_APP_CHECK_ENABLED``, off by default: it runs
   agent-written code), the application: the profile's start command runs in
   the sandbox (``workspace.app.check``, ``vscode-daemon/app_run.py``), the
@@ -46,10 +48,17 @@ from config import settings
 from sqlalchemy.engine import Engine
 
 from services.contracts.verdicts import VERDICT_REFUTED
-from services.evidence import app_check, browser_smoke, criteria_tests, wstg_tests
+from services.evidence import (
+    app_check,
+    browser_smoke,
+    command_runs,
+    criteria_tests,
+    wstg_tests,
+)
 from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
+from services.loop import delivery_suites
 from services.workspace import dependency_install, run_logs, sandbox, workspace_daemon
 from services.workspace.dependency_install import REPLY_MARGIN_SECONDS
 from services.workspace.project_profile import Context
@@ -85,6 +94,9 @@ async def run_delivery_tests(
     ctx = Context(nats_client, sprint, evidence, engine)
     await dependency_install.install_if_needed(ctx)
     await _run_tests(nats_client, sprint, evidence, engine, ctx)
+    # The suites of the folders the delivery wrote in and the company's
+    # every-delivery commands (``delivery_suites``); the root's run above.
+    await delivery_suites.run(ctx, (evidence.get("test_run") or {}).get("command"))
     if application:
         await check_application(ctx)
 
@@ -162,6 +174,8 @@ def _earlier_failure(evidence: dict[str, Any]) -> str | None:
         and check_tests_run(evidence)["outcome"] == VERDICT_REFUTED
     ):
         return "the tests failed"
+    if command_runs.failed(evidence):
+        return "a required command failed"
     return None
 
 

@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from lifecycle import shutdown, startup
 from metrics import setup_metrics
 from routers import (
+    access_review_router,
     agent_runs_router,
     agents_router,
     api_tokens_router,
@@ -40,6 +41,7 @@ from routers import (
     github_router,
     inbox_router,
     intake_router,
+    integration_reviews_router,
     integration_router,
     manager_router,
     mcp_router,
@@ -50,6 +52,7 @@ from routers import (
     reviews_router,
     run_secrets_router,
     security_tests_router,
+    sod_router,
     specifications_router,
     sprint_control_router,
     sprint_crud_router,
@@ -153,6 +156,7 @@ app.include_router(github_router)
 app.include_router(inbox_router)
 app.include_router(intake_router)
 app.include_router(integration_router)
+app.include_router(integration_reviews_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
@@ -174,6 +178,8 @@ app.include_router(model_settings_router)
 app.include_router(webhooks_router)
 app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
+app.include_router(sod_router)
+app.include_router(access_review_router)
 app.include_router(teams_router)
 app.include_router(usage_router)
 

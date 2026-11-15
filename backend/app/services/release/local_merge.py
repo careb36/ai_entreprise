@@ -14,6 +14,10 @@ What the daemon answered (the base, its tip before and after, the branch's
 commit, a fast-forward or a merge) is an observation: kept as a
 ``RunPublication`` with ``how == "local"`` for a run, under the integration's
 ``details["local_merge"]`` for a sprint, and audited either way.
+
+A sprint's integration is merged only once a person approved it when the
+company asks for that (``services/release/integration_review.py``); the
+merge records the review it stood on.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from sqlmodel import Session
 
 from services.evidence.review_changes import run_changes
 from services.platform.agent_service import AgentService
+from services.release import integration_review
 from services.release.git_publish import PublishRefused
 
 LOCAL = "local"
@@ -75,6 +80,11 @@ def integration_merge_spec(session: Session, row: SprintIntegration) -> dict[str
         )
     if not row.repository or not row.commit:
         raise PublishRefused(409, "This integration names no commit to merge")
+    try:
+        # The company may ask for a person's approving review first.
+        integration_review.require_approval(session, row)
+    except integration_review.IntegrationReviewRefused as refused:
+        raise PublishRefused(refused.status, refused.detail) from refused
     return {
         "workspace_root": row.repository,
         "branch": row.branch,
@@ -173,24 +183,35 @@ def record_integration_merge(
     reply: dict[str, Any],
     *,
     merged_by: str,
+    merged_by_user_id: int | None = None,
     agent_id: str | None = None,
 ) -> SprintIntegration:
     facts = _observed(reply)
+    approval = integration_review.approving_review(session, row)
     audit_id = _audit(
         session,
         row.company_id,
         f"sprint:{row.sprint_id}:integration",
         merged_by,
         "sprint_merged_locally",
-        {"sprint_id": row.sprint_id, "integration_id": row.id},
+        {
+            "sprint_id": row.sprint_id,
+            "integration_id": row.id,
+            "user_id": merged_by_user_id,
+            "review_id": approval.id if approval else None,
+        },
         facts,
         agent_id,
     )
     merged = {
         **facts,
         "merged_by": merged_by,
+        # The account, from the session (the segregation-of-duties report).
+        "merged_by_user_id": merged_by_user_id,
         "merged_at": datetime.now(UTC).isoformat(),
         "audit_log_id": audit_id,
+        # The person's approving review the merge stood on, when there was one.
+        "review_id": approval.id if approval else None,
     }
     # A new dict, so the JSON column is seen as changed.
     row.details = {**(row.details or {}), "local_merge": merged}

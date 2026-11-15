@@ -33,6 +33,7 @@
     "usage": "Usage",
     "wiki": "Wiki",
     "documentation": "Documentation",
+    "duties": "Duties and access",
     "auditAnchors": "Audit anchors"
   },
   "dashboard": {
@@ -2427,7 +2428,8 @@
       "price_ambiguous": "price unknown (model listed at several prices)",
       "model_unknown": "price unknown (model not recorded)"
     },
-    "reportedTokens": "{{tokens}} reported tokens"
+    "reportedTokens": "{{tokens}} reported tokens",
+    "weightTitle": "Prompt weight by section"
   },
   "gitSettings": {
     "title": "Git workflow",
@@ -2977,6 +2979,141 @@
     "lintDone_other": "{{count}} pages marked stale.",
     "version": "v{{number}}"
   },
+  "duties": {
+    "title": "Duties and access",
+    "subtitle": "Who asks for a change does not approve it; who can reach the company is reviewed on a schedule.",
+    "ownerOnly": "Only owners manage duties and access reviews. Your role here is {{role}}.",
+    "policy": {
+      "title": "Segregation of duties",
+      "mode": "Which approvals the rule holds",
+      "modes": {
+        "off": "Off",
+        "high_risk": "High-risk work (default)",
+        "all": "All approvals"
+      },
+      "modeHint": {
+        "off": "No approval is checked. Turning the rule off is recorded in the audit.",
+        "high_risk": "The person who started a sprint does not accept its held deliveries or merge its work; the person who drafted a specification does not approve it.",
+        "all": "High-risk work, and also another producer's runs and architectures."
+      },
+      "interval": "Access review every (days)",
+      "inactive": "Flag accounts inactive after (days)",
+      "save": "Save"
+    },
+    "solo": {
+      "title": "Single-person exception",
+      "hint": "Only one person here can approve, so every approval is theirs. Grant the exception with a reason; each use is recorded and listed in the report.",
+      "reasonLabel": "Reason (kept in the audit)",
+      "grant": "Grant the exception",
+      "inForce": "The single-person exception is in force: your own approvals pass and each one is recorded.",
+      "notInForce_one": "The exception is granted but not in force: {{count}} person can approve.",
+      "notInForce_other": "The exception is granted but not in force: {{count}} people can approve, so another person approves.",
+      "reason": "Reason: {{reason}} (granted by {{by}})",
+      "withdraw": "Withdraw the exception",
+      "unavailable_one": "{{count}} person can approve. The single-person exception is not needed.",
+      "unavailable_other": "{{count}} people can approve, so the single-person exception is not available."
+    },
+    "review": {
+      "title": "Access review",
+      "now": "now",
+      "state": {
+        "scheduled": "Next review due on {{due}} (every {{days}} days).",
+        "due": "A review is due ({{due}}). Confirm or remove each account below.",
+        "missed": "The review due on {{due}} was missed. Complete it now; it will be recorded as late."
+      },
+      "account": "Account",
+      "access": "Access",
+      "lastActivity": "Last activity",
+      "decision": "Decision",
+      "roles": "own {{own}}, effective {{effective}}",
+      "team": "team {{name}} ({{role}})",
+      "sso": "SSO linked",
+      "chat": "{{provider}} linked",
+      "token": "API token, {{role}}, created by {{by}}",
+      "inactive": "Inactive",
+      "never": "Never",
+      "decideFor": "Decision for {{name}}",
+      "confirm": "Confirm",
+      "remove": "Remove",
+      "note": "Note (optional)",
+      "complete": "Complete the review",
+      "history": "Earlier reviews",
+      "noHistory": "No review has been completed yet.",
+      "doneOnTime": "{{when}}: completed by {{by}}, {{removed}} removed.",
+      "doneLate": "{{when}}: completed late by {{by}}, {{removed}} removed."
+    },
+    "report": {
+      "title": "Approvals and duties report",
+      "status": {
+        "separated": "Separated",
+        "exception": "Audited exception",
+        "violation": "Violation",
+        "unattributed": "Unattributed",
+        "not_a_person": "By an agent"
+      },
+      "violations": "Violations and exceptions",
+      "noViolations": "Every approval was made by someone other than who asked for the work.",
+      "allApprovals_one": "{{count}} approval",
+      "allApprovals_other": "All {{count}} approvals",
+      "allApprovalsLabel": "All approvals",
+      "action": "Action",
+      "subject": "Work",
+      "requester": "Asked for by",
+      "approver": "Approved by",
+      "statusLabel": "Status",
+      "matrix": "Who did which duty",
+      "who": "Who",
+      "role": "Role",
+      "formerMember": "Former member",
+      "allWithRole": "All {{role}}s",
+      "agent": "Agent",
+      "both": "requests and approves",
+      "refusals_one": "{{count}} approval was refused by the rule.",
+      "refusals_other": "{{count}} approvals were refused by the rule."
+    },
+    "duty": {
+      "request": "Request",
+      "plan": "Plan",
+      "deliver": "Deliver",
+      "verify": "Verify",
+      "approve": "Approve",
+      "release": "Release"
+    },
+    "actions": {
+      "accept_held_delivery": "Accept a held delivery",
+      "approve_specification": "Approve a specification",
+      "approve_architecture": "Approve an architecture",
+      "approve_run": "Approve a run",
+      "release": "Release"
+    },
+    "accounts": {
+      "title": "Service accounts",
+      "hint": "Credentials that act without a person at the keyboard. Names, scopes and ages only; never a value.",
+      "none": "No service accounts.",
+      "company": "Company service accounts",
+      "deployment": "Deployment service accounts",
+      "kind": "Kind",
+      "name": "Name",
+      "owner": "Owner",
+      "scope": "Scope",
+      "age": "Age",
+      "status": "Status",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "kinds": {
+        "api_token": "API token",
+        "webhook": "Webhook",
+        "chat_connection": "Chat connection",
+        "sso_client": "SSO client",
+        "model_provider": "Model provider",
+        "github_webhook": "GitHub webhook",
+        "nats_backend": "Backend on NATS",
+        "nats_daemon": "Daemon on NATS"
+      },
+      "proxyPresent": "LLM proxy internal token: set",
+      "proxyMissing": "LLM proxy internal token: not set"
+    }
+  },
   "taskViews": {
     "filters": "Filters",
     "join": "Match",
@@ -3054,5 +3191,102 @@
     "save": "Save view",
     "saved": "View \"{{name}}\" saved.",
     "loading": "Loading tasks…"
+  },
+  "integrationReview": {
+    "title": "A person's review of this integration",
+    "loadError": "Could not load the reviews of this integration.",
+    "gate": {
+      "off": "This company does not require an approval before the integration is merged; a review is still recorded.",
+      "waiting": "This company merges the integration only once a person approved it: no approval of this commit yet.",
+      "approved": "Approved by a person: the integration can be merged."
+    },
+    "published": "Published as a request on the forge, whose own review decides a merge there; this review gates only the local merge.",
+    "publishedLink": "Open the request",
+    "setting": {
+      "label": "Require a person's approving review before the integration is merged"
+    },
+    "history": "Reviews of this integration",
+    "none": "No review yet.",
+    "showDiff": "Show the diff",
+    "hideDiff": "Hide the diff",
+    "readingDiff": "The workspace daemon is reading the diff...",
+    "truncated": "The diff has more files than shown.",
+    "bodyLabel": "Your review",
+    "decision": "Decision",
+    "hint": {
+      "comment": "Records what you read, without a decision.",
+      "approve": "Approves this commit of the integration. Whoever started the sprint does not approve it.",
+      "request_changes": "Records that the integration should change before it is merged."
+    },
+    "submit": "Submit review",
+    "pendingComments_one": "{{count}} comment goes with this review",
+    "pendingComments_other": "{{count}} comments go with this review",
+    "outcome": {
+      "recorded": "Recorded",
+      "approved": "Approved",
+      "changes_requested": "Changes requested"
+    },
+    "latest": "Latest integration: {{status}}",
+    "latestReview": "last review by {{author}}: {{event}}",
+    "status": {
+      "tests_passed": "tests passed",
+      "tests_failed": "tests failed",
+      "untested": "not tested",
+      "conflict": "conflict",
+      "incomplete": "incomplete",
+      "running": "running",
+      "pending": "waiting for the daemon",
+      "error": "refused by the daemon"
+    },
+    "change": {
+      "added": "added",
+      "modified": "modified",
+      "deleted": "deleted",
+      "renamed": "renamed"
+    },
+    "omitted": {
+      "binary": "A binary file: no lines to show.",
+      "too_large": "Too large to show here."
+    },
+    "comment": {
+      "inReview": "In review #{{id}}",
+      "pending": "Waiting for a review",
+      "resolved": "Resolved",
+      "resolve": "Resolve",
+      "labelGeneral": "A comment on the whole integration",
+      "label": "Comment on {{path}}, line {{line}}",
+      "submit": "Add comment",
+      "add": "Add a comment on {{path}}, line {{line}}"
+    },
+    "counts": "+{{additions}} −{{deletions}}"
+  },
+  "promptWeight": {
+    "none": "No prompt measure recorded for these runs.",
+    "summary": "{{calls}} prompts · {{tokens}} estimated tokens, plus {{system}} in the system prompt",
+    "tokensShare": "{{tokens}} · {{pct}}%",
+    "cut_one": "cut {{count}}×",
+    "cut_other": "cut {{count}}×",
+    "cutHint": "Prompts whose budget left this section out (PROMPT_BUDGET).",
+    "estimateHint": "Estimated by the backend from what it sent (characters / 4), not the provider's count.",
+    "show": "Show prompt weight",
+    "hide": "Hide prompt weight",
+    "loading": "Loading the prompt weight…",
+    "error": "The prompt weight could not be read.",
+    "section": {
+      "output_format": "Output format",
+      "task": "Task",
+      "architect_brief": "Architect's brief",
+      "review_feedback": "Review feedback",
+      "previous_attempt": "Previous attempt",
+      "requirements": "Requirements",
+      "standards_and_procedures": "Standards and procedures",
+      "repository": "Repository",
+      "related_code": "Related code",
+      "lessons": "Lessons",
+      "memory": "Memory",
+      "completed_tasks": "Completed tasks",
+      "console_assistant_notes": "Console notes",
+      "wiki": "Wiki"
+    }
   }
 }

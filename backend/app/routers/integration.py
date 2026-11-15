@@ -1,7 +1,10 @@
 """A sprint's integration: its task branches merged, the suite run, one request (issue #314).
 
 ``GET /v1/sprints/{id}/integration`` (Viewer) is the plan (which branches,
-in which order) beside the latest integration and the earlier ones.
+in which order) beside the latest integration and the earlier ones, and the
+state of the latest one's reviews (``review``: the latest review, whether it
+is approved and whether the company requires that before a merge;
+``routers/integration_reviews.py``).
 ``POST /v1/sprints/{id}/integrate`` (Manager) integrates now; the task worker
 does it on its own when a sprint closes (``services/release/integration.py``).
 ``POST /v1/sprints/{id}/integration/publish`` (Manager) pushes the
@@ -14,7 +17,9 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Sprint, User
 from models.integration import SprintIntegration
-from services.release import integration
+from services.loop import sod_requesters
+from services.platform import sod
+from services.release import integration, integration_review
 from services.release.git_publish import PublishRefused
 from services.release.integration_publish import publish_spec, record_publication
 from services.release.local_merge import (
@@ -68,6 +73,9 @@ async def sprint_integration(
     return {
         **integration.plan(session, sprint.id),
         "latest": history[0] if history else None,
+        "review": integration_review.state(
+            session, sprint.company_id, history[0] if history else None
+        ),
         "history": [
             {
                 "id": row.id,
@@ -144,13 +152,31 @@ async def merge_sprint_integration(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Merge the latest integration branch into the base branch, locally: nothing is pushed."""
+    """Merge the latest integration branch into the base branch, locally: nothing is pushed.
+
+    A release: the person who started the sprint does not merge it
+    (segregation of duties, ``services/platform/sod.py``).
+    """
     sprint = _sprint(session, user, sprint_id, "Manager")
     row = integration.latest(session, sprint.id)
     if row is None or row.company_id != sprint.company_id:
         raise HTTPException(
             status_code=409, detail="This sprint has not been integrated"
         )
+    actor = sod.actor_of(session, user)
+    try:
+        sod.enforce(
+            session,
+            sprint.company_id,
+            sod.RELEASE,
+            {"kind": "sprint_integration", "id": row.id, "sprint_id": sprint.id},
+            actor,
+            sod_requesters.of_sprint(session, sprint),
+        )
+    except sod.SodRefused as refused:
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
     try:
         reply = await daemon_request(
             getattr(request.app.state, "nats_client", None),
@@ -158,7 +184,13 @@ async def merge_sprint_integration(
             integration_merge_spec(session, row),
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
-        return record_integration_merge(session, row, reply, merged_by=_who(user))
+        return record_integration_merge(
+            session,
+            row,
+            reply,
+            merged_by=_who(user),
+            merged_by_user_id=actor.user_id if actor else None,
+        )
     except (PublishRefused, DaemonUnavailable, DaemonError) as exc:
         session.rollback()
         raise _refused(exc) from exc

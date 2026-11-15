@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/evidence/`
 - **Responsibility:** Judging a run from what was observed: the Verifier's checks and verdict, the risk tier, the quality standards check, acceptance tests per criterion, the context-read check, the application and browser checks as read from the daemon's reply, SecOps scans, the gate before QA, the changes of a run and the ingestion of AgentRun records. It reads the daemon's reply as data from contracts; it never calls the daemon, the loop, the tools or a producer.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `governance`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `governance`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
 
 ## Components
 
@@ -36,6 +36,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ### Acceptance tests a task branch holds
 
 **`backend/app/services/evidence/acceptance.py`** (`evidence_for`, `branch_lineage`; #329 retrospective) — With the daemon's `git` answer for a delivery on the task's own branch, what the delivery is judged against is what that branch can hold: `test_files` and `test_hashes` come from the test tasks in the task's lineage (itself and its done dependencies, transitively, the branches `workspace.git_workflow.delivery_spec` merges), `excused` counts as done only the implementation tasks in that lineage, and the sprint's other test files go in `other_test_hashes` for the loop's guard to check on disk (`loop/delivery_checks.guard_test_files`). Without the Git workflow every acceptance test of the sprint is guarded, as before.
+
+### Every command a delivery had to run
+
+**`backend/app/services/evidence/command_runs.py`** (self-hosting retrospective, F5) — The Verifier's `required_commands` check over `evidence["command_runs"]`: the suites of the folders a delivery wrote in, their installs and the company's every-delivery commands (`services/workspace/stack_roots.py`), each with its kind, folder, command, exit status and the sha256 of its output that the backend computed over the bytes it received (`runs` on the check). A non-zero exit or a timeout refutes and the gate sends the task back (`required command failed`, a code problem); a command that could not run (exit 126 or 127, "command not found", `python: No module named pytest` but not an import error inside a test, a refusal by the command policy, no exit status) leaves the delivery unverifiable; a suite whose only failures are acceptance tests of criteria not built yet passes, as `tests_run` excuses them. Absent when a delivery ran none: a single-root project's evidence is unchanged.
 
 ## Described elsewhere
 

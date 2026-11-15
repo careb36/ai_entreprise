@@ -15,8 +15,9 @@ Steps (``--steps``, comma-separated; ``all`` by default):
   branch per task, and a worktree shares the live repository's branches.
 - ``company``: the "La Fabrique" company with that snapshot as its project,
   the Git workflow on (the daemon observes a repository), the delivery tests
-  on (the stack profile names the test command), the sandbox set to
-  ``--sandbox``, and the roles of the loop.
+  on (the stack profile names La Fabrique's suites per folder and the checks
+  every delivery runs, or with ``--profile sprint-tests`` one root command),
+  the sandbox set to ``--sandbox``, and the roles of the loop.
 - ``records``: ``docs/architecture/specification.json`` and
   ``architecture.json`` posted and approved as the company's specification and
   architecture; the architecture's document and ADRs read back through the
@@ -29,8 +30,9 @@ Steps (``--steps``, comma-separated; ``all`` by default):
 - ``review``: the tasks waiting for a person, the task branches and the
   sprint's integration (its branches merged and the suite run, the one
   request a person reviews); with ``--accept TEXT`` a person accepts the
-  held tasks with that comment, and with ``--merge`` merges the integration
-  into ``main`` locally (nothing is pushed: the snapshot has no remote).
+  held tasks with that comment, and with ``--merge`` records an approving
+  review of the integration (the ``--accept`` comment as its text) and merges
+  it into ``main`` locally (nothing is pushed: the snapshot has no remote).
 - ``pack``: the documentation pack (#530) compiled in English and in Spanish,
   with what each could not say.
 
@@ -68,6 +70,29 @@ AGENTS = [
     {"role": "TechWriter", "name": "Tess Fab"},
 ]
 IDENTITY = ["-c", "user.name=La Fabrique self-hosting", "-c", "user.email=self-host@localhost"]
+# La Fabrique's suites per folder, as CI runs them (.github/workflows/). The
+# daemon's tests live in the backend's suite, so a change to the daemon runs it.
+_BACKEND_TESTS = "PYTHONPATH=.:app poetry run python -m pytest tests -q -p no:cacheprovider"
+LA_FABRIQUE_FOLDERS = {
+    "backend": {"stack": "python", "install": "poetry install --no-interaction", "test": _BACKEND_TESTS},
+    "frontend": {
+        "stack": "node",
+        "install": "npm ci --no-audit --no-fund",
+        "test": "npx tsc --noEmit && npm run lint && npm run test:run",
+    },
+    "llm-proxy": {
+        "stack": "python",
+        "install": "poetry install --no-interaction --no-root",
+        "test": "poetry run python -m pytest -q -p no:cacheprovider",
+    },
+    "vscode-daemon": {"stack": "python", "install": "", "test": f"cd ../backend && {_BACKEND_TESTS}"},
+}
+# What CI checks on every change, whatever it touched.
+EVERY_DELIVERY = (
+    "python3 scripts/check_architecture.py",
+    "python3 scripts/check_frontend_architecture.py",
+    "python3 scripts/check_file_sizes.py",
+)
 # Every local git call is bounded: a repository snapshot of a few thousand files
 # takes seconds, so a call still running after this is a hung host, and the
 # harness fails naming the command instead of waiting for the CI job's timeout.
@@ -202,23 +227,38 @@ def step_company(api, args, state, report):
         created = True
     cid = state["company_id"]
     git = api.put(f"/v1/companies/{cid}/git", {"git_workflow": True, "git_base_branch": "main"})
-    profile = api.put(
-        f"/v1/companies/{cid}/stack_profile",
-        # The tests only: the repository's own suites need services this run
-        # does not give an agent, so the delivery tests are the ones the
-        # sprint writes under tests/ (an install, a lint, an application to
-        # start and a browser suite are off, each named off).
-        {"profile": {"test": args.test_command, "install": "", "lint": "", "start": "", "e2e": ""}},
-    )
+    profile = api.put(f"/v1/companies/{cid}/stack_profile", {"profile": company_profile(args.profile, args.test_command)})
     sandbox = api.put(f"/v1/companies/{cid}/sandbox", {"mode": args.sandbox, "env": []})
+    overrides = profile["overrides"]
     report["company"] = {
         "id": cid,
         "created": created,
         "git_workflow": git.get("git_workflow"),
         "git_base_branch": git.get("git_base_branch"),
-        "test_command": profile["overrides"].get("test"),
+        "profile": args.profile,
+        "test_command": overrides.get("test"),
+        "folders": {name: f.get("test") for name, f in (overrides.get("folders") or {}).items()},
+        "every_delivery": [c["command"] for c in profile.get("every_delivery") or []],
         "sandbox": sandbox.get("mode"),
     }
+
+
+def company_profile(mode: str, test_command: str) -> dict:
+    """The company's stack profile (``PUT /v1/companies/{id}/stack_profile``).
+
+    ``folders`` (the default, F5 of the self-hosting retrospective): La
+    Fabrique's own suites per folder as CI runs them, each delivery running
+    the suites of the folders the daemon saw it write in (a file outside them
+    runs every one), and the architecture checks and the file-size ratchet on
+    every delivery; the root runs no suite of its own.
+    ``sprint-tests`` (the e2e's, whose sandbox has none of the repository's
+    toolchains): one root command, the tests the sprint writes under tests/.
+    Either way the root's install, lint, application and browser suite are
+    off, each named off."""
+    off = {"install": "", "lint": "", "start": "", "e2e": ""}
+    if mode == "sprint-tests":
+        return {"test": test_command, **off}
+    return {"test": "", **off, "folders": LA_FABRIQUE_FOLDERS, "every_delivery": list(EVERY_DELIVERY)}
 
 
 def _find_spec(api: Api, cid: int, title: str) -> dict | None:
@@ -402,8 +442,19 @@ def step_review(api, args, state, report):
         except ApiError as e:
             report.setdefault("notes", []).append(str(e))
         integration, latest = _settled_integration(api, sid, args.timeout)
-    merged = None
+    merged = reviewed = None
     if args.merge and latest:
+        # The person's reading is recorded before the merge (F7): an approving
+        # review of the integration, with the --accept comment when given. It
+        # may be refused (segregation of duties: the harness started the
+        # sprint); the merge is then asked anyway and answers for itself.
+        try:
+            reviewed = api.post(
+                f"/v1/sprints/{sid}/integration/reviews",
+                {"integration_id": latest.get("id"), "event": "approve", "body": args.accept or "Read the integration's diff."},
+            )
+        except ApiError as e:
+            reviewed = {"refused": str(e)}
         try:
             merged = api.post(f"/v1/sprints/{sid}/integration/merge")
         except ApiError as e:
@@ -416,6 +467,7 @@ def step_review(api, args, state, report):
         "accepted": accepted,
         "integration": {k: latest.get(k) for k in ("id", "status", "trigger", "commit", "branch") if latest},
         "integration_plan": {k: v for k, v in integration.items() if k not in ("latest", "history")},
+        "integration_review": reviewed,
         "merged": merged,
         "base_log": _git(checkout, "log", "--oneline", "-5", "main").splitlines(),
     }
@@ -460,7 +512,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", help="also write the JSON report here")
     parser.add_argument("--steps", default="all")
     parser.add_argument("--sandbox", default="container", choices=("host", "container", "bwrap"))
-    parser.add_argument("--test-command", default="python -m pytest -q -p no:cacheprovider tests")
+    parser.add_argument(
+        "--profile",
+        default="folders",
+        choices=("folders", "sprint-tests"),
+        help="company: La Fabrique's suites per folder and its every-delivery checks, or one root command (--test-command)",
+    )
+    parser.add_argument(
+        "--test-command",
+        default="python -m pytest -q -p no:cacheprovider tests",
+        help="company: the root's one command, with --profile sprint-tests",
+    )
     parser.add_argument("--autonomy", type=int, default=2, help="2: QA's approval closes a low-risk task; a high-risk one waits for a person")
     parser.add_argument("--scope", default="M")
     parser.add_argument("--timeout", type=int, default=600)

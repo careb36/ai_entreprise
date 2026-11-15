@@ -17,7 +17,13 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
-from services.evidence import app_check, criteria_tests, security_probe, standards
+from services.evidence import (
+    app_check,
+    command_runs,
+    criteria_tests,
+    security_probe,
+    standards,
+)
 
 _TASK_WORKER = "le-fabrique-task-worker"
 DELIVERY_QUEUED = "delivery queued"
@@ -36,6 +42,7 @@ _GATE_PROBLEMS = {
     app_check.CHECK_APP: "application failed to start",
     app_check.CHECK_E2E: "end-to-end tests failed",
     security_probe.CHECK_NAME: "security probe refuted",
+    command_runs.CHECK_NAME: "required command failed",
 }
 
 # The problems the code itself caused: the Developer fixes the code.
@@ -47,6 +54,7 @@ CODE_PROBLEMS = frozenset(
         "end-to-end tests failed",
         "invented dependency or import",
         "security probe refuted",
+        "required command failed",
     }
 )
 

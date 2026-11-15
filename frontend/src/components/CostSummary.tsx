@@ -7,7 +7,8 @@
  */
 import { useTranslation } from 'react-i18next'
 import { Coins } from 'lucide-react'
-import { formatCostCents, formatTokens, useRunCost, useTaskCost, type CostSummary as Cost } from '../services/cost'
+import { formatCostCents, formatTokens, useRunCost, useTaskCost, type CostSummary as Cost, type PromptWeight } from '../services/cost'
+import { PromptWeightBreakdown } from './PromptWeight'
 
 function CostValue({ cost }: { cost: Cost }) {
   const { t, i18n } = useTranslation()
@@ -44,8 +45,9 @@ export function CostLine({ cost }: { cost: Cost }) {
   )
 }
 
-/** The block on the run and task pages: the line plus the models it priced. */
-export function CostCard({ cost, title }: { cost: Cost; title: string }) {
+/** The block on the run and task pages: the line, the models it priced and,
+ * when the backend measured the prompts, where their tokens went (#443). */
+export function CostCard({ cost, title, weight }: { cost: Cost; title: string; weight?: PromptWeight }) {
   const { t } = useTranslation()
   return (
     <section aria-label={title} className="card p-4 mb-4 space-y-1">
@@ -59,6 +61,12 @@ export function CostCard({ cost, title }: { cost: Cost; title: string }) {
       {cost.estimated_tokens > 0 && (
         <p className="text-[11px] text-gray-500">{t('cost.estimatedHint')}</p>
       )}
+      {weight && weight.calls > 0 && (
+        <details className="pt-1">
+          <summary className="cursor-pointer text-[11px] text-gray-400">{t('cost.weightTitle')}</summary>
+          <div className="mt-1"><PromptWeightBreakdown weight={weight} /></div>
+        </details>
+      )}
     </section>
   )
 }
@@ -66,11 +74,11 @@ export function CostCard({ cost, title }: { cost: Cost; title: string }) {
 export function RunCostCard({ companyId, runId }: { companyId: number; runId: number }) {
   const { t } = useTranslation()
   const { data } = useRunCost(companyId, runId)
-  return data ? <CostCard cost={data} title={t('cost.runTitle')} /> : null
+  return data ? <CostCard cost={data} title={t('cost.runTitle')} weight={data.prompt_weight} /> : null
 }
 
 export function TaskCostCard({ taskId }: { taskId: number }) {
   const { t } = useTranslation()
   const { data } = useTaskCost(taskId)
-  return data ? <CostCard cost={data} title={t('cost.taskTitle')} /> : null
+  return data ? <CostCard cost={data} title={t('cost.taskTitle')} weight={data.prompt_weight} /> : null
 }

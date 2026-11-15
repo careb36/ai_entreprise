@@ -36,6 +36,7 @@ from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .intake import IntakeItem
 from .integration import SprintIntegration
+from .integration_review import IntegrationReview, IntegrationReviewComment
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
@@ -47,6 +48,7 @@ from .runtime import AssistantRuntimeState
 from .saved_view import SavedView, SavedViewPreference
 from .security_review import WstgReview
 from .session import RefreshToken, SessionFamily
+from .sod import AccessReview, SodPolicy
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -57,6 +59,7 @@ from .webhook import CompanyWebhook
 from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
 __all__ = [
+    "AccessReview",
     "Agent",
     "AgentMessage",
     "AgentRun",
@@ -81,6 +84,8 @@ __all__ = [
     "DocumentationPack",
     "GitHubRepoBinding",
     "IntakeItem",
+    "IntegrationReview",
+    "IntegrationReviewComment",
     "ManagerDecision",
     "ManagerPolicy",
     "McpServer",
@@ -97,6 +102,7 @@ __all__ = [
     "SavedView",
     "SavedViewPreference",
     "SessionFamily",
+    "SodPolicy",
     "Specification",
     "Sprint",
     "SprintBoardNote",

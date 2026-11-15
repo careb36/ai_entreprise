@@ -9,6 +9,9 @@
 # acceptance tests first and runs it with the fake model; a person reads the
 # sprint's integration and merges it locally; the documentation pack is
 # compiled in English and Spanish. Run twice: the second run makes nothing new.
+# The e2e's sandbox has none of the repository's toolchains, so the company
+# runs one root command (the sprint's tests), not La Fabrique's suites per
+# folder (`--profile sprint-tests`, scripts/self_host/README.md).
 # Uses run.sh's check, json, API, PY, REPO, WORK, SANDBOX, TEST_COMMAND, TIMEOUT.
 
 echo "9d. the factory builds itself (issue #329)"
@@ -18,7 +21,7 @@ rm -rf "$SELF/la-fabrique" "$SELF/la-fabrique.self_host.json"
 self_host() {  # self_host <report name> <harness arguments...>
   local name=$1; shift
   "$PY" "$REPO/scripts/self_host/self_host.py" --api "$API" --checkout "$SELF/la-fabrique" \
-    --sandbox "$SANDBOX" --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
+    --sandbox "$SANDBOX" --profile sprint-tests --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
     --report "$SELF/$name.json" "$@" > "$SELF/$name.log" 2>&1
 }
 report() { "$PY" -c "import sys, json; d = json.load(open(sys.argv[1])); print($2)" "$SELF/$1.json"; }
@@ -45,6 +48,7 @@ echo "     deliveries refuted for an acceptance test of another requirement: $(a
 self_host review --steps review --accept "Reviewed by a person against the specification of issue #535 (e2e)." --merge
 check "each task was delivered on its own branch of the snapshot" test "$(report review "len([b for b in d['review']['branches'] if b.startswith('fabrique/task-')])")" = 6
 check "the sprint's integration is the one request a person reads: merged into main locally when its suite passed, refused when it failed" test "$(report review "(lambda i, m: bool(i) and ((i['status'] == 'tests_passed' and 'refused' not in m) or (i['status'] == 'tests_failed' and 'The suite failed on the integrated branch' in m.get('refused', ''))))(d['review']['integration'], d['review']['merged'] or {})")" = True
+check "a person's review of the integration is recorded before its merge (F7): approved when its suite passed, refused when it failed" test "$(report review "(lambda i, r: bool(i) and ((i['status'] == 'tests_passed' and r.get('outcome') == 'approved') or (i['status'] == 'tests_failed' and 'suite failed' in r.get('refused', ''))))(d['review']['integration'], d['review']['integration_review'] or {})")" = True
 echo "     integration: $(report review "d['review']['integration'].get('status'), d['review']['base_log'][:2]")"
 self_host pack --steps pack
 check "the documentation pack compiles for La Fabrique in English and Spanish, every document written, nothing stale" test "$(report pack "[(p['language'], len(p['documents']) > 5, p['empty_documents'], p['lint_blocking']) for p in d['pack'].values()]")" = "[('en', True, [], 0), ('es', True, [], 0)]"

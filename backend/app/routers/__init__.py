@@ -6,6 +6,7 @@ importing each router module individually.  This keeps ``main.py`` clean and
 makes it easy to rename or split router modules in the future.
 """
 
+from routers.access_review import router as access_review_router
 from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
@@ -27,6 +28,7 @@ from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
 from routers.integration import router as integration_router
+from routers.integration_reviews import router as integration_reviews_router
 from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
@@ -36,6 +38,7 @@ from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.run_secrets import router as run_secrets_router
 from routers.security_tests import router as security_tests_router
+from routers.sod import router as sod_router
 from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
 from routers.sprint_control import router as sprint_control_router
@@ -53,6 +56,7 @@ from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 
 __all__ = [
+    "access_review_router",
     "agent_runs_router",
     "agents_router",
     "api_tokens_router",
@@ -73,6 +77,7 @@ __all__ = [
     "github_router",
     "inbox_router",
     "intake_router",
+    "integration_reviews_router",
     "integration_router",
     "manager_router",
     "mcp_router",
@@ -83,6 +88,7 @@ __all__ = [
     "reviews_router",
     "run_secrets_router",
     "security_tests_router",
+    "sod_router",
     "specifications_router",
     "sprint_control_router",
     "sprint_crud_router",

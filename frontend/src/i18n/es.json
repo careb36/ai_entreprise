@@ -33,6 +33,7 @@
     "usage": "Uso",
     "wiki": "Wiki",
     "documentation": "Documentación",
+    "duties": "Funciones y accesos",
     "auditAnchors": "Anclajes de auditoría"
   },
   "dashboard": {
@@ -2427,7 +2428,8 @@
       "price_ambiguous": "precio desconocido (el modelo figura con varios precios)",
       "model_unknown": "precio desconocido (modelo no registrado)"
     },
-    "reportedTokens": "{{tokens}} tokens informados"
+    "reportedTokens": "{{tokens}} tokens informados",
+    "weightTitle": "Peso del prompt por sección"
   },
   "gitSettings": {
     "title": "Flujo de trabajo con Git",
@@ -2977,6 +2979,141 @@
     "lintDone_other": "{{count}} páginas marcadas como desactualizadas.",
     "version": "v{{number}}"
   },
+  "duties": {
+    "title": "Funciones y accesos",
+    "subtitle": "Quien pide un cambio no lo aprueba; quién puede entrar en la empresa se revisa con un calendario.",
+    "ownerOnly": "Solo los propietarios gestionan las funciones y las revisiones de acceso. Tu rol aquí es {{role}}.",
+    "policy": {
+      "title": "Segregación de funciones",
+      "mode": "Qué aprobaciones sujeta la regla",
+      "modes": {
+        "off": "Desactivada",
+        "high_risk": "Trabajo de alto riesgo (por defecto)",
+        "all": "Todas las aprobaciones"
+      },
+      "modeHint": {
+        "off": "No se comprueba ninguna aprobación. Desactivar la regla queda en la auditoría.",
+        "high_risk": "Quien inició un sprint no acepta sus entregas retenidas ni fusiona su trabajo; quien redactó una especificación no la aprueba.",
+        "all": "El trabajo de alto riesgo y, además, las ejecuciones de otros productores y las arquitecturas."
+      },
+      "interval": "Revisión de accesos cada (días)",
+      "inactive": "Marcar cuentas inactivas tras (días)",
+      "save": "Guardar"
+    },
+    "solo": {
+      "title": "Excepción de una sola persona",
+      "hint": "Aquí solo una persona puede aprobar, así que todas las aprobaciones son suyas. Concede la excepción con un motivo; cada uso queda registrado y aparece en el informe.",
+      "reasonLabel": "Motivo (se guarda en la auditoría)",
+      "grant": "Conceder la excepción",
+      "inForce": "La excepción de una sola persona está en vigor: tus propias aprobaciones pasan y cada una queda registrada.",
+      "notInForce_one": "La excepción está concedida pero no en vigor: {{count}} persona puede aprobar.",
+      "notInForce_other": "La excepción está concedida pero no en vigor: {{count}} personas pueden aprobar, así que aprueba otra persona.",
+      "reason": "Motivo: {{reason}} (concedida por {{by}})",
+      "withdraw": "Retirar la excepción",
+      "unavailable_one": "{{count}} persona puede aprobar. La excepción de una sola persona no hace falta.",
+      "unavailable_other": "{{count}} personas pueden aprobar, así que la excepción de una sola persona no está disponible."
+    },
+    "review": {
+      "title": "Revisión de accesos",
+      "now": "ahora",
+      "state": {
+        "scheduled": "Próxima revisión el {{due}} (cada {{days}} días).",
+        "due": "Toca una revisión ({{due}}). Confirma o quita cada cuenta de abajo.",
+        "missed": "La revisión del {{due}} no se hizo. Complétala ahora; quedará registrada como tardía."
+      },
+      "account": "Cuenta",
+      "access": "Acceso",
+      "lastActivity": "Última actividad",
+      "decision": "Decisión",
+      "roles": "propio {{own}}, efectivo {{effective}}",
+      "team": "equipo {{name}} ({{role}})",
+      "sso": "SSO vinculado",
+      "chat": "{{provider}} vinculado",
+      "token": "Token de API, {{role}}, creado por {{by}}",
+      "inactive": "Inactiva",
+      "never": "Nunca",
+      "decideFor": "Decisión sobre {{name}}",
+      "confirm": "Confirmar",
+      "remove": "Quitar",
+      "note": "Nota (opcional)",
+      "complete": "Completar la revisión",
+      "history": "Revisiones anteriores",
+      "noHistory": "Todavía no se ha completado ninguna revisión.",
+      "doneOnTime": "{{when}}: completada por {{by}}, {{removed}} quitadas.",
+      "doneLate": "{{when}}: completada tarde por {{by}}, {{removed}} quitadas."
+    },
+    "report": {
+      "title": "Informe de aprobaciones y funciones",
+      "status": {
+        "separated": "Separada",
+        "exception": "Excepción auditada",
+        "violation": "Infracción",
+        "unattributed": "Sin atribuir",
+        "not_a_person": "Por un agente"
+      },
+      "violations": "Infracciones y excepciones",
+      "noViolations": "Cada aprobación la hizo alguien distinto de quien pidió el trabajo.",
+      "allApprovals_one": "{{count}} aprobación",
+      "allApprovals_other": "Las {{count}} aprobaciones",
+      "allApprovalsLabel": "Todas las aprobaciones",
+      "action": "Acción",
+      "subject": "Trabajo",
+      "requester": "Pedido por",
+      "approver": "Aprobado por",
+      "statusLabel": "Estado",
+      "matrix": "Quién hizo cada función",
+      "who": "Quién",
+      "role": "Rol",
+      "formerMember": "Antiguo miembro",
+      "allWithRole": "Todos los {{role}}",
+      "agent": "Agente",
+      "both": "pide y aprueba",
+      "refusals_one": "La regla rechazó {{count}} aprobación.",
+      "refusals_other": "La regla rechazó {{count}} aprobaciones."
+    },
+    "duty": {
+      "request": "Pedir",
+      "plan": "Planificar",
+      "deliver": "Entregar",
+      "verify": "Verificar",
+      "approve": "Aprobar",
+      "release": "Publicar"
+    },
+    "actions": {
+      "accept_held_delivery": "Aceptar una entrega retenida",
+      "approve_specification": "Aprobar una especificación",
+      "approve_architecture": "Aprobar una arquitectura",
+      "approve_run": "Aprobar una ejecución",
+      "release": "Publicar"
+    },
+    "accounts": {
+      "title": "Cuentas de servicio",
+      "hint": "Credenciales que actúan sin una persona al teclado. Solo nombres, alcances y antigüedad; nunca un valor.",
+      "none": "No hay cuentas de servicio.",
+      "company": "Cuentas de servicio de la empresa",
+      "deployment": "Cuentas de servicio del despliegue",
+      "kind": "Tipo",
+      "name": "Nombre",
+      "owner": "Propietario",
+      "scope": "Alcance",
+      "age": "Antigüedad",
+      "status": "Estado",
+      "days_one": "{{count}} día",
+      "days_other": "{{count}} días",
+      "kinds": {
+        "api_token": "Token de API",
+        "webhook": "Webhook",
+        "chat_connection": "Conexión de chat",
+        "sso_client": "Cliente SSO",
+        "model_provider": "Proveedor de modelos",
+        "github_webhook": "Webhook de GitHub",
+        "nats_backend": "Backend en NATS",
+        "nats_daemon": "Daemon en NATS"
+      },
+      "proxyPresent": "Token interno del proxy LLM: definido",
+      "proxyMissing": "Token interno del proxy LLM: sin definir"
+    }
+  },
   "taskViews": {
     "filters": "Filtros",
     "join": "Cumplir",
@@ -3054,5 +3191,102 @@
     "save": "Guardar vista",
     "saved": "Vista «{{name}}» guardada.",
     "loading": "Cargando tareas…"
+  },
+  "integrationReview": {
+    "title": "La revisión de una persona de esta integración",
+    "loadError": "No se pudieron cargar las revisiones de esta integración.",
+    "gate": {
+      "off": "Esta empresa no exige una aprobación antes de fusionar la integración; la revisión igual queda registrada.",
+      "waiting": "Esta empresa fusiona la integración solo cuando una persona la aprobó: todavía no hay aprobación de este commit.",
+      "approved": "Aprobada por una persona: la integración se puede fusionar."
+    },
+    "published": "Publicada como solicitud en la forja, cuya propia revisión decide la fusión allí; esta revisión controla solo la fusión local.",
+    "publishedLink": "Abrir la solicitud",
+    "setting": {
+      "label": "Exigir la revisión aprobatoria de una persona antes de fusionar la integración"
+    },
+    "history": "Revisiones de esta integración",
+    "none": "Todavía no hay revisiones.",
+    "showDiff": "Mostrar el diff",
+    "hideDiff": "Ocultar el diff",
+    "readingDiff": "El daemon del espacio de trabajo está leyendo el diff...",
+    "truncated": "El diff tiene más archivos de los que se muestran.",
+    "bodyLabel": "Tu revisión",
+    "decision": "Decisión",
+    "hint": {
+      "comment": "Registra lo que leíste, sin una decisión.",
+      "approve": "Aprueba este commit de la integración. Quien inició el sprint no la aprueba.",
+      "request_changes": "Registra que la integración debe cambiar antes de fusionarse."
+    },
+    "submit": "Enviar revisión",
+    "pendingComments_one": "{{count}} comentario va con esta revisión",
+    "pendingComments_other": "{{count}} comentarios van con esta revisión",
+    "outcome": {
+      "recorded": "Registrada",
+      "approved": "Aprobada",
+      "changes_requested": "Cambios solicitados"
+    },
+    "latest": "Última integración: {{status}}",
+    "latestReview": "última revisión de {{author}}: {{event}}",
+    "status": {
+      "tests_passed": "pruebas aprobadas",
+      "tests_failed": "pruebas fallidas",
+      "untested": "sin probar",
+      "conflict": "conflicto",
+      "incomplete": "incompleta",
+      "running": "en curso",
+      "pending": "esperando al daemon",
+      "error": "rechazada por el daemon"
+    },
+    "change": {
+      "added": "agregado",
+      "modified": "modificado",
+      "deleted": "eliminado",
+      "renamed": "renombrado"
+    },
+    "omitted": {
+      "binary": "Un archivo binario: no hay líneas que mostrar.",
+      "too_large": "Demasiado grande para mostrarlo aquí."
+    },
+    "comment": {
+      "inReview": "En la revisión #{{id}}",
+      "pending": "Esperando una revisión",
+      "resolved": "Resuelto",
+      "resolve": "Resolver",
+      "labelGeneral": "Un comentario sobre toda la integración",
+      "label": "Comentario en {{path}}, línea {{line}}",
+      "submit": "Agregar comentario",
+      "add": "Agregar un comentario en {{path}}, línea {{line}}"
+    },
+    "counts": "+{{additions}} −{{deletions}}"
+  },
+  "promptWeight": {
+    "none": "No hay medida del prompt registrada para estas corridas.",
+    "summary": "{{calls}} prompts · {{tokens}} tokens estimados, más {{system}} en el prompt de sistema",
+    "tokensShare": "{{tokens}} · {{pct}} %",
+    "cut_one": "recortada {{count}} vez",
+    "cut_other": "recortada {{count}} veces",
+    "cutHint": "Prompts en los que el presupuesto dejó afuera esta sección (PROMPT_BUDGET).",
+    "estimateHint": "Estimado por el backend a partir de lo que envió (caracteres / 4), no es el conteo del proveedor.",
+    "show": "Ver el peso del prompt",
+    "hide": "Ocultar el peso del prompt",
+    "loading": "Cargando el peso del prompt…",
+    "error": "No se pudo leer el peso del prompt.",
+    "section": {
+      "output_format": "Formato de salida",
+      "task": "Tarea",
+      "architect_brief": "Indicaciones del Architect",
+      "review_feedback": "Devolución de la revisión",
+      "previous_attempt": "Intento anterior",
+      "requirements": "Requisitos",
+      "standards_and_procedures": "Estándares y procedimientos",
+      "repository": "Repositorio",
+      "related_code": "Código relacionado",
+      "lessons": "Lecciones",
+      "memory": "Memoria",
+      "completed_tasks": "Tareas terminadas",
+      "console_assistant_notes": "Notas de consola",
+      "wiki": "Wiki"
+    }
   }
 }
