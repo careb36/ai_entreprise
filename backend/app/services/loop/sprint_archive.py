@@ -51,6 +51,7 @@ from models import (
     Procedure,
     RunSecret,
     Sprint,
+    SprintBoardNote,
     SprintIntegration,
     TaskEvent,
 )
@@ -165,6 +166,12 @@ def evidence_of(session: Session, sprint: Sprint) -> list[str]:
         ),
     ):
         found.append("sprint_integrations")
+
+    if _count(
+        session,
+        select(func.count(SprintBoardNote.id)).where(SprintBoardNote.sprint_id == sid),
+    ):
+        found.append("sprint_board_notes")
 
     if _count(
         session,

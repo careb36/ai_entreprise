@@ -28,7 +28,7 @@ const counts = (): ManagerRecord['total'] => ({
 })
 
 function asRole(role: 'Owner' | 'Manager' | 'Viewer') {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 42, human_role: role }] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 42, human_role: role }] })
 }
 
 function renderPage() {

@@ -7,8 +7,8 @@ each file written; and ``companies.doc_language``, the language the packs are
 written in (en or es; empty reads as English). Nullable: nothing existing
 changes.
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0027
+Revises: 0026
 Create Date: 2026-11-15 18:00:00 UTC
 """
 
@@ -19,8 +19,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0023"
-down_revision = "0022"
+revision = "0027"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 

@@ -173,8 +173,17 @@ def test_host_mode_says_it_is_unisolated_and_the_daemon_can_refuse_it(
         and result["sandbox"]["forced_by_daemon"] is True
     )
     assert fake_runtime.exists()
-    # A command without a sandbox request (a console assistant) is untouched.
+    # A command without a sandbox request is held to the floor too (#525).
+    fake_runtime.unlink()
+    result = shell_exec.execute_shell_command("echo hi", str(tmp_path))
+    assert result["stdout"].strip() == "hi" and fake_runtime.exists()
+    assert result["sandbox"]["mode"] == "container"
+    assert result["sandbox"]["forced_by_daemon"] is True
+    # Without the floor, it runs on the host and its reply is unchanged.
+    monkeypatch.delenv("FABRIQUE_SANDBOX_REQUIRED")
+    fake_runtime.unlink()
     assert "sandbox" not in shell_exec.execute_shell_command("echo hi", str(tmp_path))
+    assert not fake_runtime.exists()
 
 
 def test_a_sandboxed_command_that_hangs_is_killed_and_says_so(

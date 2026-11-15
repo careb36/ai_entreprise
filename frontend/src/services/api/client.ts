@@ -1,5 +1,3 @@
-import { useAuthStore } from '../../store/useAuthStore'
-
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
@@ -30,7 +28,7 @@ export function isClientError(error: unknown): error is ApiError {
 function friendlyMessage(status: number): string {
   const map: Record<number, string> = {
     400: 'Invalid request. Please check the form and try again.',
-    401: 'Session expired. Please refresh the page.',
+    401: 'Session expired. Please sign in again.',
     403: 'You do not have permission for this action.',
     404: 'Resource not found.',
     422: 'Invalid data submitted. Please review your inputs.',
@@ -45,11 +43,13 @@ function friendlyMessage(status: number): string {
 // ── Core fetch ───────────────────────────────────────────────────────────────
 
 interface FetchOptions extends RequestInit {
+  /** Part of the signed-in session: a 401 tries one refresh (default true). */
   auth?: boolean
   params?: Record<string, string | number>
   /** Retry 5xx responses (default true). A 503 that means "not connected" should not. */
   retryServerErrors?: boolean
   once?: boolean; timeoutMs?: number; _attempt?: number // once: never resent (not idempotent)
+  _refreshed?: boolean; _csrfReloaded?: boolean
 }
 
 let onUnauthorized: (() => void) | null = null
@@ -58,8 +58,110 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler
 }
 
+// ── Browser session (issue #524, docs/design/SESSIONS.md) ───────────────────
+// The access and refresh tokens are HttpOnly cookies the backend sets: this
+// module never sees them. It sends cookies (`credentials: 'include'`), the
+// CSRF header on unsafe methods, and on a 401 tries one refresh.
+
+/** What the auth store tells the client; the client imports no store. */
+export interface SessionHooks {
+  /** Changes on every sign-in and sign-out; null while signed out. */
+  current: () => number | null
+  /** The refresh was refused: end session *epoch* if it is still the current
+   * one, and say whether it was. */
+  expired: (epoch: number) => boolean
+}
+
+let sessionHooks: SessionHooks | null = null
+
+export function setSessionHooks(hooks: SessionHooks | null) {
+  sessionHooks = hooks
+}
+
+export const CSRF_COOKIE = 'fabrique_csrf'
+export const CSRF_HEADER = 'X-Fabrique-CSRF'
+const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+/** Routes whose 401 means "wrong credentials", never "refresh and retry". */
+const NO_REFRESH = new Set(['/v1/auth/login', '/v1/auth/refresh', '/v1/auth/logout', '/v1/auth/sso/exchange'])
+
+// The CSRF value is not a credential (it is useless without the HttpOnly
+// cookie); it is kept in memory only, for a page that cannot read the API's
+// cookie because it is served from another host.
+let csrfMemory: string | null = null
+
+export function setCsrfToken(token: string | null) {
+  csrfMemory = token
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  for (const part of document.cookie.split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) return decodeURIComponent(rest.join('='))
+  }
+  return null
+}
+
+function csrfToken(): string | null {
+  return readCookie(CSRF_COOKIE) || csrfMemory
+}
+
+/**
+ * A 403 that says the CSRF header was missing (the page could not read the
+ * API host's cookie and lost its memory on reload): ask the API for the value
+ * once. True when there is one to resend with; nothing was done the first time.
+ */
+async function reloadCsrf(response: Response): Promise<boolean> {
+  if (response.status !== 403 || response.headers?.get(CSRF_HEADER) !== 'required') return false
+  try {
+    const answer = await fetch(`${API_BASE}/v1/auth/csrf`, { credentials: 'include' })
+    csrfMemory = answer.ok ? ((await answer.json())?.csrf_token ?? null) : null
+  } catch {
+    csrfMemory = null
+  }
+  return csrfMemory !== null
+}
+
+type RefreshOutcome = 'refreshed' | 'raced' | 'expired'
+let refreshing: Promise<RefreshOutcome> | null = null
+
+/** One refresh at a time per tab; a 409 means another tab just did it. */
+function refreshSession(): Promise<RefreshOutcome> {
+  refreshing ??= (async (): Promise<RefreshOutcome> => {
+    try {
+      const send = () => {
+        const headers = new Headers()
+        const csrf = csrfToken()
+        if (csrf) headers.set(CSRF_HEADER, csrf)
+        return fetch(`${API_BASE}/v1/auth/refresh`, { method: 'POST', credentials: 'include', headers })
+      }
+      let response = await send()
+      if (await reloadCsrf(response)) response = await send()
+      if (response.ok) return 'refreshed'
+      return response.status === 409 ? 'raced' : 'expired'
+    } catch {
+      return 'expired'
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+/**
+ * After a 401 on a request sent with session *epoch*: whether to resend it.
+ * A refresh that fails, or a resent request refused again, ends the session.
+ */
+async function recoverFrom401(endpoint: string, epoch: number | null, retried: boolean): Promise<boolean> {
+  if (epoch === null || NO_REFRESH.has(endpoint.split('?')[0])) return false
+  if (sessionHooks?.current() !== epoch) return false // a newer session: not ours to end
+  if (!retried && (await refreshSession()) !== 'expired') return true
+  if (sessionHooks?.expired(epoch)) onUnauthorized?.()
+  return false
+}
+
 export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, _attempt = 0, auth = true, once = false, timeoutMs = TIMEOUT_MS, ...rest } = options
+  const { params, _attempt = 0, _refreshed = false, _csrfReloaded = false, auth = true, once = false, timeoutMs = TIMEOUT_MS, ...rest } = options
   const { retryServerErrors = !once, ...fetchOptions } = rest
 
   let url = `${API_BASE}${endpoint}`
@@ -74,13 +176,17 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const token = auth ? useAuthStore.getState().getValidToken() : null
+    const epoch = auth ? (sessionHooks?.current() ?? null) : null
     const headers = new Headers(fetchOptions.headers)
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-    if (token) headers.set('Authorization', ['Bearer', token].join(' '))
+    if (UNSAFE.has((fetchOptions.method ?? 'GET').toUpperCase())) {
+      const csrf = csrfToken()
+      if (csrf) headers.set(CSRF_HEADER, csrf)
+    }
 
     const response = await fetch(url, {
       ...fetchOptions,
+      credentials: 'include',
       signal: controller.signal,
       headers,
     })
@@ -88,14 +194,11 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     clearTimeout(timer)
 
     if (!response.ok) {
-      if (
-        response.status === 401 &&
-        endpoint.split('?')[0] !== '/v1/auth/login' &&
-        token &&
-        useAuthStore.getState().token === token
-      ) {
-        useAuthStore.getState().logout()
-        onUnauthorized?.()
+      if (response.status === 401 && (await recoverFrom401(endpoint, epoch, _refreshed))) {
+        return fetchApi<T>(endpoint, { ...options, _refreshed: true })
+      }
+      if (!_csrfReloaded && (await reloadCsrf(response))) {
+        return fetchApi<T>(endpoint, { ...options, _csrfReloaded: true })
       }
       if (response.status >= 500 && retryServerErrors && _attempt < MAX_RETRIES) {
         await delay(600 * (_attempt + 1))
@@ -122,12 +225,18 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
   }
 }
 
-/** GET a file with the user's token; the caller saves it. */
+/** A GET with the session's cookies, refreshed once on a 401. */
+async function getWithSession(endpoint: string): Promise<Response> {
+  const epoch = sessionHooks?.current() ?? null
+  const send = () => fetch(`${API_BASE}${endpoint}`, { credentials: 'include' })
+  const response = await send()
+  if (response.status === 401 && (await recoverFrom401(endpoint, epoch, false))) return send()
+  return response
+}
+
+/** GET a file with the user's session; the caller saves it. */
 export async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filename: string | null }> {
-  const token = useAuthStore.getState().getValidToken()
-  const headers = new Headers()
-  if (token) headers.set('Authorization', ['Bearer', token].join(' '))
-  const response = await fetch(`${API_BASE}${endpoint}`, { headers })
+  const response = await getWithSession(endpoint)
   if (!response.ok) {
     throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
   }
@@ -137,14 +246,11 @@ export async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filenam
 }
 
 /**
- * GET a text body with the user's token (a Markdown document). A refusal is an
- * `ApiError` whose message is the body's `detail` when it has one.
+ * GET a text body with the user's session (a Markdown document). A refusal is
+ * an `ApiError` whose message is the body's `detail` when it has one.
  */
 export async function fetchText(endpoint: string): Promise<string> {
-  const token = useAuthStore.getState().getValidToken()
-  const headers = new Headers()
-  if (token) headers.set('Authorization', ['Bearer', token].join(' '))
-  const response = await fetch(`${API_BASE}${endpoint}`, { headers })
+  const response = await getWithSession(endpoint)
   if (!response.ok) {
     let detail: string | undefined
     try {

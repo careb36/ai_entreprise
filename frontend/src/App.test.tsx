@@ -76,11 +76,11 @@ describe('unauthorized navigation', () => {
     expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument()
 
     await act(async () => {
-      useAuthStore.setState({ token: 'rejected-token', expiresAt: Date.now() + 60_000 })
+      useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
       await expect(api.get('/v1/protected')).rejects.toBeInstanceOf(ApiError)
     })
 
-    expect(useAuthStore.getState().token).toBeNull()
+    expect(useAuthStore.getState().expiresAt).toBeNull()
     expect(window.location.pathname).toBe('/login')
     expect(window.location.search).toBe('?from=%2Fevidence%2F5')
   })
@@ -89,7 +89,6 @@ describe('unauthorized navigation', () => {
 describe('app navigation', () => {
   it.each([0, 1, 2])('offers company switching only for multiple memberships (%i)', async count => {
     useAuthStore.setState({
-      token: 'signed-token',
       expiresAt: Date.now() + 60_000,
       meLoaded: true,
       loadingMe: count === 0,
@@ -119,7 +118,6 @@ describe('app navigation', () => {
 
   function authenticate() {
     useAuthStore.setState({
-      token: 'signed-token',
       expiresAt: Date.now() + 60_000,
       meLoaded: true,
       loadingMe: false,
@@ -252,7 +250,7 @@ describe('app navigation', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
       await waitFor(() => expect(window.location.pathname).toBe('/login'))
-      expect(useAuthStore.getState().token).toBeNull()
+      expect(useAuthStore.getState().expiresAt).toBeNull()
     })
 
     it('closes the Company dropdown with Escape', () => {
@@ -295,7 +293,7 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Members', 'Single sign-on', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Members', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
@@ -549,7 +547,7 @@ describe('service status', () => {
 
   it('checks each service only when the status pill is opened', async () => {
     useAuthStore.setState({
-      token: 'signed-token', expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
+      expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
       memberships: [{ company_id: 1, human_role: 'Owner' }],
     })
     useAppStore.getState().setCompany(1, 'Example company')
@@ -584,7 +582,7 @@ describe('service status', () => {
 
   it('shows a knowledge graph switched off as off, not down', async () => {
     useAuthStore.setState({
-      token: 'signed-token', expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
+      expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
       memberships: [{ company_id: 1, human_role: 'Owner' }],
     })
     useAppStore.getState().setCompany(1, 'Example company')

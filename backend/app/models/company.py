@@ -61,6 +61,10 @@ class Company(SQLModel, table=True):
     # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.
     default_model: str | None = None
     role_models: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The routing policy by task difficulty ({"bands": {"low": ..., "high": ...}},
+    # services/models/routing_policy.py); empty: the deployment's
+    # AGENT_MODEL_POLICY, else the role defaults. A Manager writes it.
+    model_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # The terminal coding agent that produces a role's tasks instead of the
     # LLM call ({"Developer": "claude"}, services/producers/console_producer.py); it
     # needs the Git workflow. Empty: every role is produced by its model.

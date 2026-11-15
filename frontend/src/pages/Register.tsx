@@ -9,7 +9,6 @@ export default function Register() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
@@ -35,7 +34,7 @@ export default function Register() {
     }
   }
 
-  if (token && expiresAt && expiresAt > Date.now()) {
+  if (expiresAt && expiresAt > Date.now()) {
     return <Navigate to={safeReturnPath(searchParams.get('from'))} replace />
   }
 

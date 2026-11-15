@@ -88,6 +88,12 @@ def _record_task_run(
     if agent.get("prompt_sections"):
         evidence = evidence if isinstance(evidence, dict) else {}
         evidence["prompt_sections"] = agent["prompt_sections"]
+    # The difficulty estimate and the routing it led to (#319): the plan and
+    # the request, beside the served model above (the observation).
+    for key in ("difficulty", "routing"):
+        if agent.get(key):
+            evidence = evidence if isinstance(evidence, dict) else {}
+            evidence[key] = agent[key]
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)

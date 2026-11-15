@@ -60,6 +60,7 @@ Primary trust boundaries:
 6. **CI/CD ↔ Kubernetes/Registry** — malicious images, leaked secrets, supply chain compromise.
 7. **Backend ↔ NATS ↔ workspace daemon ↔ the user's disk** — anything that can publish a request can ask the daemon to write files and run commands on the machine that holds the projects (§8.3, §8.6).
 8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`).
+9. **Backend ↔ Slack and Microsoft Teams** — a public inbound endpoint that can accept a held delivery: forged or replayed interactions, a chat user acting as someone else, a role read from the payload, a stale click deciding a changed task, leaked bot tokens or signing secrets. Each request is verified by the platform's HMAC (Slack v0 with a five-minute timestamp; the Teams outgoing webhook's HMAC with the activity's timestamp), its id is stored once, the chat user must be linked by a one-time code to a La Fabrique account, the role comes from that account's membership exactly as on the web, and the decision is the web's own function, audited with `via` (`docs/design/CHAT_APPROVALS.md`).
 
 Key threat actors: malicious end users, compromised external content, malicious model output, insider developers, CI/CD attackers.
 
@@ -75,28 +76,56 @@ Reference frameworks:
 
 ### 3.1 Identity: what is built
 
-La Fabrique authenticates people itself today; there is no external identity
-provider yet.
+La Fabrique authenticates people itself, by password, or through a company's
+OpenID Connect provider (single sign-on, below).
 
 - **Passwords** are hashed with `bcrypt` directly, cost 12
   (`backend/app/passwords.py`). The schema rejects a password over bcrypt's
   72-byte limit instead of truncating it (`backend/app/schemas.py`), and a
   successful login re-hashes a stored hash whose cost is below the current one
   (`backend/app/routers/auth.py`).
-- **Access tokens.** `POST /v1/auth/login` issues a JWT signed with **HS256**
-  and the shared secret `JWT_SECRET_KEY` (`backend/app/auth_tokens.py`,
-  `backend/app/config.py`). Claims: `sub`, `email`, `iat`, `exp`, `typ:
-  access`. It lives `ACCESS_TOKEN_EXPIRE_MINUTES`, **60 minutes** by default.
-  Validation checks the signature, the single configured algorithm, `exp`,
-  and that `sub`, `exp` and `typ` are present and `typ` is `access`; there is
-  no `iss`, `aud` or `nbf` claim. There is no refresh token: a person logs in
-  again when the token expires.
-- **Transport of the token.** The API reads it from the `Authorization:
-  Bearer` header (`backend/app/auth_deps.py`, `HTTPBearer`), never from a
-  cookie. The Glassroom stream, which a browser `EventSource` cannot give a
-  header, takes a five-minute ticket for one sprint instead
-  (`create_stream_ticket`, `typ: glassroom`; membership is checked again
-  when it is used).
+- **Access tokens.** A JWT signed with **HS256** and the shared secret
+  `JWT_SECRET_KEY` (`backend/app/auth_tokens.py`, `backend/app/config.py`).
+  Claims: `sub`, `email`, `iat`, `exp`, `typ: access`, and for a browser
+  session `sid` (its family) and `csrf` (the digest of its CSRF token). It
+  lives `ACCESS_TOKEN_EXPIRE_MINUTES`, **15 minutes** by default. Validation
+  checks the signature, the single configured algorithm, `exp`, and that
+  `sub`, `exp` and `typ` are present and `typ` is `access`; a token with a
+  `sid` is refused once its family is revoked or expired, on every request.
+  There is no `iss`, `aud` or `nbf` claim.
+- **Browser sessions** (issue #524; design and threat model in
+  `docs/design/SESSIONS.md`). Password login and the SSO exchange set three
+  cookies and return no token (`backend/app/session_cookies.py`):
+  `fabrique_session` (the access token; `HttpOnly; Secure; SameSite=Strict;
+  Path=/`), `fabrique_refresh` (the refresh token; `HttpOnly; Secure;
+  SameSite=Strict; Path=/v1/auth`) and `fabrique_csrf` (readable by the page).
+  Refresh tokens are 32 random bytes, stored only as HMAC-SHA256 under
+  `JWT_SECRET_KEY` in a family (`session_families`, `refresh_tokens`,
+  `services/platform/sessions.py`); `POST /v1/auth/refresh` rotates the token
+  exactly once, a token used twice revokes its family (except two tabs racing
+  within `REFRESH_REUSE_GRACE_SECONDS`, answered 409 with nothing issued), a
+  family ends `REFRESH_TOKEN_ABSOLUTE_DAYS` (7) after sign-in, and the route is
+  rate-limited (`REFRESH_RATE_LIMIT`). `POST /v1/auth/logout` revokes the
+  family and clears the cookies. `Secure` is relaxed only by
+  `SESSION_COOKIE_SECURE=false`, for plain-http development, with a startup
+  warning.
+- **CSRF.** The cookies are `SameSite=Strict`, and an unsafe method
+  authenticated by the cookie must also send `X-Fabrique-CSRF` equal to the
+  `fabrique_csrf` cookie and to the digest signed into the access token (a
+  signed double submit: a cookie planted from a sibling host does not pass);
+  refresh and logout check it against the family. CORS allows credentials only
+  with the explicit origins of `CORS_ORIGINS`; `*` turns credentials off
+  (`backend/app/security.py`).
+- **Transport of the token.** `Authorization: Bearer` first
+  (`backend/app/auth_deps.py`, `HTTPBearer`): an API token, or a Bearer access
+  token a script gets from `POST /v1/auth/login` with `"token_delivery":
+  "bearer"` (no family, no refresh, the password required). A Bearer request
+  is never CSRF-checked, and a request with both a Bearer header and the
+  cookie is treated as Bearer. Otherwise the `fabrique_session` cookie. The
+  Glassroom stream, which a browser `EventSource` cannot give a header, takes
+  a five-minute ticket for one sprint instead (`create_stream_ticket`, `typ:
+  glassroom`, issued on the cookie; membership is checked again when it is
+  used).
 - **Without `JWT_SECRET_KEY`** login answers 503 and the backend warns at
   startup (`backend/app/lifecycle.py`).
 - **API tokens** for external callers (`POST /v1/auth/tokens`,
@@ -105,8 +134,12 @@ provider yet.
   an expiry (90 days by default, at most 365), revocable. Only the token's
   sha256 is stored; the raw value (`fab_` + 32 random bytes) is shown once.
   A request made with one acts as `api-token:<id>`, so audit rows name it.
-- **Rotation.** Changing `JWT_SECRET_KEY` ends every session and stream
-  ticket; API tokens keep working (`docs/OPERATIONS.md`, Rotate keys).
+- **Rotation and revocation.** Changing `JWT_SECRET_KEY` ends every session
+  (access tokens no longer verify; refresh tokens, stored as HMAC under the
+  key, match nothing) and stream ticket; API tokens keep working
+  (`docs/OPERATIONS.md`, Rotate keys). Turning "require SSO" on revokes the
+  password-started families of the members it would refuse, and removing a
+  member (`DELETE /v1/company/{id}/members/{user_id}`) revokes theirs.
 
 - **Single sign-on** (issue #512, phase 3; design and threat model in
   `docs/design/SSO.md`). An Owner configures one OpenID Connect connection
@@ -127,21 +160,19 @@ provider yet.
   refused. The provider is reached only through
   `services/platform/oidc_client.py` (https, public addresses re-checked
   before each fetch unless `SSO_ALLOW_PRIVATE_ISSUERS`, no redirects, a 1 MiB
-  cap). A one-time, 60-second code is exchanged for the same access token the
-  password login issues. An Owner can require SSO for the company's members
+  cap). A one-time, 60-second code is exchanged for the same browser session
+  the password login starts. An Owner can require SSO for the company's members
   once the connection is enabled and an Owner has signed in through it;
   Owners listed in `SSO_BREAK_GLASS_EMAILS` keep their password, and each
   such sign-in is audited. Every sign-in and every configuration change
   writes an audit row (never the secret); the public routes are limited by
   `SSO_RATE_LIMIT`.
 - **Known gaps.** Allowed domains are not verified by DNS (the first company
-  to list one holds it); sessions already issued stay valid until they
-  expire when SSO becomes required or a person is removed at the provider;
-  the password login itself has no rate limit. Still **targets, not
-  present**: access tokens of 15 minutes or less and server-side refresh
-  tokens rotated on use (with #524, the token out of `localStorage`). A
-  deployment that needs a shorter session lowers
-  `ACCESS_TOKEN_EXPIRE_MINUTES`.
+  to list one holds it); someone removed only at the provider keeps a session
+  until it reaches its absolute expiry or an Owner removes them here; a Bearer
+  access token from `"token_delivery": "bearer"` has no family, so logout and
+  revocation do not reach it (it lives `ACCESS_TOKEN_EXPIRE_MINUTES`); the
+  password login itself has no rate limit.
 
 ### 3.2 API Authorization: what is built
 
@@ -195,10 +226,15 @@ fallback credential.
 `X-Frame-Options: DENY`, `Strict-Transport-Security`,
 `Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy`
 that turns off geolocation, microphone and camera; it does not send
-`Cross-Origin-Opener-Policy`. CORS allows only `CORS_ORIGINS`. The frontend
-keeps its access token in `localStorage` (`frontend/src/store/useAuthStore.ts`,
-zustand `persist`, key `fabrique-auth-storage`), which the rule below forbids:
-a known gap until the token moves to memory or an `HttpOnly` cookie (#524).
+`Cross-Origin-Opener-Policy`. CORS allows only `CORS_ORIGINS`, with
+credentials only when they are explicit origins. The frontend holds no
+credential (#524): the access and refresh tokens are `HttpOnly` cookies
+(§3.1), and `frontend/src/store/useAuthStore.ts` persists only the profile,
+the memberships and when the session ends (`frontend/src/store/useAuthStore.test.ts`
+checks that nothing credential-like reaches `localStorage` or
+`sessionStorage`). The CSRF value is readable by design and kept in memory
+only. A script running in the page can still act through the open session;
+it can no longer read a token to use elsewhere.
 
 The rules:
 
@@ -469,9 +505,11 @@ as the user who started it (`./scripts/start-daemon.sh`), and answers
 
 1. **The command policy** (`vscode-daemon/command_policy.py`, issue #357)
    decides whether the command runs at all.
-2. **The sandbox** (`vscode-daemon/sandbox.py`) decides where it runs, when
-   the request carries a `sandbox`.
-3. Otherwise it runs in the host shell, with the daemon's privileges.
+2. **The sandbox** (`vscode-daemon/sandbox.py`) decides where it runs. A
+   request without a `sandbox` is read as `host` (issue #525), so the
+   daemon's floor below applies to every command.
+3. Only when that leaves it on the host does it run in the host shell
+   (`shell_exec.run_on_host`), with the daemon's privileges.
 
 **The sandbox is the boundary.** Modes (`DELIVERY_SANDBOX` for the
 deployment, or a company's own, `GET`/`PUT /v1/companies/{id}/sandbox`,
@@ -495,15 +533,40 @@ reason, and the tests read as unverified, not passed. The Verifier records
 the report as the `sandbox` check (`backend/app/services/workspace/sandbox.py`);
 a host run is a finding, never a refutation. The person running the daemon
 can refuse the host: `FABRIQUE_SANDBOX_REQUIRED=container` (or `bwrap`) runs
-a `host` request in that mode instead and says so (`forced_by_daemon`).
+a `host` request, and one that names no sandbox, in that mode instead and
+says so (`forced_by_daemon`); when that mode cannot run, the command is
+refused with the reason, never run on the host. Without the floor a request
+that names no sandbox runs on the host as before and its reply is unchanged.
+`backend/tests/test_sandbox_floor.py` also checks that nothing else in the
+daemon builds a host shell command: only `shell_exec` (after `normalize`) and
+the application check's host path (after `normalize`). The daemon's other
+subprocesses are fixed argv it chose itself (`git` with hooks disabled, the
+container runtime, `node --check` on a copy, `gh` / `glab api`), never a
+command from a request.
 
 Requests that carry a `sandbox`: the delivery test run
 (`services/loop/delivery_checks.py`), the Developer's test tool
 (`services/tools/developer_tools.py`), the lint after an edit
 (`services/tools/edit_lint.py`), the dependency install
 (`services/workspace/dependency_install.py`), a console producer's run
-(`services/producers/console_producer.py`) and the application check
-(`vscode-daemon/app_run.py`).
+(`services/producers/console_producer.py`), a console assistant's
+consultation and the application check (`vscode-daemon/app_run.py`).
+
+**Console assistants** (`services/producers/console_assistants.py`,
+`assistant_sandbox.py`; issue #525) send the company's sandbox with purpose
+`assistant`: its mode, the network as `DELIVERY_SANDBOX_NETWORK` sets it (off
+by default), no dependency cache, and only the variable *names* in the
+company's `sandbox_env` and `console_env` (the provider's key is listed in
+`console_env`; its value stays on the daemon's machine). In a `container` or
+`bwrap` sandbox with the network off the assistant is not asked; when the
+daemon's reply shows its sandbox stopped the CLI (the floor's runtime
+missing, the CLI not in the image, no network to the provider) the
+consultation is skipped and cools down. Either way the Glassroom says why
+(`skipped_sandbox`, with the daemon's sandbox report), and the task goes on:
+the advice is optional and never evidence. A company on `host` with a daemon
+without a floor runs them on the host, as before. No command policy is sent
+for this path: the backend has none for it (the console producer's allow
+list names a producer CLI's own argv, not an assistant's template).
 
 **Which image ran, and the dependency cache** (issue #315,
 `docs/design/EXECUTION_ENVIRONMENT.md`; the cache and its quarantine are
@@ -571,17 +634,17 @@ agent-written, which is what the sandbox is for.
 - `host` is still the default and an allowed mode. A deployment that runs
   agent code sets `DELIVERY_SANDBOX=container` and, on the daemon's machine,
   `FABRIQUE_SANDBOX_REQUIRED=container` (§10.8).
-- `FABRIQUE_SANDBOX_REQUIRED` applies only to a request that carries a
-  `sandbox`. The console assistants' consultations
-  (`services/producers/console_assistants.py`, a configured CLI template run
-  with the agent's prompt) send `workspace.execute` with neither a `sandbox`
-  nor a `command_policy`, so they run on the host; only the daemon's own
-  `FABRIQUE_COMMAND_DENY` applies to them (#525).
 - The backend does not send a per-company command policy yet
   (`docs/CONFIGURATION.md`): the only policy it sends is the console
   producer's, which allows only that CLI's own command
   (`services/producers/console_clis.py`, `command_policy`). Without a policy
   and without `FABRIQUE_COMMAND_DENY`, every command runs.
+- A console assistant's sandbox mounts the project folder (the person's
+  checkout, not a task worktree) read-write, as every sandboxed run mounts its
+  folder; on the host it had the whole machine, so this is narrower, but the
+  advice needs only a read-only mount. With the network on and the provider's
+  key in its environment, a prompt-injected assistant can reach any host the
+  sandbox allows.
 - The sandbox's network is on or off; there is no egress allowlist.
 - The dependency cache is writable by every run of a project, so one run can
   leave something for the next; that is why it is off by default and removed
@@ -734,8 +797,8 @@ Every PR that touches backend, frontend, agents, or infrastructure must pass thi
 
 - [ ] No secrets in client code or Vite env
 - [ ] CSP, HSTS, anti-XSS headers configured
-- [ ] Tokens stored securely; no `localStorage`
-- [ ] CORS restricted to known origins
+- [ ] Tokens stored securely: `HttpOnly` cookies or memory, never `localStorage` or `sessionStorage` (`useAuthStore.test.ts`); unsafe cookie requests carry `X-Fabrique-CSRF`
+- [ ] CORS restricted to known origins; credentials never with `*`
 - [ ] User-supplied HTML/markdown sanitized
 
 ### 10.6 Data and Infrastructure
@@ -771,6 +834,11 @@ Before the stack serves anyone but the person running it:
       no longer used. A token cannot create tokens, and the audit rows its
       requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set and
       `AUTH_REQUIRED` on.
+- [ ] **Browser sessions.** The frontend and the API served over https under
+      one site, `SESSION_COOKIE_SECURE` left on, `CORS_ORIGINS` listing the
+      frontend's origins (never `*`), and `ACCESS_TOKEN_EXPIRE_MINUTES` and
+      `REFRESH_TOKEN_ABSOLUTE_DAYS` no longer than the defaults (15 minutes,
+      7 days) unless the owner accepts more (§3.1, `docs/design/SESSIONS.md`).
 - [ ] **Single sign-on.** `SSO_CALLBACK_URL` and `SSO_FRONTEND_URL` are the
       public https addresses; `SSO_BREAK_GLASS_EMAILS` names at least one
       Owner before any company requires SSO; `SSO_ALLOW_PRIVATE_ISSUERS`

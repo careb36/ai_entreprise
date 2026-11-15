@@ -165,6 +165,10 @@ class Settings(BaseSettings):
     # the files around the task's modules and earlier writes, from the
     # daemon's parse, and the recent runs that wrote them; 0 leaves it out.
     CODE_GRAPH_MAX_CHARS: int = 2500
+    # The sprint board in every task prompt (``services/loop/worker/sprint_notes.py``,
+    # issue #439): the notes of the sprint relevant to the task, newest first,
+    # within this many characters; 0 leaves the section out.
+    SPRINT_BOARD_MAX_CHARS: int = 2000
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
@@ -237,7 +241,17 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str | None = None
     AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
+    # family lives at most this many days from sign-in, however often it is
+    # rotated; a reuse within the grace (two tabs refreshing at once) is
+    # answered 409 without revoking; the refresh route's rate limit.
+    REFRESH_TOKEN_ABSOLUTE_DAYS: int = 7
+    REFRESH_REUSE_GRACE_SECONDS: int = 10
+    REFRESH_RATE_LIMIT: str = "30/minute"
+    # The session cookies are Secure; false only for development over plain
+    # http:// (a browser treats http://localhost as secure anyway).
+    SESSION_COOKIE_SECURE: bool = True
 
     # Single sign-on over OpenID Connect (issue #512; docs/design/SSO.md).
     # The redirect URI registered at each company's identity provider, and
@@ -253,6 +267,12 @@ class Settings(BaseSettings):
     SSO_ALLOW_PRIVATE_ISSUERS: bool = False
     SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
     SSO_CLOCK_SKEW_SECONDS: int = 60
+
+    # Approving from Slack or Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
+    # The frontend address the chat messages link to (the run's evidence, the
+    # task), and the rate limit of the public inbound endpoints per address.
+    CHAT_APP_URL: str = "http://localhost:5173"
+    CHAT_RATE_LIMIT: str = "120/minute"
 
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------

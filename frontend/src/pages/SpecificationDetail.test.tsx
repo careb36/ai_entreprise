@@ -42,7 +42,7 @@ function stubApi(specification: Specification, overrides: Record<string, () => R
 }
 
 function renderAs(role: 'Owner' | 'Manager' | 'Viewer', id = 5) {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/company/specifications/${id}`]}>

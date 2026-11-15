@@ -55,6 +55,12 @@ def _isolated_task_path(monkeypatch):
         console_assistants, "cooldown_until", lambda company_id, assistant_key: None
     )
     monkeypatch.setattr(console_assistants, "publish_event", AsyncMock())
+    # No database here: the company's sandbox is the host (issue #525).
+    monkeypatch.setattr(
+        console_assistants.assistant_sandbox,
+        "request_for",
+        lambda sprint, engine=None: {"mode": "host", "purpose": "assistant"},
+    )
     yield
     console_capabilities.reset()
 

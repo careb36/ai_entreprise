@@ -34,7 +34,7 @@ from database import engine
 from logging_config import logger
 from sqlmodel import Session, text
 
-from services.integrations import webhooks
+from services.integrations import chat_approvals, webhooks
 
 
 async def process_outbox(nats_client) -> None:
@@ -102,6 +102,10 @@ async def process_outbox(nats_client) -> None:
                             )
                         elif event_type == webhooks.EVENT_TYPE:
                             await webhooks.deliver(session, payload, event_id)
+                        elif event_type in chat_approvals.EVENT_TYPES:
+                            await chat_approvals.deliver(
+                                session, event_type, payload, event_id
+                            )
 
                         # Mark the event as successfully delivered.
                         session.exec(
