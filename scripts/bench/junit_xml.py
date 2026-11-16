@@ -13,7 +13,7 @@ Semgrep's ``use-defused-xml`` (p/security-audit) flagged the ``xml.etree``
 import this replaces (issue #522). The rule matches any import from ``xml``,
 this one included, so the import below carries a ``nosemgrep`` naming that
 rule: what it guards against, entity expansion, is refused by the handlers in
-``testcases`` and held by ``backend/tests/test_bench_scorecard.py``.
+``testcases`` and held by ``backend/tests/test_bench_grading.py``.
 """
 
 from __future__ import annotations

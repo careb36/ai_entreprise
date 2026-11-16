@@ -284,7 +284,8 @@ runner support before such a specification can be added.
    a task's own unit tests import only what that task or an earlier one
    delivers.
 4. Run `scripts/bench/run.sh bench/specs/<nn>-<name>` and the backend suite
-   (`tests/test_bench_scorecard.py` and `tests/test_bench_prompt_weight.py`
+   (`tests/test_bench_specs.py`, `tests/test_bench_grading.py` and
+   `tests/test_bench_prompt_weight.py`
    check the new specification too: the spec check, a test per criterion,
    the fake's plan and files, unique titles, and that the fake's files pass
    every criterion while an empty project passes none).
