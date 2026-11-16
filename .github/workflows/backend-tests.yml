@@ -110,7 +110,11 @@ jobs:
       - name: Run tests
         working-directory: ./backend
         run: |
-          PYTHONPATH=.:app poetry run pytest tests -v --tb=short
+          # In parallel with pytest-xdist (a dev dependency), capped at four
+          # workers: the seven self-hosted runners share one machine, and
+          # `-n auto` would start a worker per core in every job at once.
+          # loadgroup keeps the `xdist_group("wall_clock")` tests on one worker.
+          PYTHONPATH=.:app poetry run pytest tests -v --tb=short -n 4 --dist loadgroup
 
       - name: Run llm-proxy tests
         working-directory: .
