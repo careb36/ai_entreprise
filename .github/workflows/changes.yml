@@ -112,6 +112,7 @@ jobs:
               - 'db/init-db/**'
               - 'nats/**'
               - 'scripts/bench/**'
+              - 'scripts/rsi/**'
               - 'scripts/e2e/**'
               - 'scripts/self_host/**'
               # test_check_file_sizes.py reads every top-level script and its

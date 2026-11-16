@@ -278,6 +278,10 @@ def test_run_sh_refuses_graders_it_cannot_take(tmp_path):
     assert run.returncode == 2
     assert "the graders could not be taken" in run.stdout + run.stderr
     assert _run_sh(tmp_path, "--graders").returncode == 2
+    for args in (["--graders", ""], ["--graders="]):
+        empty = _run_sh(tmp_path, *args, str(REPO / "bench" / "specs" / "02-lib-roman"))
+        assert empty.returncode == 2, empty.stdout + empty.stderr
+        assert "--graders requires a commit" in empty.stderr
 
 
 def test_run_sh_grades_with_the_graders_and_points_the_fake_at_their_specs():

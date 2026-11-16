@@ -1,5 +1,4 @@
 import re
-from typing import Any
 
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
@@ -14,6 +13,7 @@ from services.contracts.verdicts import (
 )
 from services.evidence import (
     app_check,
+    claimed_paths,
     command_runs,
     context_read,
     criteria_tests,
@@ -26,18 +26,12 @@ from services.evidence import (
     standards,
     wstg_tests,
 )
+from services.evidence.claimed_paths import claim_strings, extract_claimed_paths
 from services.evidence.console_run import check_console_run
 from services.platform import protected_paths_setting
 from services.platform.agent_service import AgentService
 from services.platform.orchestration_metrics import ACTION_AGENT_RUN_VERIFIED
 
-_PATH_PATTERN = re.compile(
-    # Longest extension first, and no continuation after it, so `a.tsx` is not
-    # read as `a.ts` followed by a stray `x`.
-    r"[A-Za-z0-9_./-]+\.(?:json|toml|lock|html|yaml|yml|tsx|jsx|py|ts|js|md|sql|css|txt)"
-    r"(?![A-Za-z0-9_])"
-)
-_URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 _TEST_PATTERNS = (
     re.compile(r"\b\d+\s+(?:tests?\s+)?pass(?:ed|ing)?\b", re.IGNORECASE),
     re.compile(r"\ball tests pass\b", re.IGNORECASE),
@@ -47,17 +41,6 @@ _TEST_PATTERNS = (
     re.compile(r"\bpytest\b.*\bpassed\b", re.IGNORECASE),
     re.compile(r"\bnpm (?:run )?test\b", re.IGNORECASE),
 )
-
-
-def _claim_strings(claims: Any):
-    if isinstance(claims, dict):
-        for value in claims.values():
-            yield from _claim_strings(value)
-    elif isinstance(claims, list):
-        for value in claims:
-            yield from _claim_strings(value)
-    elif isinstance(claims, str):
-        yield claims
 
 
 def check_artifact_nonempty(run: AgentRun) -> dict:
@@ -78,19 +61,6 @@ def check_artifact_nonempty(run: AgentRun) -> dict:
         "outcome": "pass",
         "observation": f"artifact contains {run.artifact_size} bytes",
     }
-
-
-def extract_claimed_paths(claims: dict | None) -> list[str]:
-    paths = []
-    seen = set()
-    for text in _claim_strings(claims):
-        without_urls = _URL_PATTERN.sub("", text)
-        for match in _PATH_PATTERN.finditer(without_urls):
-            path = match.group(0)
-            if "/" in path and path not in seen:
-                seen.add(path)
-                paths.append(path)
-    return paths
 
 
 def check_claimed_files_present(run: AgentRun, evidence: dict | None = None) -> dict:
@@ -123,7 +93,7 @@ def check_claimed_files_present(run: AgentRun, evidence: dict | None = None) -> 
 def extract_test_claims(claims: dict | None) -> list[str]:
     matches = []
     seen = set()
-    for text in _claim_strings(claims):
+    for text in claim_strings(claims):
         if any(pattern.search(text) for pattern in _TEST_PATTERNS) and text not in seen:
             seen.add(text)
             matches.append(text)
@@ -334,11 +304,8 @@ def check_tests_run(evidence: dict) -> dict:
 
 
 def declared_paths(run: AgentRun, evidence: dict | None) -> list[str]:
-    """The paths the producer declared (claims), and those the edit tool recorded."""
-    claims = run.claims or {}
-    declared = [p for p in claims.get("files") or [] if isinstance(p, str)]
-    edited = sorted(context_read.files_edited((evidence or {}).get("tool_calls")))
-    return [*declared, *extract_claimed_paths(claims), *edited]
+    """The paths the producer declared (``claimed_paths.declared_paths``)."""
+    return claimed_paths.declared_paths(run.claims, evidence)
 
 
 def check_risk_tier(
@@ -511,16 +478,21 @@ def verify_agent_run(
         checks.extend(secops_checks.check_all(evidence))
     # The protected paths of a company that hosts the factory
     # (``services/evidence/protected_check.py``): a match holds it for a person.
-    protected = (
-        protected_check.patterns_in_force()
-        if protected_paths_setting.enabled(session, run.company_id)
-        else None
-    )
-    if protected:
-        checks.append(
-            protected_check.check(evidence, declared_paths(run, evidence), protected)
-        )
-    checks.append(check_risk_tier(run, evidence, protected))
+    # Without the shipped list it fails closed: unverifiable, and high risk.
+    protected, guard = None, None
+    if protected_paths_setting.enabled(session, run.company_id):
+        try:
+            protected = protected_check.patterns_in_force()
+            guard = protected_check.check(
+                evidence, declared_paths(run, evidence), protected
+            )
+        except protected_check.ProtectedListUnavailable as exc:
+            guard = protected_check.unavailable(str(exc))
+        checks.append(guard)
+    tier_check = check_risk_tier(run, evidence, protected)
+    if guard is not None and guard["outcome"] == VERDICT_UNVERIFIABLE:
+        tier_check = risk.held_for_a_person(tier_check, protected_check.UNAVAILABLE)
+    checks.append(tier_check)
     verdict = aggregate_verdict(checks)
     verification = Verification(
         company_id=run.company_id,

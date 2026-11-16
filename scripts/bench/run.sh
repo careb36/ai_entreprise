@@ -93,7 +93,7 @@ while [ $# -gt 0 ]; do
     --out=*) OUT_DIR="${1#--out=}"; shift ;;
     --out) [ $# -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
     --graders=*) GRADERS_REV="${1#--graders=}"; [ -n "$GRADERS_REV" ] || { echo "--graders requires a commit" >&2; exit 2; }; shift ;;
-    --graders) [ $# -ge 2 ] || { echo "--graders requires a commit" >&2; exit 2; }; GRADERS_REV="$2"; shift 2 ;;
+    --graders) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--graders requires a commit" >&2; exit 2; }; GRADERS_REV="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;
     *) SPECS+=("$(cd "$1" 2>/dev/null && pwd || echo "$1")"); shift ;;
   esac

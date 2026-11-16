@@ -85,6 +85,7 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
+        "fitness",
         "manifests",
         "protected_check",
         "review_changes",
@@ -378,6 +379,7 @@
         "loop"
       ],
       "test_acceptance_plan.py": [
+        "evidence",
         "loop"
       ],
       "test_access_review.py": [
@@ -402,6 +404,7 @@
         "loop"
       ],
       "test_agent_tools_delivery.py": [
+        "evidence",
         "loop"
       ],
       "test_agent_tools_edit.py": [
@@ -414,6 +417,7 @@
         "platform"
       ],
       "test_app_check.py": [
+        "evidence",
         "release"
       ],
       "test_architect.py": [
@@ -499,15 +503,18 @@
         "loop"
       ],
       "test_board_moves_carry.py": [
+        "evidence",
         "loop"
       ],
       "test_brief_mail.py": [
         "management"
       ],
       "test_browser_image.py": [
+        "evidence",
         "loop"
       ],
       "test_browser_smoke.py": [
+        "evidence",
         "loop"
       ],
       "test_calibration.py": [
@@ -548,6 +555,7 @@
         "repo"
       ],
       "test_code_graph.py": [
+        "evidence",
         "loop"
       ],
       "test_command_policy.py": [
@@ -599,12 +607,14 @@
         "workspace"
       ],
       "test_daemon_protocol_client.py": [
+        "evidence",
         "loop"
       ],
       "test_database_timezone.py": [
         "platform"
       ],
       "test_delivery_tests.py": [
+        "evidence",
         "loop"
       ],
       "test_delivery_undo.py": [
@@ -623,9 +633,11 @@
         "loop"
       ],
       "test_developer_tools_evidence.py": [
+        "evidence",
         "loop"
       ],
       "test_developer_tools_limits.py": [
+        "evidence",
         "loop"
       ],
       "test_developer_tools_toolbox.py": [
@@ -641,6 +653,7 @@
         "repo"
       ],
       "test_edit_blocks.py": [
+        "evidence",
         "loop"
       ],
       "test_edit_lint.py": [
@@ -687,27 +700,33 @@
         "producers"
       ],
       "test_graph_demotion.py": [
+        "evidence",
         "producers"
       ],
       "test_grounding.py": [
+        "evidence",
         "management"
       ],
       "test_grounding_imports.py": [
+        "evidence",
         "management"
       ],
       "test_grounding_lookups.py": [
         "management"
       ],
       "test_grounding_manifests.py": [
+        "evidence",
         "management"
       ],
       "test_grounding_signature_check.py": [
+        "evidence",
         "management"
       ],
       "test_grounding_signature_deliver.py": [
         "management"
       ],
       "test_grounding_signatures.py": [
+        "evidence",
         "management"
       ],
       "test_history_check.py": [
@@ -738,6 +757,7 @@
         "platform"
       ],
       "test_kickoff_failure.py": [
+        "evidence",
         "loop"
       ],
       "test_licence_scan.py": [
@@ -786,6 +806,7 @@
         "tools"
       ],
       "test_mcp_tools.py": [
+        "evidence",
         "loop"
       ],
       "test_memory_graph.py": [
@@ -881,7 +902,15 @@
       "test_protected_paths.py": [
         "contracts"
       ],
+      "test_protected_paths_check.py": [
+        "repo"
+      ],
       "test_protected_paths_guard.py": [
+        "evidence",
+        "management"
+      ],
+      "test_protected_paths_review.py": [
+        "evidence",
         "management"
       ],
       "test_provider_connections.py": [
@@ -910,6 +939,7 @@
         "platform"
       ],
       "test_review_changes.py": [
+        "evidence",
         "management"
       ],
       "test_review_digest.py": [
@@ -928,13 +958,32 @@
         "platform"
       ],
       "test_risk_tier.py": [
+        "evidence",
         "management"
       ],
       "test_roles.py": [
+        "evidence",
         "loop"
       ],
       "test_routing_record.py": [
         "models"
+      ],
+      "test_rsi_decide.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_decide_inputs.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_fitness.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_inputs.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_keep.py": [
+        "evidence"
       ],
       "test_run_cost.py": [
         "loop"
@@ -949,9 +998,11 @@
         "platform"
       ],
       "test_sandbox.py": [
+        "evidence",
         "release"
       ],
       "test_sandbox_cache.py": [
+        "evidence",
         "release"
       ],
       "test_sandbox_floor.py": [
@@ -979,6 +1030,7 @@
         "platform"
       ],
       "test_security_probe.py": [
+        "evidence",
         "loop"
       ],
       "test_security_tests_router.py": [
@@ -1058,9 +1110,11 @@
         "tools"
       ],
       "test_stack_roots.py": [
+        "evidence",
         "release"
       ],
       "test_standards.py": [
+        "evidence",
         "loop"
       ],
       "test_start_sprint.py": [
@@ -1076,6 +1130,7 @@
         "management"
       ],
       "test_task_delivery.py": [
+        "evidence",
         "loop"
       ],
       "test_task_event_decisions.py": [
@@ -1097,6 +1152,7 @@
         "loop"
       ],
       "test_task_view_filter.py": [
+        "evidence",
         "loop"
       ],
       "test_task_views.py": [
@@ -1124,6 +1180,7 @@
         "management"
       ],
       "test_verification_checks.py": [
+        "evidence",
         "management"
       ],
       "test_verification_records.py": [
@@ -1148,6 +1205,7 @@
         "workspace"
       ],
       "test_wstg_plan.py": [
+        "evidence",
         "planning"
       ]
     }

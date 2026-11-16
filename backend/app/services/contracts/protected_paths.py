@@ -40,6 +40,7 @@ PROTECTED: tuple[tuple[str, str], ...] = (
         "the self-hosting harness and the target measures it holds",
     ),
     ("scripts/e2e/**", "the end-to-end checks"),
+    ("scripts/rsi/**", "the script that decides keep or revert"),
     (
         "backend/app/services/evidence/**",
         "the Verifier, the risk tier, the standards check",
@@ -48,6 +49,11 @@ PROTECTED: tuple[tuple[str, str], ...] = (
     ("backend/tests/test_bench_*.py", "the tests of the bench"),
     (".github/workflows/**", "CI is the evidence of a run"),
     (".github/CODEOWNERS", "who must review a protected change"),
+    (
+        "scripts/protected_paths_check.py",
+        "the CI check that requires a code owner's approval of a protected change",
+    ),
+    ("backend/tests/test_protected_paths_check.py", "the test of that check"),
     ("docs/POSITIONING.md", "the rules"),
     ("backend/app/services/contracts/protected_paths.py", "the list itself"),
     (
@@ -107,15 +113,37 @@ def protected_patterns(
     return PATTERNS + tuple(extra)
 
 
-def normalize(path: str) -> str | None:
-    """A repository-relative path in POSIX form, or None outside the repository."""
-    text = (path or "").strip().replace("\\", "/")
+def normalize(path: str, backslash_separates: bool = True) -> str | None:
+    """A repository-relative path in POSIX form, or None outside the repository.
+
+    With *backslash_separates*, a backslash is a folder separator (Windows);
+    without it, a backslash is part of a name (POSIX).
+    """
+    text = (path or "").strip()
+    if backslash_separates:
+        text = text.replace("\\", "/")
     if not text:
         return None
     text = posixpath.normpath(text.lstrip("/"))
     if text in (".", "..") or text.startswith("../"):
         return None
     return text
+
+
+def interpretations(path: str) -> tuple[str, ...]:
+    """The path read as POSIX (a backslash is part of a name) and with
+    backslashes as separators, each once, those inside the repository only.
+
+    A caller cannot always know which the disk meant: ``bench/..\\frontend/x.py``
+    is a folder named ``..\\frontend`` inside bench on POSIX and
+    ``frontend/x.py`` on Windows. A path is protected if either reading is.
+    """
+    found: list[str] = []
+    for backslash_separates in (False, True):
+        text = normalize(path, backslash_separates)
+        if text is not None and text not in found:
+            found.append(text)
+    return tuple(found)
 
 
 def _compile(pattern: str) -> re.Pattern[str]:
@@ -139,21 +167,36 @@ def _compile(pattern: str) -> re.Pattern[str]:
             out.append(re.escape(pattern[i]))
             i += 1
     # Case-insensitive: on a case-insensitive disk ``BENCH/x`` is ``bench/x``,
-    # and a match only ever adds a person's review.
-    return re.compile("".join(out), re.IGNORECASE)
+    # and a match only ever adds a person's review. DOTALL: a name may hold a
+    # line break, and ``**`` must cross it as ``*`` and ``?`` already do.
+    return re.compile("".join(out), re.IGNORECASE | re.DOTALL)
 
 
 def matches(paths: Iterable[str], patterns: Sequence[str] = PATTERNS) -> list[Match]:
-    """The paths that match a pattern, in their order, each once, with its first pattern."""
+    """The paths that match a pattern, in their order, each once, with its first pattern.
+
+    Each path is tried under both of its ``interpretations``; the match names
+    the reading that matched. Two inputs are the same path only when every
+    reading is the same: ``bench/a\\b.py`` and ``bench/a/b.py`` are two files
+    on a POSIX disk, so both are kept.
+    """
+    compiled = [(pattern, _compile(pattern)) for pattern in patterns]
     found: list[Match] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, ...]] = set()
     for raw in paths:
-        path = normalize(raw)
-        if path is None or path in seen:
+        readings = interpretations(raw)
+        if not readings or readings in seen:
             continue
-        for pattern in patterns:
-            if _compile(pattern).fullmatch(path):
-                seen.add(path)
-                found.append(Match(path, pattern))
-                break
+        hit = next(
+            (
+                Match(reading, pattern)
+                for pattern, regex in compiled
+                for reading in readings
+                if regex.fullmatch(reading)
+            ),
+            None,
+        )
+        if hit is not None:
+            seen.add(readings)
+            found.append(hit)
     return found

@@ -11,6 +11,9 @@ OpenHands with OpenHands (design only, no code taken).
 | `render_docs.py` | Renders `docs/ARCHITECTURE.md` and `docs/adr/0012`… from `docs/architecture/architecture.json`; `--write` writes them. |
 | `fixtures/issue-535-specification.json` | Issue #535 written as a specification, in the PO's shape (EARS-style criteria, after Kiro; design only). It specifies the issue and does not implement it. |
 | `fixtures/issue-535-architecture.json` | The Architect's revision of La Fabrique's architecture for that specification: the covers of #535's requirements, the interfaces and the decision it adds. The product keeps #469's covers (`earlier_covers`). |
+| `spec_source.py` | What the `issue` step runs on: #535 by default, or a `--spec` file checked with the product's `spec_check`; the `measure` step. |
+| `specs/folder-lint-specification.json` | The first manual iteration's finding (`docs/design/rsi-loop.md`, §7): the lint after an edit runs the edited file's folder's linter. EARS-style criteria and its `target_measure`. `folder-lint-architecture.json` beside it is the revision. |
+| `measures/test_folder_lint.py` | That finding's target measure: one test per criterion, written by a person. It fails on `main` (2026-11-16) and should pass once the sprint's change is in. |
 
 The retrospective of the first run is
 [`docs/retrospectives/2026-11-self-hosting.md`](../../docs/retrospectives/2026-11-self-hosting.md).
@@ -44,10 +47,35 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `checkout` | Copies the files git tracks (or would track) in this repository to `--checkout` and commits them there as `main` of a fresh repository. Never the live checkout and never a `git worktree` of it: the Git workflow makes a branch per task, and a worktree shares the live repository's branches. |
 | `company` | `POST /v1/init_company` "La Fabrique" with the snapshot as its project, the Git workflow on `main`, the roles of the loop (PO, Architect, Developer, QA, ScrumMaster, TechWriter); the stack profile (`--profile`, `folders` by default) names La Fabrique's suites per folder as CI runs them (`backend/` pytest through Poetry, `frontend/` tsc, lint and vitest, `llm-proxy/` pytest, `vscode-daemon/` the backend's suite, where its tests live), each with its install, and three commands every delivery runs (`scripts/check_architecture.py`, `check_frontend_architecture.py`, `check_file_sizes.py`); a delivery runs the suites of the folders the daemon saw it write in, every one for a file outside them (self-hosting retrospective, F5). `--profile sprint-tests` (the e2e's, whose sandbox has none of these toolchains) names one root command instead (`--test-command`). Either way the root's install, lint, start and e2e are off; the sandbox is `--sandbox` (`container` by default). No foundation sprint is planned: the daemon observes the snapshot to be a repository with code, so `init_company` skips it (retrospective F8, fixed) and the response says `foundation_sprint.reason: repository_with_code`; the harness's own sprint comes from the specification (step `issue`). |
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
-| `issue` | Posts and approves the #535 specification; opens the next version of La Fabrique's architecture for it (`POST /v1/companies/{id}/architecture/revisions`, which keeps each module's #469 covers), writes the fixture's change into it and approves it, so both specifications share one architecture record; asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
+| `issue` | Posts and approves the #535 specification (with `--spec FILE`, that file instead, see below); opens the next version of La Fabrique's architecture for it (`POST /v1/companies/{id}/architecture/revisions`, which keeps each module's #469 covers), writes the fixture's change into it and approves it, so both specifications share one architecture record; asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`). |
 | `review` | Lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` records an approving review of the integration (its text the `--accept` comment, else a default; reported under `integration_review`, refused like any approval by the person who started the sprint) and then merges the integration into `main` locally (refused while its suite fails, and, when the company requires an approval, without one). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
+| `measure` | Asked by name only, never part of `all`, and only with `--spec`. Runs the file's `target_measure` (this repository's copy) with pytest on the `backend/` of `--build` (the snapshot by default), using `--python` (a Python with the backend's dependencies). The report keeps the exit status, `passed` and the sha256 of the output, computed by the harness. The exit status is 3 when the measure fails. No API call. |
+
+### A finding's specification (`--spec`)
+
+Without `--spec`, the `issue` step runs on issue #535 as before, which is what
+the e2e run reads. With `--spec FILE`, the harness reads a specification in
+the PO's shape plus `target_measure`, the repository path of the check that
+fails today and should pass after the sprint (`docs/design/rsi-loop.md`,
+REQ-2). It checks the file with the product's own `spec_check`, imported
+from this repository, before any call. A blocking finding, a missing or
+absent `target_measure`, or a missing revision makes the harness exit with
+status 2, and nothing is posted. Warnings are reported under
+`issue.warnings`. The revision is `--revision FILE`; by default it is
+`<name>-architecture.json` beside `<name>-specification.json`. The sprint is
+named after the specification's title, and `target_measure` is never posted.
+
+```bash
+# The target measure on today's main (it fails: exit status 3)
+python3 scripts/self_host/self_host.py --checkout /tmp/rsi/B --steps checkout,measure \
+  --spec scripts/self_host/specs/folder-lint-specification.json \
+  --python "$(cd backend && poetry env info -p)/bin/python"
+# The sprint on it, against a real stack
+python3 scripts/self_host/self_host.py --api http://localhost:8000 --checkout /tmp/rsi/B \
+  --steps issue,wait,review --spec scripts/self_host/specs/folder-lint-specification.json
+```
 
 The company id, the sprint id and the record ids are kept in
 `<checkout>.self_host.json` (`--state`); specifications and architecture

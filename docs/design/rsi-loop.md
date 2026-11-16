@@ -41,8 +41,9 @@ What is missing is the part that makes the loop safe to close:
    cycles without a kept change, and a kill switch a person holds.
 
 A person merges every kept change into `main` until the owner decides
-otherwise (§10). The first iteration is run by hand (§7), using finding F4 of
-the retrospective, before anything is automated.
+otherwise (§10). The first iteration is run by hand (§7), using the open
+item of the retrospective's F5 follow-up (the lint after an edit reads the
+root's profile), before anything is automated.
 
 ## 0. Terms
 
@@ -78,7 +79,7 @@ the retrospective, before anything is automated.
 
 | Step | What exists today | What is missing |
 |---|---|---|
-| **Act**: a sprint on the factory's own repository | `scripts/self_host/self_host.py` (steps `checkout`, `company`, `records`, `issue`, `wait`, `review`, `pack`); per-folder suites and every-delivery checks (`services/workspace/stack_roots.py`, `services/loop/delivery_suites.py`); no foundation sprint for an existing repository (`services/loop/foundation_setup.py`) | The `issue` step posts only the #535 fixture. It needs `--spec <file>` **(missing)**. The snapshot has no remote, and bringing the result back is a manual step (README, step 7) |
+| **Act**: a sprint on the factory's own repository | `scripts/self_host/self_host.py` (steps `checkout`, `company`, `records`, `issue`, `wait`, `review`, `pack`); per-folder suites and every-delivery checks (`services/workspace/stack_roots.py`, `services/loop/delivery_suites.py`); no foundation sprint for an existing repository (`services/loop/foundation_setup.py`) | The `issue` step takes `--spec <file>` (PR 6, `scripts/self_host/spec_source.py`: checked by `spec_check`, a target measure required, run by the `measure` step). The snapshot has no remote, and bringing the result back is a manual step (README, step 7) |
 | **Measure** | The bench: `scripts/bench/run.sh`, `scorecard.py` (`grade`, `collect`), `compare.py` (`DEFAULTS`: rate 0.05, rework 0.25, tokens 0.5), `budget.py`, schema v3; the Verifier bench (`bench/verifier/`, `python -m verifier.run`); the prompt weight (`services/loop/worker/prompt_budget.py` → `prompt_sections`); the cost (`services/models/run_cost.py`); the claim gap (`services/tasks/progress_snapshot.claim_gap`) | Graders pinned to B (`run.sh --graders <sha>` **(missing)**); repeated runs with medians and spread (**missing**); a wall-clock threshold in `compare.py` (**missing**); CI conclusions read by commit from GitHub's check-runs (**missing**: today `evidence["ci"]` is only the daemon's exit status, `services/workspace/workspace_daemon.py`; nothing reads a pull request's check-runs); a real-model reference card (`bench/scorecards/real/` holds only `.gitkeep`) |
 | **Learn** | `services/learning/retrospective.build` (board counts, contradictions, notes); procedures proposed and measured (`procedures.propose`, `evaluate`); retrospectives written by a person (`docs/retrospectives/`) | Findings as records with a target measure (`Finding`, **missing**). Today a finding exists only as prose |
 | **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, off by default since decision 8 in §10) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up is off whatever the setting says (REQ-21, PR 3: `close._complete_sprint_and_plan_follow_up` answers `protected_paths_enabled` and audits `follow_up_sprint_skipped`) |
@@ -335,7 +336,7 @@ declares can add to the match, never remove from it (the rule
    Manager agent's inbox shows it (`:protected_awaiting_ack`) and its
    `merge_local` rule waits for the acknowledgement.
 4. **On the pull request: CI.** A workflow `protected-paths.yml`
-   **(missing)** computes the diff from git (`base...head`), never from
+   (`scripts/protected_paths_check.py`, run from the base commit) computes the diff from git (`base...head`), never from
    the body, and fails unless an approving review by a code owner exists
    on the head sha. The backstop is GitHub's "Require review from Code
    Owners" on `main` (an owner's setting, issue #182, still pending).
@@ -553,15 +554,29 @@ before automation (§10).
 
 ## 7. The first manual iteration
 
-The finding is **F4, "ADRs were not a product output"**, still open on
-`main`. `POST /v1/architectures/{id}/write` (`routers/architectures.py`
-`write_architecture`, `planning/arch_author.write_document`) writes only
-`docs/ARCHITECTURE.md`. `GET /v1/architectures/{id}/adrs`
-(`planning/adr_docs.adr_documents`) renders the ADR files but nothing writes
-them. It was chosen because its target measure is deterministic, it touches
-no protected path (planning, a router, their tests), and the harness already
-compares the ADR files (`self_host.py` `step_records`: `adr_differences`,
-`written_unchanged_in_git`). F1, F2, F3, F5, F6, F7 and F8's first item are
+The finding is **"the lint after an edit reads the root's profile"**, the
+item follow-up 5 of the retrospective left open (F5: "Not done: the lint
+after an edit still reads the root's profile, not the edited file's
+folder"), still open on `main`. The delivery's suites resolve per folder
+(`services/workspace/stack_roots.py`), but a folder's profile carries no
+lint command (`FOLDER_COMMANDS` is `install` and `test`) and
+`services/tools/edit_lint.after_edit` reads only the root's profile
+(`load_profile` → `project_profile.resolved`). In La Fabrique, whose root
+has no project, an edit of `backend/app/x.py` is told "the project names no
+lint command" and is never linted. The design first named F4 (ADRs were not
+a product output); PR #599 delivered it before this iteration ran.
+
+It was chosen over the other open items because its target measure is
+deterministic, needs no stack and fails on `main` today; the change is one
+sprint's size (two requirements, five criteria, in `services/workspace/`,
+`services/tools/` and their tests); and it touches no protected path (§3.1).
+The others were set aside: follow-up 2's second half (the history check
+refusing a `verified` event without its verification) changes
+`backend/app/history_check.py`, a protected path; F8's "the sprint reads
+completed before its integration" is a race whose measure would be flaky;
+F8's company standards would change `services/evidence/`, protected and
+larger than a sprint; the wiki (#445) and a container run are not changes
+to the code. F1 to F4, F6, F7, F8's first item and F5's other parts are
 done.
 
 **Step 0. Preconditions.**
@@ -572,17 +587,19 @@ done.
   one starts the sprint, the other approves the integration.
 - Decide K (3) and the bench token budget per run.
 
-**Step 1. Write the grader first (person, protected).**
-- Write `scripts/self_host/fixtures/f4-adr-files-specification.json` with
-  EARS criteria, for example: "When an approved architecture is written,
-  the backend shall write each decision as `docs/adr/NNNN-<slug>.md` from
-  the repository's first free number and return each file's path and the
-  sha256 the daemon read back".
-- Add the target measure to `step_records`. After the write, the report
-  carries `adr_files`. The harness computes the sha256 of each file in the
-  snapshot itself, and the measure passes when every path is one of
-  `docs/adr/0012…0017` with a matching sha256 and `git status` is clean.
-  Absent `adr_files` fails the measure.
+**Step 1. Write the grader first (person, protected).** Done in PR 6.
+- `scripts/self_host/specs/folder-lint-specification.json`, with EARS
+  criteria, for example: "When an edit of a file under a folder with a lint
+  command is applied, the system shall ask the daemon to run that folder's
+  command in the folder, narrowed to the file, and name the folder in the
+  observation". It names its target measure (`target_measure`), and
+  `folder-lint-architecture.json` beside it is the revision's change.
+- The target measure, `scripts/self_host/measures/test_folder_lint.py`: one
+  test per criterion over the seams the specification names
+  (`stack_roots.validate_overrides`, `resolve_folders`,
+  `edit_lint.load_profile`, `after_edit`), with no daemon, database or
+  model. `self_host.py --steps measure --spec <file>` runs it with pytest on
+  a build's `backend/`, hashes the output itself and exits 3 when it fails.
 - Merge that pull request (reviewed by a person). Its merge commit is **B**.
 
 **Step 2. Measure B.**
@@ -593,8 +610,9 @@ scripts/bench/run.sh --out /tmp/rsi/B-fake                 # must be 30/30 (circ
 for i in 1 2 3; do BENCH_LLM_URL=<proxy> BENCH_POLICY=default \
   scripts/bench/run.sh --out /tmp/rsi/B-real-$i; done      # alternate with C later
 gh api repos/<owner>/<repo>/commits/<B>/check-runs > /tmp/rsi/B-ci.json
-python3 scripts/self_host/self_host.py --api <url> --checkout <dir>/B \
-  --steps checkout,company,records --report /tmp/rsi/B-records.json   # target: fails
+python3 scripts/self_host/self_host.py --checkout <dir>/B --steps checkout,measure \
+  --spec scripts/self_host/specs/folder-lint-specification.json \
+  --python <the backend's Poetry python> --report /tmp/rsi/B-measure.json   # target: fails, exit 3
 sha256sum /tmp/rsi/B-* /tmp/rsi/B-real-*/*.json > /tmp/rsi/B.sha256
 ```
 Expected on B: fake 30/30 (as `bench/scorecards/20261114T201804Z`), the
@@ -603,10 +621,11 @@ failing. There is no real-model reference yet: B's three cards become the
 first one, and are committed by a person to `bench/scorecards/real/` if
 complete.
 
-**Step 3. Act.** In the web app, company "La Fabrique": post the F4
-specification (or `--steps issue` once it takes `--spec`, PR 6), approve
-it, let the Architect revise and the PO plan, start the sprint (person A),
-then `--steps wait,review`.
+**Step 3. Act.** Company "La Fabrique": `--steps issue --spec
+scripts/self_host/specs/folder-lint-specification.json` checks the file
+with `spec_check`, posts and approves it and the revision, and the PO plans
+and starts the sprint (person A); or post it in the web app and let the
+Architect revise. Then `--steps wait,review`.
 
 **Step 4. Apply.** For each task, read the latest verification
 (`GET /v1/agent_runs/{id}`): `required_commands` runs, `risk_tier`, and no
@@ -615,7 +634,7 @@ protected path in `workspace_writes`. Read the integration's diff
 by hand. Person B approves the integration review, then `--merge`.
 
 **Step 5. Bring back.** From the snapshot, `git format-patch B..main`.
-Apply it on a branch `rsi/cycle-1-f4` cut from B, push, open the pull
+Apply it on a branch `rsi/cycle-1-folder-lint` cut from B, push, open the pull
 request. Its head is **C**. Do not read the PR body as evidence.
 
 **Step 6. Measure C**, with graders from B:
@@ -625,8 +644,10 @@ git diff <B> <C> -- bench scripts/bench scripts/self_host scripts/e2e   # must b
 # deploy the backend from C; run the bench with /tmp/rsi/graders' run.sh and specs
 ```
 Then repeat step 2's commands against C (fake, Verifier bench, three real
-runs alternating with B's, check-runs on C, `step_records` with C's
-backend).
+runs alternating with B's, check-runs on C, and the target measure from
+B's copy on C: `python3 /tmp/rsi/graders/scripts/self_host/self_host.py
+--checkout <dir>/B --build <C's checkout> --steps measure --spec
+/tmp/rsi/graders/scripts/self_host/specs/folder-lint-specification.json`).
 
 **Step 7. Decide** by §2.6, filling this table in the pull request and in
 `/tmp/rsi/cycle-1.json`:
@@ -639,14 +660,16 @@ backend).
 | Tests collected per suite | n | ≥ n | |
 | Verifier bench | pass | pass | |
 | Fake bench | 30/30 | 30/30 | |
-| Target measure (F4) | fail | pass | |
+| Target measure (folder lint) | fail | pass | |
 | Criteria rate, median (spread) | | | within max(0.05, spread) |
 | First attempt / blocked / rework, medians | | | within thresholds |
 | Tokens, median | | | within max(0.15, spread) |
 | Wall-clock, median | | | within max(0.25, spread) |
 
-F4 does not touch the task worker's path, so the bench rows should move
-only within noise. If they move beyond it, that is a finding about the noise
+The change is on the task worker's path (the lint after an edit), but only
+for a repository with folders: the bench's specifications are single-root
+projects, which the specification keeps as they are, so the bench rows
+should move only within noise. If they move beyond it, that is a finding about the noise
 model, recorded before the decision is read.
 **Keep**: a person merges the pull request at C. **Revert**: close it and
 write the numbers on the finding.
@@ -669,7 +692,7 @@ Each item is one pull request into `main`. Each names the REQs it closes.
 | 3 | The integration merge refusal with `protected_paths_ack` on the review; `_plan_follow_up` off for such a company | 13, 21 |
 | 4 | `protected-paths.yml`: the diff from git, a code owner's approval on the head sha (the owner turns on #182) | 12, 14 |
 | 5 | Bench: `run.sh --graders <sha>`, `compare.py --time`, repeated cards read as medians with spread, void pairs on different models | 4, 6, 7, 16 |
-| 6 | `self_host.py --spec <file>` for the `issue` step; the F4 fixture and target measure (person-written) | 2 |
+| 6 | `self_host.py --spec <file>` for the `issue` step; the first finding's specification and target measure (person-written; the folder lint, §7, since F4 was delivered by PR #599) | 2 |
 | 7 | `evidence/fitness.py` with the decision table and its negative tests; `scripts/rsi/decide.py` reading cards, check-runs and the target report | 5, 15, 27 |
 | — | **The first manual iteration (§7)**, with its retrospective | — |
 | 8 | `scripts/rsi/cycle.py`: the steps of §7 scripted, check-runs by sha, sha256 of every file kept, the cycle JSON; no merge | 1, 8, 17, 18, 26 |
