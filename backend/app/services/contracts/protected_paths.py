@@ -40,6 +40,7 @@ PROTECTED: tuple[tuple[str, str], ...] = (
         "the self-hosting harness and the target measures it holds",
     ),
     ("scripts/e2e/**", "the end-to-end checks"),
+    ("scripts/rsi/**", "the script that decides keep or revert"),
     (
         "backend/app/services/evidence/**",
         "the Verifier, the risk tier, the standards check",
