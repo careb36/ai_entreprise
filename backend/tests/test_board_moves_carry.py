@@ -21,6 +21,7 @@ from sqlmodel import Session, select
 import board_moves_helpers
 from board_moves_helpers import _assignments, _company, _history, _item, _sprint
 
+# The shared fixtures.
 db = board_moves_helpers.db
 
 

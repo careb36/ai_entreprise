@@ -441,6 +441,12 @@
       "test_auth_enforcement.py": [
         "management"
       ],
+      "test_auth_enforcement_audit.py": [
+        "management"
+      ],
+      "test_auth_enforcement_routes.py": [
+        "management"
+      ],
       "test_auth_jwt.py": [
         "platform"
       ],

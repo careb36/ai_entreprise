@@ -45,6 +45,7 @@ from board_moves_helpers import (
 )
 from test_review_gate import _FakeNATS
 
+# The shared fixtures.
 db = board_moves_helpers.db
 
 
