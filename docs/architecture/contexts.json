@@ -477,6 +477,9 @@
       "test_board_moves.py": [
         "loop"
       ],
+      "test_board_moves_carry.py": [
+        "loop"
+      ],
       "test_brief_mail.py": [
         "management"
       ],
