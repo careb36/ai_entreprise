@@ -25,6 +25,14 @@ The check fails when:
 - the contexts' ``depends_on`` names an unknown context or runs in a circle;
 - a module imports a module of another context its own context may not
   import, and that edge is not in the ``allowlist``;
+- a module imports a module of another context it may import, but one that
+  is not in that context's ``public`` list (its interface, ADR 0018), and
+  the edge is not in the ``interface_allowlist``. ``public`` names the
+  modules relative to the context (``verification``, ``project_docs.pack``),
+  or ``"*"`` for a context that is all interface (``contracts``); the
+  context's own package (``services/<context>/__init__.py``) is always
+  public. Every context declares the list, and each entry names a module of
+  that context;
 - a module imports an HTTP library (``httpx``, ``httpx2``, ``requests``,
   ``aiohttp``, ``urllib3``, ``urllib.request``) and is not listed in
   ``http_adapters`` (keyed like the modules: ``tools.mcp_client``), or that
@@ -48,7 +56,8 @@ context folder. It may only shrink: an edge listed there
 that no longer exists is reported, and ``--update`` drops it; ``--update``
 never adds an edge. The HTTP adapters likewise: a listed module that no
 longer imports an HTTP library is reported and ``--update`` drops it; a new
-adapter is added by hand, in a reviewed change. Exit status 0 when the code keeps to the rule, 1
+adapter is added by hand, in a reviewed change. The ``interface_allowlist``
+is named, reported and shrunk the same way as the ``allowlist``. Exit status 0 when the code keeps to the rule, 1
 otherwise. Run from anywhere: paths are resolved from the repository root.
 Standard library only.
 """
@@ -189,6 +198,40 @@ def _name(key: str) -> str:
 def _is_shim(path: Path) -> bool:
     """A flat module that replaces itself with its owner in ``sys.modules``."""
     return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
+
+
+def interfaces(
+    contexts: dict, modules: dict[str, Path], owner: dict[str, str]
+) -> tuple[dict[str, set[str]], list[str]]:
+    """Each context's public module keys (its interface, ADR 0018), and the
+    problems of the ``public`` lists."""
+    public: dict[str, set[str]] = {}
+    problems: list[str] = []
+    for name, ctx in contexts.items():
+        mine = {key for key in modules if owner.get(key) == name}
+        entries = ctx.get("public")
+        if not isinstance(entries, list):
+            problems.append(
+                f"context {name}: declares no public modules; add its interface "
+                f'as public in {DATA.name} (["*"] for a context that is all '
+                "interface)"
+            )
+            entries = ["*"]
+        keys = {name} & mine
+        for entry in entries:
+            if entry == "*":
+                keys |= mine
+            elif f"{name}.{entry}" in mine:
+                keys.add(f"{name}.{entry}")
+            elif entry in mine:
+                keys.add(entry)
+            else:
+                problems.append(
+                    f"context {name}: public names {entry}, but no such module "
+                    "in the context"
+                )
+        public[name] = keys
+    return public, problems
 
 
 def find_cycle(graph: dict[str, list[str]]) -> list[str] | None:
@@ -340,14 +383,21 @@ def analyse(data: dict, services: Path = SERVICES, tests: Path | None = None) ->
     by_name = {_name(key): key for key in modules if "." in key}
     by_name.update({key: key for key in modules if "." not in key})
     allowed = {n: set(c.get("depends_on", [])) | {n} for n, c in contexts.items()}
+    public, public_problems = interfaces(contexts, modules, owner)
+    problems.extend(public_problems)
     edges: list[tuple[str, str]] = []
     violations: list[str] = []
+    internal: dict[str, tuple[str, str]] = {}
     for key, path in modules.items():
         for target in sorted(imports_of(key, path, modules)):
             edges.append((key, target))
             src, dst = owner.get(key), owner.get(target)
-            if src and dst and dst not in allowed.get(src, set()):
+            if not (src and dst) or src == dst:
+                continue
+            if dst not in allowed.get(src, set()):
                 violations.append(f"{_name(key)} -> {_name(target)}")
+            elif target not in public.get(dst, set()):
+                internal[f"{_name(key)} -> {_name(target)}"] = (target, dst)
     allowlist = set(data.get("allowlist", []))
     new = sorted(v for v in violations if v not in allowlist)
     stale = sorted(allowlist - set(violations))
@@ -356,6 +406,17 @@ def analyse(data: dict, services: Path = SERVICES, tests: Path | None = None) ->
         problems.append(
             f"{edge}: {src} may not import {dst} "
             f"(allowed: {', '.join(sorted(allowed[src] - {src})) or 'nothing'})"
+        )
+    # Across contexts, only a context's public modules (its interface).
+    interface_allowlist = set(data.get("interface_allowlist", []))
+    internal_new = sorted(e for e in internal if e not in interface_allowlist)
+    internal_stale = sorted(interface_allowlist - set(internal))
+    for edge in internal_new:
+        target, dst = internal[edge]
+        problems.append(
+            f"{edge}: {target} is internal to {dst}; import one of {dst}'s "
+            f"public modules (contexts.{dst}.public in {DATA.name}), or declare "
+            "it public in the same pull request if it really is an interface"
         )
     # HTTP only in the named adapters.
     adapters = http_adapters(data)
@@ -390,6 +451,10 @@ def analyse(data: dict, services: Path = SERVICES, tests: Path | None = None) ->
         "violations": sorted(violations),
         "new": new,
         "stale": stale,
+        "public": public,
+        "internal": sorted(internal),
+        "internal_new": internal_new,
+        "internal_stale": internal_stale,
         "problems": problems,
     }
 
@@ -412,6 +477,12 @@ def main(
             data["allowlist"] = [
                 e for e in data.get("allowlist", []) if e not in set(result["stale"])
             ]
+            if result["internal_stale"]:
+                data["interface_allowlist"] = [
+                    e
+                    for e in data["interface_allowlist"]
+                    if e not in set(result["internal_stale"])
+                ]
             if result["http_stale"]:
                 data["http_adapters"]["modules"] = [
                     m for m in http_adapters(data) if m not in set(result["http_stale"])
@@ -419,6 +490,8 @@ def main(
             data_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
             print(
                 f"Allowlist written: {len(data['allowlist'])} edge(s), "
+                f"{len(data.get('interface_allowlist', []))} import(s) of "
+                "another context's internals, "
                 f"{len(http_adapters(data))} HTTP adapter(s)."
             )
     else:
@@ -426,6 +499,13 @@ def main(
             print(
                 "The allowlist can shrink (these edges are gone): "
                 + ", ".join(result["stale"])
+                + ". Run scripts/check_architecture.py --update and commit it."
+            )
+        if result["internal_stale"]:
+            print(
+                "The interface allowlist can shrink (these imports are gone or "
+                "now reach a public module): "
+                + ", ".join(result["internal_stale"])
                 + ". Run scripts/check_architecture.py --update and commit it."
             )
         if result["http_stale"]:
@@ -442,7 +522,9 @@ def main(
             f"{len(result['modules']) - len(result['shims'])} modules "
             f"(and {len(result['shims'])} shim(s)) in {len(data['contexts'])} contexts, "
             f"{len(result['edges'])} imports, {len(result['violations'])} allowlisted "
-            f"edge(s) against the rule, HTTP in {len(result['http'])} listed "
+            f"edge(s) against the rule, {len(result['internal'])} allowlisted "
+            "import(s) of another context's internals, "
+            f"HTTP in {len(result['http'])} listed "
             "adapter(s) only"
             + (
                 f", {result['test_files']} test files with a context."

@@ -2,7 +2,7 @@
 
 After ``workspace__edit`` applies a change (the daemon has already checked
 that the file still parses), the stack profile's lint command
-(``services/stack_profiles.py``, the company's override first) runs on the
+(``workspace.project_profile.resolved``, the company's override first) runs on the
 edited file through ``workspace.execute``, in the company's sandbox and under
 the daemon's command policy, bounded by ``EDIT_LINT_TIMEOUT_SECONDS``. Its
 errors go back to the model inside the edit's own result, so it fixes them
@@ -120,20 +120,14 @@ def load_profile(
 ) -> dict[str, Any] | None:
     """The stack profile of *root* with the company's overrides, through the
     worker's loop (the tool loop runs in a thread)."""
-    from services.workspace import project_profile, stack_profiles
+    from services.workspace import project_profile
 
-    overrides: dict[str, Any] = {}
-    if engine is not None:
-        from models.company import Company
-        from sqlmodel import Session
-
-        with Session(engine) as session:
-            company = session.get(Company, company_id)
-            overrides = dict(company.stack_profile or {}) if company else {}
-    detected = asyncio.run_coroutine_threadsafe(
-        project_profile.detect_profile(bridge.get("nats"), root), bridge["loop"]
+    return asyncio.run_coroutine_threadsafe(
+        project_profile.resolved(
+            bridge.get("nats"), {"company_id": company_id}, root, engine
+        ),
+        bridge["loop"],
     ).result(60)
-    return stack_profiles.resolve(detected, overrides)
 
 
 def profile_of(box: Any) -> dict[str, Any] | None:
