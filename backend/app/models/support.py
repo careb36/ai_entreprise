@@ -6,11 +6,15 @@ tab or the ``POST /v1/support/report_bug`` API endpoint.  Ticket numbers
 follow the ``FAB-XXXXX`` format (zero-padded 5-digit integer).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON
 from sqlmodel import Column, Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class BugReport(SQLModel, table=True):
@@ -55,8 +59,8 @@ class BugReport(SQLModel, table=True):
     browser_info: Any | None = Field(
         default=None, sa_column=Column(JSON)
     )  # User-agent, viewport, etc.
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
     resolved_at: datetime | None = (
         None  # Set when status transitions to "resolved" or "closed"
     )

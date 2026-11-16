@@ -18,6 +18,8 @@ import crypto
 import pytest
 from cryptography.fernet import Fernet
 from egress_fakes import FakeResolver
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import (
     AgentRun,
     BacklogItem,
@@ -30,7 +32,6 @@ from models import (
 from services.integrations import webhooks
 from services.platform import egress
 from sqlmodel import select
-from test_git_workflow import _member, enforcement  # noqa: F401
 
 KEY = Fernet.generate_key().decode()
 SECRET = "a-webhook-secret-of-some-length"

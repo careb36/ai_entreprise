@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import ProviderConnection
 from services.models import provider_connections as connections
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import _company
 
 pytestmark = pytest.mark.usefixtures("enforcement")
 

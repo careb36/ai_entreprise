@@ -15,12 +15,13 @@ from unittest.mock import patch
 
 import pytest
 import worker_stages
+from factories import enforcement as auth_on  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import Agent, BacklogItem, Company, Sprint
 from services.loop.worker import close as worker_close
 from services.loop.worker import task_run
 from services.planning import spec_planning, sprint_planner, sprint_team
 from sqlmodel import select
-from test_work_control import _member, auth_on  # noqa: F401 - fixture used by name.
 
 HIRED = ["BackendDeveloper", "PO", "QA", "TechWriter"]
 

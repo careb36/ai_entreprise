@@ -183,5 +183,759 @@
       "workspace.sandbox_http"
     ]
   },
-  "allowlist": []
+  "allowlist": [],
+  "tests": {
+    "$comment": "Each backend/tests/test_*.py and the contexts it exercises, read by scripts/affected_tests.py to run only the tests a change can break, and checked by scripts/check_architecture.py: a test file in neither 'files' nor 'always', an unknown context, a rule naming no test, or an entry for a file that does not exist fails. A test's contexts are the top of what it imports and of the routes it calls (a router stands for the contexts it imports): a test of loop runs whenever loop or a context loop may import changes, so a context another of a test's contexts may import is left out as implied. 'repo' marks a test that reads repository files (scripts, workflows, docs, the frontend) rather than the backend's modules: it runs when a file it names changes ('mentions' in sources) or when it changes. A new test's entry starts from `python3 scripts/affected_tests.py --suggest backend/tests/<file>` and is read by hand.",
+    "sources": {
+      "$comment": "How a changed file outside backend/app/services/<context>/ and backend/tests/ is read, by its longest prefix: a context (the tests of that context and of every context that may import it), 'imports' (the contexts the module imports, platform when none: the routers and the app's own modules), 'mentions' (the tests whose text names the file's path, its name or one of its folders two levels deep or more), 'all' (the whole suite) or a test file by name. A path no prefix matches runs the whole suite.",
+      "backend/app/": "imports",
+      "backend/app/models/": "all",
+      "backend/app/migrations.py": "all",
+      "backend/app/main.py": "all",
+      "backend/app/routers/": "imports",
+      "backend/app/data/models_dev.json": "models",
+      "backend/app/data/wstg/": "platform",
+      "backend/alembic/": "all",
+      "backend/alembic.ini": "all",
+      "backend/pyproject.toml": "all",
+      "backend/poetry.lock": "all",
+      "backend/janitor/": "platform",
+      "backend/telemetry.py": "platform",
+      "vscode-daemon/": "workspace",
+      "docs/architecture/contexts.json": "all",
+      ".github/": [
+        "mentions",
+        "test_workflow_pinning.py",
+        "test_supply_chain.py"
+      ],
+      "bench/": [
+        "mentions",
+        "test_bench_broker.py",
+        "test_bench_budget.py",
+        "test_bench_compare.py",
+        "test_bench_grading.py",
+        "test_bench_prompt_weight.py",
+        "test_bench_routing.py",
+        "test_bench_scorecard.py",
+        "test_bench_specs.py",
+        "test_verificador_benchmark.py"
+      ],
+      "docs/": "mentions",
+      "scripts/": "mentions",
+      "frontend/": "mentions",
+      "llm-proxy/": "mentions",
+      "deployment/": "mentions",
+      "docker": "mentions",
+      "k8s/": "mentions",
+      "nats/": "mentions",
+      "db/": "mentions",
+      "build": "mentions",
+      ".devcontainer/": "mentions",
+      ".claude/": "mentions",
+      ".atl": "mentions",
+      ".opencode": "mentions",
+      "AGENTS.md": "mentions",
+      "ARCHITECTURE.md": "mentions",
+      "CHANGELOG.md": "mentions",
+      "CLAUDE.md": "mentions",
+      "CODE_OF_CONDUCT.md": "mentions",
+      "CODING_STANDARDS.md": "mentions",
+      "CONTRIBUTING.md": "mentions",
+      "LICENSE": "mentions",
+      "NOTICE": "mentions",
+      "README": "mentions",
+      "SECURITY.md": "mentions",
+      "USER_GUIDE": "mentions",
+      "Makefile": "mentions",
+      ".pre-commit-config.yaml": "mentions",
+      ".gitleaks.toml": "mentions",
+      ".env.example": "mentions",
+      ".gitignore": "mentions",
+      "reset_infra.sh": "mentions",
+      "backend/Dockerfile": "mentions"
+    },
+    "always": {
+      "$comment": "The tests that run whatever changed, each with its reason. Keep this list short.",
+      "test_check_architecture.py": "Holds every module of backend/app/services and every test file to this map; a new module, import or test anywhere can break it.",
+      "test_authorization_matrix.py": "Reads every module under backend/app for its endpoints and their roles, so a change anywhere in the app can break it."
+    },
+    "files": {
+      "test_acceptance.py": [
+        "loop"
+      ],
+      "test_access_review.py": [
+        "management"
+      ],
+      "test_affected_tests.py": [
+        "repo"
+      ],
+      "test_agent_access.py": [
+        "loop"
+      ],
+      "test_agent_messages.py": [
+        "loop"
+      ],
+      "test_agent_run_approval.py": [
+        "management"
+      ],
+      "test_agent_runs.py": [
+        "management"
+      ],
+      "test_agent_tools.py": [
+        "loop"
+      ],
+      "test_agent_tools_delivery.py": [
+        "loop"
+      ],
+      "test_agent_tools_edit.py": [
+        "loop"
+      ],
+      "test_api_token_auth.py": [
+        "models"
+      ],
+      "test_api_tokens.py": [
+        "platform"
+      ],
+      "test_app_check.py": [
+        "release"
+      ],
+      "test_architect.py": [
+        "loop"
+      ],
+      "test_architecture_adr_files.py": [
+        "loop"
+      ],
+      "test_architectures.py": [
+        "loop"
+      ],
+      "test_audit_anchor_delivery.py": [
+        "integrations"
+      ],
+      "test_audit_anchors.py": [
+        "platform"
+      ],
+      "test_audit_chain.py": [
+        "platform"
+      ],
+      "test_audit_signature.py": [
+        "platform"
+      ],
+      "test_auth_enforcement.py": [
+        "management"
+      ],
+      "test_auth_jwt.py": [
+        "platform"
+      ],
+      "test_auth_limits.py": [
+        "platform"
+      ],
+      "test_backlog_comments.py": [
+        "loop"
+      ],
+      "test_bench_broker.py": [
+        "planning"
+      ],
+      "test_bench_budget.py": [
+        "repo"
+      ],
+      "test_bench_compare.py": [
+        "planning"
+      ],
+      "test_bench_grading.py": [
+        "planning"
+      ],
+      "test_bench_prompt_weight.py": [
+        "repo"
+      ],
+      "test_bench_routing.py": [
+        "planning"
+      ],
+      "test_bench_scorecard.py": [
+        "planning"
+      ],
+      "test_bench_specs.py": [
+        "planning"
+      ],
+      "test_board.py": [
+        "tasks"
+      ],
+      "test_board_moves.py": [
+        "loop"
+      ],
+      "test_brief_mail.py": [
+        "management"
+      ],
+      "test_browser_image.py": [
+        "loop"
+      ],
+      "test_browser_smoke.py": [
+        "loop"
+      ],
+      "test_calibration.py": [
+        "loop"
+      ],
+      "test_capabilities.py": [
+        "management"
+      ],
+      "test_carry_over.py": [
+        "management"
+      ],
+      "test_chat_approvals.py": [
+        "integrations"
+      ],
+      "test_chat_inbound.py": [
+        "integrations",
+        "release"
+      ],
+      "test_check_file_sizes.py": [
+        "repo"
+      ],
+      "test_check_frontend_architecture.py": [
+        "repo"
+      ],
+      "test_check_script.py": [
+        "repo"
+      ],
+      "test_code_graph.py": [
+        "loop"
+      ],
+      "test_command_policy.py": [
+        "workspace"
+      ],
+      "test_company_architecture.py": [
+        "loop"
+      ],
+      "test_company_models.py": [
+        "management"
+      ],
+      "test_console_assistant_sandbox.py": [
+        "producers"
+      ],
+      "test_console_assistants.py": [
+        "producers"
+      ],
+      "test_console_capabilities.py": [
+        "producers"
+      ],
+      "test_console_producers_command.py": [
+        "loop"
+      ],
+      "test_console_producers_daemon.py": [
+        "loop"
+      ],
+      "test_console_producers_private_git.py": [
+        "loop"
+      ],
+      "test_console_producers_setting.py": [
+        "loop"
+      ],
+      "test_console_producers_worker.py": [
+        "loop"
+      ],
+      "test_cors_credentials.py": [
+        "platform"
+      ],
+      "test_cross_company_access.py": [
+        "release"
+      ],
+      "test_crypto.py": [
+        "loop"
+      ],
+      "test_daemon_capabilities.py": [
+        "workspace"
+      ],
+      "test_daemon_protocol.py": [
+        "workspace"
+      ],
+      "test_daemon_protocol_client.py": [
+        "loop"
+      ],
+      "test_database_timezone.py": [
+        "platform"
+      ],
+      "test_delivery_tests.py": [
+        "loop"
+      ],
+      "test_delivery_undo.py": [
+        "management"
+      ],
+      "test_dependencies.py": [
+        "loop"
+      ],
+      "test_developer_tools.py": [
+        "loop"
+      ],
+      "test_developer_tools_evidence.py": [
+        "loop"
+      ],
+      "test_developer_tools_limits.py": [
+        "loop"
+      ],
+      "test_developer_tools_toolbox.py": [
+        "loop"
+      ],
+      "test_difficulty_routing.py": [
+        "loop"
+      ],
+      "test_documentation_router.py": [
+        "loop"
+      ],
+      "test_e2e_ports.py": [
+        "repo"
+      ],
+      "test_edit_blocks.py": [
+        "loop"
+      ],
+      "test_edit_lint.py": [
+        "tools"
+      ],
+      "test_edit_plan.py": [
+        "loop"
+      ],
+      "test_error_bodies.py": [
+        "integrations",
+        "loop"
+      ],
+      "test_events.py": [
+        "tasks"
+      ],
+      "test_factories.py": [
+        "platform"
+      ],
+      "test_foundation_sprint.py": [
+        "release"
+      ],
+      "test_git_acceptance.py": [
+        "release"
+      ],
+      "test_git_base.py": [
+        "release"
+      ],
+      "test_git_publish.py": [
+        "release"
+      ],
+      "test_git_workflow.py": [
+        "management"
+      ],
+      "test_github_adapter.py": [
+        "management"
+      ],
+      "test_glassroom_access.py": [
+        "loop"
+      ],
+      "test_glassroom_sse.py": [
+        "platform"
+      ],
+      "test_graph.py": [
+        "producers"
+      ],
+      "test_graph_demotion.py": [
+        "producers"
+      ],
+      "test_grounding.py": [
+        "management"
+      ],
+      "test_grounding_imports.py": [
+        "management"
+      ],
+      "test_grounding_lookups.py": [
+        "management"
+      ],
+      "test_grounding_manifests.py": [
+        "management"
+      ],
+      "test_grounding_signatures.py": [
+        "management"
+      ],
+      "test_history_check.py": [
+        "platform"
+      ],
+      "test_inbox.py": [
+        "management"
+      ],
+      "test_intake.py": [
+        "planning"
+      ],
+      "test_intake_sources.py": [
+        "management"
+      ],
+      "test_integration.py": [
+        "release"
+      ],
+      "test_integration_flows.py": [
+        "management"
+      ],
+      "test_integration_review.py": [
+        "release"
+      ],
+      "test_jetstream_durability.py": [
+        "loop"
+      ],
+      "test_jwt_claims.py": [
+        "platform"
+      ],
+      "test_kickoff_failure.py": [
+        "loop"
+      ],
+      "test_licence_scan.py": [
+        "repo"
+      ],
+      "test_llm_client.py": [
+        "models"
+      ],
+      "test_llm_routing.py": [
+        "loop"
+      ],
+      "test_local_merge.py": [
+        "release"
+      ],
+      "test_manager_agent.py": [
+        "management"
+      ],
+      "test_manager_agent_brief.py": [
+        "management"
+      ],
+      "test_manager_agent_cycle.py": [
+        "management"
+      ],
+      "test_manager_agent_overrides.py": [
+        "management"
+      ],
+      "test_manager_agent_safety.py": [
+        "management"
+      ],
+      "test_manager_policy.py": [
+        "management"
+      ],
+      "test_manager_rules.py": [
+        "management"
+      ],
+      "test_mass_assignment.py": [
+        "platform"
+      ],
+      "test_mcp_config.py": [
+        "tools"
+      ],
+      "test_mcp_router.py": [
+        "tools"
+      ],
+      "test_mcp_tools.py": [
+        "loop"
+      ],
+      "test_memory_graph.py": [
+        "management"
+      ],
+      "test_memory_lessons.py": [
+        "loop"
+      ],
+      "test_memory_tenancy.py": [
+        "models"
+      ],
+      "test_metrics.py": [
+        "loop"
+      ],
+      "test_migrations.py": [
+        "platform"
+      ],
+      "test_model_catalog.py": [
+        "models"
+      ],
+      "test_model_factory.py": [
+        "models"
+      ],
+      "test_model_routing.py": [
+        "models"
+      ],
+      "test_model_suggestions.py": [
+        "models"
+      ],
+      "test_nats_connect_retry.py": [
+        "management"
+      ],
+      "test_nats_namespace.py": [
+        "platform"
+      ],
+      "test_nats_security_config.py": [
+        "management"
+      ],
+      "test_nats_security_connect.py": [
+        "management"
+      ],
+      "test_nats_security_live.py": [
+        "management"
+      ],
+      "test_nats_security_logs.py": [
+        "management"
+      ],
+      "test_needs_split.py": [
+        "loop"
+      ],
+      "test_orchestration_metrics.py": [
+        "release"
+      ],
+      "test_passwords.py": [
+        "platform"
+      ],
+      "test_procedures.py": [
+        "loop"
+      ],
+      "test_project_docs.py": [
+        "planning"
+      ],
+      "test_project_docs_language.py": [
+        "planning"
+      ],
+      "test_project_wiki.py": [
+        "loop"
+      ],
+      "test_project_wiki_loop.py": [
+        "loop"
+      ],
+      "test_prompt_budget.py": [
+        "loop"
+      ],
+      "test_prompt_weight.py": [
+        "models"
+      ],
+      "test_provider_connections.py": [
+        "models"
+      ],
+      "test_proxy_connections.py": [
+        "learning",
+        "planning"
+      ],
+      "test_quality_gate.py": [
+        "loop"
+      ],
+      "test_release_notes.py": [
+        "repo"
+      ],
+      "test_replicas.py": [
+        "management"
+      ],
+      "test_repo_map.py": [
+        "loop"
+      ],
+      "test_research_tools.py": [
+        "release"
+      ],
+      "test_retention.py": [
+        "platform"
+      ],
+      "test_review_changes.py": [
+        "management"
+      ],
+      "test_review_digest.py": [
+        "loop"
+      ],
+      "test_review_gate.py": [
+        "loop"
+      ],
+      "test_review_sync.py": [
+        "release"
+      ],
+      "test_reviewer_agent.py": [
+        "management"
+      ],
+      "test_rfc3161.py": [
+        "platform"
+      ],
+      "test_risk_tier.py": [
+        "management"
+      ],
+      "test_roles.py": [
+        "loop"
+      ],
+      "test_routing_record.py": [
+        "models"
+      ],
+      "test_run_cost.py": [
+        "loop"
+      ],
+      "test_run_logs.py": [
+        "loop"
+      ],
+      "test_run_reviews.py": [
+        "release"
+      ],
+      "test_run_secrets.py": [
+        "platform"
+      ],
+      "test_sandbox.py": [
+        "release"
+      ],
+      "test_sandbox_cache.py": [
+        "release"
+      ],
+      "test_sandbox_floor.py": [
+        "workspace"
+      ],
+      "test_sandbox_manager.py": [
+        "workspace"
+      ],
+      "test_scrum_master.py": [
+        "loop"
+      ],
+      "test_scrum_master_decision.py": [
+        "loop"
+      ],
+      "test_scrum_master_record.py": [
+        "loop"
+      ],
+      "test_secops_checks.py": [
+        "evidence"
+      ],
+      "test_security.py": [
+        "platform"
+      ],
+      "test_security_headers.py": [
+        "platform"
+      ],
+      "test_security_probe.py": [
+        "loop"
+      ],
+      "test_security_tests_router.py": [
+        "planning"
+      ],
+      "test_self_hosting.py": [
+        "loop"
+      ],
+      "test_sessions.py": [
+        "loop"
+      ],
+      "test_sod.py": [
+        "management"
+      ],
+      "test_specifications.py": [
+        "loop"
+      ],
+      "test_sprint_board.py": [
+        "loop"
+      ],
+      "test_sprint_close.py": [
+        "loop"
+      ],
+      "test_sprint_crud.py": [
+        "management"
+      ],
+      "test_sprint_integration_api.py": [
+        "management"
+      ],
+      "test_sprint_integration_daemon.py": [
+        "management"
+      ],
+      "test_sprint_integration_events.py": [
+        "management"
+      ],
+      "test_sprint_integration_jobs.py": [
+        "management"
+      ],
+      "test_sprint_integration_request.py": [
+        "management"
+      ],
+      "test_sprint_list.py": [
+        "loop"
+      ],
+      "test_sprint_progress.py": [
+        "loop"
+      ],
+      "test_sprint_team.py": [
+        "loop"
+      ],
+      "test_sso_admin.py": [
+        "platform"
+      ],
+      "test_sso_flow.py": [
+        "platform"
+      ],
+      "test_sso_tokens.py": [
+        "platform"
+      ],
+      "test_ssrf_vectors.py": [
+        "integrations",
+        "tools"
+      ],
+      "test_stack_roots.py": [
+        "release"
+      ],
+      "test_standards.py": [
+        "loop"
+      ],
+      "test_start_sprint.py": [
+        "loop"
+      ],
+      "test_supply_chain.py": [
+        "repo"
+      ],
+      "test_support_access.py": [
+        "management"
+      ],
+      "test_support_agent.py": [
+        "management"
+      ],
+      "test_task_delivery.py": [
+        "loop"
+      ],
+      "test_task_event_decisions.py": [
+        "management"
+      ],
+      "test_task_events.py": [
+        "management"
+      ],
+      "test_task_events_history.py": [
+        "management"
+      ],
+      "test_task_events_transitions.py": [
+        "management"
+      ],
+      "test_task_relations.py": [
+        "loop"
+      ],
+      "test_task_views.py": [
+        "loop"
+      ],
+      "test_teams.py": [
+        "management"
+      ],
+      "test_tenant_scoping.py": [
+        "platform"
+      ],
+      "test_token_diet.py": [
+        "management"
+      ],
+      "test_tool_history.py": [
+        "tools"
+      ],
+      "test_usage_report.py": [
+        "loop"
+      ],
+      "test_verificador_benchmark.py": [
+        "evidence"
+      ],
+      "test_verification.py": [
+        "management"
+      ],
+      "test_webhooks.py": [
+        "integrations"
+      ],
+      "test_win_job.py": [
+        "workspace"
+      ],
+      "test_work_control.py": [
+        "release"
+      ],
+      "test_workflow_pinning.py": [
+        "repo"
+      ],
+      "test_workspace_host.py": [
+        "release"
+      ],
+      "test_workspace_isolation.py": [
+        "workspace"
+      ],
+      "test_wstg_plan.py": [
+        "planning"
+      ]
+    }
+  }
 }

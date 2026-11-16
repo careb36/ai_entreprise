@@ -49,8 +49,10 @@ def _refs(value: Any) -> list[str]:
 
 def _decision_record(d: dict[str, Any]) -> dict[str, str]:
     """A decision's optional ADR fields, kept only when well formed: ``date``
-    (``YYYY-MM-DD``, when it was accepted) and ``slug`` (the ADR file's name,
-    lowercase words and hyphens). See ``services/planning/adr_docs.py``."""
+    (``YYYY-MM-DD``, when it was accepted), ``slug`` (the ADR file's name,
+    lowercase words and hyphens), and ``superseded_by`` (the id of the
+    decision that supersedes this one, ``ADR-7``). See
+    ``services/planning/adr_docs.py``."""
     out: dict[str, str] = {}
     date = _text(d.get("date"), 10)
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
@@ -58,6 +60,9 @@ def _decision_record(d: dict[str, Any]) -> dict[str, str]:
     slug = _text(d.get("slug"), 60).lower()
     if re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", slug):
         out["slug"] = slug
+    superseded_by = _text(d.get("superseded_by"), 10).upper()
+    if re.fullmatch(r"ADR-\d+", superseded_by):
+        out["superseded_by"] = superseded_by
     return out
 
 

@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class GitHubRepoBinding(SQLModel, table=True):
@@ -14,4 +18,4 @@ class GitHubRepoBinding(SQLModel, table=True):
     repo: str
     webhook_secret_encrypted: str
     inclusion_rule: str = "all"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)

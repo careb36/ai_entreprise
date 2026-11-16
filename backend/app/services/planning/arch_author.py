@@ -6,11 +6,12 @@ decisions and the conventions, in a fixed JSON shape a parser checks, and
 lists what it could not decide. The draft is a claim: ``arch_check``
 numbers it and says what blocks its approval, a person answers, edits and
 approves. Once approved, ``context_for`` gives each task the modules its
-requirements map to, and ``write_document`` sends it to the repository
-through the workspace daemon, whose sha256 of the bytes on disk is what the
-backend keeps. The architecture is the company's (``arch_versions``): for a
-new specification the Architect revises the current version, and the
-earlier specifications' covers are kept.
+requirements map to, and ``write_document`` sends the document and one ADR
+file per decision to the repository through the workspace daemon, whose
+sha256 of the bytes on disk is what the backend keeps, per file. The
+architecture is the company's (``arch_versions``): for a new specification
+the Architect revises the current version, and the earlier specifications'
+covers are kept.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from sqlmodel import Session, select, text
 
 from services.evidence import standards
 from services.planning import (
+    adr_docs,
     arch_check,
     arch_versions,
     spec_author,
@@ -198,9 +200,11 @@ def parse_draft(text_: str) -> dict[str, Any] | None:
     arch = arch_check.normalize(parsed)
     if not arch["title"] or not arch["modules"]:
         return None
-    # When a decision was accepted is a person's record, never the model's.
+    # When a decision was accepted, and what supersedes it, is a person's
+    # record, never the model's.
     for decision in arch["decisions"]:
         decision.pop("date", None)
+        decision.pop("superseded_by", None)
     return arch
 
 
@@ -379,14 +383,45 @@ def document(session: Session, arch: Architecture) -> str:
     )
 
 
+async def _adr_entries(nats_client: Any, root: str, timeout: float) -> list[str]:
+    """The ``docs/adr`` listing the daemon reports; empty when the folder is not there."""
+    from services.workspace.workspace_daemon import DaemonError, daemon_request
+
+    try:
+        reply = await daemon_request(
+            nats_client,
+            "workspace.list",
+            {"workspace_root": root, "path": adr_docs.ADR_DIRECTORY, "depth": 1},
+            timeout,
+        )
+    except DaemonError as exc:
+        if exc.status == 404 and exc.message.startswith("Not a folder"):
+            return []
+        raise
+    if reply.get("truncated"):
+        raise DaemonError(
+            502,
+            f"The {adr_docs.ADR_DIRECTORY} listing was truncated; "
+            "the decisions cannot be numbered safely",
+        )
+    entries = reply.get("entries")
+    return [entry for entry in entries or [] if isinstance(entry, str)]
+
+
 async def write_document(
     nats_client: Any, session: Session, arch: Architecture, timeout: float
 ) -> dict[str, Any]:
-    """Send ``docs/ARCHITECTURE.md`` to the repository through the daemon.
+    """Write ``docs/ARCHITECTURE.md`` and one ADR file per decision through the daemon.
 
-    Returns the daemon's report of the file; raises ``DaemonUnavailable`` or
-    ``DaemonError`` (``services.workspace.workspace_daemon``) otherwise, and
-    ``ArchAuthorError`` when the company has no project folder.
+    The repository's ``docs/adr`` is read first: the first free number numbers
+    a decision with no file, and a decision whose slug is already there keeps
+    its file and number (``adr_docs``). The returned dict is the document's
+    report (``path``, ``sha256``) with ``files``: every file written, each
+    with the sha256 the daemon reported, never one computed here. Raises
+    ``DaemonUnavailable`` when no daemon answers, ``DaemonError``
+    (``services.workspace.workspace_daemon``) when one refuses a file or
+    cannot number the decisions, and ``ArchAuthorError`` when the company
+    has no project folder.
     """
     from services.workspace.workspace_daemon import DaemonError, daemon_request
 
@@ -397,40 +432,83 @@ async def write_document(
     ).first()
     if discovery is None or not discovery.project_path:
         raise ArchAuthorError("The company has no project folder to write to")
+    root = discovery.project_path
+    entries = await _adr_entries(nats_client, root, timeout)
+    spec = session.get(Specification, arch.specification_id)
+    approved_on = (
+        arch.approved_at.date().isoformat()
+        if arch.status != "draft" and arch.approved_at
+        else None
+    )
+    adrs = adr_docs.adr_documents(
+        content_of(arch),
+        spec.title if spec else "",
+        arch.version,
+        first_number=adr_docs.first_free_number(entries),
+        approved_on=approved_on,
+        existing=adr_docs.adr_files(entries),
+    )
+    files = [
+        {
+            "path": ARCHITECTURE_PATH,
+            "content": document(session, arch),
+            "overwrite_existing": True,
+        },
+        *[
+            {
+                "path": adr["path"],
+                "content": adr["markdown"],
+                "overwrite_existing": True,
+            }
+            for adr in adrs
+        ],
+    ]
     reply = await daemon_request(
         nats_client,
         "workspace.generate",
         {
-            "workspace_root": discovery.project_path,
-            "files": [
-                {
-                    "path": ARCHITECTURE_PATH,
-                    "content": document(session, arch),
-                    "overwrite_existing": True,
-                }
-            ],
+            "workspace_root": root,
+            "files": files,
             "interaction_id": f"architecture-{arch.id}",
         },
         timeout,
     )
-    files = reply.get("files") if isinstance(reply, dict) else None
-    written = next(
-        (
-            f
-            for f in files or []
-            if isinstance(f, dict) and f.get("path") == ARCHITECTURE_PATH
-        ),
-        None,
+    reported = {
+        f.get("path"): f
+        for f in (reply.get("files") if isinstance(reply, dict) else None) or []
+        if isinstance(f, dict)
+    }
+    by_path = {adr["path"]: adr for adr in adrs}
+    written = []
+    for item in files:
+        got = reported.get(item["path"])
+        if got is None or got.get("status") != "written" or not got.get("sha256"):
+            raise DaemonError(
+                502,
+                f"The workspace daemon did not report {item['path']} as written",
+            )
+        entry: dict[str, Any] = {
+            "path": item["path"],
+            "sha256": str(got["sha256"]),
+        }
+        if isinstance(got.get("bytes"), int):
+            entry["bytes"] = got["bytes"]
+        adr = by_path.get(item["path"])
+        if adr is None:
+            entry["kind"] = "architecture"
+        else:
+            entry.update(
+                {
+                    "kind": "adr",
+                    "decision_id": adr["id"],
+                    "number": adr["number"],
+                }
+            )
+        written.append(entry)
+    document_written = next(
+        entry for entry in written if entry["path"] == ARCHITECTURE_PATH
     )
-    if (
-        written is None
-        or written.get("status") != "written"
-        or not written.get("sha256")
-    ):
-        raise DaemonError(
-            502, "The workspace daemon did not report the file as written"
-        )
-    return written
+    return {**document_written, "files": written}
 
 
 def architecture_for_item(engine: Engine, item_id: int) -> str:

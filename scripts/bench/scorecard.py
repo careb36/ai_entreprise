@@ -30,7 +30,8 @@ Subcommands, used by ``scripts/bench/run.sh``:
 
 The pure functions (``criterion_of_test``, ``criteria_from_junit``,
 ``summarize_spec``, ``build_scorecard``, ``validate``, ``render_markdown``)
-are what ``backend/tests/test_bench_scorecard.py`` checks.
+are what ``backend/tests/test_bench_grading.py`` and
+``test_bench_scorecard.py`` check.
 
 Credit: OpenHands' evaluation harness, which states the harness version
 beside every number (here: the schema version, the factory's commit and the

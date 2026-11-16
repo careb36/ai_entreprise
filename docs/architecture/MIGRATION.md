@@ -189,3 +189,7 @@ Step 14 is done: `services/management/` holds `brief_mail`, `manager_actions`, `
 ## Step 15: the last shims
 
 Step 15 is done: no flat `services/<module>.py` shim is left. Every importer, test patch string, comment and document names `services.<context>.<module>`, every context's `modules` list in `contexts.json` is empty, and the checker reports no shim and no allowlisted edge. `.github/CODEOWNERS` names `evidence/verification.py` and `tasks/board.py`.
+
+## After the migration: the tests
+
+The test files now have a context too: `tests` in `contexts.json` maps each `backend/tests/test_*.py` to the contexts it exercises (derived from its imports and routes, then read by hand), `check_architecture.py` fails a test without one, and `scripts/affected_tests.py` runs only the tests of a change's context and of the contexts that may import it (`docs/TESTING.md`, Only the tests a change can break).

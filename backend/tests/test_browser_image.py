@@ -39,13 +39,13 @@ import pytest
 import sandbox_cache
 import shell_exec
 from config import settings
+from factories import company as _company
 from models.company import Company
 from services.evidence import app_check, browser_smoke
 from services.loop import delivery_checks
 from services.workspace import dependency_install, project_profile
 from test_app_check import fake_docker  # noqa: F401 - the fixture
 from test_browser_smoke import _ctx, _evidence, _Recorder
-from test_specifications import _company
 
 REPO = Path(__file__).resolve().parents[2]
 IMAGE_DIR = REPO / "vscode-daemon" / "images" / "browser"
