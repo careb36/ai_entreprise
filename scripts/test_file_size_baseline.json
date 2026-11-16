@@ -1,6 +1,7 @@
 {
   "backend/tests/test_acceptance.py": 711,
   "backend/tests/test_app_check.py": 1322,
+  "backend/tests/test_architectures.py": 610,
   "backend/tests/test_auth_enforcement.py": 695,
   "backend/tests/test_board_moves.py": 718,
   "backend/tests/test_browser_image.py": 642,
