@@ -2,6 +2,19 @@
 
 The test suites, the end-to-end run, the bench and what CI runs. Moved whole from `CLAUDE.md`, whose index is [here](../CLAUDE.md). The i18n rule that `npm run lint` enforces is in that index (Frontend i18n).
 
+## One command: `scripts/check.sh`
+
+`scripts/check.sh quick` runs the checks a change can break, while working. It reads the files changed against `CHECK_BASE` (default `origin/main`, then `main`, then `HEAD`: committed since the merge base, staged, unstaged and untracked) and runs:
+
+- for a change outside `frontend/`, the backend tests it can break (`scripts/affected_tests.py --run -- -n 0`, below) and `ruff check` and `ruff format --check` on the changed Python files of `backend/app` and `backend/tests`;
+- for a change under `frontend/`, `npm run test:changed` (vitest's `--changed` against the same base; with no such ref, the uncommitted changes only), eslint on the changed files of `frontend/src` and `npx tsc --noEmit`;
+- for a change to `.github/workflows/`, actionlint when it is installed;
+- always, being fast, `check_architecture.py`, `check_frontend_architecture.py` and `check_file_sizes.py`.
+
+`scripts/check.sh full` runs everything CI runs, once before pushing: the whole backend suite in parallel (`-n $CHECK_BACKEND_WORKERS`, default `auto`), ruff on `app` and `tests`, the LLM proxy's tests, the whole frontend (tsc, lint, `test:run`, build), actionlint and the three rule checks.
+
+Both end with a summary of each step's status and time and exit non-zero when one failed. Neither reinstalls what is current: `frontend/node_modules` keeps the hash of the `package-lock.json` it was installed from, and the Poetry venvs of `backend/` and `llm-proxy/` the hash of their lock files (`.check-lock-sha256`); `npm ci` or `poetry install` runs only when one is missing or differs. `CHECK_PYTHON` and `CHECK_PROXY_PYTHON` name an interpreter instead of the Poetry venv, `CHECK_FILES` lists the changed files instead of asking git, and `CHECK_DRY_RUN=1` prints the steps without running them (`backend/tests/test_check_script.py`).
+
 ## Test Suite
 
 The backend has a pytest test suite under `backend/tests/`.  No external services (Postgres, NATS, Neo4j, LLM proxy) are required — every boundary is stubbed with an in-memory SQLite engine or `unittest.mock`.
@@ -45,6 +58,8 @@ python3 scripts/affected_tests.py --files backend/app/services/loop/task_worker.
 A change low in the rule (contracts, platform) still selects nearly every
 test; one high in it (loop, release, management, a router) selects far fewer.
 Run the whole suite once before pushing.
+
+The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
 
 Test files:
 
