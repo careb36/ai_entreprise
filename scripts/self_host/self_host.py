@@ -310,7 +310,7 @@ def step_records(api, args, state, report):
     # Only the current version is written; run again after the #535 version
     # superseded it, the file the first run wrote is the one checked.
     written = api.post(f"/v1/architectures/{arch['id']}/write") if arch["status"] == "approved" else arch
-    dirty = _git(checkout, "status", "--porcelain", "--", "docs/ARCHITECTURE.md").strip()
+    dirty = _git(checkout, "status", "--porcelain", "--", "docs/ARCHITECTURE.md", "docs/adr").strip()
     report["records"] = {
         "specification_id": spec["id"],
         "specification_status": spec["status"],
@@ -324,6 +324,7 @@ def step_records(api, args, state, report):
         "adrs": [a["path"] for a in adrs],
         "adr_differences": adr_diffs,
         "written_path": written.get("written_path"),
+        "written_adrs": [f["path"] for f in (written.get("written_files") or []) if f.get("kind") == "adr"],
         "written_unchanged_in_git": dirty == "",
     }
 

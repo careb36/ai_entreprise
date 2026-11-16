@@ -152,6 +152,18 @@ the ADR files are not yet written to a project's repository, and the
 appendix ADR 0012 had (the contexts at adoption) had to move to
 `docs/architecture/MIGRATION.md`, since a decision has no place for one.
 
+*Done (follow-up 4).* The write now sends the document and one
+`docs/adr/NNNN-<slug>.md` per decision in a single `workspace.generate`
+request, and reads the repository's `docs/adr` first (`workspace.list`): a
+decision whose file is already there keeps its number and slug, a new one
+takes the repository's first free number, and the sha256 the daemon read back
+is kept per file as an observation (`architectures.written_files`, migration
+`0039`; `written_path` and `written_sha256` still name the document). A
+decision a person marks `superseded_by` another one (`ADR-7`, dropped from a
+draft the Architect wrote like its `date`) says so in its file's Status
+instead of "Accepted"; without a daemon the write is a 503 and nothing is
+written. `GET .../document` and `GET .../adrs` are unchanged.
+
 ### F5. La Fabrique's own suites cannot be its delivery tests
 
 The stack detection finds no manifest at the repository's root (the backend
@@ -239,10 +251,13 @@ review before the local merge (`services/release/integration_review.py`,
    company's architecture; the pack documents every approved specification.
    *Measure:* La Fabrique's #469 and #535 specifications share one
    architecture record in the self-hosting run.
-4. **Write the ADR files with the architecture.**
+4. **Write the ADR files with the architecture.** *Done* (see F4).
    *Problem:* F4. *Proposal:* `POST /v1/architectures/{id}/write` also writes
    `docs/adr/NNNN-<slug>.md` (first free number read from the repository), each
    file's sha256 kept as an observation; a superseded decision says so.
+   *Measure:* the self-hosting run's `records` step writes `docs/ARCHITECTURE.md`
+   and `docs/adr/0012` to `0017`, one per decision, into the snapshot, and
+   `git status` sees no change.
 5. **A stack profile per folder.**
    *Problem:* F5. *Proposal:* the profile resolves per root (`backend/`
    Poetry, `frontend/` npm, `llm-proxy/` Poetry) and a delivery runs the
