@@ -49,6 +49,7 @@ from services.loop.carry_over import (
 )
 from services.management import manager_observe
 from services.planning import document_approval
+from services.release import integration_review
 from services.release.delivery_undo import UndoRefused, record_undo, undo_spec
 from services.release.git_publish import (
     PublishRefused,
@@ -57,6 +58,7 @@ from services.release.git_publish import (
 )
 from services.release.local_merge import (
     integration_merge_spec,
+    needs_diff,
     record_integration_merge,
     record_run_merge,
     run_merge_spec,
@@ -114,6 +116,19 @@ def _run(session: Session, row: ManagerDecision) -> AgentRun:
     return run
 
 
+def _integration_diff(session: Session, row: SprintIntegration) -> dict | None:
+    """The daemon's diff of *row* when its protected paths are checked; else None."""
+    if not needs_diff(session, row):
+        return None
+    try:
+        reply = _daemon(
+            integration_review.DIFF_SUBJECT, integration_review.diff_spec(session, row)
+        )
+        return integration_review.observed(reply, row)
+    except integration_review.IntegrationReviewRefused as exc:
+        raise Failed(exc.detail) from exc
+
+
 def _merge(session: Session, row: ManagerDecision) -> tuple[str, dict]:
     try:
         if row.item_kind == "integration":
@@ -121,7 +136,10 @@ def _merge(session: Session, row: ManagerDecision) -> tuple[str, dict]:
             if integration is None or integration.company_id != row.company_id:
                 raise Stale("the integration is gone")
             reply = _daemon(
-                "workspace.git.merge", integration_merge_spec(session, integration)
+                "workspace.git.merge",
+                integration_merge_spec(
+                    session, integration, _integration_diff(session, integration)
+                ),
             )
             done = record_integration_merge(
                 session, integration, reply, merged_by=AGENT, agent_id=AGENT

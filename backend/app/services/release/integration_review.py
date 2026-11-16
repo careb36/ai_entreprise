@@ -22,7 +22,10 @@ default; an Owner turns it on, audited), merging the integration into the base
 (``local_merge.integration_merge_spec``, from the web, the Manager agent or
 the harness alike) needs an approving review of that integration: the latest
 ``approve`` or ``request_changes`` on it is an ``approve`` of its commit. The
-local merge records the review it relied on.
+local merge records the review it relied on. For a company that hosts the
+factory, an approval may also carry ``protected_paths_ack``: the protected
+paths of the diff a signed-in Owner names (``protected_merge.validate_ack``),
+without which such an integration is not merged.
 
 **Segregation of duties** (issue #543): an approval is a release decision, so
 ``sod.enforce`` holds it to the rule (``sod.RELEASE``) with the sprint's
@@ -53,6 +56,7 @@ from sqlmodel import Session, select
 from services.loop import sod_requesters
 from services.platform import sod
 from services.platform.agent_service import AgentService
+from services.release import protected_merge
 from services.workspace.workspace_daemon import daemon_request
 
 DIFF_SUBJECT = "workspace.git.diff"
@@ -159,6 +163,13 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
                 "sha256_new": _sha256_or_none(f.get("sha256_new")),
             }
         )
+    # Every path, unquoted (``--name-status -z``); None from an older daemon.
+    raw_paths = reply.get("paths")
+    paths = (
+        list(raw_paths)
+        if isinstance(raw_paths, list) and all(isinstance(p, str) for p in raw_paths)
+        else None
+    )
     digest = hashlib.sha256(
         json.dumps(
             {
@@ -168,6 +179,7 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
                     [f["path"], f["old_path"], f["sha256_old"], f["sha256_new"]]
                     for f in clean
                 ],
+                "paths": paths,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -180,6 +192,8 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
         "base_commit": str(reply.get("base_commit") or ""),
         "files": clean,
         "truncated": bool(reply.get("truncated")),
+        "paths": paths,
+        "paths_truncated": bool(reply.get("paths_truncated")),
         "diff_sha256": digest,
     }
 
@@ -336,6 +350,24 @@ def _segregate(
         raise IntegrationReviewRefused(refused.status, refused.detail) from refused
 
 
+def _ack(session, row, diff, event, paths, actor) -> list[str] | None:
+    """The protected paths an Owner acknowledges in this approval, checked."""
+    if not paths:
+        return None
+    if event != "approve":
+        raise IntegrationReviewRefused(
+            422, "Protected paths are acknowledged in an approving review"
+        )
+    if not protected_merge.applies(session, row.company_id):
+        raise IntegrationReviewRefused(
+            409, "This company does not hold protected paths: nothing to acknowledge"
+        )
+    try:
+        return protected_merge.validate_ack(session, row, diff, paths, actor)
+    except protected_merge.ProtectedMergeRefused as refused:
+        raise IntegrationReviewRefused(refused.status, refused.detail) from refused
+
+
 def submit_review(
     session: Session,
     row: SprintIntegration,
@@ -346,10 +378,12 @@ def submit_review(
     author_name: str,
     author_user_id: int | None,
     actor: sod.Person | None,
+    protected_paths_ack: list[str] | None = None,
 ) -> IntegrationReview:
     """Record a review of *row* as *diff* shows it, carrying its open comments."""
     if event not in EVENTS:
         raise IntegrationReviewRefused(422, f"event is one of {', '.join(EVENTS)}")
+    ack = _ack(session, row, diff, event, protected_paths_ack, actor)
     comments = [
         c
         for c in comments_of(session, row)
@@ -378,11 +412,14 @@ def submit_review(
         files=len(diff["files"]),
         published_url=published if isinstance(published, str) else None,
         sod=sod_outcome,
+        protected_paths_ack=ack,
         author_name=author_name,
         author_user_id=author_user_id,
     )
     session.add(review)
     session.flush()
+    # A diff that changed since a refused merge replaces the check kept then.
+    protected_merge.refresh(session, row, diff)
     for comment in comments:
         comment.review_id = review.id
         session.add(comment)
@@ -407,6 +444,7 @@ def submit_review(
             "commit": review.commit,
             "merge_base": review.merge_base,
             "diff_sha256": review.diff_sha256,
+            "protected_paths_ack": ack,
             "body": body,
         },
         decision_signature=None,
@@ -487,6 +525,10 @@ def state(session: Session, company_id: int, row: SprintIntegration | None) -> d
         "reviews": len(reviews),
         "open_comments": open_comments,
         "published_url": published if isinstance(published, str) else None,
+        # The merge guard's last check (a company that hosts the factory).
+        "protected_paths": protected_merge.facts(session, row, approval)
+        if row is not None
+        else None,
     }
 
 

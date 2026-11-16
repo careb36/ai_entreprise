@@ -24,6 +24,7 @@ from services.release.git_publish import PublishRefused
 from services.release.integration_publish import publish_spec, record_publication
 from services.release.local_merge import (
     integration_merge_spec,
+    needs_diff,
     record_integration_merge,
 )
 from services.workspace.workspace_daemon import (
@@ -90,7 +91,14 @@ async def sprint_integration(
 
 
 def _refused(exc: Exception) -> HTTPException:
-    if isinstance(exc, (integration.IntegrationRefused, PublishRefused)):
+    if isinstance(
+        exc,
+        (
+            integration.IntegrationRefused,
+            PublishRefused,
+            integration_review.IntegrationReviewRefused,
+        ),
+    ):
         return HTTPException(status_code=exc.status, detail=exc.detail)
     if isinstance(exc, DaemonUnavailable):
         return HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL)
@@ -177,11 +185,19 @@ async def merge_sprint_integration(
         raise HTTPException(
             status_code=refused.status, detail=refused.detail
         ) from refused
+    nats_client = getattr(request.app.state, "nats_client", None)
     try:
+        # A company that hosts the factory: its protected paths are matched
+        # against the daemon's diff of the integration (``protected_merge``).
+        diff = (
+            await integration_review.read_diff(nats_client, session, row)
+            if needs_diff(session, row)
+            else None
+        )
         reply = await daemon_request(
-            getattr(request.app.state, "nats_client", None),
+            nats_client,
             "workspace.git.merge",
-            integration_merge_spec(session, row),
+            integration_merge_spec(session, row, diff),
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
         return record_integration_merge(
@@ -191,6 +207,11 @@ async def merge_sprint_integration(
             merged_by=_who(user),
             merged_by_user_id=actor.user_id if actor else None,
         )
-    except (PublishRefused, DaemonUnavailable, DaemonError) as exc:
+    except (
+        PublishRefused,
+        integration_review.IntegrationReviewRefused,
+        DaemonUnavailable,
+        DaemonError,
+    ) as exc:
         session.rollback()
         raise _refused(exc) from exc

@@ -28,7 +28,7 @@ from sqlmodel import Session, select
 from services.learning import retrospective
 from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
-from services.loop.sprint_close import RECLOSED
+from services.loop.sprint_close import PROTECTED_PATHS_ON, RECLOSED
 from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
@@ -40,7 +40,8 @@ from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
 )
-from services.platform import hooks
+from services.platform import hooks, protected_paths_setting
+from services.platform.agent_service import AgentService
 from services.platform.glassroom import publish_glassroom
 from services.tasks import dependencies, progress_snapshot
 from services.tasks.board import SCRUM_MASTER_ROLE
@@ -212,6 +213,30 @@ def _kickoff_event(
     )
 
 
+def _audit_follow_up_off(session: Session, company: Company, sprint: Sprint) -> None:
+    logger.info(
+        "Sprint %s closed: no model-planned follow-up for company %s, which hosts "
+        "the factory (protected paths on; AUTO_SELF_IMPROVEMENT_ENABLED=%s)",
+        sprint.id,
+        company.id,
+        AUTO_SELF_IMPROVEMENT_ENABLED,
+    )
+    AgentService().audit_interaction(
+        session=session,
+        company_id=company.id,
+        interaction_id=f"sprint:{sprint.id}:follow_up",
+        agent_id="platform:protected_paths",
+        action="follow_up_sprint_skipped",
+        details={"company_id": str(company.id), "sprint_id": sprint.id},
+        result={
+            "reason": PROTECTED_PATHS_ON,
+            "auto_self_improvement_enabled": AUTO_SELF_IMPROVEMENT_ENABLED,
+        },
+        decision_signature=None,
+        cost_tokens=0,
+    )
+
+
 def _complete_sprint_and_plan_follow_up(
     completed_sprint_id: int,
     retro_metrics: dict[str, Any] | None = None,
@@ -260,6 +285,14 @@ def _complete_sprint_and_plan_follow_up(
 
         if company.autonomy_level < 3:
             result["reason"] = "autonomy_below_threshold"
+            session.commit()
+            return result
+
+        if protected_paths_setting.enabled(session, company.id):
+            # The factory's own company (rsi-loop REQ-21): the model-planned
+            # follow-up has no protected-path guard, so it never runs here.
+            result["reason"] = PROTECTED_PATHS_ON
+            _audit_follow_up_off(session, company, sprint)
             session.commit()
             return result
 

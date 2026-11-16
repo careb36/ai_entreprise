@@ -82,7 +82,7 @@ root's profile), before anything is automated.
 | **Act**: a sprint on the factory's own repository | `scripts/self_host/self_host.py` (steps `checkout`, `company`, `records`, `issue`, `wait`, `review`, `pack`); per-folder suites and every-delivery checks (`services/workspace/stack_roots.py`, `services/loop/delivery_suites.py`); no foundation sprint for an existing repository (`services/loop/foundation_setup.py`) | The `issue` step takes `--spec <file>` (PR 6, `scripts/self_host/spec_source.py`: checked by `spec_check`, a target measure required, run by the `measure` step). The snapshot has no remote, and bringing the result back is a manual step (README, step 7) |
 | **Measure** | The bench: `scripts/bench/run.sh`, `scorecard.py` (`grade`, `collect`), `compare.py` (`DEFAULTS`: rate 0.05, rework 0.25, tokens 0.5), `budget.py`, schema v3; the Verifier bench (`bench/verifier/`, `python -m verifier.run`); the prompt weight (`services/loop/worker/prompt_budget.py` → `prompt_sections`); the cost (`services/models/run_cost.py`); the claim gap (`services/tasks/progress_snapshot.claim_gap`) | Graders pinned to B (`run.sh --graders <sha>` **(missing)**); repeated runs with medians and spread (**missing**); a wall-clock threshold in `compare.py` (**missing**); CI conclusions read by commit from GitHub's check-runs (**missing**: today `evidence["ci"]` is only the daemon's exit status, `services/workspace/workspace_daemon.py`; nothing reads a pull request's check-runs); a real-model reference card (`bench/scorecards/real/` holds only `.gitkeep`) |
 | **Learn** | `services/learning/retrospective.build` (board counts, contradictions, notes); procedures proposed and measured (`procedures.propose`, `evaluate`); retrospectives written by a person (`docs/retrospectives/`) | Findings as records with a target measure (`Finding`, **missing**). Today a finding exists only as prose |
-| **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, off by default since decision 8 in §10) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up must stay off (REQ-21) |
+| **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, off by default since decision 8 in §10) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up is off whatever the setting says (REQ-21, PR 3: `close._complete_sprint_and_plan_follow_up` answers `protected_paths_enabled` and audits `follow_up_sprint_skipped`) |
 | **Apply** | The Verifier (`verify_agent_run`), the risk tier (`services/evidence/risk.classify`; `.github/workflows/` already raises it to high), segregation of duties (`services/platform/sod.enforce`), the integration review and its merge gate (`integration_review.py`, `local_merge.integration_merge_spec`, `companies.integration_review_required`), the history check (`backend/app/history_check.py`) | A protected-paths check (§3); a hold no Manager rule can accept; the same check on the pull request in CI |
 | **Keep or revert** | Procedures: kept or reverted against a baseline of two sprints with tolerances (`REWORK_TOLERANCE` 0.25, `BLOCKED_TOLERANCE` 0.10, `GAP_TOLERANCE` 0.10); `unmeasured` is never `kept` | The same discipline for code changes: `services/evidence/fitness.py` **(missing)**, the cycle record **(missing)**, and a watch after the merge that opens a revert pull request **(missing)** |
 
@@ -124,7 +124,9 @@ and no recorded revert of the same specification (the same rule as
 otherwise, a person picks it. A model may draft the specification from the
 finding. The specification passes `spec_check` and is approved by a person,
 as any specification is. The planner's free-text follow-up
-(`_plan_follow_up`) is not used for this company.
+(`_plan_follow_up`) is not used for this company: with
+`protected_paths_enabled` it does not run, whatever
+`AUTO_SELF_IMPROVEMENT_ENABLED` says (REQ-21).
 
 ### 1.5 Apply
 
@@ -321,9 +323,18 @@ declares can add to the match, never remove from it (the rule
    write files that `workspace_writes` never lists. The integration's
    `workspace.git.diff` (`vscode-daemon/git_diff.py`, read-only, between
    the merge base and the pinned commit) is therefore matched too.
-   `local_merge.integration_merge_spec` refuses the merge unless the
-   latest `approve` review of that commit records `protected_paths_ack`:
-   the matched paths and the `diff_sha256` the backend computed.
+   `local_merge.integration_merge_spec` refuses the merge
+   (`services/release/protected_merge.py`, 409 naming the paths, audited
+   `integration_merge_refused_protected_paths`) unless the latest decision
+   on the integration is an `approve` of that commit, recorded by a
+   signed-in Owner (never an API token or the Manager agent), whose
+   `protected_paths_ack` (migration `0042`) names every matched path and
+   whose `diff_sha256` is the one the backend computes now. Each file's
+   path and a renamed file's old path are matched; a diff the daemon cut
+   short is refused. The paths the tasks declared are never read. The check
+   is kept on the integration (`details["protected_paths"]`), so the
+   Manager agent's inbox shows it (`:protected_awaiting_ack`) and its
+   `merge_local` rule waits for the acknowledgement.
 4. **On the pull request: CI.** A workflow `protected-paths.yml`
    (`scripts/protected_paths_check.py`, run from the base commit) computes the diff from git (`base...head`), never from
    the body, and fails unless an approving review by a code owner exists
@@ -342,7 +353,7 @@ hurry and the numbers are wrong.
 |---|---|---|
 | `contracts/protected_paths.py` | contracts | nothing |
 | `evidence/protected_paths.py` (the check), `evidence/fitness.py` (the decision) | evidence | contracts (and platform for logging) only, as ADR 0012 requires |
-| The merge refusal in `release/local_merge.py` | release | evidence, contracts |
+| The merge refusal in `release/protected_merge.py`, called from `release/local_merge.py` | release | evidence, contracts, platform |
 | The hold in `management/manager_rules.py` | management | evidence |
 | The cycle record and its orchestration, `management/rsi_cycle.py` **(missing)** | management | every context (it is the owner as a client) |
 | Reading GitHub's check-runs | `producers/github_adapter.py` (already an HTTP adapter), or the runner script outside `services/` | — |

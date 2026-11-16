@@ -17,10 +17,16 @@ from sqlmodel import Session
 from services.loop import board_moves
 
 RECLOSED = "reclosed_after_reopen"
+# docs/design/rsi-loop.md, REQ-21: whatever AUTO_SELF_IMPROVEMENT_ENABLED says.
+PROTECTED_PATHS_ON = "protected_paths_enabled"
 
 _REASONS = {
     "autonomy_below_threshold": "Autonomous follow-up skipped: company autonomy level is below 3.",
     "auto_self_improvement_disabled": "Autonomous follow-up skipped: auto self-improvement is disabled.",
+    PROTECTED_PATHS_ON: (
+        "Autonomous follow-up skipped: this company hosts the factory "
+        "(protected paths on), so no model-planned sprint runs for it."
+    ),
     "planner_returned_no_tasks": "Autonomous follow-up skipped: planner did not produce a usable backlog.",
     "company_missing": "Autonomous follow-up skipped: company context was missing.",
     "completed_no_follow_up": "Sprint completed with no autonomous follow-up trigger.",
