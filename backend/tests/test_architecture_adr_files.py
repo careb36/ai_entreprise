@@ -4,8 +4,10 @@ of ``docs/retrospectives/2026-11-self-hosting.md``).
 The first free number is read from the repository through the daemon, a
 decision already written keeps its file and number, a superseded decision
 says so in its file, every file's sha256 is the daemon's observation, and a
-missing daemon writes nothing. The write itself is faked in memory, like the
-other daemon tests (``test_architectures._Daemon``).
+missing daemon writes nothing. What the listing cannot answer — no ``docs/adr``
+yet, a listing the daemon truncated, a project folder it cannot read — is
+reported, never guessed. The write itself is faked in memory, like the other
+daemon tests (``test_architectures._Daemon``).
 """
 
 from __future__ import annotations
@@ -194,3 +196,79 @@ def test_without_a_daemon_the_write_is_a_clear_error_and_nothing_is_written(
     stored = test_client.get(f"/v1/architectures/{arch['id']}").json()
     assert stored["written_path"] is None
     assert stored["written_files"] == []
+
+
+def test_a_repository_without_an_adr_folder_numbers_from_one(
+    sqlite_session, test_client
+):
+    arch = _approved_architecture(sqlite_session, test_client)
+    daemon = _Daemon(
+        replies={
+            "workspace.list": {
+                "error": {"status": 404, "message": "Not a folder: docs/adr"}
+            },
+            "workspace.generate": {
+                "ok": True,
+                "files": [
+                    {
+                        "path": "docs/ARCHITECTURE.md",
+                        "status": "written",
+                        "sha256": "ab" * 32,
+                    },
+                    {
+                        "path": "docs/adr/0001-sqlite-for-the-store.md",
+                        "status": "written",
+                        "sha256": "cd" * 32,
+                    },
+                ],
+            },
+        }
+    )
+    app.state.nats_client = daemon
+    written = test_client.post(f"/v1/architectures/{arch['id']}/write")
+    assert written.status_code == 200, written.text
+    assert [(f["kind"], f["path"]) for f in written.json()["written_files"]] == [
+        ("architecture", "docs/ARCHITECTURE.md"),
+        ("adr", "docs/adr/0001-sqlite-for-the-store.md"),
+    ]
+
+
+def test_a_truncated_adr_listing_is_refused_rather_than_a_guessed_number(
+    sqlite_session, test_client
+):
+    arch = _approved_architecture(sqlite_session, test_client)
+    daemon = _Daemon(
+        replies={
+            "workspace.list": {
+                "path": "docs/adr",
+                "entries": ["docs/adr/0400-x.md"],
+                "truncated": True,
+            }
+        }
+    )
+    app.state.nats_client = daemon
+    written = test_client.post(f"/v1/architectures/{arch['id']}/write")
+    assert written.status_code == 502
+    assert "truncated" in written.json()["detail"]
+    assert [subject for subject, _ in daemon.requests] == ["workspace.list"]
+
+
+def test_a_project_folder_the_daemon_cannot_read_is_not_an_empty_adr_folder(
+    sqlite_session, test_client
+):
+    arch = _approved_architecture(sqlite_session, test_client)
+    daemon = _Daemon(
+        replies={
+            "workspace.list": {
+                "error": {
+                    "status": 404,
+                    "message": "The project folder is not on this machine.",
+                }
+            }
+        }
+    )
+    app.state.nats_client = daemon
+    written = test_client.post(f"/v1/architectures/{arch['id']}/write")
+    assert written.status_code == 404
+    assert "not on this machine" in written.json()["detail"]
+    assert [subject for subject, _ in daemon.requests] == ["workspace.list"]

@@ -21,6 +21,10 @@ A write reads the repository's ``docs/adr`` through the daemon and passes
 what it found: ``adr_files`` maps each file's slug to its number, so a
 decision already written keeps its file and number, and
 ``first_free_number`` numbers the new ones after the highest file there.
+The slug is the file's identity: a decision whose title changed and records
+no ``slug`` gets a new file, and a file whose decision is gone from the
+record is left as it was — a write never deletes one, nor rewrites a file
+it did not render.
 
 Pure; no I/O.
 """
