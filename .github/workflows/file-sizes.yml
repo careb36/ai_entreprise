@@ -11,13 +11,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/src/**'
-      - 'vscode-daemon/**'
-      - 'llm-proxy/**'
-      - 'scripts/**'
-      - '.github/workflows/file-sizes.yml'
+  # Which pull requests run the check: the `changes` job (changes.yml).
 
 permissions:
   contents: read
@@ -31,7 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   check:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.file-sizes == 'true') }}
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 5
     steps:

@@ -503,3 +503,22 @@ def test_the_document_is_the_rendering_of_the_record(records):
     spec, arch = records
     expected = arch_check.as_markdown(arch, spec["title"], 1)
     assert (REPO / "docs" / "ARCHITECTURE.md").read_text() == expected
+
+
+def test_no_decision_text_is_cut_by_the_record_s_limits():
+    # normalize() trims each text to arch_check.TEXT_LIMIT (titles to
+    # TITLE_LIMIT), and the rendering compares trimmed with trimmed, so a text
+    # past the limit would publish cut off without failing anything else.
+    raw = json.loads((REPO / "docs/architecture/architecture.json").read_text())
+    too_long = [
+        f"{d.get('title', '?')}: {field} has {len(d[field])} characters"
+        for d in raw.get("decisions", [])
+        for field, limit in (
+            ("title", arch_check.TITLE_LIMIT),
+            ("context", arch_check.TEXT_LIMIT),
+            ("decision", arch_check.TEXT_LIMIT),
+            ("consequences", arch_check.TEXT_LIMIT),
+        )
+        if len(" ".join(str(d.get(field) or "").split())) > limit
+    ]
+    assert not too_long, too_long

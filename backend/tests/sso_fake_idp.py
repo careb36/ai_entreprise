@@ -2,7 +2,8 @@
 
 The RSA key is generated when the test runs; discovery, the JWKS and the
 token endpoint are served through an ``httpx.MockTransport`` that the
-``fake_idp`` fixture installs as ``oidc.HTTP_TRANSPORT``. The token endpoint
+``fake_idp`` fixture (``conftest.py``, through ``serve_fake_idp``) installs
+as ``oidc.HTTP_TRANSPORT``. The token endpoint
 answers with an ID token built from ``claims`` (overridable per test), signed
 with ``sign_key`` (the provider's own key unless a test swaps it).
 """
@@ -19,7 +20,6 @@ from urllib.parse import parse_qs, urlsplit
 import auth_tokens
 import httpx
 import jwt
-import pytest
 from config import settings
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
@@ -98,8 +98,9 @@ class FakeIdp:
         return httpx.Response(404, json={"error": "not_found"})
 
 
-@pytest.fixture
-def fake_idp(monkeypatch):
+def serve_fake_idp(monkeypatch):
+    """The ``fake_idp`` fixture's body: ``conftest.py`` imports this module
+    only for the tests that ask for the fixture."""
     idp = FakeIdp()
     monkeypatch.setattr(oidc, "HTTP_TRANSPORT", httpx.MockTransport(idp.handler))
     monkeypatch.setattr(settings, "SSO_ALLOW_PRIVATE_ISSUERS", True)

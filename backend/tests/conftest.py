@@ -12,6 +12,7 @@ Usage::
         ...
 """
 
+import importlib.abc
 import sys
 from pathlib import Path
 from unittest import mock
@@ -124,9 +125,6 @@ from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-# The fake OpenID Connect provider of the SSO tests, as a shared fixture.
-from sso_fake_idp import fake_idp  # noqa: F401
-
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine — shared across all tests within a session via
 # StaticPool so every Session sees the same in-memory database. An in-memory
@@ -142,6 +140,133 @@ _engine = create_engine(
 )
 
 
+# ---------------------------------------------------------------------------
+# A fixture acts on a module only once the test has loaded it (``when_loaded``):
+# a test loads only what it uses, so a change at a module's top level selects
+# only the tests that load it (``scripts/affected_tests.py --by module``).
+# ---------------------------------------------------------------------------
+
+
+class _AfterImport(importlib.abc.MetaPathFinder):
+    """Runs a test's pending actions on a module right after its first import."""
+
+    def __init__(self) -> None:
+        self.pending: dict[str, list] = {}
+
+    def find_spec(self, name, path=None, target=None):
+        if name not in self.pending:
+            return None
+        for finder in sys.meta_path:
+            if finder is not self and hasattr(finder, "find_spec"):
+                spec = finder.find_spec(name, path, target)
+                if spec is not None:
+                    break
+        else:
+            return None
+        if spec.loader is None:
+            return spec
+        exec_module = spec.loader.exec_module
+
+        def exec_then_act(module):
+            exec_module(module)
+            for act in self.pending.pop(name, []):
+                act(module)
+
+        spec.loader.exec_module = exec_then_act
+        return spec
+
+
+_after_import = _AfterImport()
+sys.meta_path.insert(0, _after_import)
+
+
+def when_loaded(name, act):
+    """``act(module)`` now if the module *name* is loaded, else right after a
+    later import of it during this test. ``scripts/affected_graph.py`` draws
+    no edge from a fixture to the module it names here: a test reaches that
+    module through its own imports, or the fixture does nothing."""
+    for loaded in (name, "app." + name):
+        if loaded in sys.modules:
+            act(sys.modules[loaded])
+    if name not in sys.modules:
+        _after_import.pending.setdefault(name, []).append(act)
+
+
+# What the process keeps by a row's id (or another key a later test reuses),
+# emptied after every test: the tables ``sqlite_session`` empties, and the
+# in-memory database of a test's own engine, hand out their ids again, so a
+# later test's task 1 is not this test's. A module never loaded keeps nothing.
+# ``test_process_state.py`` fails on a module-level container of ``services``
+# that is neither here nor in its list of safe ones.
+PROCESS_STATE = {
+    "services.loop.worker.intake.LAST_AUTONOMOUS_QUEUE_AT": "by task id",
+    "services.management.manager_observe._last_credit_probe": "by company id",
+    "services.management.manager_observe._bridge": "a test's NATS, loop, requester",
+    # A background integration that an earlier test's event loop dropped
+    # mid-attempt never released its lock, so a later test's sprint 1 found
+    # it held and was never integrated.
+    "services.platform.locks._local_held": "by sprint or task id",
+    "services.platform.login_throttle._records": "sign-in failures by account",
+    "services.platform.oidc._discovery_cache": "by issuer, reused by each fake IdP",
+    "services.platform.oidc._jwks_cache": "by JWKS URL, holding another test's keys",
+    "services.models.routing_policy._warned": "warned once: a later test sees none",
+    "services.release.integration._LOCKS": "by sprint id",
+    "services.release.integration_jobs._RUNNING": "integrations, each of a sprint id",
+    "services.tools.developer_tools._bridge": "a test's NATS and closed event loop",
+    "services.workspace.daemon_liveness._daemons": "heartbeats by daemon id",
+    "services.workspace.workspace_snapshot._tree_cache": "trees by workspace path",
+    "routers.agents.sse_connections": "Glassroom subscribers by sprint id",
+    "routers.agents.recent_sse_events": "Glassroom events by sprint id",
+}
+
+
+@pytest.fixture(autouse=True)
+def forget_process_state():
+    """After each test, ``PROCESS_STATE`` emptied and the pending actions of
+    ``when_loaded`` dropped. The first autouse fixture: its teardown runs last."""
+    yield
+    _after_import.pending.clear()
+    empty_process_state()
+
+
+def empty_process_state():
+    """Empty each container of ``PROCESS_STATE`` in the modules loaded."""
+    for dotted in PROCESS_STATE:
+        name, attr = dotted.rsplit(".", 1)
+        for loaded in (name, "app." + name):
+            # A module still importing may not define it yet (nothing kept);
+            # test_every_listed_container_exists catches a misspelt name.
+            container = getattr(sys.modules.get(loaded), attr, None)
+            if container is not None:
+                container.clear()  # atomic under the GIL
+
+
+def _listen_for_closed_sprints(hooks):
+    """Install ``integration_jobs`` if it is loaded, else a stand-in that
+    loads and installs it when a sprint first closes."""
+    jobs = sys.modules.get("services.release.integration_jobs")
+    # A test whose first import is integration_jobs loads hooks from inside
+    # it: the module is then in sys.modules without install() yet, and counts
+    # as not loaded (the stand-in installs it at the first close).
+    if jobs is not None and hasattr(jobs, "install"):
+        hooks.off(hooks.SPRINT_CLOSED, _integrate_after_close)
+        jobs.install()
+    else:
+        hooks.on(hooks.SPRINT_CLOSED, _integrate_after_close)
+
+
+def _integrate_after_close(**payload):
+    """Stands in for ``integration_jobs.on_sprint_closed`` until a sprint closes."""
+    from services.platform import hooks
+    from services.release import integration_jobs
+
+    hooks.off(hooks.SPRINT_CLOSED, _integrate_after_close)
+    if integration_jobs.on_sprint_closed not in hooks.handlers(hooks.SPRINT_CLOSED):
+        # Not installed meanwhile (``main.py`` installs it when the app is built).
+        integration_jobs.install()
+        integration_jobs.on_sprint_closed(**payload)
+
+
 @pytest.fixture(autouse=True)
 def disable_auth_for_legacy_tests(monkeypatch):
     # The legacy suite predates authentication enforcement.
@@ -152,26 +277,23 @@ def disable_auth_for_legacy_tests(monkeypatch):
 def sign_in_limits_out_of_the_way(monkeypatch):
     """The suite signs in and registers far more often than a person would,
     all from the test client's one address: the limits of the password
-    routes (issue #541) are lifted, and their counters and the per-account
-    backoff start empty. ``test_auth_limits.py`` lowers them to test them."""
-    from security import limiter
-    from services.platform import login_throttle
-
+    routes (issue #541) are lifted, and their counters start empty (the
+    per-account backoff is ``PROCESS_STATE``). ``test_auth_limits.py``
+    lowers them to test them."""
     monkeypatch.setattr(settings, "LOGIN_RATE_LIMIT", "100000/minute")
     monkeypatch.setattr(settings, "REGISTER_RATE_LIMIT", "100000/minute")
     monkeypatch.setattr(settings, "LOGIN_FAILURES_BEFORE_BACKOFF", 100000)
-    limiter.reset()
-    login_throttle.reset()
+    when_loaded("security", lambda security: security.limiter.reset())
 
 
 @pytest.fixture(autouse=True)
 def release_listens_to_sprint_closed():
     """A closed sprint's integration starts from ``sprint.closed``, as in the
     backend, where ``main.py`` installs the handler; a test that closes a
-    sprint without the app gets it too."""
-    from services.release import integration_jobs
-
-    integration_jobs.install()
+    sprint without the app gets it too. Only a test that loads
+    ``platform.hooks`` can emit the event, and release is loaded only when a
+    sprint closes (``_listen_for_closed_sprints``)."""
+    when_loaded("services.platform.hooks", _listen_for_closed_sprints)
 
 
 @pytest.fixture(autouse=True)
@@ -216,7 +338,6 @@ def no_scrum_master_proxy(monkeypatch):
     A test that blocks a task gets the deterministic default (no decision)
     unless it patches ``scrum_master.ask`` or ``scrum_master.LLMProxyClient``.
     """
-    from services.learning import scrum_master
 
     class _NoProxy:
         def __init__(self, base_url=None):
@@ -225,11 +346,12 @@ def no_scrum_master_proxy(monkeypatch):
         def chat(self, messages, model, role, bu_id=None):
             return {"error": "no LLM proxy in tests"}
 
-    monkeypatch.setattr(scrum_master, "LLMProxyClient", _NoProxy)
-    # The wiki's compilation at sprint close (#445) asks the same way.
-    from services.learning import wiki_compile
+    def no_proxy(module):
+        monkeypatch.setattr(module, "LLMProxyClient", _NoProxy)
 
-    monkeypatch.setattr(wiki_compile, "LLMProxyClient", _NoProxy)
+    when_loaded("services.learning.scrum_master", no_proxy)
+    # The wiki's compilation at sprint close (#445) asks the same way.
+    when_loaded("services.learning.wiki_compile", no_proxy)
 
 
 SQLModel.metadata.create_all(
@@ -329,22 +451,15 @@ def _empty_shared_database():
         ).scalars()
         for name in list(names):
             connection.exec_driver_sql(f'DELETE FROM "{name}"')
-    # Emptied tables hand out their ids again, so what the process remembers
-    # by a row's id goes too: a later test's task 1 is not this test's.
-    from services.loop.worker import intake
-    from services.management import manager_observe
-    from services.platform import locks
-    from services.release import integration, integration_jobs
+    # What the process keeps by a row's id goes too: ``forget_process_state``.
 
-    intake.LAST_AUTONOMOUS_QUEUE_AT.clear()
-    manager_observe._last_credit_probe.clear()
-    # Locks and jobs are kept by a sprint's id as well: a background integration
-    # that an earlier test's event loop dropped mid-attempt never released its
-    # lock, so a later test's sprint 1 found it held and was never integrated.
-    with locks._local_lock:
-        locks._local_held.clear()
-    integration._LOCKS.clear()
-    integration_jobs._RUNNING.clear()
+
+@pytest.fixture()
+def fake_idp(monkeypatch):
+    """The fake OpenID Connect provider of the SSO tests (``sso_fake_idp.py``)."""
+    from sso_fake_idp import serve_fake_idp
+
+    yield from serve_fake_idp(monkeypatch)
 
 
 class _FakeNATSClient:

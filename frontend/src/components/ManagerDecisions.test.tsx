@@ -53,6 +53,39 @@ describe('ManagerDecisions', () => {
     expect(screen.getByText(/could not suggest/)).toBeInTheDocument()
   })
 
+  it('shows why the policy did not let the agent decide alone, apart from its claim', () => {
+    const refused = {
+      ...DECISION, decided_by: null, rule: null, outcome: null, action_state: 'not_allowed',
+      refusal_reason: 'accept_delivery: an operator froze the task',
+    }
+    const { rerender } = render(<ManagerSuggestion suggestion={refused} />)
+    // The claim stays the model's; the refusal is the platform's own line.
+    expect(screen.getByText('Manager agent suggests: accept')).toBeInTheDocument()
+    expect(screen.getByText('Not decided alone: accept_delivery: an operator froze the task')).toBeInTheDocument()
+    rerender(<ManagerSuggestion suggestion={{ ...refused, refusal_reason: null }} />)
+    expect(screen.queryByText(/Not decided alone/)).not.toBeInTheDocument()
+  })
+
+  it('lists the refusals in the brief with their reasons', () => {
+    vi.mocked(useClientBrief).mockReturnValue({
+      data: {
+        since: '2026-11-07T00:00:00', done: { count: 0 },
+        agent: {
+          suggested: 2, taken_alone: 0, overridden: 0, refused: 2,
+          refusals: [
+            { id: 8, item_kind: 'task', item_id: 3, category: 'accept_delivery', decision: 'accept', reason: 'Looks fine.', action_state: 'not_allowed', refusal_reason: 'no rule of the policy applies' },
+            { id: 9, item_kind: 'run', item_id: 4, category: 'approve_run', decision: null, reason: null, action_state: 'stale', refusal_reason: 'the item no longer waits for a decision' },
+          ],
+        },
+        waiting: { total: 0 }, cost: { tokens_since: 0, tokens_total: 0, over_budget: false },
+      },
+    } as never)
+    render(<ClientBriefCard companyId={42} />)
+    expect(screen.getByText('Not decided alone (2)')).toBeInTheDocument()
+    expect(screen.getByText('accept (task #3): no rule of the policy applies')).toBeInTheDocument()
+    expect(screen.getByText('no usable suggestion (run #4): the item no longer waits for a decision')).toBeInTheDocument()
+  })
+
   it("reads the client's brief", () => {
     vi.mocked(useClientBrief).mockReturnValue({
       data: {

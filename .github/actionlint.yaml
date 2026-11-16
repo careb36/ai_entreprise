@@ -1,3 +1,5 @@
 self-hosted-runner:
   labels:
     - lafabrique
+    # Carried by the two runners that take e2e jobs (e2e.yml).
+    - e2e

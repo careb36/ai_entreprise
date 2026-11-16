@@ -11,23 +11,33 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'vscode-daemon/**'
-      - 'scripts/e2e/**'
-      - 'scripts/backup.sh'
-      - '.github/workflows/e2e.yml'
-
 
 # The self-hosted runners are shared by every pull request and by main: a new
 # push cancels the runs of the commit it replaces, on main too (the newest
 # commit's run covers the ones merged before it), instead of queueing behind them.
+#
+# This group only cancels superseded runs of the same ref. How many e2e jobs
+# run on the machine at once, across every pull request, is set by the runner
+# label below, not here: a concurrency group holds one running and one pending
+# run, and a third arrival cancels the pending one, which is a failed check.
 concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   e2e:
+    needs: changes
+    # Not a job-level `if` on the paths: a matrix job skipped that way reports
+    # once under the bare name `e2e`, and the checks "e2e (host)" and
+    # "e2e (container)" would wait forever. Both start; when E2E_RUN is not
+    # 'true' every step is skipped and the job ends in seconds as a success.
+    if: ${{ !cancelled() }}
     # upload-artifact needs to write to the run's artifact store; a bare
     # `contents: read` would make the keep-the-logs step fail.
     permissions:
@@ -36,7 +46,21 @@ jobs:
     # Runs on the self-hosted runner like every other workflow: hosted runners
     # are blocked by the account's spending limit, so a job on ubuntu-latest
     # never starts and reports a failure it never produced.
-    runs-on: [self-hosted, linux, x64, lafabrique]
+    #
+    # At most two e2e jobs on the machine at once (each starts Postgres, NATS,
+    # the backend and the daemon: two at a time is what four cores and 16 GB
+    # hold beside the other jobs). A job that runs the loop asks for the
+    # extra label `e2e` once the repository variable E2E_RUNS_ON is set to
+    # '["self-hosted","linux","x64","lafabrique","e2e"]' and two of the seven
+    # runners carry that label; GitHub then queues the rest until one of
+    # those two is free and cancels nothing. Unset (the default), an e2e job
+    # takes any runner, as before: setting the variable before any runner has
+    # the label would leave every e2e job waiting until GitHub cancels it.
+    # The limit is the number of runners with the label (docs/OPERATIONS.md,
+    # Runner capacity). A job
+    # with nothing to run takes any runner, so a skipped e2e never waits for
+    # an e2e slot.
+    runs-on: ${{ fromJSON((needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true') && (vars.E2E_RUNS_ON || '["self-hosted","linux","x64","lafabrique"]') || '["self-hosted","linux","x64","lafabrique"]') }}
     timeout-minutes: 25
     # Once with agent-written code on the host, once in a container per run
     # (DELIVERY_SANDBOX=container): the daemon's report must say which.
@@ -64,10 +88,25 @@ jobs:
       # secreto que buscar aquí: la clave se lee del entorno.
       POETRY_NO_INTERACTION: "1"
       PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+      # 'true' when the pull request changes what the loop runs (changes.yml),
+      # on every push to main, and when the filter failed.
+      E2E_RUN: ${{ needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true' }}
     steps:
+      - name: Nothing the loop runs changed
+        if: env.E2E_RUN != 'true'
+        run: echo "Skipped, this pull request changes nothing the end-to-end run reads (changes.yml)."
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.E2E_RUN == 'true'
 
       - name: Start Postgres, NATS and pick free ports
+        if: env.E2E_RUN == 'true'
+        env:
+          # Optional memory caps for the two containers (`docker run --memory`,
+          # e.g. 1g and 256m), from repository variables; empty means no cap.
+          # docs/OPERATIONS.md, Runner capacity.
+          PG_MEMORY: ${{ vars.E2E_POSTGRES_MEMORY }}
+          NATS_MEMORY: ${{ vars.E2E_NATS_MEMORY }}
         run: |
           # Docker itself picks the port (empty host side of -p), then the
           # mapping is read back. Binding an ephemeral port in Python and
@@ -89,10 +128,14 @@ jobs:
           # behind (#566).
           docker rm -fv "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" >/dev/null 2>&1 || true
-          docker run -d --name "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
+          pg_limits=()
+          if [ -n "$PG_MEMORY" ]; then pg_limits=(--memory "$PG_MEMORY"); fi
+          nats_limits=()
+          if [ -n "$NATS_MEMORY" ]; then nats_limits=(--memory "$NATS_MEMORY"); fi
+          docker run -d --name "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "${pg_limits[@]}" \
             -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
             -p "127.0.0.1::5432" pgvector/pgvector:pg15
-          docker run -d --name "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
+          docker run -d --name "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "${nats_limits[@]}" \
             -p "127.0.0.1::4222" nats:2.10 -js
 
           pg_port="$(docker port "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" 5432/tcp | head -1 | sed 's/.*://')"
@@ -126,6 +169,7 @@ jobs:
           echo "postgres port: $pg_port / nats port: $nats_port"
 
       - name: Set up Python 3.12 (uv)
+        if: env.E2E_RUN == 'true'
         shell: bash
         run: |
           python3 -m pip install --user --break-system-packages uv >/dev/null
@@ -134,6 +178,7 @@ jobs:
           echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
 
       - name: Install the backend
+        if: env.E2E_RUN == 'true'
         working-directory: ./backend
         run: |
           # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
@@ -145,6 +190,7 @@ jobs:
           poetry install --no-interaction
 
       - name: Run the loop end to end
+        if: env.E2E_RUN == 'true'
         env:
           E2E_WORKDIR: ${{ runner.temp }}/e2e
           E2E_SANDBOX: ${{ matrix.sandbox }}
@@ -166,7 +212,7 @@ jobs:
       # filled, restored into a scratch database (the restore creates it)
       # that must hold the same tables and the same audit chain length.
       - name: Back up and restore the e2e database
-        if: matrix.sandbox == 'host'
+        if: env.E2E_RUN == 'true' && matrix.sandbox == 'host'
         env:
           PG_CONTAINER: pg-e2e-${{ github.run_id }}-${{ matrix.sandbox }}
           POSTGRES_USER: factory
@@ -187,14 +233,14 @@ jobs:
       # advisory locks and the conditional updates are real (the backend
       # suite runs the same races on SQLite).
       - name: Two workers on Postgres
-        if: matrix.sandbox == 'host'
+        if: env.E2E_RUN == 'true' && matrix.sandbox == 'host'
         working-directory: ./backend
         run: |
           REPLICAS_POSTGRES_URL="postgresql://factory:factorypw@127.0.0.1:${E2E_POSTGRES_PORT}/factory_e2e" \
             PYTHONPATH=.:app poetry run python -m pytest tests/test_replicas.py -q -k postgres
 
       - name: Stop the containers
-        if: always()
+        if: always() && env.E2E_RUN == 'true'
         run: |
           # -v again: the anonymous volume of this run's pgvector container goes
           # with it, so a completed run leaks nothing (#566).
@@ -202,7 +248,7 @@ jobs:
 
       - name: Keep the logs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+        if: always() && env.E2E_RUN == 'true'
         with:
           name: e2e-logs-${{ matrix.sandbox }}
           # The run's logs, and the self-hosting harness's (step 9d,

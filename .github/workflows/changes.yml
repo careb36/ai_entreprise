@@ -1,0 +1,166 @@
+# Changes — which jobs a pull request's files can affect.
+#
+# Called by backend-tests.yml, frontend-build.yml, docker-build.yml, e2e.yml,
+# file-sizes.yml and workflows.yml (`uses: ./.github/workflows/changes.yml`).
+# Each output is the string 'true' or 'false'; a job runs when its output is
+# 'true'. This file is the one place the path mapping lives: docs/TESTING.md
+# (CI, Which jobs a pull request runs) describes it, and
+# backend/tests/test_ci_paths.py holds the callers and the mapping to it.
+#
+# Every output is 'true':
+#   - on any event but a pull request (a push to main, a schedule, a manual
+#     run): those keep running everything;
+#   - when the pull request changes a workflow (`workflows` below), since a
+#     changed workflow may change what any job does.
+# A caller also runs its job when this workflow did not succeed (the filter
+# could not list the files), so a broken filter runs too much, never too
+# little.
+#
+# Why a job and not `on.pull_request.paths`: a workflow that path filtering
+# does not start reports nothing, and a required status check then waits
+# forever. A job skipped by its `if:` reports "skipped", which a required
+# check accepts as passing.
+
+name: Changes
+
+on:
+  workflow_call:
+    outputs:
+      workflows:
+        description: "A workflow or the actionlint configuration changed"
+        value: ${{ jobs.filter.outputs.workflows }}
+      backend:
+        description: "Backend tests (backend-tests.yml)"
+        value: ${{ jobs.filter.outputs.backend }}
+      frontend:
+        description: "Frontend build (frontend-build.yml)"
+        value: ${{ jobs.filter.outputs.frontend }}
+      e2e:
+        description: "End to end (e2e.yml)"
+        value: ${{ jobs.filter.outputs.e2e }}
+      file-sizes:
+        description: "File sizes (file-sizes.yml)"
+        value: ${{ jobs.filter.outputs.file-sizes }}
+      docker-backend:
+        description: "Docker build of the backend image"
+        value: ${{ jobs.filter.outputs.docker-backend }}
+      docker-janitor:
+        description: "Docker build of the janitor image"
+        value: ${{ jobs.filter.outputs.docker-janitor }}
+      docker-frontend:
+        description: "Docker build of the frontend image"
+        value: ${{ jobs.filter.outputs.docker-frontend }}
+      docker-llm-proxy:
+        description: "Docker build of the llm-proxy image"
+        value: ${{ jobs.filter.outputs.docker-llm-proxy }}
+      docker-vscode-daemon:
+        description: "Docker build of the vscode-daemon image"
+        value: ${{ jobs.filter.outputs.docker-vscode-daemon }}
+
+jobs:
+  filter:
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 5
+    # On a pull request the filter lists the files through the API, which
+    # needs `pull-requests: read`; there is no checkout. The calling job grants
+    # the same, since a called workflow cannot widen its caller's token.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      workflows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.backend == 'true' }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.frontend == 'true' }}
+      e2e: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.e2e == 'true' }}
+      file-sizes: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.file-sizes == 'true' }}
+      docker-backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-backend == 'true' }}
+      docker-janitor: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-janitor == 'true' }}
+      docker-frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-frontend == 'true' }}
+      docker-llm-proxy: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-llm-proxy == 'true' }}
+      docker-vscode-daemon: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-vscode-daemon == 'true' }}
+    steps:
+      - name: List the changed files and match them
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actionlint.yaml'
+            # Everything the backend suite reads or imports outside backend/,
+            # and the llm-proxy suite the same job runs.
+            # backend/tests/test_ci_paths.py fails when a test reads a path
+            # outside this list. frontend/src is left out on purpose: the one
+            # backend test that reads it runs the layer check, which the
+            # frontend build runs too.
+            backend:
+              - 'backend/**'
+              - 'llm-proxy/**'
+              - 'vscode-daemon/**'
+              - 'bench/**'
+              - 'db/init-db/**'
+              - 'nats/**'
+              - 'scripts/bench/**'
+              - 'scripts/e2e/**'
+              - 'scripts/self_host/**'
+              # test_check_file_sizes.py reads every top-level script and its
+              # baselines; test_affected_tests.py and test_check_script.py read theirs.
+              - 'scripts/*'
+              - 'scripts/check_architecture.py'
+              - 'scripts/check_frontend_architecture.py'
+              - 'scripts/licence_scan.py'
+              - 'scripts/nats_config.py'
+              - 'scripts/release_notes.py'
+              - 'scripts/wstg_catalogue.py'
+              - 'scripts/start-daemon.sh'
+              - 'scripts/start-daemon.ps1'
+              - 'docs/architecture/**'
+              - 'docs/ARCHITECTURE.md'
+              - 'docs/adr/**'
+              - 'docs/OPERATIONS.md'
+              - 'docs/STANDARDS.md'
+              - 'CHANGELOG.md'
+              - 'NOTICE'
+              - '.env.example'
+              - 'docker-compose.yml'
+              - '.pre-commit-config.yaml'
+              - '.github/CODEOWNERS'
+              - '.github/dependabot.yml'
+              - '.github/licence-exceptions.txt'
+              - '.github/pip-audit-ignore.txt'
+            frontend:
+              - 'frontend/**'
+              - 'docs/architecture/frontend.json'
+              - 'scripts/check_frontend_architecture.py'
+            e2e:
+              - 'backend/**'
+              - 'vscode-daemon/**'
+              - 'llm-proxy/**'
+              - 'nats/**'
+              - 'scripts/e2e/**'
+              - 'scripts/self_host/**'
+              - 'scripts/backup.sh'
+              - 'scripts/nats_config.py'
+              - 'docs/architecture/specification.json'
+              - 'docs/architecture/architecture.json'
+              - 'docker-compose*.yml'
+            file-sizes:
+              - 'backend/**'
+              - 'frontend/src/**'
+              - 'vscode-daemon/**'
+              - 'llm-proxy/**'
+              - 'scripts/**'
+            # One per image: its build context and Dockerfile. The janitor's
+            # context is the repository root, but its Dockerfile copies only
+            # backend/janitor/.
+            docker-backend:
+              - 'backend/**'
+            docker-janitor:
+              - 'backend/janitor/**'
+            docker-frontend:
+              - 'frontend/**'
+            docker-llm-proxy:
+              - 'llm-proxy/**'
+            docker-vscode-daemon:
+              - 'vscode-daemon/**'

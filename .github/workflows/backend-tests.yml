@@ -5,20 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'llm-proxy/**'
-      - 'bench/verifier/**'
-      - 'scripts/check_architecture.py'
-      - 'scripts/check_frontend_architecture.py'
-      - 'docs/architecture/**'
-      - 'docs/ARCHITECTURE.md'
-      # test_workflow_pinning.py reads every workflow, dependabot.yml and the
-      # audit's ignore list: a tag-pinned action in any workflow fails here.
-      - '.github/workflows/**'
-      - '.github/dependabot.yml'
-      - '.github/pip-audit-ignore.txt'
-
+  # No `paths:` here: the `changes` job below decides, so the check reports on
+  # every pull request (skipped when nothing it reads changed) instead of
+  # leaving a required check waiting. The mapping is in changes.yml.
 
 # The self-hosted runners are shared by every pull request and by main: a new
 # push cancels the runs of the commit it replaces, on main too (the newest
@@ -28,7 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   test:
+    needs: changes
+    # Runs when the suite's inputs changed, and when the filter itself failed:
+    # a broken filter runs too much, never too little.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.backend == 'true') }}
     # upload-artifact needs to write to the run's artifact store; a bare
     # `contents: read` would make the keep-the-logs step fail.
     permissions:
@@ -109,12 +108,17 @@ jobs:
 
       - name: Run tests
         working-directory: ./backend
+        env:
+          WORKERS: ${{ vars.BACKEND_TEST_WORKERS || '4' }}
         run: |
           # In parallel with pytest-xdist (a dev dependency), capped at four
           # workers: the seven self-hosted runners share one machine, and
           # `-n auto` would start a worker per core in every job at once.
           # loadgroup keeps the `xdist_group("wall_clock")` tests on one worker.
-          PYTHONPATH=.:app poetry run pytest tests -v --tb=short -n 4 --dist loadgroup
+          # Each worker holds its own interpreter and SQLite database: fewer
+          # workers use less memory and take longer (the repository variable
+          # BACKEND_TEST_WORKERS; docs/OPERATIONS.md, Runner capacity).
+          PYTHONPATH=.:app poetry run pytest tests -v --tb=short -n "$WORKERS" --dist loadgroup
 
       - name: Run llm-proxy tests
         working-directory: .

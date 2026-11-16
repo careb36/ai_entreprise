@@ -6,7 +6,7 @@ Verifier then judges, each reply kept on the run's evidence:
 - the acceptance test files on disk against what QA delivered
   (``guard_test_files``, ``workspace.hash``), restored when they differ;
 - the dependency install when a manifest changed
-  (``workspace/dependency_install.py``);
+  (``delivery_commands.install_dependencies``);
 - the project's tests (``workspace.execute``): ``test_run`` and ``ci``, with
   the runner's per-test lines read back per criterion
   (``evidence/criteria_tests.py``); then the suites of the folders the
@@ -29,13 +29,15 @@ Verifier then judges, each reply kept on the run's evidence:
   runs in that image instead of ``DELIVERY_SANDBOX_IMAGE``.
 
 The install, the tests and the application check each ask for the whole
-output too (``workspace/run_logs.py``): the daemon uploads it to the object
-store, the backend reads it back, hashes it and records ``full_log`` on the
-record beside the tail.
+output too (``workspace/run_logs.py``, through ``delivery_commands``): the
+daemon uploads it to the object store, the backend reads it back, hashes it
+and records ``full_log`` on the record beside the tail.
 
 The workspace sends the requests and returns observations; the evidence
 judges them; this module, in the loop, puts the two together (ADR 0012). The
-commands come from the stack profile (``workspace/project_profile.py``).
+daemon's requests go through the workspace's one entry point for them
+(``workspace/delivery_commands.py``, ADR 0018); the commands come from the
+stack profile (``workspace/project_profile.py``).
 """
 
 from __future__ import annotations
@@ -59,24 +61,10 @@ from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
 from services.loop import delivery_suites
-from services.workspace import dependency_install, run_logs, sandbox, workspace_daemon
-from services.workspace.dependency_install import REPLY_MARGIN_SECONDS
+from services.workspace import delivery_commands, sandbox, workspace_daemon
 from services.workspace.project_profile import Context
 
 logger = logging.getLogger(__name__)
-
-# The application check's bounded phases beyond the ready and e2e bounds, as
-# ``vscode-daemon/app_run.py`` sets them: ``docker run -d`` (LAUNCH_SECONDS,
-# 120 s, a cold image is pulled), the last inspect and probe and the teardown
-# (logs, removal), each a runtime call of RUNTIME_CALL_SECONDS (30 s).
-_APP_OVERHEAD_SECONDS = 120.0 + 4 * 30.0
-# The browser probe before a browser e2e command (vscode-daemon/browser_probe.py,
-# PROBE_SECONDS) and the full log's upload after the run.
-_BROWSER_PROBE_SECONDS = 90.0
-# The security probe once the application listens (vscode-daemon/security_probe.py,
-# PROBE_SECONDS: its own 40 s bound and the in-container margin).
-_SECURITY_PROBE_SECONDS = 60.0
-_FULL_LOG_UPLOAD_SECONDS = 60.0
 
 
 async def run_delivery_tests(
@@ -92,7 +80,7 @@ async def run_delivery_tests(
     tests alone (a sprint's integration, whose status reads only the test
     run)."""
     ctx = Context(nats_client, sprint, evidence, engine)
-    await dependency_install.install_if_needed(ctx)
+    await delivery_commands.install_dependencies(ctx)
     await _run_tests(nats_client, sprint, evidence, engine, ctx)
     # The suites of the folders the delivery wrote in and the company's
     # every-delivery commands (``delivery_suites``); the root's run above.
@@ -110,11 +98,11 @@ async def _run_tests(
 ) -> None:
     """Run the project's tests through the daemon and add the result to *evidence*:
     ``test_run`` (command, exit code, output tail) and ``ci``, the shape
-    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's.
-    The command is the resolved stack profile's (``Context.test_command``):
-    the company's, the deployment's, or the detected one; an empty one in the
-    company's profile turns the tests off."""
-    workspace_root = evidence["workspace_root"]
+    ``check_claimed_tests_evidenced`` reads (``delivery_commands.run_tests``).
+    The exit status is the daemon's. The command is the resolved stack
+    profile's (``Context.test_command``): the company's, the deployment's, or
+    the detected one; an empty one in the company's profile turns the tests
+    off."""
     command, reason = await ctx.test_command()
     if not command:
         evidence["test_run"] = {"command": None, "reason": reason}
@@ -122,39 +110,9 @@ async def _run_tests(
     if evidence.get("acceptance"):
         # Per-test lines, so the criteria's tests can be told apart.
         command = criteria_tests.verbose_command(command)
-    try:
-        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, engine)
-    except sandbox.PolicyUnavailable as e:
-        # Never run agent code under a guessed sandbox: the tests stay unverified.
-        evidence["test_run"] = {"command": command, "reason": str(e)}
+    output = await delivery_commands.run_tests(ctx, command)
+    if output is None:
         return
-    full_log = run_logs.request_spec(nats_client)
-    try:
-        result = await nats_client.request(
-            "workspace.execute",
-            {
-                "command": command,
-                "workspace_root": workspace_root,
-                "sprint_id": sprint["id"],
-                # Agent-written code: run as the company's sandbox says.
-                "sandbox": box,
-                **run_logs.request_field(full_log),
-            },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS
-            + (_FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0),
-        )
-    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
-        evidence["test_run"] = {
-            "command": command,
-            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
-        }
-        return
-    workspace_daemon.record_test_run(evidence, command, result)
-    evidence["test_run"]["full_log"] = await run_logs.observe(
-        nats_client, full_log, result
-    )
-    reply = result if isinstance(result, dict) else {}
-    output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
     criteria_tests.record_results(evidence, output)
     # Tests named after a WSTG test (``test_wstg_athz_02_…``, issue #539).
     wstg_tests.record(evidence, output)
@@ -211,8 +169,6 @@ async def check_application(ctx: Context) -> None:
     except sandbox.PolicyUnavailable as e:
         evidence["app_run"] = {**base, "reason": str(e)}
         return
-    ready = float(settings.DELIVERY_APP_READY_TIMEOUT_SECONDS)
-    e2e_timeout = float(settings.DELIVERY_E2E_TIMEOUT_SECONDS)
     e2e = profile.get("e2e") or browser_smoke.default_command(
         ctx.company().get("overrides"), profile, evidence
     )
@@ -224,69 +180,10 @@ async def check_application(ctx: Context) -> None:
         # daemon records which image ran (its content ID and digest).
         box = {**box, "image": settings.DELIVERY_BROWSER_IMAGE.strip()}
         base["image_source"] = "DELIVERY_BROWSER_IMAGE"
-    full_log = run_logs.request_spec(ctx.nats)
-    try:
-        reply = await ctx.nats.request(
-            "workspace.app.check",
-            {
-                "workspace_root": evidence["workspace_root"],
-                "start_command": start,
-                "port": int(port),
-                "probe_path": profile.get("probe_path") or "/",
-                "e2e_command": e2e,
-                "ready_timeout_seconds": ready,
-                "e2e_timeout_seconds": e2e_timeout,
-                "sandbox": box,
-                "sprint_id": ctx.sprint.get("id"),
-                "security_probe": True,
-                **({"browser_probe": True} if browser else {}),
-                **run_logs.request_field(full_log),
-            },
-            timeout=ready
-            + (e2e_timeout if e2e else 0)
-            + _APP_OVERHEAD_SECONDS
-            + _SECURITY_PROBE_SECONDS
-            + (_BROWSER_PROBE_SECONDS if browser else 0)
-            + (_FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0)
-            + REPLY_MARGIN_SECONDS,
-        )
-    except Exception as e:  # noqa: BLE001 - A silent daemon leaves it unverified.
-        evidence["app_run"] = {
-            **base,
-            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
-        }
-        return
-    evidence["app_run"] = {**base, **_app_record(reply)}
-    # Asked for on every check: a reply without it is not observed, never clean.
-    evidence["app_run"]["security_probe_requested"] = True
-    if browser:
-        evidence["app_run"]["browser_probe_requested"] = True
-    evidence["app_run"]["full_log"] = await run_logs.observe(ctx.nats, full_log, reply)
-    browser_smoke.read_back(evidence)
-
-
-def _app_record(reply: Any) -> dict[str, Any]:
-    """The daemon's reply, kept with only the fields the checks read."""
-    reply = reply if isinstance(reply, dict) else {}
-    keep = (
-        "started",
-        "listening",
-        "ready_seconds",
-        "ready_timeout_seconds",
-        "exit_code",
-        "probe",
-        "e2e",
-        "log",
-        "stopped",
-        "sandbox",
-        "refused",
-        "browser_probe",
-        "security_probe",
-    )
-    record = {k: reply[k] for k in keep if k in reply}
-    if reply.get("error"):
-        record["reason"] = reply["error"]
-    return record
+    record, replied = await delivery_commands.check_app(ctx, profile, box, e2e, browser)
+    evidence["app_run"] = {**base, **record}
+    if replied:
+        browser_smoke.read_back(evidence)
 
 
 async def guard_test_files(

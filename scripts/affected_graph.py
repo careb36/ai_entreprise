@@ -28,8 +28,11 @@ with ``ast`` (nothing is imported or run) and give two kinds of edge:
 
 ``conftest.py`` is a node every test uses: its module-level imports and its
 autouse fixtures' imports, and a test that names one of its other fixtures as
-a parameter (``test_client``) uses that fixture's imports too. Standard
-library only.
+a parameter (``test_client``) uses that fixture's imports too. A module a
+fixture names in ``when_loaded("x", act)`` is no edge: the fixture acts on it
+only once the test has loaded it, which the test's own edges show (nor are
+the imports of conftest's module-level functions, which only its fixtures
+call). Standard library only.
 """
 
 from __future__ import annotations
@@ -135,6 +138,7 @@ class Facts:
     strings: list[str] = field(default_factory=list)
     urls: set[str] = field(default_factory=set)
     dynamic: list[str] = field(default_factory=list)  # import_module("x"), patch("x")
+    deferred: set[str] = field(default_factory=set)  # when_loaded("x", act)
     emits: bool = False
     registers: bool = False
     touched: set[str] = field(default_factory=set)  # names a top level changes
@@ -259,6 +263,10 @@ def facts_of(tree: ast.AST, path: str = "") -> Facts:
                     facts.dynamic.append(arg.value)
                 elif name in {"import_module", "__import__"}:
                     facts.opaque = not _prefix(arg, facts)
+            if name == "when_loaded" and node.args:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    facts.deferred.add(arg.value)
             facts.scans |= name in {"rglob", "glob", "walk", "iterdir"}
             facts.enumerates_routes |= name == "openapi"
             if isinstance(func, ast.Attribute) and _root(func) == "hooks":
@@ -543,7 +551,7 @@ def _add_conftest(graph: Graph) -> None:
         node = f"{CONFTEST}::{name}"
         own = Graph(graph.index, facts={node: inner})
         _add_imports(own, node, inner, {})
-        texts = inner.strings + inner.dynamic
+        texts = [t for t in inner.strings + inner.dynamic if t not in inner.deferred]
         for text in texts:
             if _DOTTED.fullmatch(text):
                 for hit in graph.index.resolve(text, graph.index.tables(CONFTEST)):

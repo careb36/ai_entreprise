@@ -528,8 +528,9 @@ still uses a fixed tag or name on the shared daemon: give it the run id.
 example the task filter's page budget with timings of 0.4 to 1.4 s against
 300 ms, while the code did not change. Cause: other jobs on the same machine.
 Since #590 (merged with #588 and #589) every pull request counts the filter's
-SQL statements and holds the timing to a loose 1 s guard; the strict 300 ms
-runs in the nightly bench (`PERF_STRICT=1`). A timing test that fails twice
+SQL statements, and since #605 holds the timing to five times a reference
+read of the same rows timed in the same moment, so the load weighs on both;
+the strict 300 ms runs in the nightly bench (`PERF_STRICT=1`). A timing test that fails twice
 on a quiet machine is a real regression.
 
 **A run killed for lack of memory.** The job ends with `exit code 137`,
@@ -546,6 +547,55 @@ runners show `online`. Cause: a runner whose job died mid-run (often under
 disk or memory pressure) keeps a wedged session. Cancel the stuck run, then
 follow "The runners stop taking jobs" above (`df -h /`, then restart the
 services).
+
+## Runner capacity
+
+The seven self-hosted runners (`lafabrique`) share one machine of about 4
+cores and 16 GB with the workspace daemon, so CI jobs compete for CPU and
+memory; too many at once failed wall-clock tests and had runs killed for lack
+of memory. Four knobs bound that, all outside the code (`docs/TESTING.md`, CI,
+has the design):
+
+- **Which jobs run.** A pull request runs only the jobs its files can affect
+  (`.github/workflows/changes.yml`); a push to `main` runs everything. Widen a
+  job's paths there, never with `on.pull_request.paths`.
+- **How many e2e jobs run at once: the runner label `e2e`.** Off by default:
+  an e2e job takes any `lafabrique` runner. To allow at most two at once,
+  **first** add the label `e2e` to two runners, **then** set the repository
+  variable `E2E_RUNS_ON` to `["self-hosted","linux","x64","lafabrique","e2e"]`
+  (`gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique","e2e"]'`).
+  The number of runners with the label is then the limit. In the other order
+  every e2e job waits for a runner until GitHub cancels it after 24 hours. In
+  Settings > Actions > Runners, open a runner and add the label, or:
+
+  ```bash
+  gh api repos/{owner}/{repo}/actions/runners \
+    --jq '.runners[] | [.id, .name, ([.labels[].name] | join(","))] | @tsv'
+  gh api -X POST repos/{owner}/{repo}/actions/runners/<id>/labels -f 'labels[]=e2e'
+  gh api -X DELETE repos/{owner}/{repo}/actions/runners/<id>/labels/e2e
+  ```
+
+  (`orgs/<org>/actions/runners/...` when the runners are registered to the
+  organisation.) Add the label to a third runner to allow three, remove one to
+  allow one. The runners with the label still take other jobs, so an e2e job
+  can wait behind a backend run on them. To lift the limit again, delete the
+  variable (`gh variable delete E2E_RUNS_ON`).
+- **Backend test workers: `BACKEND_TEST_WORKERS`.** `backend-tests.yml` runs
+  pytest with `-n 4`; each worker is a Python process with the application
+  imported and its own SQLite database. `gh variable set BACKEND_TEST_WORKERS
+  --body 2` halves that memory and roughly doubles the suite's time (about 2
+  minutes with four, about 11 in one process); `gh variable delete
+  BACKEND_TEST_WORKERS` goes back to four.
+- **Memory caps on the e2e containers: `E2E_POSTGRES_MEMORY`,
+  `E2E_NATS_MEMORY`.** Passed to `docker run --memory` (for example `1g` and
+  `256m`); unset means no cap, the default. The backend, the daemon and the
+  fake model of an e2e run are processes on the runner, not containers, and
+  have no cap; most of the run's memory is theirs, so the label above is the
+  knob that bounds it.
+
+A superseded run is still cancelled: each workflow's concurrency group is
+per ref with `cancel-in-progress: true` (#559), so a new push to a pull
+request stops its older run, queued e2e jobs included.
 
 ## Backups
 

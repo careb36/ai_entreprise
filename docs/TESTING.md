@@ -24,7 +24,7 @@ The backend has a pytest test suite under `backend/tests/`.  No external service
 cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
 ```
 
-The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
+The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. Emptied tables hand out their ids again, so what the process keeps by an id goes too: `conftest.PROCESS_STATE` lists each module-level container that can leak (by task, sprint, company or daemon id, a fake provider's issuer, a test's NATS client and loop), with its reason, and the autouse `forget_process_state` empties those of the modules the test loaded after every test; `test_process_state.py` fails on an empty container or an `lru_cache` at the top level of a `services` module that is neither there nor in its short list of safe ones. An autouse fixture acts on a module only once the test has loaded it (`when_loaded`: now, or right after a later import during the test), so a test loads only what it uses: the ScrumMaster's and the wiki's proxy are faked, the rate limiter reset and release's `sprint.closed` handler installed in the modules a test loads, the last through a stand-in that loads `integration_jobs` when a sprint first closes. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
 
 ### Only the tests a change can break
 
@@ -56,7 +56,8 @@ python3 scripts/affected_tests.py --explain           # why each test is selecte
 Every Python file of `backend/app`, `vscode-daemon`, `bench` and
 `backend/tests` is a node of an import graph read with `ast`: plain, `from`,
 relative and function-level imports, a package's re-exports
-(`from routers import webhooks_router` is `routers/webhooks.py`), and in the
+(`from package import name` is the module the package's `__init__` binds
+`name` from), and in the
 tests a dotted string that names a module (`mock.patch("services.x.y")`,
 `importlib` by name), a `*.py` path string (a module loaded by path) and an
 f-string's dotted head (`f"services.loop.{name}"`). Edges no import shows are
@@ -81,10 +82,17 @@ changed lines:
   or with no line information (`--files` without a diff; `--assume body|top`
   overrides): every test that loads it, by any edge, through `conftest`'s
   fixtures and the routers `main.py` mounts too. A raise at import fails
-  exactly those tests. Today that is the whole suite for most of `services`:
-  `conftest.py`'s autouse fixture imports `services.release.integration_jobs`
-  for every test, which loads most of the loop, the evidence and the
-  platform.
+  exactly those tests. A module a `conftest` fixture names in `when_loaded`
+  is no edge (the fixture acts on it only once the test has loaded it), and
+  neither `services/__init__.py` nor `routers/__init__.py` imports anything,
+  so a test that imports one module does not load the rest. For a top-level
+  change, of the 229 test files `evidence/verification.py` selects 165 (all
+  228 before), `tasks/task_events.py` 171 (228), `platform/agent_service.py`
+  184 (228), `management/manager_agent.py` 127 (128) and `routers/webhooks.py`
+  121 (123); most of the rest build the app (`test_client`), which loads
+  every router. A raise injected at import into `evidence/verification.py`,
+  `tasks/task_events.py` or `platform/agent_service.py` failed no test
+  outside the selection.
 
 Added to both: the changed tests and the tests that import them (a test file
 is a node), the tests that walk a folder (`rglob`, `glob`, `os.walk`) and name
@@ -120,7 +128,7 @@ what the test itself calls, and a change to the factories runs every test that
 imports them. `--suggest` reads the helper modules a test imports (not other
 test files) with it.
 
-The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
+The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. Emptied tables hand out their ids again, so what the process keeps by an id goes too: `conftest.PROCESS_STATE` lists each module-level container that can leak (by task, sprint, company or daemon id, a fake provider's issuer, a test's NATS client and loop), with its reason, and the autouse `forget_process_state` empties those of the modules the test loaded after every test; `test_process_state.py` fails on an empty container or an `lru_cache` at the top level of a `services` module that is neither there nor in its short list of safe ones. An autouse fixture acts on a module only once the test has loaded it (`when_loaded`: now, or right after a later import during the test), so a test loads only what it uses: the ScrumMaster's and the wiki's proxy are faked, the rate limiter reset and release's `sprint.closed` handler installed in the modules a test loads, the last through a stand-in that loads `integration_jobs` when a sprint first closes. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
 
 Test files:
 
@@ -200,7 +208,7 @@ Test files:
 | `test_check_architecture.py` | The dependency rule between contexts (issue #469): the repository passes `scripts/check_architecture.py` with every module in exactly one context, the evidence importing only contracts and platform and no stale allowlist entry; on trees of its own, an unassigned, doubly listed or missing module, a new edge against the rule (passing once allowlisted), a cycle between contexts, a module in a context folder belonging to it, a shim left at a flat path belonging to its owner's context (listed elsewhere fails), the contracts context importing nothing else, and a folder that is no context; `--update` drops an edge that is gone and writes nothing while a new one breaks the rule; the specification and architecture records pass `spec_check` and `arch_check` with every requirement covered, `contexts.json` matches the architecture and `docs/ARCHITECTURE.md` is its rendering |
 | `test_check_architecture_interfaces.py` | Another context imported only through its public modules (ADR 0018): a public import passes, an internal one fails, as do a context with no `public` list and a `public` entry naming no module; an allowlisted internal import passes and a stale entry is reported and dropped by `--update` |
 | `test_factories.py` | The test data factories (`tests/factories.py`): a company, sprint and task keep the models' defaults unless told; a member holds the role in the company and a user without one holds none; a member's header signs in under `enforcement`; a task's run is the task worker's run of it (reference, subject, digest and size of the artifact) and its verification is `verified` |
-| `test_affected_tests.py` | `scripts/affected_tests.py` and the test map: a change in one context runs its tests and the always-run set; a change below reaches every context that may import it; a test-only change runs it and the tests and helpers' importers, never a deleted file; `conftest.py`, `backend/app/models` and an unknown path fall back to the whole suite; a script runs the tests that name it and a workflow the tests its rule names; on the repository's map, `--by context --files` for a management module selects every management test and no tasks test, and `--run` hands the selection and the arguments after `--` to pytest from `backend/` with `PYTHONPATH=.:app`. By module, on a small repository of its own: the graph reads plain, `from`, relative, function-level and re-exported imports, a patch string, a helper, the routes a test's URLs match, the `test_client` fixture and `hooks.emit` to `hooks.on`; a body change selects the tests that use the module and not those that only build the app, a top-level change (or no line information) every test that loads it; a router change selects the tests that call its URLs, a change to `lifecycle.py` the tests that build the app, a change to what conftest calls every test, and a handler's dependency the emitter's tests; a changed helper its importers; `conftest.py`, the models and an unknown path run everything, a data file, a deleted module and an import by a computed name go to the context rules with the reason; the diff's lines and their kind (a decorator, a default and an import are top-level); the URL matching; and on the repository, `--explain` names the route and a router change selects fewer tests than its context, the route-walking test among them `test_check_architecture.py` also fails a test file without a context, an unknown context, an entry for a missing file, an always-run test without a reason and an unknown source rule |
+| `test_affected_tests.py` | `scripts/affected_tests.py` and the test map: a change in one context runs its tests and the always-run set; a change below reaches every context that may import it; a test-only change runs it and the tests and helpers' importers, never a deleted file; `conftest.py`, `backend/app/models` and an unknown path fall back to the whole suite; a script runs the tests that name it and a workflow the tests its rule names; on the repository's map, `--by context --files` for a management module selects every management test and no tasks test, and `--run` hands the selection and the arguments after `--` to pytest from `backend/` with `PYTHONPATH=.:app`. By module, on a small repository of its own: the graph reads plain, `from`, relative, function-level and re-exported imports, a patch string, a helper, the routes a test's URLs match, the `test_client` fixture and `hooks.emit` to `hooks.on`; a body change selects the tests that use the module and not those that only build the app, a top-level change (or no line information) every test that loads it; a router change selects the tests that call its URLs, a change to `lifecycle.py` the tests that build the app, a change to what conftest calls every test (but not a module a fixture names in `when_loaded`), and a handler's dependency the emitter's tests; a changed helper its importers; `conftest.py`, the models and an unknown path run everything, a data file, a deleted module and an import by a computed name go to the context rules with the reason; the diff's lines and their kind (a decorator, a default and an import are top-level); the URL matching; and on the repository, `--explain` names the route and a router change selects fewer tests than its context, the route-walking test among them `test_check_architecture.py` also fails a test file without a context, an unknown context, an entry for a missing file, an always-run test without a reason and an unknown source rule |
 | `test_check_frontend_architecture.py` | The frontend's dependency rule between layers (issue #519): the repository passes `scripts/check_frontend_architecture.py` with no stale allowlist entry and the network only in `services`; on trees of their own, imports downwards and within a layer (a multi-line import, `export … from`) pass, an upward import and a component importing a page fail, `fetch`, `window.fetch` and `EventSource` outside `network.modules` fail while the same words in a string or a comment do not, an alias resolves to `src`, a dynamic `import()` is an edge, an import that resolves to no file and a file in no layer fail, tests are exempt but a shipped module importing the test support fails, an allowlisted violation passes, and `--update` drops a stale entry and a network module that no longer uses the network |
 | `test_migrations.py` | The schema's version (head `0023`): the migrations build the models' schema from nothing and `alembic check` finds no difference; a database from the old startup (tables present, columns and tables missing) is converged, not rebuilt, and a second run changes nothing; the backend refuses a database that is not at head naming both versions; `DB_AUTO_UPGRADE` runs the migrations at startup; one head |
 | `test_database_timezone.py` | The Postgres session is pinned to UTC, so aware datetimes in `timestamp` columns and the naive UTC text in board comments stay comparable |
@@ -228,6 +236,7 @@ Test files:
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
 | `test_sprint_progress.py` | A sprint's progress from its task events (#531): building twice, or from shuffled events, rows or their dicts, gives the same bytes; the claimed and verified lines stay apart and the gap is the tasks claimed and not verified; tasks by their latest verdict (a later refutation drops the verified line, a verdict that is not the Verifier's changes nothing); one point per day or per event; an older `verified` event takes the verdict of its run as observed then; a close seals the snapshot with the digest the server computed, the audit row carries it and the chain verifies, an altered snapshot no longer does; no snapshot before a close; a reopened sprint keeps its first snapshot and adds one; `claim_gap_rate` in `board_metrics` from the first snapshot, and a procedure under which it grew is reverted; coverage per requirement; `GET /v1/sprints/{id}/progress` (live, then sealed) and `GET /v1/specifications/{id}/progress` are Viewer reads, company-scoped |
+| `test_process_state.py` | What a `services` module keeps between calls: every empty container (`{}`, `[]`, `set()`, `OrderedDict()`, `defaultdict`, `deque`, weak maps) or `lru_cache` / `cache` at a module's top level is in `conftest.PROCESS_STATE`, which `forget_process_state` empties after every test, or in the test's list of safe ones with the reason; every listed name exists, none is in both, and emptying reaches a loaded module; `conftest.when_loaded` acts on a loaded module at once and on another right after its import |
 | `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, what earlier procedures did in the proposal prompt, a reverted or rejected text not proposed again (a person still can), procedures in prompts, `/v1/procedures` |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt; an engram analysed by the model its caller hands in (none: kept as written), and the retrospective's caller hands it the EngramProcessor model |
 | `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter; its record against the admins' decisions (unusable answers as misses, beside the reporters who chose a value, legacy rows compared case-blind) and that record in its next prompt |
@@ -570,6 +579,55 @@ machines; only the SLSA release generator stays on `ubuntu-latest`. The
 runner keeps its state between jobs, so a job cleans up what it starts (the
 e2e removes its NATS container) and avoids the ports a local stack uses.
 
+**Which jobs a pull request runs.** The seven runners share one machine of
+about 4 cores and 16 GB, so a pull request runs only the jobs its files can
+affect. `.github/workflows/changes.yml` (a reusable workflow, `dorny/paths-filter`
+pinned by sha) lists the pull request's files once; each workflow calls it as
+its `changes` job and gates its own job on one output:
+
+| Job | Runs when the pull request changes |
+|-----|-----------------------------------|
+| Backend tests (`backend-tests.yml`) | `backend/**`, `llm-proxy/**`, `vscode-daemon/**`, `bench/**`, `db/init-db/**`, `nats/**`, the scripts the tests read (`scripts/bench/**`, `scripts/e2e/**`, `scripts/self_host/**`, `check_architecture.py`, `check_frontend_architecture.py`, `licence_scan.py`, `nats_config.py`, `release_notes.py`, `wstg_catalogue.py`, `start-daemon.sh`, `start-daemon.ps1`), `docs/architecture/**`, `docs/ARCHITECTURE.md`, `docs/adr/**`, `docs/OPERATIONS.md`, `docs/STANDARDS.md`, `CHANGELOG.md`, `NOTICE`, `.env.example`, `docker-compose.yml`, `.pre-commit-config.yaml`, `.github/CODEOWNERS`, `dependabot.yml`, `licence-exceptions.txt`, `pip-audit-ignore.txt` |
+| Frontend build (`frontend-build.yml`) | `frontend/**`, `docs/architecture/frontend.json`, `scripts/check_frontend_architecture.py` |
+| Docker build, one per image (`docker-build.yml`) | its build context: `backend/**`, `backend/janitor/**` (the janitor), `frontend/**`, `llm-proxy/**`, `vscode-daemon/**` |
+| End to end, host and container (`e2e.yml`) | `backend/**`, `vscode-daemon/**`, `llm-proxy/**`, `nats/**`, `scripts/e2e/**`, `scripts/self_host/**`, `scripts/backup.sh`, `scripts/nats_config.py`, `docs/architecture/specification.json` and `architecture.json` (the self-hosting step reads them), `docker-compose*.yml` |
+| File sizes (`file-sizes.yml`) | `backend/**`, `frontend/src/**`, `vscode-daemon/**`, `llm-proxy/**`, `scripts/**` |
+| actionlint (`workflows.yml`) | `.github/workflows/**`, `.github/actionlint.yaml` |
+| Security scans (`security-scan.yml`) | always |
+
+A change under `.github/workflows/` or to `.github/actionlint.yaml` runs every
+job, and so does every push to `main`, every schedule and every manual run.
+The backend list is everything the backend suite reads outside `backend/`:
+`backend/tests/test_ci_paths.py` fails when a test reads a path the filter
+leaves out. So a docs-only pull request (`README.md`, `docs/TESTING.md`, a
+design document) runs the security scans and nothing else, while
+`CHANGELOG.md`, `docs/OPERATIONS.md` and `docs/STANDARDS.md` start the backend
+tests (`test_release_notes.py`, `test_supply_chain.py` and `test_standards.py`
+read them). A frontend-only change runs the frontend build, the file sizes and
+the frontend image; a change under `backend/app` runs the backend tests, the
+e2e, the file sizes and the backend image.
+
+No workflow uses `on.pull_request.paths`: a workflow path filtering does not
+start reports nothing, and a required check then waits forever. A job skipped
+by its `if:` reports "skipped", which a required check accepts. The two matrix
+jobs cannot be skipped that way (a skipped matrix job reports once under its
+bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
+skip their steps, ending in seconds as a success. When the `changes` job
+itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
+
+**At most two e2e jobs at once, once turned on.** By default an e2e job takes
+any runner, as before. Setting the repository variable `E2E_RUNS_ON` to
+`["self-hosted","linux","x64","lafabrique","e2e"]` makes an e2e job that runs
+the loop ask for the runner label `e2e` besides `lafabrique`; with only two of
+the seven runners carrying it, GitHub queues any further e2e job until one of
+the two is free, across every pull request, without cancelling anything. Label
+the runners first, then set the variable (`docs/OPERATIONS.md`, Runner
+capacity). A concurrency group cannot do this: it holds one running and one
+pending run per group, and a third arrival cancels the pending one, a failed
+check. An e2e job with nothing to run takes any runner. Each workflow's
+own group (`<workflow>-${{ github.ref }}`, `cancel-in-progress: true`, #559)
+still cancels the older run of a pull request when it gets a new push.
+
 Security checks on every pull request into `main` are in
 `.github/workflows/security-scan.yml`, on the same runner (issue #522):
 
@@ -626,8 +684,8 @@ uv tool run --from "semgrep==1.182.1" semgrep scan --config p/security-audit \
   --severity ERROR --error --metrics=off --baseline-commit "$(git merge-base origin/main HEAD)" .
 ```
 
-CI runs this suite on every pull request that touches `backend/` or the
-workflow itself, and on pushes to `main`
+CI runs this suite on every pull request whose files it reads (Which jobs a
+pull request runs, above), and on pushes to `main`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
 from `backend/poetry.lock`. The lint step runs the ruff version the workflow
 pins (`pip install "ruff==0.17.1"`); lint locally with that same version, since
@@ -638,7 +696,7 @@ pull request to get a run. Add new backend dependencies to
 
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
-`frontend/` or the workflow itself, and on pushes to `main`.
+`frontend/`, the layer rules or a workflow, and on pushes to `main`.
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
 and `npm run build` from the `frontend/` directory, with no Actions cache: the
 self-hosted runner keeps `~/.npm` between jobs, and archiving it (1.8 GB)
