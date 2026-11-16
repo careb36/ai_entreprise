@@ -26,6 +26,12 @@ nothing while GitHub forbids it. A team owner (``@org/team``) counts when the
 API says the reviewer is an active member; a token that may not read the team
 counts as not a member, and the summary says so.
 
+A changed path whose normalised form is not the literal git path (a
+backslash, a ``.`` or ``..`` segment, an empty segment, surrounding
+whitespace) is held as protected whatever the list says, since the list may
+read it as another path; owners are always resolved on the literal path, as
+GitHub does, and a held path without an owner is refused.
+
 The matched paths, each path's owners, the approving reviewer and sha, and the
 decision are written to ``$GITHUB_STEP_SUMMARY`` (or ``--summary``) and to
 standard output.
@@ -259,6 +265,7 @@ class PathDecision(NamedTuple):
     pattern: str
     owners: list[str]
     approved_by: Review | None
+    reason: str = ""
 
 
 class Decision(NamedTuple):
@@ -266,6 +273,40 @@ class Decision(NamedTuple):
     changed: int
     paths: list[PathDecision]
     notes: list[str]
+
+
+AMBIGUOUS = "(ambiguous path)"
+
+
+def identity_problem(path: str, module: ModuleType | None = None) -> str | None:
+    """Why ``path``, as git wrote it, may be read as another path; None when it cannot.
+
+    The protected list normalises a path before matching it (backslashes as
+    separators, ``.`` and ``..`` resolved), but git and GitHub read the literal
+    one: ``bench/payload\\..\\..\\README.md`` is a file inside ``bench/`` on
+    Linux, and ``README.md`` once normalised. Such a path is held as protected,
+    whatever the base's copy of the list makes of it.
+    """
+    if "\\" in path:
+        return "contains a backslash"
+    if path != path.strip():
+        return "has leading or trailing whitespace"
+    if path.startswith("/") or path.endswith("/") or "//" in path:
+        return "has an empty segment"
+    if any(segment in (".", "..") for segment in path.split("/")):
+        return "has a '.' or '..' segment"
+    normalize = getattr(module, "normalize", None)
+    if callable(normalize):
+        normal = normalize(path)
+        if normal != path:
+            return f"the protected list reads it as {normal!r}"
+    return None
+
+
+def _match(module: ModuleType, path: str, patterns: Sequence[str]) -> str | None:
+    """The first pattern the base's list matches for ``path``, under either reading."""
+    found = module.matches([path], patterns)
+    return found[0].pattern if found else None
 
 
 def decide(
@@ -278,23 +319,46 @@ def decide(
     author: str,
     team_check: TeamCheck | None = None,
 ) -> Decision:
-    """The decision; ``reviews`` may be a callable, read only when a path matched."""
-    matched = module.matches(changed, patterns)
-    if not matched:
+    """The decision; ``reviews`` may be a callable, read only when a path is held.
+
+    A path is held when the base's list matches it, or when its normalised
+    form differs from the literal git path (``identity_problem``): the list
+    may read such a path as one outside it, so it fails closed. Owners are
+    resolved on the literal path, as GitHub does; a held path whose literal
+    form has no owner is refused (safer than falling back to the root ``*``
+    line, which an ownerless line exists to override).
+    """
+    held: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    for path in changed:
+        if path in seen:
+            continue
+        seen.add(path)
+        pattern = _match(module, path, patterns)
+        problem = identity_problem(path, module)
+        if pattern is None and problem is None:
+            continue
+        reasons = []
+        if pattern is not None:
+            reasons.append(f"matches `{pattern}`")
+        if problem is not None:
+            reasons.append(f"its normalised form is not the git path: {problem}")
+        held.append((path, pattern or AMBIGUOUS, "; ".join(reasons)))
+    if not held:
         return Decision(True, len(changed), [], [])
     notes: list[str] = []
     approvals = approvals_of_head(
         reviews() if callable(reviews) else reviews, head, author
     )
     paths = []
-    for match in matched:
-        owners = owners_of(rules, match.path)
+    for path, pattern, reason in held:
+        owners = owners_of(rules, path)
         if not owners:
-            notes.append(f"{match.path} has no owner in {CODEOWNERS}")
+            notes.append(f"`{path}` has no owner in {CODEOWNERS}; refused")
         approved_by = next(
             (r for r in approvals if owns(r.login, owners, team_check, notes)), None
         )
-        paths.append(PathDecision(match.path, match.pattern, owners, approved_by))
+        paths.append(PathDecision(path, pattern, owners, approved_by, reason))
     passed = all(p.approved_by is not None for p in paths)
     return Decision(passed, len(changed), paths, notes)
 
@@ -309,7 +373,7 @@ def render(decision: Decision, base: str, head: str) -> str:
     lines.append("")
     if decision.paths:
         lines += [
-            "| Path | Pattern | Owners | Approved on the head by |",
+            "| Path | Why it is held | Owners | Approved on the head by |",
             "|---|---|---|---|",
         ]
         for p in decision.paths:
@@ -319,7 +383,9 @@ def render(decision: Decision, base: str, head: str) -> str:
                 else "nobody"
             )
             owners = " ".join(p.owners) or "none"
-            lines.append(f"| `{p.path}` | `{p.pattern}` | {owners} | {who} |")
+            path = p.path.replace("|", "\\|")
+            why = (p.reason or f"matches `{p.pattern}`").replace("|", "\\|")
+            lines.append(f"| `{path}` | {why} | {owners} | {who} |")
         lines.append("")
     for note in decision.notes:
         lines.append(f"- {note}")

@@ -149,7 +149,9 @@ def test_a_team_the_token_cannot_read_counts_as_not_a_member_and_says_so():
 def test_a_path_without_an_owner_cannot_be_approved():
     decision = _decide(["scripts/orphan.py"], [_review("owner")])
     assert not decision.passed
-    assert decision.notes == ["scripts/orphan.py has no owner in .github/CODEOWNERS"]
+    assert decision.notes == [
+        "`scripts/orphan.py` has no owner in .github/CODEOWNERS; refused"
+    ]
 
 
 # --- CODEOWNERS ----------------------------------------------------------------------
@@ -371,3 +373,90 @@ def test_the_check_and_its_workflow_are_protected():
         "backend/tests/test_protected_paths_check.py",
     ):
         assert PROTECTED.matches([path]), path
+
+
+# --- a git path whose normalised form is another path (PR #623 review) ----------------
+
+TRAVERSAL = "bench/payload\\..\\..\\README.md"
+
+
+def test_a_backslash_traversal_inside_a_protected_folder_is_not_passed():
+    # On Linux git this is a file inside bench/; read with backslashes as
+    # separators it would be README.md, outside the list.
+    decision = _decide([TRAVERSAL], [])
+    assert not decision.passed
+    assert [p.path for p in decision.paths] == [TRAVERSAL]
+    assert "contains a backslash" in decision.paths[0].reason
+    # Owned on the literal path, as GitHub reads it: /bench/'s owners.
+    assert decision.paths[0].owners == ["@owner", "@second"]
+    assert not _decide([TRAVERSAL], [_review("someone")]).passed
+    passed = _decide([TRAVERSAL], [_review("second")])
+    assert passed.passed
+    summary = check.render(passed, OLD, HEAD)
+    assert TRAVERSAL in summary and "contains a backslash" in summary
+
+
+@pytest.mark.parametrize(
+    ("path", "reason"),
+    [
+        ("README.md\\x", "backslash"),
+        ("docs/./README.md", "'.' or '..' segment"),
+        ("docs/../README.md", "'.' or '..' segment"),
+        ("docs//README.md", "empty segment"),
+        ("/README.md", "empty segment"),
+        (" README.md", "whitespace"),
+    ],
+)
+def test_a_path_whose_normal_form_differs_is_held_even_outside_the_list(path, reason):
+    # Outside every pattern, yet held: the list could read it as another path.
+    decision = _decide([path], [])
+    assert not decision.passed
+    assert reason in decision.paths[0].reason
+    assert decision.paths[0].pattern == check.AMBIGUOUS
+    assert check.identity_problem("README.md", PROTECTED) is None
+    assert check.identity_problem("bench/x.py") is None
+
+
+class _BothReadings:
+    """The list as #622 changes it: a match under the literal or backslash reading."""
+
+    @staticmethod
+    def matches(paths, patterns):
+        found = []
+        for raw in paths:
+            for reading in (raw, raw.replace("\\", "/")):
+                hit = PROTECTED.matches([reading], patterns)
+                if hit:
+                    found.append(PROTECTED.Match(raw, hit[0].pattern))
+                    break
+        return found
+
+
+@pytest.mark.parametrize("module", [PROTECTED, _BothReadings], ids=["main", "pr622"])
+def test_the_check_is_safe_with_either_version_of_the_list(module):
+    for path in (TRAVERSAL, "bench\\x.py", "x/../bench/y.py"):
+        decision = check.decide(
+            [path], ("bench/**",), module, RULES, [], HEAD, "author"
+        )
+        assert not decision.passed, path
+        assert [p.path for p in decision.paths] == [path]
+    clean = check.decide(["README.md"], ("bench/**",), module, RULES, [], HEAD, "a")
+    assert clean.passed
+
+
+def test_the_command_holds_a_backslash_path_git_reports(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "README.md").write_text("base\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "bench").mkdir()
+    (repo / "bench" / "payload\\..\\..\\README.md").write_text("x\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "head")
+    head = _git(repo, "rev-parse", "HEAD")
+    code, summary = _main(tmp_path, repo, base, head, _root(tmp_path), [])
+    assert code == check.REFUSED
+    assert TRAVERSAL in summary and "contains a backslash" in summary
