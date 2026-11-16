@@ -16,6 +16,7 @@
     "build": "tsc && vite build",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:changed": "node scripts/test-changed.mjs",
     "lint": "eslint src",
     "preview": "vite preview",
     "electron:compile": "tsc -p electron/tsconfig.json",
