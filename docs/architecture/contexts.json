@@ -589,6 +589,12 @@
       "test_dependencies.py": [
         "loop"
       ],
+      "test_dependency_history.py": [
+        "loop"
+      ],
+      "test_dependency_holds.py": [
+        "loop"
+      ],
       "test_developer_tools.py": [
         "loop"
       ],
