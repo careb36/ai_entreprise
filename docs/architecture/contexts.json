@@ -387,6 +387,9 @@
         "integrations",
         "release"
       ],
+      "test_check_context_docs.py": [
+        "repo"
+      ],
       "test_check_file_sizes.py": [
         "repo"
       ],
