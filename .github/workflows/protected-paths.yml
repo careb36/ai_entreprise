@@ -1,0 +1,90 @@
+# Protected paths — a pull request that changes a protected path needs a code
+# owner's approval of its head commit (docs/design/rsi-loop.md §3.3, layer 4;
+# REQ-12, REQ-14).
+#
+# The protected list is backend/app/services/contracts/protected_paths.py (the
+# graders, the evidence, CI, the ratchets, this check). The decision is
+# scripts/protected_paths_check.py, and what it reads comes from observations
+# the pull request cannot write:
+#   - the changed paths from git (`base...head`), never the body or labels;
+#   - the list, the test map and CODEOWNERS from the BASE commit: the job
+#     checks out the base sha and runs the script from it, and fetches the head
+#     only as git objects to diff, so none of the head's code runs here;
+#   - the reviews from the API with this job's read-only token: an approval
+#     counts only by a code owner of the path and only on the head sha.
+#
+# It also runs when a review is submitted or dismissed, so an approval turns
+# the check green and a dismissal turns it red. The job is not filtered by
+# changes.yml: it is cheap, and it must report on every pull request.
+#
+# This check gates merges only once it is a required status check of `main`
+# (Settings > Branches or Rulesets), with "Require review from Code Owners"
+# as the backstop (#182); docs/OPERATIONS.md, Protected paths.
+
+name: Protected paths
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# A newer event on the same pull request (a push, a review) replaces the run
+# in progress; the newest run's result is the one on the head sha.
+concurrency:
+  group: protected-paths-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # The status check's name, for branch protection: unique across the
+    # workflows (file-sizes.yml also has a job `check`).
+    name: protected-paths
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base, not the merge commit: the script, the list and
+          # CODEOWNERS that judge the pull request are main's, never its own.
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Fetch the head commit to diff
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Objects only: nothing of the head is checked out or run.
+        run: git fetch --no-tags --quiet origin "$HEAD_SHA"
+
+      - name: Match the changed paths and read the reviews
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        # The base's copy of the script. A base without one (the pull request
+        # that adds this workflow) fails closed rather than run the head's.
+        run: |
+          if [ ! -f scripts/protected_paths_check.py ]; then
+            {
+              echo "## Protected paths"
+              echo
+              echo "**Refused**: the base commit has no scripts/protected_paths_check.py;"
+              echo "the head's copy is never run. A person reviews and merges this pull request."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+          python3 -I scripts/protected_paths_check.py \
+            --root "$GITHUB_WORKSPACE" \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --pr "$PR_NUMBER" --repository "$GITHUB_REPOSITORY" \
+            --author "$PR_AUTHOR"

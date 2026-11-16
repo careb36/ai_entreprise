@@ -324,7 +324,7 @@ declares can add to the match, never remove from it (the rule
    latest `approve` review of that commit records `protected_paths_ack`:
    the matched paths and the `diff_sha256` the backend computed.
 4. **On the pull request: CI.** A workflow `protected-paths.yml`
-   **(missing)** computes the diff from git (`base...head`), never from
+   (`scripts/protected_paths_check.py`, run from the base commit) computes the diff from git (`base...head`), never from
    the body, and fails unless an approving review by a code owner exists
    on the head sha. The backstop is GitHub's "Require review from Code
    Owners" on `main` (an owner's setting, issue #182, still pending).

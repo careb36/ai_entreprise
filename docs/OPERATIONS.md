@@ -548,6 +548,30 @@ disk or memory pressure) keeps a wedged session. Cancel the stuck run, then
 follow "The runners stop taking jobs" above (`df -h /`, then restart the
 services).
 
+## Protected paths
+
+`.github/workflows/protected-paths.yml` (status check `protected-paths`)
+fails a pull request whose git diff (`base...head`) touches a protected path
+(`backend/app/services/contracts/protected_paths.py`: the bench and its
+graders, the evidence, CI, the ratchets, the list and this check) unless a
+code owner of each such path approved the head sha
+(`docs/design/rsi-loop.md` §3.3, layer 4). It runs the base commit's copy of
+`scripts/protected_paths_check.py` with the base's list and CODEOWNERS, and
+runs again when a review is submitted or dismissed. The job summary lists the
+matched paths, their owners, who approved and at which sha, and the decision.
+A push after an approval turns it red until an owner approves the new head.
+
+**It gates nothing until the owner makes it required.** In Settings →
+Branches (or Rulesets) for `main`, add `protected-paths` as a
+required status check, and turn on "Require review from Code Owners" (#182),
+which is the backstop: a pull request that edits this workflow runs its own
+edited copy, so only GitHub's code-owner rule holds against that one. GitHub
+never counts an author's approval of their own pull request, and the check
+does not either: a protected change the sole code owner opens is merged by an
+admin bypass, deliberately, or approved by another owner. The pull request
+that adds the check fails it by design (the base has no copy of the script
+yet, and the head's is never run).
+
 ## Runner capacity
 
 The seven self-hosted runners (`lafabrique`) share one machine of about 4
