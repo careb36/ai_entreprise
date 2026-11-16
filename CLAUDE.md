@@ -148,7 +148,7 @@ python3 scripts/check_frontend_architecture.py
 python3 scripts/check_file_sizes.py
 ```
 
-While working, run only the tests your change can break: `python3 scripts/affected_tests.py --run` (with the backend's interpreter; it reads each test's context from `tests` in `docs/architecture/contexts.json` and says when it falls back to the whole suite). Before pushing, run the full suite once.
+While working, run only the tests your change can break: `python3 scripts/affected_tests.py --run` (with the backend's interpreter; it follows the import graph from the lines you changed, `--by context` uses each test's context from `tests` in `docs/architecture/contexts.json`, `--explain` says why each test runs, and it says when it falls back). Before pushing, run the full suite once.
 
 `scripts/check_file_sizes.py` keeps a source file at or under 600 lines; the files already over it (`scripts/file_size_baseline.json`) may shrink but never grow, and `--update` lowers an entry.
 

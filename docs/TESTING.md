@@ -24,24 +24,74 @@ missing file, or a rule is unknown; a new test's entry starts from
 
 `scripts/affected_tests.py` prints the tests a set of changed files can break
 (by default `git diff origin/main...HEAD` plus the working tree; `--files a b`,
-`--base <ref>`): the tests of each changed module's context and of every
-context that may import it (the dependency rule reversed: a change in platform
-reaches loop), the changed test files and the tests that import them, the files
-a rule in `tests.sources` names (a router or an app module stands for the
-contexts it imports; a script, workflow or document for the tests that name
-it), and the always-run set. It falls back to the whole suite, and says why,
-for `conftest.py`, the lock files, `backend/app/models`, the migrations,
+`--base <ref>`). It has two ways to select, `--by module` (the default) and
+`--by context`, and both fall back to the whole suite, and say why, for
+`conftest.py`, the lock files, `backend/app/models`, `main.py`, the migrations,
 `contexts.json` itself or a path no rule knows. `--run` runs pytest on the
 selection from `backend/` with `PYTHONPATH=.:app` and the interpreter that runs
 the script, passing what follows `--` through:
 
 ```bash
 python3 scripts/affected_tests.py --files backend/app/services/loop/task_worker.py
+python3 scripts/affected_tests.py --explain           # why each test is selected
 <backend venv>/bin/python scripts/affected_tests.py --run -- -q
 ```
 
-A change low in the rule (contracts, platform) still selects nearly every
-test; one high in it (loop, release, management, a router) selects far fewer.
+**By module** (`scripts/affected_graph.py`, `scripts/affected_modules.py`).
+Every Python file of `backend/app`, `vscode-daemon`, `bench` and
+`backend/tests` is a node of an import graph read with `ast`: plain, `from`,
+relative and function-level imports, a package's re-exports
+(`from routers import webhooks_router` is `routers/webhooks.py`), and in the
+tests a dotted string that names a module (`mock.patch("services.x.y")`,
+`importlib` by name), a `*.py` path string (a module loaded by path) and an
+f-string's dotted head (`f"services.loop.{name}"`). Edges no import shows are
+added: a module that calls `hooks.emit` uses every module that registers with
+`hooks.on`, and a module whose top level changes another module's object uses
+that module the other way. The routers are counted by URL: `main.py` mounts
+them all, so a test that builds the app (`test_client`, `from app.main import
+app`) does not reach a router through `main`; it reaches the routers whose
+routes its URL strings match (`/v1/companies/{id}/webhook`, or a leading part
+such as `"/v1/sprints"` that a path is added to), and every router when it
+walks `app.routes` or `app.openapi()`. A changed module is then read by its
+changed lines:
+
+- inside function bodies only: the tests that use it, directly or through
+  other modules (the reverse transitive closure). `conftest.py` and `main.py`
+  are wiring, crossed only when they import the changed module themselves:
+  `conftest`'s autouse fixtures patch, reset or install what they import, and
+  `main` installs handlers, so a change to `lifecycle.py` selects every test
+  that builds the app, and a change to a module `lifecycle` imports does not,
+  through it;
+- anywhere else (an import, a constant, a decorator, a default, a class body),
+  or with no line information (`--files` without a diff; `--assume body|top`
+  overrides): every test that loads it, by any edge, through `conftest`'s
+  fixtures and the routers `main.py` mounts too. A raise at import fails
+  exactly those tests. Today that is the whole suite for most of `services`:
+  `conftest.py`'s autouse fixture imports `services.release.integration_jobs`
+  for every test, which loads most of the loop, the evidence and the
+  platform.
+
+Added to both: the changed tests and the tests that import them (a test file
+is a node), the tests that walk a folder (`rglob`, `glob`, `os.walk`) and name
+one of the changed file's folders, and the always-run set. A path that is not
+a Python module of the graph (a script, a workflow, a document, a data file),
+a deleted module, a bench file (read as data too), or any change while an app
+module imports a module by a computed name, goes to the context rules below,
+with the reason. `--explain` prints each selected test with the chain that
+reaches the change (`test_webhooks.py -> routers/webhooks.py (calls
+/v1/companies/{}/webhook)`).
+
+**By context**, the tests of each changed module's context and of every
+context that may import it (the dependency rule reversed: a change in platform
+reaches loop), the changed test files and the tests that import them, the files
+a rule in `tests.sources` names (a router or an app module stands for the
+contexts it imports; a script, workflow or document for the tests that name
+it), and the always-run set. A change low in the rule (contracts, platform)
+selects nearly every test; one high in it (loop, release, management, a router)
+selects far fewer. The context selection misses the tests that walk every
+route when a router changes, and the tests that build the app when a router's
+top level changes; the module selection does not.
+
 Run the whole suite once before pushing.
 
 Test files:
@@ -98,7 +148,7 @@ Test files:
 | `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own, the second-attempt track record in the prompt, a send-back during the triage window makes the answer stale, a decision names the escalation it answers and is judged by it, `END` with a period or Windows line endings |
 | `test_api_tokens.py` / `test_api_token_auth.py` | API tokens (issue #327): created, verified and revoked; a token acts with its role only (a Viewer token reads and cannot act as a Manager), never mints a token, no one mints one above their own role or an Owner token, the expiry bounded (1 to 365 days, or none), an expired token refused with a 401, a legacy token kept as a Manager without expiry; the listing never carries the token or its hash |
 | `test_check_architecture.py` | The dependency rule between contexts (issue #469): the repository passes `scripts/check_architecture.py` with every module in exactly one context, the evidence importing only contracts and platform and no stale allowlist entry; on trees of its own, an unassigned, doubly listed or missing module, a new edge against the rule (passing once allowlisted), a cycle between contexts, a module in a context folder belonging to it, a shim left at a flat path belonging to its owner's context (listed elsewhere fails), the contracts context importing nothing else, and a folder that is no context; `--update` drops an edge that is gone and writes nothing while a new one breaks the rule; the specification and architecture records pass `spec_check` and `arch_check` with every requirement covered, `contexts.json` matches the architecture and `docs/ARCHITECTURE.md` is its rendering |
-| `test_affected_tests.py` | `scripts/affected_tests.py` and the test map: a change in one context runs its tests and the always-run set; a change below reaches every context that may import it; a test-only change runs it and the tests and helpers' importers, never a deleted file; `conftest.py`, `backend/app/models` and an unknown path fall back to the whole suite; a script runs the tests that name it and a workflow the tests its rule names; on the repository's map, `--files` for a management module selects every management test and no tasks test, and `--run` hands the selection and the arguments after `--` to pytest from `backend/` with `PYTHONPATH=.:app`. `test_check_architecture.py` also fails a test file without a context, an unknown context, an entry for a missing file, an always-run test without a reason and an unknown source rule |
+| `test_affected_tests.py` | `scripts/affected_tests.py` and the test map: a change in one context runs its tests and the always-run set; a change below reaches every context that may import it; a test-only change runs it and the tests and helpers' importers, never a deleted file; `conftest.py`, `backend/app/models` and an unknown path fall back to the whole suite; a script runs the tests that name it and a workflow the tests its rule names; on the repository's map, `--by context --files` for a management module selects every management test and no tasks test, and `--run` hands the selection and the arguments after `--` to pytest from `backend/` with `PYTHONPATH=.:app`. By module, on a small repository of its own: the graph reads plain, `from`, relative, function-level and re-exported imports, a patch string, a helper, the routes a test's URLs match, the `test_client` fixture and `hooks.emit` to `hooks.on`; a body change selects the tests that use the module and not those that only build the app, a top-level change (or no line information) every test that loads it; a router change selects the tests that call its URLs, a change to `lifecycle.py` the tests that build the app, a change to what conftest calls every test, and a handler's dependency the emitter's tests; a changed helper its importers; `conftest.py`, the models and an unknown path run everything, a data file, a deleted module and an import by a computed name go to the context rules with the reason; the diff's lines and their kind (a decorator, a default and an import are top-level); the URL matching; and on the repository, `--explain` names the route and a router change selects fewer tests than its context, the route-walking test among them `test_check_architecture.py` also fails a test file without a context, an unknown context, an entry for a missing file, an always-run test without a reason and an unknown source rule |
 | `test_check_frontend_architecture.py` | The frontend's dependency rule between layers (issue #519): the repository passes `scripts/check_frontend_architecture.py` with no stale allowlist entry and the network only in `services`; on trees of their own, imports downwards and within a layer (a multi-line import, `export … from`) pass, an upward import and a component importing a page fail, `fetch`, `window.fetch` and `EventSource` outside `network.modules` fail while the same words in a string or a comment do not, an alias resolves to `src`, a dynamic `import()` is an edge, an import that resolves to no file and a file in no layer fail, tests are exempt but a shipped module importing the test support fails, an allowlisted violation passes, and `--update` drops a stale entry and a network module that no longer uses the network |
 | `test_migrations.py` | The schema's version (head `0023`): the migrations build the models' schema from nothing and `alembic check` finds no difference; a database from the old startup (tables present, columns and tables missing) is converged, not rebuilt, and a second run changes nothing; the backend refuses a database that is not at head naming both versions; `DB_AUTO_UPGRADE` runs the migrations at startup; one head |
 | `test_database_timezone.py` | The Postgres session is pinned to UTC, so aware datetimes in `timestamp` columns and the naive UTC text in board comments stay comparable |

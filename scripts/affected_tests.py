@@ -1,8 +1,21 @@
 #!/usr/bin/env python3
 """
-The backend tests a change can break, from the contexts and their rule.
+The backend tests a change can break: by the import graph (``--by module``,
+the default) or by whole contexts (``--by context``).
 
-``docs/architecture/contexts.json`` gives every ``backend/tests/test_*.py`` a
+By module (``scripts/affected_graph.py``, ``scripts/affected_modules.py``),
+a changed Python file of ``backend/app``, ``vscode-daemon``, ``bench`` or
+``backend/tests`` selects the tests that import it, directly or through other
+modules, from the lines that changed (``git diff -U0``): a change inside
+function bodies reaches what uses the module; a change at its top level, or
+one without line information, reaches every test that loads it, as a raise at
+import would. Any other path, a deleted module, or a graph holding an import
+by a computed name goes to the context rules below, with the reason printed;
+the whole-suite rules apply in both modes. ``--explain`` prints, for each
+selected test, the chain of imports, routes or fixtures that reaches the
+change; ``--assume body|top`` reads a file without a diff (``--files``).
+
+By context, ``docs/architecture/contexts.json`` gives every ``backend/tests/test_*.py`` a
 context (``tests.files``: the contexts it exercises) or puts it in the few that
 always run (``tests.always``, each with its reason). A changed file is read as:
 
@@ -26,6 +39,8 @@ path. The reason is printed.
     python3 scripts/affected_tests.py                 # origin/main...HEAD + working tree
     python3 scripts/affected_tests.py --base main
     python3 scripts/affected_tests.py --files backend/app/services/evidence/risk.py
+    python3 scripts/affected_tests.py --by context --files backend/app/config.py
+    python3 scripts/affected_tests.py --explain
     python3 scripts/affected_tests.py --run -- -x -n auto
     python3 scripts/affected_tests.py --suggest backend/tests/test_new.py
 
@@ -42,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib.util
 import json
 import os
 import re
@@ -61,6 +77,21 @@ SERVICES_REL = "backend/app/services/"
 
 def load(path: Path = DATA) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sibling(name: str):
+    """A module of this folder, by path: ``python3 -I`` puts no script folder
+    on ``sys.path``."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        name, Path(__file__).with_name(f"{name}.py")
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 # --- the contexts ------------------------------------------------------------
@@ -248,9 +279,117 @@ def rule_for(rel: str, sources: dict) -> object | None:
     return sources[max(keys, key=len)] if keys else None
 
 
-def select(changed: list[str], data: dict, tests: Path = TESTS) -> dict:
+def select(
+    changed: list[str],
+    data: dict,
+    tests: Path = TESTS,
+    by: str = "context",
+    lines: dict[str, set[int]] | None = None,
+    graph: object | None = None,
+    assume: str | None = None,
+) -> dict:
     """The tests to run for *changed* (repository-relative paths), as data:
-    ``tests`` (file names), ``everything`` (the reason, or ``None``), ``notes``."""
+    ``tests`` (file names), ``everything`` (the reason, or ``None``), ``notes``
+    and, by module, ``groups`` (each changed module, its kind and its tests
+    with the reason). *lines* are the changed lines per path, from git."""
+    if by == "module":
+        return select_by_module(changed, data, tests, lines or {}, graph, assume)
+    return select_by_context(changed, data, tests)
+
+
+# The paths the module graph reads (the rest go to the context rules).
+GRAPH_ROOTS = ("backend/app/", "vscode-daemon/", "bench/")
+
+
+def _whole_suite_rule(rel: str, sources: dict) -> bool:
+    rule = rule_for(rel, sources)
+    return rule is not None and "all" in (rule if isinstance(rule, list) else [rule])
+
+
+def select_by_module(
+    changed: list[str],
+    data: dict,
+    tests: Path,
+    lines: dict[str, set[int]],
+    graph: object | None,
+    assume: str | None,
+) -> dict:
+    """The tests to run for *changed*, from the import graph; a path the
+    graph cannot decide goes to the context rules, with the reason."""
+    modules = _sibling("affected_modules")
+    sources: dict = (data.get("tests") or {}).get("sources", {})
+    always = {k for k in (data.get("tests") or {}).get("always", {}) if k[0] != "$"}
+    existing = set(test_files(tests))
+    chosen: set[str] = set()
+    notes: list[str] = []
+    groups: list = []
+    fallback: dict[str, str] = {}
+    everything: str | None = None
+    for rel in sorted({c.replace("\\", "/") for c in changed}):
+        if rel.startswith(TESTS_REL):
+            name = rel[len(TESTS_REL) :]
+            if name == "conftest.py" or "/" in name or not name.endswith(".py"):
+                everything = everything or f"{rel}: shared by every test"
+            elif graph_of(graph, tests) and rel in graph_of(graph, tests).facts:
+                groups.append(modules.module_group(graph_of(graph, tests), rel, None))
+            else:
+                notes.append(f"{rel}: no longer there, nothing to run for it")
+            continue
+        if _whole_suite_rule(rel, sources):
+            everything = everything or f"{rel}: shared by every context"
+        elif rel.endswith(".py") and rel.startswith(GRAPH_ROOTS):
+            g = graph_of(graph, tests)
+            if rel not in g.facts:
+                fallback[rel] = "deleted, so the graph cannot see who imported it"
+                continue
+            groups.append(modules.module_group(g, rel, lines.get(rel), assume))
+            if rel.startswith("bench/"):
+                fallback[rel] = "a bench file, which the bench tests also read as data"
+        else:
+            fallback[rel] = "not a Python module of the graph"
+    if groups and (opaque := modules.opaque_importers(graph_of(graph, tests))):
+        for group in groups:
+            fallback.setdefault(
+                group.path, f"{opaque[0]} imports a module by a computed name"
+            )
+    for group in groups:
+        chosen |= {t.rsplit("/", 1)[-1] for t in group.tests}
+        notes.append(
+            f"{group.path}: {group.kind} change ({group.why}): "
+            f"{len(group.tests)} test file(s) by the module graph"
+        )
+    if fallback:
+        by_context = select_by_context(sorted(fallback), data, tests)
+        everything = everything or by_context["everything"]
+        chosen |= set(by_context["tests"])
+        for rel, why in sorted(fallback.items()):
+            notes.append(f"{rel}: by its context rule, since it is {why}")
+        notes.extend(f"  {note}" for note in by_context["notes"])
+    chosen |= always
+    return {
+        "tests": sorted(chosen & existing),
+        "everything": everything,
+        "notes": notes,
+        "groups": groups,
+    }
+
+
+_GRAPHS: dict = {}
+
+
+def graph_of(graph: object | None, tests: Path):
+    """The graph handed in, or the repository's (built once per run) when
+    *tests* is the repository's own folder."""
+    if graph is not None:
+        return graph
+    root = tests.resolve().parent.parent
+    if root not in _GRAPHS:
+        _GRAPHS[root] = _sibling("affected_graph").build(root)
+    return _GRAPHS[root]
+
+
+def select_by_context(changed: list[str], data: dict, tests: Path = TESTS) -> dict:
+    """The tests to run for *changed* by the contexts and their rule."""
     contexts = data["contexts"]
     section = data.get("tests") or {}
     files: dict = {k: v for k, v in section.get("files", {}).items() if k[0] != "$"}
@@ -341,6 +480,34 @@ def changed_files(base: str) -> list[str]:
     )
 
 
+def changed_lines(base: str, paths: list[str] | None = None) -> dict[str, set[int]]:
+    """The changed lines of each file since the merge base with *base*, the
+    working tree included (``git diff -U0``); ``{}`` when git cannot say."""
+    try:
+        merge_base = _git("merge-base", base, "HEAD")[0]
+        diff = subprocess.run(
+            ["git", "-C", str(ROOT), "diff", "-U0", "--no-color", "--no-ext-diff"]
+            + [merge_base, "--", *(paths or [])],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, IndexError, subprocess.CalledProcessError):
+        return {}
+    return _sibling("affected_modules").lines_from_diff(diff)
+
+
+def _report(result: dict, explain: bool) -> None:
+    for note in result["notes"]:
+        print(note, file=sys.stderr)
+    if not explain:
+        return
+    for group in result.get("groups", []):
+        print(f"{group.path} ({group.kind}):", file=sys.stderr)
+        for reason in group.tests.values():
+            print(f"  {reason}", file=sys.stderr)
+
+
 def main(argv: list[str]) -> int:
     extra: list[str] = []
     if "--" in argv:
@@ -353,23 +520,42 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--base", default="origin/main", help="git ref to diff from")
     parser.add_argument("--run", action="store_true", help="run pytest on them")
     parser.add_argument("--suggest", nargs="+", help="test files to suggest for")
+    parser.add_argument(
+        "--by",
+        choices=("module", "context"),
+        default="module",
+        help="select by the import graph (default) or by whole contexts",
+    )
+    parser.add_argument(
+        "--explain", action="store_true", help="print why each test is selected"
+    )
+    parser.add_argument(
+        "--assume",
+        choices=("body", "top"),
+        help="read a file without a diff as a body or a top-level change "
+        "(default: top, the safe reading)",
+    )
     args = parser.parse_args(argv)
     data = load()
 
     if args.suggest:
         print(json.dumps({Path(p).name: suggest(Path(p), data) for p in args.suggest}))
         return 0
+    lines: dict[str, set[int]] = {}
     if args.files is not None:
         changed = args.files
+        if args.by == "module":
+            lines = changed_lines(args.base, changed)
     else:
         try:
             changed = changed_files(args.base)
         except (OSError, subprocess.CalledProcessError) as exc:
             print(f"Cannot list the changes since {args.base}: {exc}", file=sys.stderr)
             return 2
-    result = select(changed, data)
-    for note in result["notes"]:
-        print(note, file=sys.stderr)
+        if args.by == "module":
+            lines = changed_lines(args.base)
+    result = select(changed, data, by=args.by, lines=lines, assume=args.assume)
+    _report(result, args.explain)
     if result["everything"]:
         print(f"The whole suite: {result['everything']}.", file=sys.stderr)
         targets = ["tests"]
