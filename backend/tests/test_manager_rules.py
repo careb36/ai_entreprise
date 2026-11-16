@@ -21,6 +21,7 @@ from models import (
 )
 from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.integration import SprintIntegration
+from models.integration_review import IntegrationReview
 from models.review import RunPublication
 from services.learning import scrum_master
 from services.loop import carry_over
@@ -993,3 +994,95 @@ def test_a_hold_note_is_never_read_as_a_deliverable_after_a_mark():
 
     assert blocked_item_next_step(comments, "Developer") is None
     assert is_send_back({"author": "Manager agent", "text": f"{SEND_BACK_MARKER}."})
+
+
+def _integration_for_merge(session, company, *, commit=SHA, status="tests_passed"):
+    sprint = Sprint(company_id=company.id, sprint_name="S", status="completed")
+    session.add(sprint)
+    session.commit()
+    row = SprintIntegration(
+        company_id=company.id,
+        sprint_id=sprint.id,
+        trigger="close",
+        requested_by="system",
+        status=status,
+        branch=f"fabrique/sprint-{sprint.id}",
+        base="main",
+        repository="/repo",
+        commit=commit,
+    )
+    session.add(row)
+    session.commit()
+    return sprint, row
+
+
+def test_the_agent_waits_for_an_integration_review_before_merging_when_required(
+    sqlite_session, daemon
+):
+    calls, answers = daemon
+    answers["workspace.git.merge"] = MERGED
+    company = _company(sqlite_session)
+    company.integration_review_required = True
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    _integration_for_merge(sqlite_session, company)
+    _policy(sqlite_session, company, "merge_local")
+
+    _cycle(sqlite_session, company, answer("merge", "merge_local"))
+
+    assert calls == []
+    (row,) = _rows(sqlite_session, company)
+    assert row.suggested_decision == "escalate"
+    assert "Waiting for a person's review" in (row.suggested_reason or "")
+    assert row.action_state == "not_allowed"
+    assert row.outcome is None
+
+
+def test_the_agent_merges_the_integration_once_an_approving_review_exists(
+    sqlite_session, daemon
+):
+    calls, answers = daemon
+    answers["workspace.git.merge"] = MERGED
+    company = _company(sqlite_session)
+    company.integration_review_required = True
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sprint, integration = _integration_for_merge(sqlite_session, company)
+    sqlite_session.add(
+        IntegrationReview(
+            company_id=company.id,
+            sprint_id=sprint.id,
+            integration_id=integration.id,
+            event="approve",
+            outcome="approved",
+            commit=integration.commit,
+            merge_base="b" * 40,
+            diff_sha256="d" * 64,
+            files=1,
+            author_name="Reviewer",
+        )
+    )
+    sqlite_session.commit()
+    _policy(sqlite_session, company, "merge_local")
+
+    _cycle(sqlite_session, company, answer("merge", "merge_local"))
+
+    assert [s for s, _ in calls] == ["workspace.git.merge"]
+    sqlite_session.refresh(integration)
+    assert integration.details["local_merge"]["merged_by"] == MANAGER_AGENT_NAME
+
+
+def test_with_the_review_gate_off_the_agent_merges_the_integration_as_before(
+    sqlite_session, daemon
+):
+    _, answers = daemon
+    answers["workspace.git.merge"] = MERGED
+    company = _company(sqlite_session)
+    assert company.integration_review_required is False
+    _sprint, integration = _integration_for_merge(sqlite_session, company)
+    _policy(sqlite_session, company, "merge_local")
+
+    _cycle(sqlite_session, company, answer("merge", "merge_local"))
+
+    sqlite_session.refresh(integration)
+    assert integration.details["local_merge"]["merged_by"] == MANAGER_AGENT_NAME

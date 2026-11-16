@@ -30,6 +30,7 @@ from models import (
     ChatApprovalMessage,
     Company,
     CompanyMember,
+    IntegrationReview,
     RunPublication,
     RunReview,
     Specification,
@@ -490,3 +491,125 @@ def test_a_release_recorded_by_the_starter_is_a_violation_in_the_report(sqlite_s
     (release,) = [a for a in report["approvals"] if a["action"] == sod.RELEASE]
     assert release["status"] == "violation"
     assert release["approver"]["user_id"] == starter.id
+
+
+def _integration_review(
+    session,
+    company_id,
+    sprint,
+    integration,
+    approver,
+    *,
+    author_name=None,
+    by_agent=False,
+):
+    uid = approver.id if approver and not by_agent else None
+    name = (
+        author_name
+        or (approver.full_name if approver and not by_agent else None)
+        or "Manager agent"
+    )
+    review = IntegrationReview(
+        company_id=company_id,
+        sprint_id=sprint.id,
+        integration_id=integration.id,
+        event="approve",
+        body=None,
+        outcome="approved",
+        commit=integration.commit or "c" * 40,
+        merge_base="b" * 40,
+        diff_sha256="d" * 64,
+        files=1,
+        author_name=name,
+        author_user_id=uid,
+    )
+    session.add(review)
+    session.commit()
+    session.refresh(review)
+    return review
+
+
+def test_the_report_lists_integration_review_approvals_with_each_status(
+    sqlite_session,
+):
+    acme = _company(sqlite_session)
+    starter, _ = _person(sqlite_session, acme.id, "Manager")
+    other, _ = _person(sqlite_session, acme.id, "Manager")
+    solo_starter, _ = _person(sqlite_session, acme.id, "Manager")
+
+    def sprint(started_by=None):
+        s = Sprint(
+            company_id=acme.id,
+            sprint_name=f"S {secrets.token_hex(2)}",
+            status="active",
+            started_by_user_id=started_by,
+        )
+        sqlite_session.add(s)
+        sqlite_session.commit()
+        row = SprintIntegration(
+            company_id=acme.id,
+            sprint_id=s.id,
+            trigger="manual",
+            requested_by="human:test",
+            status="tests_passed",
+            branch="fabrique/integration",
+            base="main",
+            commit=secrets.token_hex(20),
+        )
+        sqlite_session.add(row)
+        sqlite_session.commit()
+        return s, row
+
+    separated_s, separated_i = sprint(started_by=starter.id)
+    _integration_review(sqlite_session, acme.id, separated_s, separated_i, other)
+
+    exception_s, exception_i = sprint(started_by=solo_starter.id)
+    _integration_review(sqlite_session, acme.id, exception_s, exception_i, solo_starter)
+    sqlite_session.add(
+        AuditLog(
+            company_id=acme.id,
+            interaction_id=f"sod:{acme.id}",
+            agent_id=f"human:{solo_starter.email}",
+            action="sod_exception_applied",
+            details={
+                "company_id": acme.id,
+                "action": sod.RELEASE,
+                "subject": {
+                    "kind": "sprint_integration_review",
+                    "id": exception_i.id,
+                    "sprint_id": exception_s.id,
+                },
+                "actor_user_id": solo_starter.id,
+            },
+            result={"outcome": "exception"},
+        )
+    )
+    sqlite_session.commit()
+
+    violation_s, violation_i = sprint(started_by=starter.id)
+    _integration_review(sqlite_session, acme.id, violation_s, violation_i, starter)
+
+    unattributed_s, unattributed_i = sprint(started_by=None)
+    _integration_review(sqlite_session, acme.id, unattributed_s, unattributed_i, other)
+
+    agent_s, agent_i = sprint(started_by=starter.id)
+    _integration_review(sqlite_session, acme.id, agent_s, agent_i, None, by_agent=True)
+
+    report = sod_report.report(sqlite_session, acme.id)
+
+    approvals = {
+        a["subject"]["id"]: a
+        for a in report["approvals"]
+        if a["subject"]["kind"] == "sprint_integration_review"
+    }
+    assert approvals[separated_i.id]["status"] == "separated"
+    assert approvals[exception_i.id]["status"] == "exception"
+    assert approvals[violation_i.id]["status"] == "violation"
+    assert approvals[unattributed_i.id]["status"] == "unattributed"
+    assert approvals[agent_i.id]["status"] == "not_a_person"
+    for row in approvals.values():
+        assert row["action"] == sod.RELEASE
+        assert row["requesters"]
+    assert approvals[separated_i.id]["approver"]["user_id"] == other.id
+    assert approvals[violation_i.id]["requesters"][0]["why"] == "started the sprint"
+    assert approvals[unattributed_i.id]["requesters"] == []
