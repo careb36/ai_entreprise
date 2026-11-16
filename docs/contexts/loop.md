@@ -57,6 +57,20 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 **`backend/app/services/loop/delivery_suites.py`** (self-hosting retrospective, F5) — After the root's test run, `run` runs the suites of the folders the delivery wrote in (`stack_roots.selected`, the daemon's write report) and then the company's every-delivery commands, each through `folder_commands.execute` in the company's sandbox, appended to `evidence["command_runs"]` (and `folders_run`: which folders and why) for the Verifier's `required_commands` check. When the root has no suite of its own, `summarise` makes `test_run` the folders' suites read together (`summary_of: "command_runs"`: the first failure's exit status, else the first run that could not happen, else 0), so the per-criterion reading, the gate, `_earlier_failure` and a sprint's integration (`integration.status_of`, which also reads the runs) read one test run as before.
 
+### Other modules
+
+- `task_worker`: the facade of the task worker, the `task.assign` consumer the lifespan starts (`process_backlog_tasks`), re-exporting the stages of `worker/`.
+- `answers`: reads a model's answer before anything is recorded (`llm_content`, `llm_failure`, `llm_finish_reason`, `gate_reason`, `review_format_reminder`). A cut answer is sent back, never recorded.
+- `company_service` (`CompanyService`): a company's lifecycle: creating the tenant with its agents, quotas, sprint health for the dashboard, the agents' CRUD and the seed of the knowledge graph.
+- `worker/intake`: the consumer, the claim under the task's lock, the queue markers and the dispatch; it also runs the review cycle every 30 seconds.
+- `worker/task_run`: runs one claimed task: announce, gather context, execute, deliver, record.
+- `worker/messages`: the `AgentMessage` rows a task's hand-overs leave (claims, not evidence) and the ScrumMaster's triage of an escalation.
+- `worker/prompt`: the read-only context of a task's prompt (memory, lessons, done tasks, standards and procedures). A failing reader leaves its section out.
+- `worker/deliver`: sends the agent's files to the daemon on `workspace.generate`, or queues them on `workspace.deliver` and records the result from `workspace.delivered`.
+- `worker/quality_gate`: the form check on a deliverable's text before QA. A rejected one goes back as `Quality gate`, and is blocked for a person once the shared rework budget is spent.
+- `worker/qa_review`: QA's review of a delivered task: the prompt, the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold for a person and the rework budget.
+- `worker/procedures_round`: after a sprint closes, keeps or reverts procedures by the board's numbers and asks the ScrumMaster for new ones.
+
 ## Described elsewhere
 
 - The task worker's steps, from `POST /v1/start_sprint` to the close of a sprint: [the sprint loop](../SPRINT_LOOP.md).
