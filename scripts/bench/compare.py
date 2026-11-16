@@ -454,6 +454,17 @@ def _main_repeated(
     before = [_load(p) for p in previous]
     if any(card is None for card in (*after, *before)):
         return 2
+    for side, cards in (("candidate", after), ("baseline", before)):
+        stamps = [card["stamp"] for card in cards]
+        repeats = sorted({s for s in stamps if stamps.count(s) > 1})
+        if repeats:
+            # One run passed twice, or under two paths, is one run: counting
+            # it again would make up K.
+            print(
+                f"the {side}'s cards repeat a run: {', '.join(repeats)}",
+                file=sys.stderr,
+            )
+            return 2
     result = repeated.compare_runs(before, after, limits, runs)
     print(repeated.render(before, after, result), end="")
     if result["regressions"]:
