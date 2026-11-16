@@ -446,6 +446,9 @@
       "test_factories.py": [
         "platform"
       ],
+      "test_foundation_sprint.py": [
+        "release"
+      ],
       "test_git_acceptance.py": [
         "release"
       ],
