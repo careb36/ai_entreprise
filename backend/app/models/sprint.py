@@ -8,12 +8,16 @@ Tables:
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON
 from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class CommentList(MutableList):
@@ -107,8 +111,8 @@ class BacklogItem(SQLModel, table=True):
     # ``acceptance_tests`` for the QA task that writes the acceptance tests of a
     # requirement before its implementation (``services.evidence.acceptance``); else None.
     kind: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class OutboxEvent(SQLModel, table=True):
@@ -134,7 +138,7 @@ class OutboxEvent(SQLModel, table=True):
     )  # {"subject": "...", "message": {...}}
     status: str = "pending"  # "pending" | "completed" | "failed"
     retry_count: int = 0  # Incremented on each failed delivery attempt
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
     processed_at: datetime | None = (
         None  # Set when status transitions to completed/failed
     )
