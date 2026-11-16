@@ -14,7 +14,7 @@
   "backend/tests/test_sod.py": 616,
   "backend/tests/test_specifications.py": 902,
   "backend/tests/test_sprint_board.py": 629,
-  "backend/tests/test_task_views.py": 716,
+  "backend/tests/test_task_views.py": 727,
   "backend/tests/test_verification.py": 746,
   "frontend/src/App.test.tsx": 613,
   "frontend/src/pages/CompanyNew.test.tsx": 741
