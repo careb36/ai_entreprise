@@ -360,8 +360,9 @@ def _branch_items(
 
 
 def _integration_items(session: Session, company: Company) -> list[dict]:
-    from services.release import integration
+    from services.release import integration, integration_review
 
+    review_required = integration_review.required(session, company.id)
     items = []
     sprints = session.exec(
         select(Sprint.id).where(Sprint.company_id == company.id).order_by(Sprint.id)
@@ -372,20 +373,37 @@ def _integration_items(session: Session, company: Company) -> list[dict]:
             continue
         if (row.details or {}).get("local_merge"):
             continue
+        state = f"{row.status}:{(row.commit or '-')[:12]}"
+        facts = {
+            "target": "integration",
+            "integration_status": row.status,
+            "merged": False,
+            "sprint_id": sprint_id,
+        }
+        text = (
+            f"Sprint #{sprint_id}'s integration #{row.id} on {row.branch} "
+            f"at {(row.commit or '-')[:12]}: {row.status}"
+        )
+        if review_required:
+            approved = integration_review.approving_review(session, row) is not None
+            facts["integration_review_required"] = True
+            facts["integration_approved"] = approved
+            # An approval changes the item, so the agent is asked again.
+            state += ":approved" if approved else ":awaiting_review"
+            text += (
+                "; a person approved its review"
+                if approved
+                else "; the company requires a person's review before a local merge"
+                ", and none approves this commit yet"
+            )
         items.append(
             {
                 "kind": "integration",
                 "id": row.id,
-                "state": f"{row.status}:{(row.commit or '-')[:12]}",
+                "state": state,
                 "category": "merge_local",
-                "facts": {
-                    "target": "integration",
-                    "integration_status": row.status,
-                    "merged": False,
-                    "sprint_id": sprint_id,
-                },
-                "text": f"Sprint #{sprint_id}'s integration #{row.id} on {row.branch} "
-                f"at {(row.commit or '-')[:12]}: {row.status}",
+                "facts": facts,
+                "text": text,
             }
         )
     return items
