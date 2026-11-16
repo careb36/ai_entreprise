@@ -7,10 +7,12 @@ ecosystem still bumps it (the version stays in a trailing comment).
 
 These tests read every workflow under ``.github/workflows/`` and fail on a
 ``uses:`` of a step or a reusable workflow that names a third-party action by
-anything but a commit sha. Local actions (``./...``) are exempt; a
-``docker://`` image is not a GitHub action but has the same problem (a tag can
-be pushed again), so it must name a ``sha256`` digest with its version in a
-comment. They also hold the dependency audit and the pull-request scans in
+anything but a commit sha. Local actions (``./...``) are exempt. A
+``docker://`` image is not a GitHub action at all: this repository's Actions
+policy runs GitHub-owned and verified creators only, so a workflow that names
+one never starts (``startup_failure``, no job, no log), which is why no
+workflow may name one — the digest rule ``_unpinned`` still knows is not
+enough. They also hold the dependency audit and the pull-request scans in
 ``security-scan.yml`` to what makes them able to fail.
 """
 
@@ -109,6 +111,25 @@ def test_every_docker_digest_names_its_version_in_a_comment(path):
         match = re.search(r"uses:\s*(docker://\S+@sha256:[0-9a-f]{64})(.*)$", line)
         if match:
             assert re.match(r"\s+#\s*v?\d", match.group(2)), line.strip()
+
+
+@pytest.mark.parametrize("path", _workflow_files(), ids=lambda p: p.name)
+def test_no_workflow_names_a_container_image(path):
+    """A ``docker://`` step is refused by the repository's Actions policy.
+
+    Settings -> Actions -> General allows GitHub-owned and
+    Marketplace-verified actions only. A ``docker://`` image is neither, so
+    the run reports ``startup_failure`` before a job exists: no step fails, no
+    log is written, and every workflow that calls it dies with it. Install the
+    tool from a pinned, checksummed release instead (``workflows.yml``,
+    actionlint).
+    """
+    refs = [
+        ref
+        for ref in _uses(yaml.safe_load(path.read_text()))
+        if ref.startswith("docker://")
+    ]
+    assert not refs, f"{path.name}: {', '.join(refs)}"
 
 
 @pytest.mark.parametrize(
