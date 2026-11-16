@@ -12,8 +12,8 @@
 #     run): those keep running everything;
 #   - when the pull request changes a workflow (`workflows` below), since a
 #     changed workflow may change what any job does.
-# A caller also runs its job when this workflow did not succeed (the filter
-# could not list the files), so a broken filter runs too much, never too
+# A caller also runs its job when this workflow did not succeed (the step could
+# not read the changed files), so a broken filter runs too much, never too
 # little.
 #
 # Why a job and not `on.pull_request.paths`: a workflow that path filtering
@@ -61,12 +61,13 @@ jobs:
   filter:
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 5
-    # On a pull request the filter lists the files through the API, which
-    # needs `pull-requests: read`; there is no checkout. The calling job grants
-    # the same, since a called workflow cannot widen its caller's token.
+    # The step checks the pull request out and diffs it against its merge base.
+    # No third-party filter action: the repository's allowlist admits only
+    # GitHub-owned and Marketplace-verified actions, and this workflow is
+    # called by six others, so one disallowed action here stops all six at
+    # startup. `scripts/changed_paths.py` reads the mapping below instead.
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       workflows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' }}
       backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.backend == 'true' }}
@@ -79,12 +80,21 @@ jobs:
       docker-llm-proxy: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-llm-proxy == 'true' }}
       docker-vscode-daemon: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' || steps.filter.outputs.docker-vscode-daemon == 'true' }}
     steps:
-      - name: List the changed files and match them
+      - name: Check out both ends of the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The two shas below and their merge base must be in the clone;
+          # the default depth of 1 has only the last commit.
+          fetch-depth: 0
+
+      - name: Match the changed files against the filters
         id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        with:
-          filters: |
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          FILTERS: |
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'
@@ -164,3 +174,9 @@ jobs:
               - 'llm-proxy/**'
             docker-vscode-daemon:
               - 'vscode-daemon/**'
+        # One `<filter>=true|false` line per filter, appended to the step's
+        # outputs. A failure here fails the job, and a caller then runs its
+        # job rather than none.
+        run: |
+          python3 scripts/changed_paths.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" >> "$GITHUB_OUTPUT"
