@@ -32,6 +32,7 @@ import ast
 import importlib.util
 import itertools
 import re
+import subprocess
 import sys
 from collections import deque
 from dataclasses import dataclass, field
@@ -228,3 +229,39 @@ def opaque_importers(graph) -> list[str]:
         for path, facts in graph.facts.items()
         if path.startswith(("backend/app/", "vscode-daemon/")) and facts.opaque
     )
+
+
+# --- what git says changed ----------------------------------------------------
+
+
+def _git(*args: str) -> list[str]:
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), *args], check=True, capture_output=True, text=True
+    ).stdout
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def changed_files(base: str) -> list[str]:
+    """The branch's changes since *base* plus the working tree's, untracked too."""
+    return sorted(
+        set(_git("diff", "--name-only", f"{base}...HEAD"))
+        | set(_git("diff", "--name-only", "HEAD"))
+        | set(_git("ls-files", "--others", "--exclude-standard"))
+    )
+
+
+def changed_lines(base: str, paths: list[str] | None = None) -> dict[str, set[int]]:
+    """The changed lines of each file since the merge base with *base*, the
+    working tree included (``git diff -U0``); ``{}`` when git cannot say."""
+    try:
+        merge_base = _git("merge-base", base, "HEAD")[0]
+        diff = subprocess.run(
+            ["git", "-C", str(ROOT), "diff", "-U0", "--no-color", "--no-ext-diff"]
+            + [merge_base, "--", *(paths or [])],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, IndexError, subprocess.CalledProcessError):
+        return {}
+    return lines_from_diff(diff)
