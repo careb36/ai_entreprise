@@ -58,6 +58,12 @@ from the daemon's reply, never from the producer's claim.
 
 **`backend/app/services/evidence/command_runs.py`** (self-hosting retrospective, F5) — The Verifier's `required_commands` check over `evidence["command_runs"]`: the suites of the folders a delivery wrote in, their installs and the company's every-delivery commands (`services/workspace/stack_roots.py`), each with its kind, folder, command, exit status and the sha256 of its output that the backend computed over the bytes it received (`runs` on the check). A non-zero exit or a timeout refutes and the gate sends the task back (`required command failed`, a code problem); a command that could not run (exit 126 or 127, "command not found", `python: No module named pytest` but not an import error inside a test, a refusal by the command policy, no exit status) leaves the delivery unverifiable; a suite whose only failures are acceptance tests of criteria not built yet passes, as `tests_run` excuses them. Absent when a delivery ran none: a single-root project's evidence is unchanged.
 
+### Other modules
+
+- `agent_run_service` (`ingest_agent_run`): stores a run handed in by an outside producer (`POST /v1/agent_runs`, the GitHub adapter) as an `AgentRun`. The backend computes the artifact's sha256 itself, refuses one over 2 MiB (`ArtifactTooLargeError`), returns the latest version unchanged when the artifact and claims match, and otherwise adds a version and an audit entry.
+- `governance` (`classify_artifact`, `classify_artifacts`): classifies the paths a self-improvement sprint proposes against `SELF_IMPROVEMENT_PROTECTED_PATHS`, and may redirect a write to a sandbox folder for review.
+- `secops_checks` (`check_dependencies`, `check_secrets_scan`, `check_sast`, `check_all`): SecOps as verification: the dependency audit, secret scan and SAST the Verifier runs (`verification`), each able to block.
+
 ## Described elsewhere
 
 - `touched.verified_writes` (the writes of the latest verified task-worker runs, optionally of some tasks, with the daemon's sha256 and diff and when they were observed): what the project wiki compiles from and lints against, [the project wiki](../design/PROJECT_WIKI.md).

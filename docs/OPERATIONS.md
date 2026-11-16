@@ -480,6 +480,73 @@ that stack is down), and the named images belong to the other repositories
 sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
 a finished run leaks nothing.
 
+### From an error id to the log line
+
+An unhandled error answers `500 {"detail": "Internal server error",
+"error_id": "<16 hex>"}` and nothing else (`backend/app/exception_handlers.py`).
+The backend logs the traceback under that id, on stdout, as one JSON line
+(`logging_config.JSONFormatter`) whose `message` reads `unhandled <Exception>
+on <METHOD> <route template> [error_id=<id>]` followed by the traceback (its
+last 4000 characters, the newlines escaped). To find it:
+
+```bash
+docker compose logs backend --since 24h | grep 'error_id=<id>'
+```
+
+Search every replica's log when several run. Uvicorn may print its own
+`Exception in ASGI application` traceback beside it, without the id. The same
+id, with the exception's class and the route template (never the path, the
+message or the body), goes to `system.maintenance.create_ticket` on NATS and,
+when set, to `ERROR_REPORT_URL`. The web app does not show the id yet: a
+person finds it in the browser's network tab (the failed request's response)
+or gives the time and the page, and you search the log by time and route.
+Errors in the workers (the task worker, the outbox, the janitor) have no
+error id: search by the task or sprint id they log.
+
+### CI failures on the shared runners
+
+The self-hosted runners share one machine, one Docker daemon and its memory.
+A failure that does not reproduce alone is often a collision between jobs.
+
+**A port already in use (e2e).** Step 9c reports `nothing else listens on the
+web project's port` failed, or a task's `application_started` is
+unverifiable because `app_run.py` refused a port in use; later steps then
+fail on what did not run. Cause: two e2e runs used the fixed web port 18765.
+Since #580 `e2e.yml` and `scripts/e2e/run.sh` pick it per run
+(`E2E_WEB_PORT`), as they already did for the backend and fake model. If it
+recurs, look for a fixed port added back, or a leftover container holding it
+(`docker ps`), and rerun.
+
+**An image the job just built is gone (Docker Build).** The smoke test fails
+with `Unable to find image 'fabrique-<name>:ci' locally … pull access denied`
+a second after a green build. Cause: another job's cleanup
+(`docker rmi -f`) removed the same fixed tag. Since #589 each build is
+tagged `fabrique-<name>:ci-<run_id>-<attempt>`; if it happens again, a job
+still uses a fixed tag or name on the shared daemon: give it the run id.
+
+**A timing test fails on a busy machine.** A wall-clock assertion fails, for
+example the task filter's page budget with timings of 0.4 to 1.4 s against
+300 ms, while the code did not change. Cause: other jobs on the same machine.
+Since #590 (merged with #588 and #589) every pull request counts the filter's
+SQL statements and holds the timing to a loose 1 s guard; the strict 300 ms
+runs in the nightly bench (`PERF_STRICT=1`). A timing test that fails twice
+on a quiet machine is a real regression.
+
+**A run killed for lack of memory.** The job ends with `exit code 137`,
+`Killed`, or pytest-xdist's `node down: Not properly terminated` and
+`replacing crashed worker`, with no assertion failure. Cause: the kernel's
+OOM killer, when several jobs (or `-n auto` in each) run at once. Check
+`dmesg -T | grep -i 'out of memory'` and `free -h` on the machine, run the
+backend suite by hand with a fixed, small `-n` (`-n 2`) while CI runs, and
+rerun the job once the machine is quieter.
+
+**A self-hosted runner freezes.** A job stays `in_progress` with no new log
+lines, or jobs wait with `Waiting for a runner to pick up this job` while the
+runners show `online`. Cause: a runner whose job died mid-run (often under
+disk or memory pressure) keeps a wedged session. Cancel the stuck run, then
+follow "The runners stop taking jobs" above (`df -h /`, then restart the
+services).
+
 ## Backups
 
 `scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`
