@@ -11,11 +11,15 @@
   the values the browser carries is stored.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Column, UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class SsoConnection(SQLModel, table=True):
@@ -41,8 +45,8 @@ class SsoConnection(SQLModel, table=True):
     test_ok: bool | None = None
     test_detail: str | None = None
     created_by: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class SsoIdentity(SQLModel, table=True):
@@ -55,7 +59,7 @@ class SsoIdentity(SQLModel, table=True):
     issuer: str
     subject: str
     email: str | None = None  # the address the provider gave at the last sign-in
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
     last_login_at: datetime | None = None
 
 
@@ -71,4 +75,4 @@ class SsoFlowState(SQLModel, table=True):
     code_verifier: str | None = None
     binding_hash: str | None = None
     expires_at: datetime
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
