@@ -933,7 +933,14 @@
         "evidence",
         "repo"
       ],
+      "test_rsi_decide_inputs.py": [
+        "evidence",
+        "repo"
+      ],
       "test_rsi_fitness.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_inputs.py": [
         "evidence"
       ],
       "test_rsi_fitness_keep.py": [

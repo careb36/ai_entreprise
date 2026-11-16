@@ -5,8 +5,8 @@ keeps: three complete paired bench runs per side with equal numbers, green
 CI read at each side's sha, the same tests collected, a Verifier bench with
 no regression, the fake bench at 30/30, equal graders, no protected path and
 a target measure that fails on B and passes on C. Each negative test breaks
-one thing. The tests are ``test_rsi_fitness.py``, ``test_rsi_fitness_keep.py``
-and ``test_rsi_decide.py``.
+one thing. The tests are ``test_rsi_fitness.py``, ``test_rsi_fitness_keep.py``,
+``test_rsi_fitness_inputs.py`` and the ``test_rsi_decide*.py`` files.
 """
 
 import copy
@@ -58,9 +58,11 @@ def ci(sha, *runs, tests=None):
         "sha": sha,
         "check_runs": list(runs)
         or [check_run(sha, "backend-tests"), check_run(sha, "frontend-build")],
-        "tests_collected": {"backend": 4000, "frontend": 900}
-        if tests is None
-        else tests,
+        "tests_collected": {
+            "produced_by": fitness.PLATFORM,
+            "sha": sha,
+            "suites": {"backend": 4000, "frontend": 900} if tests is None else tests,
+        },
     }
 
 

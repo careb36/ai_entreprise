@@ -195,7 +195,7 @@ def test_a_baseline_that_is_not_green_is_unmeasured():
 )
 def test_fewer_tests_collected_on_c_is_reverted(tests):
     obs = observations()
-    obs["candidate"]["ci"]["tests_collected"] = tests
+    obs["candidate"]["ci"]["tests_collected"]["suites"] = tests
     result = decide(obs)
     assert result["decision"] == fitness.REVERT
     assert "fewer_tests" in codes(result)

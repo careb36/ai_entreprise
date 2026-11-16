@@ -24,16 +24,21 @@ The files:
 
 - **Scorecards** (``scripts/bench/scorecard.py``): a file or a folder of
   ``*.json`` cards per side, paired in stamp order (the first B card with the
-  first C card...). A card off the schema is left out and named. The card's
-  ``commit`` is the side's sha the fitness function checks.
+  first C card...). A card off the schema, or one of the fake model (``llm``
+  ``fake``), is left out and named. A file named twice, or by its folder and
+  by itself, is read once; the same card under two names counts once; two
+  different cards with one stamp count for nothing. The card's ``commit`` is
+  the side's sha the fitness function checks.
 - **Check-runs**: GitHub's answer (``{"total_count", "check_runs"}``) or a
   list of check-runs. A ``total_count`` above the runs listed is partial.
-- **Tests collected**: ``{"<suite>": <count>}`` per side.
+- **Tests collected**: ``{"sha", "suites": {"<suite>": <count>}}`` per side,
+  an observation of its own: refused without the side's sha.
 - **Target**: ``{"measure", "baseline": {"sha", "result"}, "candidate":
   {"sha", "result"}}`` with results ``pass``, ``fail`` or ``error``; or
   ``{"metric": "<bench metric>"}`` for a change aimed at a bench number.
 - **Verifier bench**: ``{"sha", "cases": {"<case>": "pass"|"fail"}}``.
-- **Fake card**: the circuit check's scorecard on C (``llm`` fake).
+- **Fake card**: the circuit check's scorecard on C; only a card with
+  ``llm`` ``fake`` is read.
 - **Graders**: ``{"baseline_tree", "candidate_tree"}``, the tree hashes of
   the graders' paths the runner read from git.
 - **Protected**: ``{"sha", "touched": [{"path", "pattern"}], "approval":
@@ -41,7 +46,8 @@ The files:
 
 Every file is one the platform's runner saved, so it is read as produced by
 the platform, unless it names another producer itself (``produced_by``): the
-fitness function then refuses it. A file that is absent or unreadable is a
+fitness function then refuses it. The protected match's approval is stamped
+the same way, so an approval that names another producer is still refused. A file that is absent or unreadable is a
 missing observation, and the decision says so.
 """
 
@@ -62,6 +68,7 @@ from services.evidence import fitness
 
 EXIT = {fitness.KEEP: 0, fitness.REVERT: 1, fitness.UNMEASURED: 2}
 _SPEC_STATUS_DONE = "completed"
+FAKE_LLM = "fake"  # the scorecard's llm for the fake model (scripts/bench/run.sh)
 
 
 class Inputs:
@@ -161,16 +168,28 @@ def card_run(card: dict, pair: int) -> dict[str, Any]:
 
 
 def _card_files(paths: list[str]) -> list[Path]:
+    """Each card file once: a file named twice, or by its folder and by
+    itself, is one file (compared by its resolved path)."""
     found: list[Path] = []
+    seen: set[Path] = set()
     for raw in paths:
         path = Path(raw)
-        found.extend(sorted(path.glob("*.json")) if path.is_dir() else [path])
+        for one in sorted(path.glob("*.json")) if path.is_dir() else [path]:
+            key = one.resolve()
+            if key not in seen:
+                seen.add(key)
+                found.append(one)
     return found
 
 
 def read_cards(paths: list[str], inputs: Inputs) -> list[dict]:
-    """The sound cards among *paths*, in stamp order."""
-    cards = []
+    """The sound real-model cards among *paths*, one per stamp, in stamp order.
+
+    A fake-model card measures no factory (rsi-loop §2.5) and is left out.
+    The same card under two names counts once; two different cards with one
+    stamp are ambiguous, and neither counts.
+    """
+    by_stamp: dict[str, list[tuple[Path, dict]]] = {}
     for path in _card_files(paths):
         card = inputs.load(path)
         if card is None:
@@ -179,8 +198,21 @@ def read_cards(paths: list[str], inputs: Inputs) -> list[dict]:
         if problems:
             inputs.note(path, "off the schema: " + "; ".join(problems[:3]))
             continue
-        cards.append(card)
-    return sorted(cards, key=lambda c: c["stamp"])
+        if card.get("llm") == FAKE_LLM:
+            inputs.note(path, "a fake-model card is no measurement of B or C")
+            continue
+        by_stamp.setdefault(card["stamp"], []).append((path, card))
+    cards = []
+    for stamp, found in sorted(by_stamp.items()):
+        first_path, first = found[0]
+        if any(card != first for _, card in found[1:]):
+            for path, _ in found:
+                inputs.note(path, f"stamp {stamp} names {len(found)} different cards")
+            continue
+        for path, _ in found[1:]:
+            inputs.note(path, f"the same card as {first_path}, counted once")
+        cards.append(first)
+    return cards
 
 
 def read_checks(listing: Any, sha: str, tests: Any) -> dict[str, Any] | None:
@@ -211,12 +243,16 @@ def read_checks(listing: Any, sha: str, tests: Any) -> dict[str, Any] | None:
             for r in runs
             if isinstance(r, dict)
         ],
-        "tests_collected": tests if isinstance(tests, dict) else None,
+        "tests_collected": _stamped(tests),
     }
 
 
-def _fake(card: Any) -> dict[str, Any] | None:
+def _fake(card: Any, path: str | None, inputs: Inputs) -> dict[str, Any] | None:
+    """The circuit check on C: a sound fake-model card only (rsi-loop §2.5)."""
     if not isinstance(card, dict) or schema.validate(card):
+        return None
+    if card.get("llm") != FAKE_LLM:
+        inputs.note(Path(path), "the circuit check needs a fake-model card")
         return None
     return {
         "produced_by": card.get("produced_by", fitness.PLATFORM),
@@ -224,6 +260,15 @@ def _fake(card: Any) -> dict[str, Any] | None:
         "criteria_passed": card["totals"]["criteria_passed"],
         "criteria_total": card["totals"]["criteria_total"],
     }
+
+
+def _protected(obj: Any) -> Any:
+    """The protected match, its approval stamped as the platform's record
+    unless the approval names its own producer (then refused downstream)."""
+    found = _stamped(obj)
+    if found is not None and isinstance(found.get("approval"), dict):
+        found["approval"] = _stamped(found["approval"])
+    return found
 
 
 def build(args: argparse.Namespace) -> dict[str, Any]:
@@ -243,13 +288,15 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             "ci": read_checks(listing, sha, tests),
             "verifier_bench": _stamped(inputs.load(getattr(args, f"{side}_verifier"))),
         }
-    sides["candidate"]["fake_bench"] = _fake(inputs.load(args.fake_card))
+    sides["candidate"]["fake_bench"] = _fake(
+        inputs.load(args.fake_card), args.fake_card, inputs
+    )
     result = fitness.decide(
         sides["baseline"],
         sides["candidate"],
         graders=_stamped(inputs.load(args.graders)),
         target=_stamped(inputs.load(args.target)),
-        protected=_stamped(inputs.load(args.protected)),
+        protected=_protected(inputs.load(args.protected)),
         k=args.k,
     )
     result["inputs"] = inputs.read

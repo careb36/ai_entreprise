@@ -4,103 +4,27 @@ The script reads scorecards, the check-runs saved per sha, the target report
 and the other observations, calls ``fitness.decide``, prints the decision as
 JSON with the sha256 of every file it read (computed by the script, REQ-27)
 and exits 0 keep, 1 revert, 2 unmeasured. It never reaches the network.
-The scorecards are the committed fake reference with the side's commit.
+The files are built by ``decide_helpers.cycle_files``.
 """
 
 import ast
-import copy
 import hashlib
 import json
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
+from decide_helpers import SCRIPT, argv, card, cycle_files, decide, listing, write
 from fitness_helpers import B_SHA, C_SHA
-
-REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / "scripts" / "rsi" / "decide.py"
-sys.path.insert(0, str(SCRIPT.parent))
-import decide  # scripts/rsi/decide.py, by path
-
-REFERENCE = json.loads(
-    (REPO / "bench" / "scorecards" / "20261114T201804Z.json").read_text("utf-8")
-)
-
-
-def _card(sha, index, **totals):
-    card = copy.deepcopy(REFERENCE)
-    card["commit"] = sha
-    card["stamp"] = f"20261116T0{index}0000Z"
-    card["totals"].update(totals)
-    return card
-
-
-def _listing(sha, conclusion="success", total=None):
-    runs = [
-        {
-            "id": i,
-            "name": name,
-            "head_sha": sha,
-            "status": "completed",
-            "conclusion": conclusion if name == "backend-tests" else "success",
-            "app": {"slug": "github-actions"},
-        }
-        for i, name in enumerate(("backend-tests", "frontend-build"), start=1)
-    ]
-    return {"total_count": len(runs) if total is None else total, "check_runs": runs}
-
-
-def _write(folder: Path, name: str, obj) -> Path:
-    path = folder / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj), encoding="utf-8")
-    return path
 
 
 @pytest.fixture
 def files(tmp_path):
-    """Every file of a cycle decide.py keeps, by option name."""
-    paths = {}
-    for side, sha in (("baseline", B_SHA), ("candidate", C_SHA)):
-        for i in range(3):
-            _write(tmp_path / side, f"card-{i}.json", _card(sha, i))
-        paths[f"{side}_cards"] = tmp_path / side
-        paths[f"{side}_checks"] = _write(tmp_path, f"{side}-ci.json", _listing(sha))
-        paths[f"{side}_tests"] = _write(
-            tmp_path, f"{side}-tests.json", {"backend": 4000}
-        )
-        paths[f"{side}_verifier"] = _write(
-            tmp_path, f"{side}-verifier.json", {"sha": sha, "cases": {"cors": "pass"}}
-        )
-    paths["fake_card"] = _write(tmp_path, "fake.json", _card(C_SHA, 9))
-    paths["graders"] = _write(
-        tmp_path, "graders.json", {"baseline_tree": "t1", "candidate_tree": "t1"}
-    )
-    paths["protected"] = _write(
-        tmp_path, "protected.json", {"sha": C_SHA, "touched": [], "approval": None}
-    )
-    paths["target"] = _write(
-        tmp_path,
-        "target.json",
-        {
-            "measure": "f4-adr-files",
-            "baseline": {"sha": B_SHA, "result": "fail"},
-            "candidate": {"sha": C_SHA, "result": "pass"},
-        },
-    )
-    return paths
-
-
-def _argv(paths):
-    argv = ["--baseline-sha", B_SHA, "--candidate-sha", C_SHA]
-    for key, value in paths.items():
-        argv += [f"--{key.replace('_', '-')}", str(value)]
-    return argv
+    return cycle_files(tmp_path)
 
 
 def _run(paths, capsys):
-    code = decide.main(_argv(paths))
+    code = decide.main(argv(paths))
     return code, json.loads(capsys.readouterr().out)
 
 
@@ -120,17 +44,17 @@ def test_every_file_read_is_hashed_by_the_script(files, capsys):
 
 
 def test_a_failing_check_run_reverts_with_exit_1(files, capsys):
-    files["candidate_checks"].write_text(json.dumps(_listing(C_SHA, "failure")))
+    files["candidate_checks"].write_text(json.dumps(listing(C_SHA, "failure")))
     code, out = _run(files, capsys)
     assert (code, out["decision"]) == (1, "revert")
 
 
 def test_a_regression_in_the_cards_reverts(files, capsys):
     for i in range(3):
-        _write(
+        write(
             files["candidate_cards"],
             f"card-{i}.json",
-            _card(C_SHA, i, criteria_rate=0.5),
+            card(C_SHA, i, criteria_rate=0.5),
         )
     code, _ = _run(files, capsys)
     assert code == 1
@@ -152,21 +76,21 @@ def test_a_card_off_the_schema_is_left_out_and_named(files, capsys):
 
 
 def test_a_card_of_another_commit_is_refused(files, capsys):
-    _write(files["candidate_cards"], "card-1.json", _card(B_SHA, 1))
+    write(files["candidate_cards"], "card-1.json", card(B_SHA, 1))
     code, out = _run(files, capsys)
     assert code == 2
     assert any(r["code"] == "wrong_sha" for r in out["reasons"])
 
 
 def test_a_check_run_listing_saved_for_the_wrong_sha_is_refused(files, capsys):
-    files["candidate_checks"].write_text(json.dumps(_listing(B_SHA)))
+    files["candidate_checks"].write_text(json.dumps(listing(B_SHA)))
     code, out = _run(files, capsys)
     assert code == 2
     assert any(r["code"] == "wrong_sha" for r in out["reasons"])
 
 
 def test_a_partial_check_run_listing_is_unmeasured(files, capsys):
-    files["candidate_checks"].write_text(json.dumps(_listing(C_SHA, total=40)))
+    files["candidate_checks"].write_text(json.dumps(listing(C_SHA, total=40)))
     assert _run(files, capsys)[0] == 2
 
 
@@ -212,20 +136,20 @@ def test_an_unreadable_file_is_named_and_unmeasured(files, capsys):
 
 
 def test_a_card_with_unreported_turns_has_no_token_count():
-    card = _card(B_SHA, 0)
-    card["specs"][0]["tokens"]["turns_unreported"] = 1
-    run = decide.card_run(card, 0)
+    one = card(B_SHA, 0)
+    one["specs"][0]["tokens"]["turns_unreported"] = 1
+    run = decide.card_run(one, 0)
     assert run["totals"]["tokens_reported"] is None
-    assert run["specs"][card["specs"][1]["name"]]["tokens_reported"] is not None
+    assert run["specs"][one["specs"][1]["name"]]["tokens_reported"] is not None
 
 
 def test_a_card_the_budget_cut_is_not_complete():
-    card = _card(B_SHA, 0)
-    card["run"] = {"status": "budget_exceeded"}
-    assert decide.card_run(card, 0)["status"] == "budget_exceeded"
-    card = _card(B_SHA, 0)
-    card["specs"][0]["status"] = "timeout"
-    assert decide.card_run(card, 0)["status"] == "timeout"
+    one = card(B_SHA, 0)
+    one["run"] = {"status": "budget_exceeded"}
+    assert decide.card_run(one, 0)["status"] == "budget_exceeded"
+    one = card(B_SHA, 0)
+    one["specs"][0]["status"] = "timeout"
+    assert decide.card_run(one, 0)["status"] == "timeout"
 
 
 def test_the_script_imports_nothing_that_reaches_the_network():
@@ -242,7 +166,7 @@ def test_the_script_imports_nothing_that_reaches_the_network():
 
 def test_the_command_line_exits_by_the_decision(files):
     done = subprocess.run(
-        [sys.executable, str(SCRIPT), *_argv(files)],
+        [sys.executable, str(SCRIPT), *argv(files)],
         capture_output=True,
         text=True,
         timeout=60,
