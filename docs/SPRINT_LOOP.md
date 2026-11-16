@@ -72,7 +72,11 @@ the LangGraph graph is only an optional kickoff conversation.
    criterion ids (`pass`, `fail`, `missing`; an observation, from the daemon's
    output) and the Verifier records them as `criteria_tests`: for the test task,
    every criterion must have run (failing is expected); for an implementation
-   task, its own criteria must pass. `tests_run` excuses only the failing
+   task, its own criteria must pass. When it refutes, the observation — and so
+   the task's comment and its block reason — leads with the failing tests the
+   output named (at most 20, then how many it left out) and the per-criterion
+   results, and only then the end of the output (finding F6 of the self-hosting
+   retrospective). `tests_run` excuses only the failing
    acceptance tests of criteria whose implementation is not done yet, never
    another failure; an implementation task that writes an acceptance test file
    is refuted (`acceptance_tests_untouched`) and sent back. Before its tests

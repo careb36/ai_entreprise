@@ -71,6 +71,11 @@ def _done_branch(facts, policy) -> str | None:
     return _verified_low(facts) or _size(facts.get("files"), policy.max_files)
 
 
+WAITING_FOR_INTEGRATION_REVIEW = (
+    "waiting for a person's review of the integration before merging it locally"
+)
+
+
 def _merge_local(facts, policy) -> str | None:
     if facts.get("merged"):
         return "the branch is merged already"
@@ -78,6 +83,12 @@ def _merge_local(facts, policy) -> str | None:
         status = facts.get("integration_status")
         if status != "tests_passed":
             return f"the integration is {status or 'unknown'}, not tests_passed"
+        # The company's review gate (F7): observed from the review records,
+        # never from the agent's answer.
+        if facts.get("integration_review_required") and not facts.get(
+            "integration_approved"
+        ):
+            return WAITING_FOR_INTEGRATION_REVIEW
         return None
     return _done_branch(facts, policy)
 
