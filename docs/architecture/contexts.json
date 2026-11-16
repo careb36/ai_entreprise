@@ -390,6 +390,9 @@
       "test_check_frontend_architecture.py": [
         "repo"
       ],
+      "test_check_script.py": [
+        "repo"
+      ],
       "test_code_graph.py": [
         "loop"
       ],

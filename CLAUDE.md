@@ -129,6 +129,15 @@ The frontend has a rule of its own (issue #519): `frontend/src` is in layers, fr
 The whole section (both tables of test files, the e2e run, the bench, CI) is [`docs/TESTING.md`](docs/TESTING.md).
 
 ```bash
+scripts/check.sh quick   # while working: the checks what you changed against origin/main can break
+scripts/check.sh full    # once before pushing: everything CI runs
+```
+
+Both print each step's status and time and exit non-zero on a failure; they install `frontend/node_modules` or a Poetry venv only when it is missing or its lock file changed. `CHECK_PYTHON` names the backend's interpreter (default: the Poetry venv of `backend/`), and `CHECK_BACKEND_WORKERS=2` caps the parallel backend suite on a shared machine. What each mode runs is at the top of `scripts/check.sh` and in `docs/TESTING.md`.
+
+The individual commands, for reference:
+
+```bash
 # Backend (no Postgres, NATS, Neo4j or LLM proxy needed)
 cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
 # runs on every core with pytest-xdist (dev group) by default; -n 0 for one process
@@ -149,7 +158,7 @@ python3 scripts/check_frontend_architecture.py
 python3 scripts/check_file_sizes.py
 ```
 
-While working, run only the tests your change can break: `python3 scripts/affected_tests.py --run` (with the backend's interpreter; it reads each test's context from `tests` in `docs/architecture/contexts.json` and says when it falls back to the whole suite). Before pushing, run the full suite once.
+`scripts/check.sh quick` runs the backend tests through `scripts/affected_tests.py --run` (it reads each test's context from `tests` in `docs/architecture/contexts.json` and says when it falls back to the whole suite) and the frontend's through `npm run test:changed`.
 
 `scripts/check_file_sizes.py` keeps a source file at or under 600 lines; the files already over it (`scripts/file_size_baseline.json`) may shrink but never grow, and `--update` lowers an entry. Test files (`backend/tests`, `llm-proxy/tests`, `vscode-daemon/tests`, the frontend's `*.test.ts(x)`) follow the same rule with their own baseline, `scripts/test_file_size_baseline.json`.
 

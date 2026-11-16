@@ -1,8 +1,12 @@
 """Runtime persistence models for lightweight assistant state."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class AssistantRuntimeState(SQLModel, table=True):
@@ -15,4 +19,4 @@ class AssistantRuntimeState(SQLModel, table=True):
     assistant_key: str = Field(index=True)
     cooldown_until: datetime | None = None
     last_error: str | None = None
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)

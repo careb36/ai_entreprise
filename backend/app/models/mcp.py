@@ -7,13 +7,17 @@ apart, encrypted with the Fernet key (``crypto.py``), and never leave the
 backend through the API: it lists their names only.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Column, Field, SQLModel
 
 MCP_TRANSPORTS = ("stdio", "http", "sse")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class McpServer(SQLModel, table=True):
@@ -38,5 +42,5 @@ class McpServer(SQLModel, table=True):
     description: str | None = None
     timeout_seconds: float | None = None
     created_by: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
