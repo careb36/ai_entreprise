@@ -156,6 +156,11 @@ Copy `.env.example` to `.env` and fill in:
   Verifier's verdict alone would have (verified → approved, refuted →
   rejected), and those numbers go into its next prompt. Off by default: each
   run costs an LLM call.
+- `AUTO_SELF_IMPROVEMENT_ENABLED` — optional, default `false` (decision 8 of
+  `docs/design/rsi-loop.md`). At autonomy 3, a closed sprint gets a follow-up
+  sprint planned by a model (`services/loop/worker/close.py`). It runs with no
+  protected-path guard, so it is off unless a company turns it on; the
+  finding-driven cycle of that design replaces it.
 - `MANAGER_AGENT_ENABLED` — optional, default `false`. The Manager agent
   (`services/management/manager_agent.py`) reads the inbox every
   `MANAGER_AGENT_INTERVAL_SECONDS` (60): each task blocked for a person or
