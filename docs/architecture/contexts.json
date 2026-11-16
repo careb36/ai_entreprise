@@ -963,6 +963,9 @@
       "test_sod.py": [
         "management"
       ],
+      "test_sod_policy.py": [
+        "management"
+      ],
       "test_specifications.py": [
         "loop"
       ],
