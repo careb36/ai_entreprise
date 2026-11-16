@@ -1018,6 +1018,12 @@
       "test_task_relations.py": [
         "loop"
       ],
+      "test_task_view_budget.py": [
+        "loop"
+      ],
+      "test_task_view_filter.py": [
+        "loop"
+      ],
       "test_task_views.py": [
         "loop"
       ],
