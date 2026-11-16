@@ -38,6 +38,22 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 **`backend/app/services/evidence/acceptance.py`** (`evidence_for`, `branch_lineage`; #329 retrospective) — With the daemon's `git` answer for a delivery on the task's own branch, what the delivery is judged against is what that branch can hold: `test_files` and `test_hashes` come from the test tasks in the task's lineage (itself and its done dependencies, transitively, the branches `workspace.git_workflow.delivery_spec` merges), `excused` counts as done only the implementation tasks in that lineage, and the sprint's other test files go in `other_test_hashes` for the loop's guard to check on disk (`loop/delivery_checks.guard_test_files`). Without the Git workflow every acceptance test of the sprint is guarded, as before.
 
+### What a failed test run says
+
+**`backend/app/services/evidence/verification.py`** (`check_tests_run`) and
+`criteria_tests.failure_summary` (self-hosting retrospective, F6) — When a
+delivery's tests fail, the observation the gate sends the task back with —
+which becomes the task's comment and its block reason unchanged — reads the
+daemon's output in the order a person reads it: `failing tests: <name, …>`,
+the tests the runner's per-test lines named, at most `FAILING_TESTS_QUOTED`
+(20) and then `(and N more)` from the uncapped `failing_count` that
+`criteria_tests.record_results` keeps beside the 50-name `failing_tests`;
+`criteria: <id> pass|fail|missing`, only when the run recorded them; and
+`output ends: <last 400 characters>`, the truncation note still last. A run
+whose output named no test returns `""` and the observation keeps its previous
+wording (`<command> exited <code>: <tail>`), byte for byte. Every part comes
+from the daemon's reply, never from the producer's claim.
+
 ### Every command a delivery had to run
 
 **`backend/app/services/evidence/command_runs.py`** (self-hosting retrospective, F5) — The Verifier's `required_commands` check over `evidence["command_runs"]`: the suites of the folders a delivery wrote in, their installs and the company's every-delivery commands (`services/workspace/stack_roots.py`), each with its kind, folder, command, exit status and the sha256 of its output that the backend computed over the bytes it received (`runs` on the check). A non-zero exit or a timeout refutes and the gate sends the task back (`required command failed`, a code problem); a command that could not run (exit 126 or 127, "command not found", `python: No module named pytest` but not an import error inside a test, a refusal by the command policy, no exit status) leaves the delivery unverifiable; a suite whose only failures are acceptance tests of criteria not built yet passes, as `tests_run` excuses them. Absent when a delivery ran none: a single-root project's evidence is unchanged.

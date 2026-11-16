@@ -48,7 +48,8 @@ RULES: dict[str, str] = {
         "Merge a done task's branch into the base branch locally when QA "
         "approved it, its latest run is verified, its risk tier is low or "
         "medium and it is within the file limit; or a sprint's integration "
-        "whose suite passed."
+        "whose suite passed and, when the company requires a review of its "
+        "integration, that a person approved at its commit."
     ),
     "undo_delivery": (
         "Undo a delivery from the daemon's snapshot when its latest "
