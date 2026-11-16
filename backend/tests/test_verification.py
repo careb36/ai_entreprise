@@ -2,6 +2,7 @@ import pytest
 from models.agent_run import AgentRun, Verification
 from models.audit import AuditLog
 from models.company import Company
+from services.evidence import criteria_tests
 from services.evidence.verification import (
     check_tests_run,
     extract_claimed_paths,
@@ -610,6 +611,88 @@ def test_daemon_silence_stays_unverifiable():
 
     assert check["outcome"] == "unverifiable"
     assert "not run" in check["observation"]
+
+
+# --- a failed run says which tests failed, before the end of its output ------
+
+
+_PYTEST_FAILING_WITH_WARNING = """\
+tests/test_req_1.py::test_req_1_1_ok PASSED
+tests/test_req_1.py::test_req_1_2_empty FAILED
+FAILED tests/test_req_1.py::test_req_1_2_empty - AssertionError: ''
+1 failed, 1 passed, 1 warning in 0.03s
+tests/test_req_1.py:5: DeprecationWarning: asyncio_default_fixture_loop_scope unset
+"""
+
+
+def test_a_failure_leads_with_the_failing_tests_not_the_end_of_the_output():
+    """The tail of a failed run is often a warning; the comment a person
+    reads first must say which test failed, and for which criterion."""
+    evidence = {
+        "acceptance": {"all": ["REQ-1.1", "REQ-1.2"], "kind": "acceptance_tests"},
+        "test_run": {
+            "command": "python -m pytest -v",
+            "exit_code": 1,
+            "output_tail": _PYTEST_FAILING_WITH_WARNING[-400:],
+        },
+    }
+    criteria_tests.record_results(evidence, _PYTEST_FAILING_WITH_WARNING)
+
+    check = check_tests_run(evidence)
+
+    observation = check["observation"]
+    assert check["outcome"] == "refuted"
+    assert observation.startswith(
+        "`python -m pytest -v` exited 1: failing tests: "
+        "tests/test_req_1.py::test_req_1_2_empty"
+    )
+    assert "criteria: REQ-1.1 pass, REQ-1.2 fail" in observation
+    assert "output ends: " in observation
+    assert observation.index("test_req_1_2_empty") < observation.index(
+        "DeprecationWarning"
+    )
+
+
+def test_more_than_twenty_failing_tests_are_counted_not_all_quoted():
+    """A broadly broken suite quotes 20 names and says how many it left out."""
+    output = "\n".join(
+        f"FAILED tests/test_many.py::test_case_{i:02d} - AssertionError"
+        for i in range(25)
+    )
+    evidence = {
+        "acceptance": {"all": []},
+        "test_run": {"command": "python -m pytest -v", "exit_code": 1},
+    }
+    criteria_tests.record_results(evidence, output)
+
+    check = check_tests_run(evidence)
+
+    observation = check["observation"]
+    assert check["outcome"] == "refuted"
+    assert "failing tests: tests/test_many.py::test_case_00" in observation
+    assert "tests/test_many.py::test_case_19" in observation
+    assert "tests/test_many.py::test_case_20" not in observation
+    assert "(and 5 more)" in observation
+    assert evidence["test_run"]["failing_count"] == 25
+
+
+def test_a_failure_with_no_test_name_falls_back_to_the_output_tail():
+    """A run whose output named no test still says how it ended."""
+    check = check_tests_run(
+        {
+            "test_run": {
+                "command": "npm test",
+                "exit_code": 1,
+                "output_tail": "error: Cannot find module './app'\n",
+            }
+        }
+    )
+
+    assert check["outcome"] == "refuted"
+    assert check["observation"] == (
+        "`npm test` exited 1: error: Cannot find module './app'"
+    )
+    assert "failing tests" not in check["observation"]
 
 
 def test_posted_evidence_omitting_the_daemon_report_cannot_verify_writes(
