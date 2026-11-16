@@ -378,6 +378,9 @@
       "test_acceptance.py": [
         "loop"
       ],
+      "test_acceptance_plan.py": [
+        "loop"
+      ],
       "test_access_review.py": [
         "management"
       ],
