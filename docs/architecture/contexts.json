@@ -1,10 +1,13 @@
 {
-  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update). A module in services/<context>/ belongs to that context by its folder. The flat services/<module>.py shims of the migration are gone (ADR 0016, step 15); a context's modules list names a flat module only while one is left.",
+  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update). Each context's public list is its interface (ADR 0018): another context imports only those modules (relative to the context, or \"*\" for all of them; the context's own package is always public), and interface_allowlist holds the imports of a context's internals that remained when the rule was adopted, which may only shrink too. A module in services/<context>/ belongs to that context by its folder. The flat services/<module>.py shims of the migration are gone (ADR 0016, step 15); a context's modules list names a flat module only while one is left.",
   "contexts": {
     "contracts": {
       "path": "backend/app/services/contracts/",
       "responsibility": "The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.",
       "depends_on": [],
+      "public": [
+        "*"
+      ],
       "modules": []
     },
     "platform": {
@@ -12,6 +15,21 @@
       "responsibility": "The infrastructure every context may use: the audit writes (AgentService), the advisory locks across replicas, idempotency claims, the Glassroom publisher, the KPI turn records, token usage, API tokens, run secrets, the health check, the knowledge graph reader and, after the migration, the engram processor from backend/memory. It knows nothing of tasks, runs or companies' decisions.",
       "depends_on": [
         "contracts"
+      ],
+      "public": [
+        "agent_service",
+        "audit_anchors",
+        "egress",
+        "engram_processor",
+        "glassroom",
+        "hooks",
+        "locks",
+        "memory_graph",
+        "orchestration_metrics",
+        "rfc3161",
+        "sod",
+        "teams",
+        "wstg_catalogue"
       ],
       "modules": []
     },
@@ -21,6 +39,15 @@
       "depends_on": [
         "contracts",
         "platform"
+      ],
+      "public": [
+        "board",
+        "dependencies",
+        "progress_snapshot",
+        "relations",
+        "sprint_board",
+        "task_events",
+        "task_projection"
       ],
       "modules": []
     },
@@ -32,6 +59,12 @@
         "platform",
         "tasks"
       ],
+      "public": [
+        "company_models",
+        "effort",
+        "model_factory",
+        "model_routing"
+      ],
       "modules": []
     },
     "evidence": {
@@ -41,6 +74,26 @@
         "contracts",
         "platform"
       ],
+      "public": [
+        "acceptance",
+        "agent_run_service",
+        "app_check",
+        "browser_smoke",
+        "command_runs",
+        "console_run",
+        "context_read",
+        "criteria_tests",
+        "delivery_gate",
+        "manifests",
+        "review_changes",
+        "risk",
+        "signatures",
+        "sources",
+        "standards",
+        "touched",
+        "verification",
+        "wstg_tests"
+      ],
       "modules": []
     },
     "workspace": {
@@ -49,6 +102,13 @@
       "depends_on": [
         "contracts",
         "platform"
+      ],
+      "public": [
+        "daemon_liveness",
+        "git_workflow",
+        "project_profile",
+        "sandbox",
+        "workspace_daemon"
       ],
       "modules": []
     },
@@ -61,6 +121,15 @@
         "evidence",
         "workspace"
       ],
+      "public": [
+        "code_graph",
+        "developer_tools",
+        "mcp_tools",
+        "registry_lookup",
+        "research_tools",
+        "signature_lookup",
+        "workspace_edits"
+      ],
       "modules": []
     },
     "learning": {
@@ -71,6 +140,14 @@
         "platform",
         "tasks",
         "models"
+      ],
+      "public": [
+        "architect",
+        "procedures",
+        "retrospective",
+        "scrum_master",
+        "wiki_compile",
+        "wiki_store"
       ],
       "modules": []
     },
@@ -86,6 +163,16 @@
         "workspace",
         "tools"
       ],
+      "public": [
+        "arch_author",
+        "arch_check",
+        "document_approval",
+        "spec_check",
+        "spec_planning",
+        "sprint_planner",
+        "sprint_team",
+        "stack_detection"
+      ],
       "modules": []
     },
     "producers": {
@@ -99,6 +186,10 @@
         "evidence",
         "workspace",
         "tools"
+      ],
+      "public": [
+        "console_assistants",
+        "console_producer"
       ],
       "modules": []
     },
@@ -117,6 +208,13 @@
         "planning",
         "producers"
       ],
+      "public": [
+        "carry_over",
+        "delivery_checks",
+        "run_review",
+        "sod_requesters",
+        "sprint_control"
+      ],
       "modules": []
     },
     "release": {
@@ -132,6 +230,13 @@
         "planning",
         "loop"
       ],
+      "public": [
+        "delivery_undo",
+        "git_publish",
+        "integration",
+        "integration_review",
+        "local_merge"
+      ],
       "modules": []
     },
     "integrations": {
@@ -143,6 +248,7 @@
         "tasks",
         "evidence"
       ],
+      "public": [],
       "modules": []
     },
     "management": {
@@ -163,6 +269,7 @@
         "release",
         "integrations"
       ],
+      "public": [],
       "modules": []
     }
   },
@@ -184,6 +291,14 @@
     ]
   },
   "allowlist": [],
+  "interface_allowlist": [
+    "delivery_checks -> dependency_install",
+    "delivery_checks -> run_logs",
+    "delivery_suites -> folder_commands",
+    "delivery_suites -> stack_roots",
+    "task_routing -> difficulty",
+    "task_routing -> routing_policy"
+  ],
   "tests": {
     "$comment": "Each backend/tests/test_*.py and the contexts it exercises, read by scripts/affected_tests.py to run only the tests a change can break, and checked by scripts/check_architecture.py: a test file in neither 'files' nor 'always', an unknown context, a rule naming no test, or an entry for a file that does not exist fails. A test's contexts are the top of what it imports and of the routes it calls (a router stands for the contexts it imports): a test of loop runs whenever loop or a context loop may import changes, so a context another of a test's contexts may import is left out as implied. 'repo' marks a test that reads repository files (scripts, workflows, docs, the frontend) rather than the backend's modules: it runs when a file it names changes ('mentions' in sources) or when it changes. A new test's entry starts from `python3 scripts/affected_tests.py --suggest backend/tests/<file>` and is read by hand.",
     "sources": {
@@ -386,6 +501,9 @@
       "test_chat_inbound.py": [
         "integrations",
         "release"
+      ],
+      "test_check_architecture_interfaces.py": [
+        "repo"
       ],
       "test_check_context_docs.py": [
         "repo"

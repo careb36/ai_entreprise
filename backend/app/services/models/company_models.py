@@ -64,6 +64,17 @@ def role_key(role: str | None) -> str:
     return role_for_name(role or "").value
 
 
+def business_unit_id(session: Session, company_id: int) -> int | None:
+    """The company's business unit the proxy bills, or ``None`` when it has none."""
+    from models import BusinessUnit
+    from sqlmodel import select
+
+    unit = session.exec(
+        select(BusinessUnit).where(BusinessUnit.company_id == company_id)
+    ).first()
+    return unit.id if unit else None
+
+
 def company_choice(company: Company | None, role: str | None) -> str | None:
     """The model the company chose for *role*, else its default, else ``None``."""
     if company is None:

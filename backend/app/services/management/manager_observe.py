@@ -130,7 +130,7 @@ def credit_ok(
 ) -> bool | None:
     """Whether a one-token call for the paused sprint's work passes; ``None``
     when one was made less than ``CREDIT_PROBE_INTERVAL`` ago."""
-    from services.planning.spec_author import business_unit_id
+    from services.models.company_models import business_unit_id
 
     moment = time.monotonic() if now is None else now
     last = _last_credit_probe.get(sprint_id)

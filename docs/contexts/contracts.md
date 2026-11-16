@@ -5,6 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/contracts/`
 - **Responsibility:** The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.
 - **May import:** no other context (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): every module (`"*"`): the context exists to be shared.
 - **Modules:** `board_notes`, `edit_blocks`, `intake_rules`, `manifest`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Components
