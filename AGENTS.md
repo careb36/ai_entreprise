@@ -185,9 +185,9 @@ JetStream), `security-scan.yml` (Trivy, plus a non-failing `safety check`),
 `runner-hygiene.yml` (a daily sweep of the docker state the runners share with
 every other repository on this machine) and
 a manual SLSA provenance workflow. Feature-branch pushes do **not** trigger the
-test workflows — push a pull request to get a run. Backend and frontend jobs
-are path-filtered on `backend/**`, `llm-proxy/**`, `frontend/**` and their own
-workflow file.
+test workflows — push a pull request to get a run. A pull request runs only the
+jobs its files can affect (`changes.yml`; the mapping is in `docs/TESTING.md`,
+CI): a job that did not apply reports "skipped", which counts as green.
 
 A red run does not necessarily mean broken code: read the check-run
 *annotations* (`gh api repos/<owner>/<repo>/check-runs/<job_id>/annotations`),

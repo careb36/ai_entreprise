@@ -517,6 +517,9 @@
       "test_check_script.py": [
         "repo"
       ],
+      "test_ci_paths.py": [
+        "repo"
+      ],
       "test_code_graph.py": [
         "loop"
       ],

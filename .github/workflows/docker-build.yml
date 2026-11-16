@@ -12,14 +12,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'llm-proxy/**'
-      - 'vscode-daemon/**'
-      - 'docker-compose.yml'
-      - '.dockerignore'
-      - '.github/workflows/docker-build.yml'
 
 # The self-hosted runners are shared by every pull request and by main: a new
 # push cancels the runs of the commit it replaces, on main too (the newest
@@ -29,9 +21,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   build:
+    needs: changes
+    # Not a job-level `if` on the image: a matrix job skipped that way is
+    # reported once under the bare job name, and the required check
+    # "build (<image>)" would wait forever. Each image's job starts, and
+    # its steps run only when BUILD is 'true' (that image's context changed,
+    # or the filter failed); otherwise it ends in seconds as a success.
+    if: ${{ !cancelled() }}
     runs-on: [self-hosted, linux, x64, lafabrique]
     env:
+      BUILD: ${{ needs.changes.result != 'success' || needs.changes.outputs[matrix.filter] == 'true' }}
       # One tag per run and attempt: the self-hosted runners share one Docker
       # daemon, and a fixed tag let one job's cleanup (`docker rmi -f`) delete
       # the image another job had just built (PR #588's backend build).
@@ -45,26 +51,39 @@ jobs:
       matrix:
         include:
           - name: backend
+            filter: docker-backend
             context: ./backend
             dockerfile: ./backend/Dockerfile
           - name: janitor
+            filter: docker-janitor
             # El Dockerfile copia `backend/janitor/main.py`, así que el
             # contexto es la raíz (igual que en docker-compose.yml).
             context: .
             dockerfile: ./backend/janitor/Dockerfile
           - name: frontend
+            filter: docker-frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
           - name: llm-proxy
+            filter: docker-llm-proxy
             context: ./llm-proxy
             dockerfile: ./llm-proxy/Dockerfile
           - name: vscode-daemon
+            filter: docker-vscode-daemon
             context: ./vscode-daemon
             dockerfile: ./vscode-daemon/Dockerfile
     steps:
+      - name: Nothing in ${{ matrix.name }}'s build context changed
+        if: env.BUILD != 'true'
+        env:
+          NAME: ${{ matrix.name }}
+        run: echo "Skipped, this pull request does not change the build context of $NAME (changes.yml)."
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.BUILD == 'true'
 
       - name: Build ${{ matrix.name }}
+        if: env.BUILD == 'true'
         run: |
           docker build \
             --file "${{ matrix.dockerfile }}" \
@@ -74,7 +93,7 @@ jobs:
       # Construir no prueba que el proceso arranque: el proxy compilaba bien y
       # moría en el primer import. Estos pasos ejecutan la imagen.
       - name: Smoke test llm-proxy (serves /health)
-        if: matrix.name == 'llm-proxy'
+        if: env.BUILD == 'true' && matrix.name == 'llm-proxy'
         env:
           # El runner es compartido y dos corridas de refs distintas no se
           # serializan por el bloque `concurrency`: nombre y puerto fijos se
@@ -98,7 +117,7 @@ jobs:
       # El backend necesita Postgres para arrancar, así que aquí solo se
       # comprueba lo que el `COPY` incompleto rompía: que todo import resuelva.
       - name: Smoke test backend (imports resolve)
-        if: matrix.name == 'backend'
+        if: env.BUILD == 'true' && matrix.name == 'backend'
         run: |
           docker run --rm --entrypoint python "$IMAGE" \
             -c "import app.main; print('imports OK')"
@@ -106,7 +125,7 @@ jobs:
       # Este Dockerfile copiaba un solo archivo, así que un módulo nuevo al lado
       # de daemon.py se quedaba fuera de la imagen. Importarlo lo detecta.
       - name: Smoke test vscode-daemon (imports resolve)
-        if: matrix.name == 'vscode-daemon'
+        if: env.BUILD == 'true' && matrix.name == 'vscode-daemon'
         run: |
           docker run --rm --entrypoint python "$IMAGE" \
             -c "import daemon; print('daemon imports OK')"
@@ -116,7 +135,7 @@ jobs:
       # nombre, el del daemon mataba el contenedor del proxy mientras este
       # esperaba /health.
       - name: Clean up ${{ matrix.name }}
-        if: always()
+        if: always() && env.BUILD == 'true'
         env:
           CONTAINER: fabrique-llm-proxy-smoke-${{ github.run_id }}-${{ github.run_attempt }}
         run: |

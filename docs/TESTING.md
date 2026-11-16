@@ -546,6 +546,55 @@ machines; only the SLSA release generator stays on `ubuntu-latest`. The
 runner keeps its state between jobs, so a job cleans up what it starts (the
 e2e removes its NATS container) and avoids the ports a local stack uses.
 
+**Which jobs a pull request runs.** The seven runners share one machine of
+about 4 cores and 16 GB, so a pull request runs only the jobs its files can
+affect. `.github/workflows/changes.yml` (a reusable workflow, `dorny/paths-filter`
+pinned by sha) lists the pull request's files once; each workflow calls it as
+its `changes` job and gates its own job on one output:
+
+| Job | Runs when the pull request changes |
+|-----|-----------------------------------|
+| Backend tests (`backend-tests.yml`) | `backend/**`, `llm-proxy/**`, `vscode-daemon/**`, `bench/**`, `db/init-db/**`, `nats/**`, the scripts the tests read (`scripts/bench/**`, `scripts/e2e/**`, `scripts/self_host/**`, `check_architecture.py`, `check_frontend_architecture.py`, `licence_scan.py`, `nats_config.py`, `release_notes.py`, `wstg_catalogue.py`, `start-daemon.sh`, `start-daemon.ps1`), `docs/architecture/**`, `docs/ARCHITECTURE.md`, `docs/adr/**`, `docs/OPERATIONS.md`, `docs/STANDARDS.md`, `CHANGELOG.md`, `NOTICE`, `.env.example`, `docker-compose.yml`, `.pre-commit-config.yaml`, `.github/CODEOWNERS`, `dependabot.yml`, `licence-exceptions.txt`, `pip-audit-ignore.txt` |
+| Frontend build (`frontend-build.yml`) | `frontend/**`, `docs/architecture/frontend.json`, `scripts/check_frontend_architecture.py` |
+| Docker build, one per image (`docker-build.yml`) | its build context: `backend/**`, `backend/janitor/**` (the janitor), `frontend/**`, `llm-proxy/**`, `vscode-daemon/**` |
+| End to end, host and container (`e2e.yml`) | `backend/**`, `vscode-daemon/**`, `llm-proxy/**`, `nats/**`, `scripts/e2e/**`, `scripts/self_host/**`, `scripts/backup.sh`, `scripts/nats_config.py`, `docs/architecture/specification.json` and `architecture.json` (the self-hosting step reads them), `docker-compose*.yml` |
+| File sizes (`file-sizes.yml`) | `backend/**`, `frontend/src/**`, `vscode-daemon/**`, `llm-proxy/**`, `scripts/**` |
+| actionlint (`workflows.yml`) | `.github/workflows/**`, `.github/actionlint.yaml` |
+| Security scans (`security-scan.yml`) | always |
+
+A change under `.github/workflows/` or to `.github/actionlint.yaml` runs every
+job, and so does every push to `main`, every schedule and every manual run.
+The backend list is everything the backend suite reads outside `backend/`:
+`backend/tests/test_ci_paths.py` fails when a test reads a path the filter
+leaves out. So a docs-only pull request (`README.md`, `docs/TESTING.md`, a
+design document) runs the security scans and nothing else, while
+`CHANGELOG.md`, `docs/OPERATIONS.md` and `docs/STANDARDS.md` start the backend
+tests (`test_release_notes.py`, `test_supply_chain.py` and `test_standards.py`
+read them). A frontend-only change runs the frontend build, the file sizes and
+the frontend image; a change under `backend/app` runs the backend tests, the
+e2e, the file sizes and the backend image.
+
+No workflow uses `on.pull_request.paths`: a workflow path filtering does not
+start reports nothing, and a required check then waits forever. A job skipped
+by its `if:` reports "skipped", which a required check accepts. The two matrix
+jobs cannot be skipped that way (a skipped matrix job reports once under its
+bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
+skip their steps, ending in seconds as a success. When the `changes` job
+itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
+
+**At most two e2e jobs at once, once turned on.** By default an e2e job takes
+any runner, as before. Setting the repository variable `E2E_RUNS_ON` to
+`["self-hosted","linux","x64","lafabrique","e2e"]` makes an e2e job that runs
+the loop ask for the runner label `e2e` besides `lafabrique`; with only two of
+the seven runners carrying it, GitHub queues any further e2e job until one of
+the two is free, across every pull request, without cancelling anything. Label
+the runners first, then set the variable (`docs/OPERATIONS.md`, Runner
+capacity). A concurrency group cannot do this: it holds one running and one
+pending run per group, and a third arrival cancels the pending one, a failed
+check. An e2e job with nothing to run takes any runner. Each workflow's
+own group (`<workflow>-${{ github.ref }}`, `cancel-in-progress: true`, #559)
+still cancels the older run of a pull request when it gets a new push.
+
 Security checks on every pull request into `main` are in
 `.github/workflows/security-scan.yml`, on the same runner (issue #522):
 
@@ -602,8 +651,8 @@ uv tool run --from "semgrep==1.182.1" semgrep scan --config p/security-audit \
   --severity ERROR --error --metrics=off --baseline-commit "$(git merge-base origin/main HEAD)" .
 ```
 
-CI runs this suite on every pull request that touches `backend/` or the
-workflow itself, and on pushes to `main`
+CI runs this suite on every pull request whose files it reads (Which jobs a
+pull request runs, above), and on pushes to `main`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
 from `backend/poetry.lock`. The lint step runs the ruff version the workflow
 pins (`pip install "ruff==0.17.1"`); lint locally with that same version, since
@@ -614,7 +663,7 @@ pull request to get a run. Add new backend dependencies to
 
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
-`frontend/` or the workflow itself, and on pushes to `main`.
+`frontend/`, the layer rules or a workflow, and on pushes to `main`.
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
 and `npm run build` from the `frontend/` directory, with no Actions cache: the
 self-hosted runner keeps `~/.npm` between jobs, and archiving it (1.8 GB)

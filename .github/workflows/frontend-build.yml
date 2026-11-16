@@ -1,7 +1,9 @@
-# Frontend build — runs typecheck, tests, and build on every pull request that touches
-# frontend code or this workflow, and on pushes to the main branch
-# branches. Pushes to other branches do not trigger it; open a pull request for
-# a run.
+# Frontend build — runs typecheck, tests, and build on every pull request, on
+# pushes to the main branch and on demand. On a pull request the `changes` job
+# (changes.yml) skips the build unless the change touches frontend/, the layer
+# rules (docs/architecture/frontend.json, scripts/check_frontend_architecture.py)
+# or a workflow; a skipped build still reports, so a required check never waits.
+# Pushes to other branches do not trigger it; open a pull request for a run.
 #
 # Run the same checks locally with:
 #   python3 scripts/check_frontend_architecture.py
@@ -12,17 +14,7 @@ name: Frontend Build
 on:
   push:
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'scripts/check_frontend_architecture.py'
-      - 'docs/architecture/frontend.json'
-      - '.github/workflows/frontend-build.yml'
   pull_request:
-    paths:
-      - 'frontend/**'
-      - 'scripts/check_frontend_architecture.py'
-      - 'docs/architecture/frontend.json'
-      - '.github/workflows/frontend-build.yml'
   workflow_dispatch:
 
 # The self-hosted runners are shared by every pull request and by main: a new
@@ -36,8 +28,17 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   build:
     name: typecheck, test, and build (Node 24)
+    needs: changes
+    # A broken filter runs the build rather than skipping it.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 15
 
