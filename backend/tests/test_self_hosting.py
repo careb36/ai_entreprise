@@ -540,3 +540,36 @@ def test_the_measure_runs_on_the_builds_backend_and_is_hashed_here(
     failed = spec_source.run_measure("m/test_fails.py", tmp_path / "build", python)
     assert (failed["exit_code"], failed["passed"]) == (1, False)
     assert any("1 failed" in line for line in failed["tail"])
+
+
+def test_a_build_cannot_stand_in_for_the_runner(tmp_path, monkeypatch):
+    graders = tmp_path / "graders"
+    (graders / "m").mkdir(parents=True)
+    (graders / "m" / "test_fails.py").write_text(
+        "def test_not_yet():\n    assert False\n", encoding="utf-8"
+    )
+    backend = tmp_path / "build" / "backend"
+    backend.mkdir(parents=True)
+    fake = "import sys\nprint('1 passed')\nsys.exit(0)\n"
+    for name in ("pytest.py", "conftest.py"):
+        (backend / name).write_text(fake, encoding="utf-8")
+    (backend / "pytest.ini").write_text("[pytest]\naddopts = -p no:python\n")
+    monkeypatch.setattr(spec_source, "REPO", graders)
+    monkeypatch.setenv("PYTHONPATH", str(backend))
+    result = spec_source.run_measure(
+        "m/test_fails.py", tmp_path / "build", self_host.sys.executable
+    )
+    assert (result["exit_code"], result["passed"]) == (1, False)
+    assert any("1 failed" in line for line in result["tail"])
+
+
+def test_a_saved_sprint_is_resumed_only_for_its_specification():
+    assert spec_source.resume_sprint({}, 7, True) is False
+    saved = {"sprint_id": 3, "sprint_specification_id": 7}
+    assert spec_source.resume_sprint(saved, 7, True) is True
+    with pytest.raises(spec_source.SpecRefused, match="fresh --checkout"):
+        spec_source.resume_sprint(saved, 8, True)
+    # A state from before the record is #535's: resumed without --spec only.
+    assert spec_source.resume_sprint({"sprint_id": 3}, 5, False) is True
+    with pytest.raises(spec_source.SpecRefused):
+        spec_source.resume_sprint({"sprint_id": 3}, 8, True)

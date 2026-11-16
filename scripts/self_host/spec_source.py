@@ -35,6 +35,12 @@ DEFAULT_REVISION = HERE / "fixtures" / "issue-535-architecture.json"
 DEFAULT_SPRINT_NAME = "Saved views 1"
 MEASURE_TIMEOUT_SECONDS = 900
 MEASURE_TAIL_LINES = 30
+# Imports pytest from the interpreter's own packages, then puts the build's
+# paths last on ``sys.path`` (see run_measure).
+RUNNER = (
+    "import sys, pytest; sys.path += ['.', 'app']; "
+    "sys.exit(pytest.main(sys.argv[1:]))"
+)
 
 
 class SpecRefused(ValueError):
@@ -157,16 +163,35 @@ def run_measure(
     """Run the target measure (this repository's file) with pytest in
     *build*'s ``backend/``: ``passed`` is its exit status 0, and the sha256
     of its output is computed here."""
+    # The runner is loaded before any path of the build: ``-I`` keeps the
+    # build's directory, PYTHONPATH and user site out of ``sys.path``, so a
+    # ``backend/pytest.py`` in the build cannot stand in for pytest. The
+    # build's ``.`` and ``app`` are appended after pytest is imported, its
+    # ini files and conftests are not read (``-c`` an empty file, rootdir the
+    # measure's folder, ``--noconftest``) and plugins are not auto-loaded.
+    # A measure still imports the build's code in-process; grading in a
+    # sandbox is PR 12 of docs/design/rsi-loop.md.
+    target = REPO / measure
     command = [
         python,
-        "-m",
-        "pytest",
+        "-I",
+        "-B",
+        "-c",
+        RUNNER,
         "-q",
         "-p",
         "no:cacheprovider",
-        str(REPO / measure),
+        "--noconftest",
+        "-c",
+        os.devnull,
+        "--rootdir",
+        str(target.parent),
+        str(target),
     ]
-    env = {**os.environ, "PYTHONPATH": ".:app", "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {
+        **{k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")},
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    }
     try:
         done = subprocess.run(
             command,
@@ -189,9 +214,25 @@ def run_measure(
     return {
         "target_measure": measure,
         "build": str(build),
-        "command": " ".join(command[1:]),
+        "command": " ".join(["pytest", *command[5:]]),
         "exit_code": exit_code,
         "passed": exit_code == 0,
         "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
         "tail": output.strip().splitlines()[-MEASURE_TAIL_LINES:],
     }
+
+
+def resume_sprint(state: dict, specification_id: int, from_file: bool) -> bool:
+    """Whether the checkout's saved sprint is this specification's: resumed
+    then. A sprint saved for another specification (or before the harness
+    recorded one, under ``--spec``) is refused rather than reused."""
+    if not state.get("sprint_id"):
+        return False
+    saved = state.get("sprint_specification_id")
+    # A state saved before the specification was recorded is #535's.
+    if saved == specification_id or (saved is None and not from_file):
+        return True
+    raise SpecRefused(
+        f"sprint {state['sprint_id']} was started for specification {saved}, "
+        f"not {specification_id}: use a fresh --checkout for a new finding"
+    )

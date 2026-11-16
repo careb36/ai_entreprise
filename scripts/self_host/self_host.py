@@ -383,7 +383,7 @@ def step_issue(api, args, state, report):
         "planned_against": api.get(f"/v1/specifications/{spec['id']}").get("architecture_id"),
         **{k: source[k] for k in ("source", "target_measure", "warnings") if k in source},
     }
-    if not state.get("sprint_id"):
+    if not spec_source.resume_sprint(state, spec["id"], "source" in source):
         plan = api.post(
             "/v1/plan_sprint", {"company_id": cid, "scope_size": args.scope, "specification_id": spec["id"]}
         )
@@ -405,7 +405,7 @@ def step_issue(api, args, state, report):
                 "backlog_items": plan["tasks"],
             },
         )
-        state["sprint_id"] = started["sprint_id"]
+        state["sprint_id"], state["sprint_specification_id"] = started["sprint_id"], spec["id"]
     out["sprint_id"] = state["sprint_id"]
     report["issue"] = out
 
@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 globals()[f"step_{step}"](api, args, state, report)
             state_file.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    except ApiError as e:
+    except (ApiError, spec_source.SpecRefused) as e:
         report["error"] = str(e)
     text = json.dumps(report, indent=2, ensure_ascii=False)
     if args.report:
