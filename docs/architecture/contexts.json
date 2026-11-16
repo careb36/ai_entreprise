@@ -84,6 +84,7 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
+        "fitness",
         "manifests",
         "review_changes",
         "risk",
@@ -927,6 +928,23 @@
       ],
       "test_routing_record.py": [
         "models"
+      ],
+      "test_rsi_decide.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_decide_inputs.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_fitness.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_inputs.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_keep.py": [
+        "evidence"
       ],
       "test_run_cost.py": [
         "loop"
