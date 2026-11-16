@@ -354,6 +354,56 @@ describe('company creation profile refresh', () => {
     expect(init).toHaveBeenCalledOnce()
     client.clear()
   })
+
+  it('lands on the sprint list and says why when no foundation sprint was planned (F8)', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    useAuthStore.setState({ memberships: [] })
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+    vi.spyOn(api, 'initCompany').mockResolvedValue({
+      company_id: 21,
+      sprint_id: null,
+      sprint_status: null,
+      task_count: 0,
+      message: 'Company initialized without a foundation sprint',
+      foundation_sprint: {
+        planned: false,
+        reason: 'repository_with_code',
+        detail: 'skipped: the daemon observed an existing repository with code',
+        observed_repository_with_code: true,
+      },
+    })
+    vi.spyOn(api, 'me').mockResolvedValue({
+      user_id: 1, email: 'user@example.com', full_name: 'User',
+      memberships: [{ company_id: 21, human_role: 'Owner' }],
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/companies/new']}>
+          <CurrentPath />
+          <Routes>
+            <Route element={<ProtectedRoute />}>
+              <Route path="/companies/new" element={<CompanyNew />} />
+              <Route path="/sprints" element={<div>Sprint list</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+    fireEvent.change(screen.getByPlaceholderText('Acme Corp'), { target: { value: 'Existing Repo' } })
+    for (let step = 1; step < 5; step++) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(
+      'No foundation sprint was planned: the workspace daemon observed an existing repository with code in the project folder.',
+    ))
+    expect(useAppStore.getState().companyId).toBe(21)
+    // The list page renders only for exactly /sprints — never a sprint that does not exist.
+    expect(await screen.findByText('Sprint list')).toBeInTheDocument()
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/sprints')
+    client.clear()
+  })
 })
 
 describe('project folder on the user\'s computer', () => {

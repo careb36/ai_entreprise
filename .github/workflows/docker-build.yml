@@ -31,6 +31,11 @@ concurrency:
 jobs:
   build:
     runs-on: [self-hosted, linux, x64, lafabrique]
+    env:
+      # One tag per run and attempt: the self-hosted runners share one Docker
+      # daemon, and a fixed tag let one job's cleanup (`docker rmi -f`) delete
+      # the image another job had just built (PR #588's backend build).
+      IMAGE: fabrique-${{ matrix.name }}:ci-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -63,7 +68,7 @@ jobs:
         run: |
           docker build \
             --file "${{ matrix.dockerfile }}" \
-            --tag "fabrique-${{ matrix.name }}:ci" \
+            --tag "$IMAGE" \
             "${{ matrix.context }}"
 
       # Construir no prueba que el proceso arranque: el proxy compilaba bien y
@@ -77,7 +82,7 @@ jobs:
           CONTAINER: fabrique-llm-proxy-smoke-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           docker run -d --name "$CONTAINER" \
-            --publish 127.0.0.1::5100 "fabrique-${{ matrix.name }}:ci"
+            --publish 127.0.0.1::5100 "$IMAGE"
           PORT=$(docker port "$CONTAINER" 5100 | head -1 | sed 's/.*://')
           for _ in $(seq 1 30); do
             if curl -fsS "http://127.0.0.1:$PORT/health" > /dev/null 2>&1; then
@@ -95,7 +100,7 @@ jobs:
       - name: Smoke test backend (imports resolve)
         if: matrix.name == 'backend'
         run: |
-          docker run --rm --entrypoint python "fabrique-${{ matrix.name }}:ci" \
+          docker run --rm --entrypoint python "$IMAGE" \
             -c "import app.main; print('imports OK')"
 
       # Este Dockerfile copiaba un solo archivo, así que un módulo nuevo al lado
@@ -103,7 +108,7 @@ jobs:
       - name: Smoke test vscode-daemon (imports resolve)
         if: matrix.name == 'vscode-daemon'
         run: |
-          docker run --rm --entrypoint python "fabrique-${{ matrix.name }}:ci" \
+          docker run --rm --entrypoint python "$IMAGE" \
             -c "import daemon; print('daemon imports OK')"
 
       # Solo el job del proxy deja un contenedor. Los dos runners comparten el
@@ -118,4 +123,4 @@ jobs:
           if [ "${{ matrix.name }}" = "llm-proxy" ]; then
             docker rm -f "$CONTAINER" 2>/dev/null || true
           fi
-          docker rmi -f "fabrique-${{ matrix.name }}:ci" 2>/dev/null || true
+          docker rmi -f "$IMAGE" 2>/dev/null || true

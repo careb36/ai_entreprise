@@ -574,7 +574,7 @@ Documentación interactiva disponible en `http://localhost:8000/docs` con el ent
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | `GET`  | `/health` | Health check del servicio |
-| `POST` | `/v1/init_company` | Crear empresa con tamaño de alcance por defecto (S/M/L) |
+| `POST` | `/v1/init_company` | Crear empresa con tamaño de alcance por defecto (S/M/L); el sprint de fundamentos se planifica salvo que el daemon observe un repositorio con código en `project_path` (`foundation_sprint: true/false` lo pide o lo descarta; la respuesta dice qué ocurrió y por qué) |
 | `GET` · `POST` · `PUT` | `/v1/specifications` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`) | La especificación: requisitos numerados con criterios dado / cuando / entonces, chequeada de forma determinística; el PO la redacta y revisa desde un brief, una persona responde, edita y aprueba; cobertura por criterio leída de los tableros |
 | `GET` · `POST` · `PUT` | `/v1/architectures` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`, `/{id}/write`, `/{id}/document`) | La arquitectura de una especificación aprobada: módulos, interfaces, decisiones y convenciones, chequeada de forma determinística; el Architect la redacta y revisa, una persona aprueba; escrita en el repositorio por el daemon, con su hash guardado |
 | `POST` | `/v1/plan_sprint` | Armar el backlog desde un objetivo o desde una especificación aprobada (`specification_id`: las tareas nombran los criterios que cubren, `uncovered` lista el resto) |
