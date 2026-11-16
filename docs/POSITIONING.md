@@ -288,6 +288,9 @@ replaces none of it.
      briefed task's rework counted from the brief on. The Architect is told
      those numbers when it is asked again. The brief is a claim, and it is
      never read as a verdict on the task.
+6. **The factory improves itself** (designed, not built). How a cycle runs
+   on the factory's own repository and keeps a change only when graders it
+   cannot edit say it is better is in [`docs/design/rsi-loop.md`](design/rsi-loop.md).
 
 ### What this changes in the tables above
 
