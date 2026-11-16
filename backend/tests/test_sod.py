@@ -607,9 +607,10 @@ def test_the_report_lists_integration_review_approvals_with_each_status(
     assert approvals[violation_i.id]["status"] == "violation"
     assert approvals[unattributed_i.id]["status"] == "unattributed"
     assert approvals[agent_i.id]["status"] == "not_a_person"
-    for row in approvals.values():
+    for subject_id, row in approvals.items():
         assert row["action"] == sod.RELEASE
-        assert row["requesters"]
+        if subject_id != unattributed_i.id:
+            assert row["requesters"]
     assert approvals[separated_i.id]["approver"]["user_id"] == other.id
     assert approvals[violation_i.id]["requesters"][0]["why"] == "started the sprint"
     assert approvals[unattributed_i.id]["requesters"] == []
