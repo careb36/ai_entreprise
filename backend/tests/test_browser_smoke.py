@@ -20,11 +20,11 @@ import app_run  # the daemon's module, on sys.path via conftest
 import pytest
 import worker_stages
 from config import settings
+from factories import company as _company
 from models.sprint import BacklogItem, Sprint
 from services.evidence import app_check, browser_smoke, criteria_tests
 from services.loop import delivery_checks
 from services.workspace import project_profile, stack_profiles
-from test_specifications import _company
 
 PY = sys.executable
 SERVE = f'"{PY}" -m http.server $PORT --bind 127.0.0.1'

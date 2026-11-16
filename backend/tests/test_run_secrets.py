@@ -8,9 +8,10 @@ import secrets
 import crypto
 import pytest
 from cryptography.fernet import Fernet
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import BacklogItem, Company, RunSecret, Sprint
 from services.platform import run_secrets
-from test_git_workflow import _member, enforcement  # noqa: F401
 
 KEY = Fernet.generate_key().decode()
 

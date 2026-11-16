@@ -322,7 +322,7 @@
         "repo"
       ],
       "test_bench_prompt_weight.py": [
-        "management"
+        "repo"
       ],
       "test_bench_scorecard.py": [
         "planning"
@@ -355,7 +355,8 @@
         "integrations"
       ],
       "test_chat_inbound.py": [
-        "management"
+        "integrations",
+        "release"
       ],
       "test_check_frontend_architecture.py": [
         "repo"
@@ -440,7 +441,10 @@
         "loop"
       ],
       "test_events.py": [
-        "loop"
+        "tasks"
+      ],
+      "test_factories.py": [
+        "platform"
       ],
       "test_git_acceptance.py": [
         "release"
@@ -449,7 +453,7 @@
         "release"
       ],
       "test_git_publish.py": [
-        "management"
+        "release"
       ],
       "test_git_workflow.py": [
         "management"
@@ -515,7 +519,7 @@
         "loop"
       ],
       "test_local_merge.py": [
-        "management"
+        "release"
       ],
       "test_manager_agent.py": [
         "management"
@@ -602,7 +606,7 @@
         "loop"
       ],
       "test_prompt_weight.py": [
-        "management"
+        "models"
       ],
       "test_provider_connections.py": [
         "models"
@@ -639,7 +643,7 @@
         "loop"
       ],
       "test_review_sync.py": [
-        "management"
+        "release"
       ],
       "test_reviewer_agent.py": [
         "management"
@@ -657,13 +661,13 @@
         "models"
       ],
       "test_run_cost.py": [
-        "management"
+        "loop"
       ],
       "test_run_logs.py": [
         "loop"
       ],
       "test_run_reviews.py": [
-        "management"
+        "release"
       ],
       "test_run_secrets.py": [
         "platform"

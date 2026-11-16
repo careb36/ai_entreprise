@@ -130,6 +130,22 @@ def test_the_reverse_of_the_rule_and_the_top_of_a_set():
     assert affected_tests.top(CONTEXTS, {"platform"}) == ["platform"]
 
 
+def test_suggest_reads_a_helper_s_imports_and_whole_f_strings(tmp_path):
+    (tmp_path / "factories.py").write_text("from services.tasks import events\n")
+    (tmp_path / "test_other.py").write_text("from services.loop import task_worker\n")
+    test = tmp_path / "test_new.py"
+    test.write_text(
+        "import factories\n"
+        "from test_other import HELPER\n"
+        'URL = f"/v1/sprints/{1}/events"\n'
+    )
+    # The piece "/v1/sprints/" is not a call to the sprint routes.
+    assert affected_tests.urls_in(test) == {"/v1/sprints/X/events"}
+    # A helper module is followed, another test file is not.
+    assert affected_tests._with_helpers(test) == [test, tmp_path / "factories.py"]
+    assert affected_tests.suggest(test, affected_tests.load()) == ["tasks"]
+
+
 def _run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-I", str(SCRIPT), *args],

@@ -27,12 +27,13 @@ import sandbox_cache
 import sandbox_image
 import shell_exec
 from config import settings
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models.company import Company, ProjectDiscovery
 from services.contracts import sandbox_report
 from services.evidence import app_check
 from services.workspace import sandbox
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import _company
 
 PY = sys.executable
 IMAGE_ID = "c" * 64

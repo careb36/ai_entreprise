@@ -17,6 +17,9 @@ from pathlib import Path
 
 import pytest
 from config import settings
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models.company import Company
 from services.evidence import command_runs, delivery_gate
 from services.loop import delivery_checks
@@ -28,8 +31,6 @@ from services.workspace import (
     stack_roots,
 )
 from test_app_check import _Daemon, _write
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import _company
 
 PY = sys.executable
 REPO = Path(__file__).resolve().parents[2]

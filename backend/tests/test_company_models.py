@@ -10,15 +10,16 @@ company's choice; a company's choice is never re-routed by difficulty."""
 from __future__ import annotations
 
 import pytest
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import Agent, Company, ProviderConnection
 from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
 from services.models import company_models, model_routing
 from services.models.model_factory import AgentRole
 from services.planning import spec_author
-from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
-from test_specifications import _company
 
 
 @pytest.fixture(autouse=True)
