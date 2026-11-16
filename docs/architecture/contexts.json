@@ -683,6 +683,12 @@
       "test_grounding_manifests.py": [
         "management"
       ],
+      "test_grounding_signature_check.py": [
+        "management"
+      ],
+      "test_grounding_signature_deliver.py": [
+        "management"
+      ],
       "test_grounding_signatures.py": [
         "management"
       ],
