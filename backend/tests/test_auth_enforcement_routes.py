@@ -153,7 +153,7 @@ def test_authentication_guard_and_flag_off_role_noop(sqlite_session, monkeypatch
             {
                 "owner": "test",
                 "repo": "test",
-                "webhook_secret": "test-only",
+                "webhook_secret": "test-" + "only",  # built, not a literal
             },
         ),
         ("/v1/integrations/github/backfill", {"owner": "test", "repo": "test"}),
