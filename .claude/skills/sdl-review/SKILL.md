@@ -160,7 +160,7 @@ without having read the code that makes it so.
 
 - [ ] A security-relevant change ships a test that fails without it, in the
       suite for its area: `test_security.py`, `test_security_headers.py`,
-      `test_nats_security.py`, `test_audit_chain.py`, `test_audit_signature.py`,
+      `test_nats_security_*.py`, `test_audit_chain.py`, `test_audit_signature.py`,
       `test_webhooks.py`, `test_run_secrets.py`, or the context's own tests.
 - [ ] There are negative tests: the wrong role gets 403, another company's
       resource is 404 or 403, a forged or replayed signature is refused, an

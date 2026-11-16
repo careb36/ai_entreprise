@@ -54,7 +54,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   the yearly test covers it (`SECURITY.md` §16).
 - **Controls:** one NATS user per component with fixed subjects, no
   `allow_responses` for the daemon (`scripts/nats_config.py`,
-  `nats/nats-server.conf`, `--check`, `backend/tests/test_nats_security.py`);
+  `nats/nats-server.conf`, `--check`, `backend/tests/test_nats_security_config.py`);
   passwords or `.creds`/NKey from the environment; TLS that refuses to fall
   back (SECURITY.md §8.6; `docs/OPERATIONS.md`, Securing the bus); loopback
   bind by default with a startup warning otherwise.
