@@ -502,6 +502,9 @@
         "integrations",
         "release"
       ],
+      "test_check_architecture_interfaces.py": [
+        "repo"
+      ],
       "test_check_file_sizes.py": [
         "repo"
       ],
