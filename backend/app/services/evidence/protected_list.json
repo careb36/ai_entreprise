@@ -5,11 +5,14 @@
     "scripts/bench/**",
     "scripts/self_host/**",
     "scripts/e2e/**",
+    "scripts/rsi/**",
     "backend/app/services/evidence/**",
     "backend/tests/test_verificador_benchmark.py",
     "backend/tests/test_bench_*.py",
     ".github/workflows/**",
     ".github/CODEOWNERS",
+    "scripts/protected_paths_check.py",
+    "backend/tests/test_protected_paths_check.py",
     "docs/POSITIONING.md",
     "backend/app/services/contracts/protected_paths.py",
     "backend/tests/test_protected_paths.py",
@@ -24,6 +27,11 @@
     "backend/app/services/learning/procedures.py",
     "backend/app/services/management/manager_policy.py",
     "backend/app/services/platform/sod.py",
+    "backend/tests/test_rsi_decide.py",
+    "backend/tests/test_rsi_decide_inputs.py",
+    "backend/tests/test_rsi_fitness.py",
+    "backend/tests/test_rsi_fitness_inputs.py",
+    "backend/tests/test_rsi_fitness_keep.py",
     "backend/tests/test_secops_checks.py"
   ]
 }

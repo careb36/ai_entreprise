@@ -1,0 +1,17 @@
+{
+  "$comment": "The Architect's revision of La Fabrique's architecture for folder-lint-specification.json, as a person would post it: the next version of the company's one architecture (follow-up 3 of docs/retrospectives/2026-11-self-hosting.md). scripts/self_host/self_host.py --spec opens it with POST /v1/companies/{id}/architecture/revisions, which keeps each module's covers of the earlier specifications under earlier_covers, writes the covers below for this specification's requirements, appends the interface and approves it. No decision is added: the change follows ADR-7's interfaces and the stack profile per folder already in the record.",
+  "title": "La Fabrique backend, revised for the lint per folder",
+  "covers": {
+    "workspace": ["REQ-1", "REQ-2"],
+    "tools": ["REQ-2"]
+  },
+  "interfaces": [
+    {
+      "name": "Folder lint command",
+      "kind": "schema",
+      "module": "workspace",
+      "contract": "Company.stack_profile[\"folders\"][<folder>] = {\"stack\", \"install\", \"test\", \"lint\"}; stack_roots.resolve_folders(...) -> [{\"folder\", \"stack\", \"manifests\", \"install\", \"test\", \"lint\", \"source\"}]\nedit_lint.load_profile(bridge, company_id, root, engine) -> the root's resolved profile with \"folders\": the resolved folders\nedit_lint.after_edit runs stack_roots.in_folder(<folder lint narrowed to the file>, <folder>) for a file under a folder; extra[\"lint\"][\"folder\"] names it",
+      "consumers": ["tools"]
+    }
+  ]
+}

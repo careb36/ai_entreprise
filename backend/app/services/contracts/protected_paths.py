@@ -40,6 +40,7 @@ PROTECTED: tuple[tuple[str, str], ...] = (
         "the self-hosting harness and the target measures it holds",
     ),
     ("scripts/e2e/**", "the end-to-end checks"),
+    ("scripts/rsi/**", "the script that decides keep or revert"),
     (
         "backend/app/services/evidence/**",
         "the Verifier, the risk tier, the standards check",
@@ -48,6 +49,11 @@ PROTECTED: tuple[tuple[str, str], ...] = (
     ("backend/tests/test_bench_*.py", "the tests of the bench"),
     (".github/workflows/**", "CI is the evidence of a run"),
     (".github/CODEOWNERS", "who must review a protected change"),
+    (
+        "scripts/protected_paths_check.py",
+        "the CI check that requires a code owner's approval of a protected change",
+    ),
+    ("backend/tests/test_protected_paths_check.py", "the test of that check"),
     ("docs/POSITIONING.md", "the rules"),
     ("backend/app/services/contracts/protected_paths.py", "the list itself"),
     (

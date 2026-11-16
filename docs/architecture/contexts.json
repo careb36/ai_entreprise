@@ -85,6 +85,7 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
+        "fitness",
         "manifests",
         "protected_check",
         "review_changes",
@@ -878,6 +879,9 @@
       "test_protected_paths.py": [
         "contracts"
       ],
+      "test_protected_paths_check.py": [
+        "repo"
+      ],
       "test_protected_paths_guard.py": [
         "management"
       ],
@@ -935,6 +939,23 @@
       ],
       "test_routing_record.py": [
         "models"
+      ],
+      "test_rsi_decide.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_decide_inputs.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_fitness.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_inputs.py": [
+        "evidence"
+      ],
+      "test_rsi_fitness_keep.py": [
+        "evidence"
       ],
       "test_run_cost.py": [
         "loop"
