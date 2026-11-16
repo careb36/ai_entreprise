@@ -24,6 +24,14 @@ name: Bench
 # (scripts/bench/budget.py), and its card is compared with the newest
 # real-model reference in bench/scorecards/real/, apart from the fake ones
 # (bench/README.md, "The nightly real-model run").
+#
+# The job `watch` is the watch after a merge (docs/design/rsi-loop.md §1.6,
+# §7 step 8, REQ-19): while a merged self-improvement cycle has fewer than two
+# nightly real-model runs after it, each counted card is compared with the
+# cycle's baseline B (scripts/rsi/watch.py over the cycle records a person
+# commits under rsi/cycles/). On a regression the job `revert` opens a revert
+# pull request naming the cycle (scripts/rsi/revert.py); it never merges —
+# a person reviews and merges the revert (docs/OPERATIONS.md).
 
 on:
   workflow_dispatch:
@@ -323,3 +331,137 @@ jobs:
             ${{ runner.temp }}/bench-real/*.log
             ${{ runner.temp }}/bench-real/*.grade.json
           if-no-files-found: ignore
+
+  watch:
+    # The watch after a merge (docs/design/rsi-loop.md §1.6, §7 step 8;
+    # REQ-19). While a merged self-improvement cycle has fewer than two
+    # nightly real-model runs on main after it, every counted card is
+    # compared with the cycle's baseline B: the medians and spread in the
+    # cycle record a person commits under rsi/cycles/ (the schema is
+    # scripts/rsi/cycle_record.py, PR 8 writes the records). The cards are
+    # tonight's (the bench-real artifact) plus the committed real-model
+    # references in bench/scorecards/real/; a card counts only when it is a
+    # real-model card made after the merge, on a commit that contains the
+    # merged sha (verified with git) and graded by the cycle's graders.
+    # Read-only: the decision per night goes to the job summary, and the
+    # cycles that regressed go to the `revert` job's output.
+    needs: bench-real
+    if: always() && needs.bench-real.result != 'skipped'
+    permissions:
+      contents: read
+      actions: read    # download-artifact for tonight's card
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 10
+    outputs:
+      regressed: ${{ steps.watch.outputs.regressed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The watch verifies with git that each card's commit contains the
+          # cycle's merged sha; the card's own word is not enough.
+          fetch-depth: 0
+
+      - name: Take tonight's real-model card
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        # A run that wrote no card is still watched against the committed ones.
+        continue-on-error: true
+        with:
+          name: bench-real
+          path: ${{ runner.temp }}/bench-real-artifact
+
+      - name: Watch the cycles whose merge has fewer than two nightly runs
+        id: watch
+        run: |
+          shopt -s nullglob
+          cycles=(rsi/cycles/*.json)
+          if [ ${#cycles[@]} -eq 0 ]; then
+            echo "No cycle records under rsi/cycles/: nothing to watch." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Scorecards only (<stamp>.json); the artifact also holds logs and
+          # the per-spec grade files, which are not cards.
+          card_args=()
+          while IFS= read -r card; do
+            card_args+=(--cards "$card")
+          done < <(find "$RUNNER_TEMP/bench-real-artifact" bench/scorecards/real \
+                     -type f -regextype posix-extended \
+                     -regex '.*/[0-9]{8}T[0-9]{6}Z\.json' 2>/dev/null | sort)
+          regressed=""
+          broken=""
+          for cycle in "${cycles[@]}"; do
+            out="$RUNNER_TEMP/watch-$(basename "$cycle")"
+            echo "### Watch: $cycle" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            set +e
+            python3 scripts/rsi/watch.py --cycle "$cycle" --repo . "${card_args[@]}" \
+              --out "$out" >> "$GITHUB_STEP_SUMMARY" 2>&1
+            status=$?
+            set -e
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "Exit status $status (0 ok, 1 regressed, 2 unmeasured or bad input)." >> "$GITHUB_STEP_SUMMARY"
+            if [ "$status" -eq 1 ]; then
+              regressed="$regressed $cycle"
+            elif [ "$status" -eq 2 ] && grep -qE '"invalid_record"|"merged_sha_unknown"' "$out" 2>/dev/null; then
+              broken="$broken $cycle"
+            fi
+          done
+          echo "regressed=$(echo "$regressed" | xargs)" >> "$GITHUB_OUTPUT"
+          if [ -n "$broken" ]; then
+            echo "::error::cycle records that do not validate (a person must fix them):$broken"
+          fi
+          if [ -n "$regressed" ]; then
+            echo "::error::nightly regression after a merge:$regressed"
+            exit 1
+          fi
+          [ -z "$broken" ]
+
+  revert:
+    # Opens the revert pull request of a cycle the watch saw regress
+    # (REQ-19), through the gh API with the workflow's token. It never
+    # merges: a person reviews and merges the revert (docs/OPERATIONS.md).
+    # The only writer of the workflow: `contents: write` pushes the revert
+    # branch and nothing else, `pull-requests: write` opens the pull request;
+    # the token is never printed.
+    needs: watch
+    if: always() && needs.watch.outputs.regressed != ''
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # From the watch job's output, through the environment: never
+      # interpolated into the script's text.
+      REGRESSED: ${{ needs.watch.outputs.regressed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the revert needs the merged sha and its parents
+
+      - name: Take tonight's real-model card
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        continue-on-error: true
+        with:
+          name: bench-real
+          path: ${{ runner.temp }}/bench-real-artifact
+
+      - name: Open the revert pull requests
+        run: |
+          # The revert commit's identity is the bot's, not a person's.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          failed=0
+          for cycle in $REGRESSED; do
+            card_args=()
+            while IFS= read -r card; do
+              card_args+=(--cards "$card")
+            done < <(find "$RUNNER_TEMP/bench-real-artifact" bench/scorecards/real \
+                       -type f -regextype posix-extended \
+                       -regex '.*/[0-9]{8}T[0-9]{6}Z\.json' 2>/dev/null | sort)
+            if ! python3 scripts/rsi/revert.py --cycle "$cycle" --repo . "${card_args[@]}"; then
+              echo "::error::the revert pull request of $cycle could not be opened; a person must prepare it"
+              failed=1
+            fi
+          done
+          exit $failed

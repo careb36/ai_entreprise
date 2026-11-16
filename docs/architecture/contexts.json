@@ -971,6 +971,10 @@
       "test_routing_record.py": [
         "models"
       ],
+      "test_rsi_cycle_record.py": [
+        "evidence",
+        "repo"
+      ],
       "test_rsi_decide.py": [
         "evidence",
         "repo"
@@ -987,6 +991,14 @@
       ],
       "test_rsi_fitness_keep.py": [
         "evidence"
+      ],
+      "test_rsi_watch.py": [
+        "evidence",
+        "repo"
+      ],
+      "test_rsi_watch_revert.py": [
+        "evidence",
+        "repo"
       ],
       "test_run_cost.py": [
         "loop"
