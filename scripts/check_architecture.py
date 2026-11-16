@@ -31,7 +31,15 @@ The check fails when:
   list names a module that does not exist. HTTP lives only in named adapter
   modules that return data and raise named errors, and the domain modules
   call them (after AixleHQ/flow's "no HTTP in domain services" rule,
-  Apache-2.0, design only).
+  Apache-2.0, design only);
+- a ``backend/tests/test_*.py`` has no entry in ``tests`` (``files``, with the
+  contexts it exercises, or ``always``, with the reason it runs whatever
+  changed), or is in both, an entry names an unknown context or a test file
+  that does not exist, an ``always`` entry gives no reason, or a rule of
+  ``tests.sources`` is neither a context, ``all``, ``imports``, ``mentions``
+  nor a test file. ``scripts/affected_tests.py`` reads that map to run only
+  the tests a change can break, so a test missing from it would never run
+  there.
 
 The allowlist holds the edges that broke the rule when it was adopted
 (``"acceptance -> task_worker"``), named by the modules' stems whichever
@@ -55,6 +63,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "docs" / "architecture" / "contexts.json"
 SERVICES = ROOT / "backend" / "app" / "services"
+TESTS = ROOT / "backend" / "tests"
 PACKAGE = "services"
 
 
@@ -204,8 +213,66 @@ def find_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def analyse(data: dict, services: Path = SERVICES) -> dict:
-    """Everything the check reports, as data (the test reads it too)."""
+# What a source rule may say besides a context's name or a test file
+# (scripts/affected_tests.py), and the mark of a test that reads repository files.
+SOURCE_RULES = ("all", "imports", "mentions")
+REPO_MARK = "repo"
+
+
+def _entries(section: object) -> dict:
+    """A section's entries, without its ``$comment``."""
+    if not isinstance(section, dict):
+        return {}
+    return {k: v for k, v in section.items() if not k.startswith("$")}
+
+
+def check_tests(data: dict, tests: Path) -> tuple[list[str], int]:
+    """The problems of the test map (``tests`` in the data), and the number of
+    test files in *tests*."""
+    present = {p.name for p in tests.glob("test_*.py")}
+    section = data.get("tests")
+    if not isinstance(section, dict):
+        return [f"no tests section in {DATA.name}: every test file needs one"], len(
+            present
+        )
+    contexts = set(data["contexts"])
+    files, always = _entries(section.get("files")), _entries(section.get("always"))
+    problems: list[str] = []
+    for name in sorted(present):
+        if name not in files and name not in always:
+            problems.append(
+                f"tests/{name}: no context; add it to tests.files in {DATA.name} "
+                f"(start from scripts/affected_tests.py --suggest backend/tests/{name})"
+            )
+        elif name in files and name in always:
+            problems.append(f"tests/{name}: in both tests.files and tests.always")
+    for name, value in sorted(files.items()):
+        if name not in present:
+            problems.append(f"tests/{name}: listed in tests.files, but no such file")
+        if not isinstance(value, list) or not value:
+            problems.append(f"tests/{name}: names no context")
+            continue
+        for context in value:
+            if context not in contexts and context != REPO_MARK:
+                problems.append(f"tests/{name}: unknown context {context}")
+    for name, reason in sorted(always.items()):
+        if name not in present:
+            problems.append(f"tests/{name}: listed in tests.always, but no such file")
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(f"tests/{name}: in tests.always without its reason")
+    for prefix, rule in sorted(_entries(section.get("sources")).items()):
+        for token in rule if isinstance(rule, list) else [rule]:
+            if token in contexts or token in SOURCE_RULES:
+                continue
+            if isinstance(token, str) and token in present:
+                continue
+            problems.append(f"tests.sources {prefix}: unknown rule {token}")
+    return problems, len(present)
+
+
+def analyse(data: dict, services: Path = SERVICES, tests: Path | None = None) -> dict:
+    """Everything the check reports, as data (the test reads it too). The test
+    map is checked against *tests* when it is given."""
     contexts: dict = data["contexts"]
     problems: list[str] = []
     for name, ctx in contexts.items():
@@ -307,7 +374,12 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             f"module listed in http_adapters ({DATA.name}), which returns data "
             "and raises named errors, and this module calls it"
         )
+    test_files = None
+    if tests is not None:
+        test_problems, test_files = check_tests(data, tests)
+        problems.extend(test_problems)
     return {
+        "test_files": test_files,
         "http": http,
         "http_new": http_new,
         "http_stale": http_stale,
@@ -322,10 +394,17 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
     }
 
 
-def main(argv: list[str], data_path: Path = DATA, services: Path = SERVICES) -> int:
+def main(
+    argv: list[str],
+    data_path: Path = DATA,
+    services: Path = SERVICES,
+    tests: Path | None = None,
+) -> int:
     update = "--update" in argv
     data = load(data_path)
-    result = analyse(data, services)
+    if tests is None and data_path == DATA:
+        tests = TESTS
+    result = analyse(data, services, tests)
     if update:
         if result["problems"]:
             print("Not updating while the code breaks the rule:", file=sys.stderr)
@@ -364,7 +443,12 @@ def main(argv: list[str], data_path: Path = DATA, services: Path = SERVICES) -> 
             f"(and {len(result['shims'])} shim(s)) in {len(data['contexts'])} contexts, "
             f"{len(result['edges'])} imports, {len(result['violations'])} allowlisted "
             f"edge(s) against the rule, HTTP in {len(result['http'])} listed "
-            "adapter(s) only."
+            "adapter(s) only"
+            + (
+                f", {result['test_files']} test files with a context."
+                if result["test_files"] is not None
+                else "."
+            )
         )
     return 1 if result["problems"] else 0
 

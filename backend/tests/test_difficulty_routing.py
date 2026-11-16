@@ -21,6 +21,8 @@ import logging
 
 import pytest
 from config import settings
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import AuditLog, Company, TaskEvent
 from models.agent_run import AgentRun, Verification
 from models.architecture import Architecture
@@ -33,7 +35,6 @@ from services.models import difficulty, model_routing, routing_policy, routing_r
 from services.models.model_factory import default_model_for_role
 from services.tasks import task_events
 from sqlmodel import select
-from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, _Nats, db, llm  # noqa: F401
 
 ARCH = {

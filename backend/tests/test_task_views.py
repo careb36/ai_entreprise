@@ -472,21 +472,32 @@ def test_a_filter_over_five_thousand_tasks_answers_within_the_page_budget(
     company = _seed_tasks(sqlite_session, 5000)
     tree = task_filters.parse_filter(_BUDGET_FILTER)
     task_filter.query(sqlite_session, company.id, tree, limit=100)  # warm-up
-    timings = []
+    timings, reads = [], []
     for _ in range(5):
         start = time.perf_counter()
         result = task_filter.query(sqlite_session, company.id, tree, limit=100)
         timings.append(time.perf_counter() - start)
+        # The reference: reading every task row, on the same database at the
+        # same moment, so the machine's load weighs on both sides alike.
+        start = time.perf_counter()
+        sqlite_session.exec(select(BacklogItem)).all()
+        reads.append(time.perf_counter() - start)
+        sqlite_session.expire_all()
     assert 0 < result["count"] < 5000 and len(result["tasks"]) == 100
     # The page budget of docs/ux/performance_usability_benchmark.md is 400 ms
     # (the Doherty threshold); the specification asks 300 ms for the query.
-    # Wall-clock time is only a measurement on a machine with CPU to spare:
-    # the self-hosted runners share one, so every pull request holds the
-    # query to a loose 1 s guard (a large regression), best of five after a
-    # warm-up, and the nightly bench job, alone on the machine, holds it to
-    # the specification's 300 ms with PERF_STRICT=1 (.github/workflows/bench.yml).
-    budget = 0.3 if os.environ.get("PERF_STRICT") == "1" else 1.0
-    assert min(timings) < budget, timings
+    # Wall-clock time is a measurement only on a machine with CPU to spare:
+    # the nightly bench job, alone on the machine, holds the query to the
+    # specification's 300 ms with PERF_STRICT=1 (.github/workflows/bench.yml).
+    # The self-hosted runners that check a pull request share one machine, so
+    # there an absolute budget measures the other jobs; the query is held
+    # instead to five times the reference read (about 1.5 times on an idle
+    # machine), which a large regression crosses and the load does not.
+    # Per-task queries are caught exactly by the statement count above.
+    if os.environ.get("PERF_STRICT") == "1":
+        assert min(timings) < 0.3, timings
+    else:
+        assert min(timings) < 5 * min(reads), (timings, reads)
 
 
 # ── Saved views: access, locks, roles (REQ-3) ────────────────────────────────

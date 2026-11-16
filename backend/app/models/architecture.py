@@ -24,8 +24,9 @@ answers its questions, edits and approves. A draft is a claim; the
 deterministic check (unknown ids, a dependency cycle, a decision without
 its decision, an open question) decides whether it can be approved. Once
 approved, every task's prompt carries the modules its requirements map to,
-and a Manager can write it into the repository as ``docs/ARCHITECTURE.md``:
-the sha256 the daemon reads back is kept here as an observation.
+and a Manager can write it into the repository as ``docs/ARCHITECTURE.md``
+and one ``docs/adr/NNNN-<slug>.md`` per decision: the sha256 the daemon reads
+back is kept here as an observation, per file.
 """
 
 from datetime import UTC, datetime
@@ -56,7 +57,10 @@ class Architecture(SQLModel, table=True):
     interfaces: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
-    # [{id, title, context, decision, consequences}]
+    # [{id, title, context, decision, consequences, slug?, date?,
+    #   superseded_by?}] — ``slug`` names its ADR file, ``date`` is when a
+    # person accepted it, and ``superseded_by`` is the id (``ADR-7``) of the
+    # decision that supersedes it.
     decisions: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
@@ -74,6 +78,11 @@ class Architecture(SQLModel, table=True):
     # Where the daemon wrote it in the repository and the sha256 it read back.
     written_path: str | None = None
     written_sha256: str | None = None
+    # [{path, sha256, kind, decision_id?, number?, bytes?}] — every file of the
+    # write (the document and one ADR per decision), as the daemon reported it.
+    written_files: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSON)
+    )
     written_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

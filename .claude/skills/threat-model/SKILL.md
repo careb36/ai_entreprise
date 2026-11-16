@@ -134,7 +134,7 @@ stores the archive and its sha256 → browser downloads it (B1).
 
 | ID | Boundary | STRIDE | Threat | L | I | Sev | Mitigation |
 |---|---|---|---|---|---|---|---|
-| T1 | B2 | S | A holder of the daemon's credentials publishes `workspace.archive` to make the daemon archive something | L | H | High | Existing: the daemon user cannot publish requests (`scripts/nats_config.py`); new subject added only to the backend's publish list, `--check` regenerates the conf; test in `test_nats_security.py` |
+| T1 | B2 | S | A holder of the daemon's credentials publishes `workspace.archive` to make the daemon archive something | L | H | High | Existing: the daemon user cannot publish requests (`scripts/nats_config.py`); new subject added only to the backend's publish list, `--check` regenerates the conf; test in `test_nats_security_config.py` |
 | T2 | B3 | I | The requested path escapes the worktree (`../`, a symlink) and zips `~/.ssh` | M | H | Critical | New: resolve the path, refuse anything outside the task's worktree and do not follow symlinks out, as the read tools already do (`docs/contexts/tools.md`); negative tests for `..` and a symlink |
 | T3 | B3 | I | The archive includes `.env` or key files | M | H | High | New: apply the read tools' secret-file exclusions; list excluded files in the reply as an observation |
 | T4 | B2 | T | The backend stores a sha256 the daemon reported instead of computing one | M | M | High | New: backend hashes the bytes it received (POSITIONING rule 6); the daemon's value, if kept, is a claim field |

@@ -127,6 +127,7 @@ def serialize(
         "approved_at": _iso(arch.approved_at),
         "written_path": arch.written_path,
         "written_sha256": arch.written_sha256,
+        "written_files": arch.written_files or [],
         "written_at": _iso(arch.written_at),
         "created_at": _iso(arch.created_at),
         "updated_at": _iso(arch.updated_at),
@@ -491,10 +492,11 @@ async def write_architecture(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Write the approved architecture into the repository as ``docs/ARCHITECTURE.md``.
+    """Write the approved architecture into the repository, with its ADR files.
 
-    The daemon on the person's computer writes it and reports the sha256 of
-    the bytes it read back; that is what is kept. 409 for a draft, 503 when
+    ``docs/ARCHITECTURE.md`` and one ``docs/adr/NNNN-<slug>.md`` per decision
+    are written in one request; the daemon reports each file's sha256 of the
+    bytes it read back, and that is what is kept. 409 for a draft, 503 when
     no daemon answers.
     """
     arch, spec = _load(session, user, arch_id, "Manager")
@@ -520,6 +522,7 @@ async def write_architecture(
         raise HTTPException(status_code=exc.status, detail=exc.message) from exc
     arch.written_path = str(written["path"])
     arch.written_sha256 = str(written["sha256"])
+    arch.written_files = list(written["files"])
     arch.written_at = _now()
     arch.updated_at = arch.written_at
     return _saved(session, arch, spec)
