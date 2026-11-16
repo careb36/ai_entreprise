@@ -26,6 +26,7 @@
         "locks",
         "memory_graph",
         "orchestration_metrics",
+        "protected_paths_setting",
         "rfc3161",
         "sod",
         "teams",
@@ -86,6 +87,7 @@
         "delivery_gate",
         "fitness",
         "manifests",
+        "protected_check",
         "review_changes",
         "risk",
         "signatures",
@@ -899,6 +901,14 @@
       ],
       "test_protected_paths_check.py": [
         "repo"
+      ],
+      "test_protected_paths_guard.py": [
+        "evidence",
+        "management"
+      ],
+      "test_protected_paths_review.py": [
+        "evidence",
+        "management"
       ],
       "test_provider_connections.py": [
         "models"

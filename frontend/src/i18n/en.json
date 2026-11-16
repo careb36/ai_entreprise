@@ -3002,6 +3002,12 @@
     "title": "Duties and access",
     "subtitle": "Who asks for a change does not approve it; who can reach the company is reviewed on a schedule.",
     "ownerOnly": "Only owners manage duties and access reviews. Your role here is {{role}}.",
+    "protectedPaths": {
+      "title": "Protected paths",
+      "hint": "For a company that hosts the factory itself. With it on, a delivery that changes a protected path (the graders, the evidence, CI, the rules) waits for a person, and no Manager agent rule accepts it. Each change is audited.",
+      "label": "This company hosts the factory: hold changes to protected paths for a person",
+      "list": "The list in force ({{count}} patterns)"
+    },
     "policy": {
       "title": "Segregation of duties",
       "mode": "Which approvals the rule holds",

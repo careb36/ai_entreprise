@@ -84,6 +84,8 @@
 /backend/tests/test_verificador_benchmark.py     @careb36
 /backend/tests/test_bench_*.py                   @careb36
 /backend/tests/test_secops_checks.py             @careb36
+/backend/tests/test_protected_paths_guard.py    @careb36
+/backend/tests/test_protected_paths_review.py   @careb36
 # Los tests que importan la evidencia (contexto evidence en tests.files de
 # docs/architecture/contexts.json).
 /backend/tests/test_acceptance_plan.py           @careb36

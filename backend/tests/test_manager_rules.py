@@ -73,7 +73,7 @@ def daemon():
 
 
 def test_the_strict_rules_are_opt_in_and_the_confirmation_set_stays():
-    assert manager_policy.ALWAYS_ESCALATE == {
+    assert manager_policy.ALWAYS_ESCALATE - {"change_protected_paths"} == {
         "cancel_sprint",
         "delete_sprint",
         "change_autonomy",

@@ -90,7 +90,8 @@ RULES: dict[str, str] = {
     "accept_high_risk": (
         "Accept a high-risk delivery QA approved when its latest run is "
         "verified, every criterion test the task covers passed, the standards "
-        "check found no secret, and it is within the high-risk file limit."
+        "check found no secret, it is within the high-risk file limit, and it "
+        "touches no protected path of a company that hosts the factory."
     ),
 }
 # The decision each rule lets the agent take, and the category it applies to.
@@ -110,8 +111,16 @@ RULE_DECISIONS = {
     "accept_high_risk": ("accept_high_risk", "accept"),
 }
 # Decisions that always go to the client, whatever a policy says.
+# ``change_protected_paths``: turning a company's protected paths on or off
+# (``services/platform/protected_paths_setting.py``) is a signed-in Owner's.
 ALWAYS_ESCALATE = frozenset(
-    {"cancel_sprint", "delete_sprint", "change_autonomy", "spend_above_budget"}
+    {
+        "cancel_sprint",
+        "delete_sprint",
+        "change_autonomy",
+        "spend_above_budget",
+        "change_protected_paths",
+    }
 )
 LOW_TIERS = ("low", "medium")
 MAX_LIMIT = 1000

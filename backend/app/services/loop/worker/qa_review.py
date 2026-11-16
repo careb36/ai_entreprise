@@ -38,6 +38,7 @@ from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import close, execute, messages, record
 from services.models import model_routing
 from services.planning import spec_planning
+from services.platform import protected_paths_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW,
@@ -216,6 +217,16 @@ async def _person_hold(
         risk_check = risk.classify(
             [f["path"] for f in parse_file_manifest(deliverable)]
         )
+    if not needs_work and protected_paths_setting.enabled(session, sprint.company_id):
+        # The company hosts the factory under the setting as it is now, which
+        # may postdate the verification: the recorded run's paths and the
+        # deliverable's are matched again (record._protected_reasons).
+        grader = await asyncio.to_thread(
+            record._protected_reasons, sprint.company_id, item.id, deliverable
+        )
+        if grader:
+            earlier = (risk_check or {}).get("reasons") or []
+            risk_check = {"tier": risk.RISK_HIGH, "reasons": [*grader, *earlier][:10]}
     risk_hold = risk_check is not None and risk.is_high(risk_check.get("tier"))
     company = session.get(Company, sprint.company_id)
     person_reason = sprint_control.person_acceptance_reason(

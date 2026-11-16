@@ -18,8 +18,8 @@ from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from schemas import AgentRunCreate
 from sqlmodel import Session
 
-from services.contracts.manifest import MANIFEST_BLOCK
-from services.evidence import agent_run_service, delivery_gate
+from services.contracts.manifest import MANIFEST_BLOCK, parse_file_manifest
+from services.evidence import agent_run_service, delivery_gate, protected_check, risk
 from services.evidence.verification import verify_agent_run
 from services.tools.workspace_edits import observe_tools
 
@@ -33,6 +33,25 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
 
 def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
     return delivery_gate.risk(engine, company_id, item_id)
+
+
+def _protected_reasons(company_id: int, item_id: int, deliverable: str) -> list[str]:
+    """``grader: <path>`` for each protected path the task's latest recorded run
+    or its deliverable touched, matched under the list in force now; the
+    reason the list is missing when it cannot be read (fail closed)."""
+    verification = delivery_gate.latest_verification(engine, company_id, item_id)
+    declared = {"files": [f["path"] for f in parse_file_manifest(deliverable)]}
+    try:
+        paths = protected_check.touched(declared, None, None)
+        if verification is not None:
+            with Session(engine) as session:
+                run = session.get(AgentRun, verification.agent_run_id)
+                row = {"checks": verification.checks, "evidence": verification.evidence}
+                if run is not None:
+                    paths += protected_check.touched(run.claims, run.subject, row)
+    except protected_check.ProtectedListUnavailable:
+        return [f"{risk.GRADER_AREA}: {protected_check.UNAVAILABLE}"]
+    return [f"{risk.GRADER_AREA}: {p}" for p in dict.fromkeys(paths)]
 
 
 def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:

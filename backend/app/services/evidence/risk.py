@@ -3,7 +3,9 @@ How much a delivery needs a person: a deterministic risk tier from its paths.
 
 ``classify`` reads file paths and returns ``low``, ``medium`` or ``high`` with
 the reasons. ``high`` is a delivery that touches authentication, secrets,
-payments or the CI pipeline; ``medium`` one that touches shell scripts,
+payments or the CI pipeline, or, for a company that hosts the factory, a
+protected path (the area ``grader``: the graders, the evidence, CI, the rules,
+``services/contracts/protected_paths.py``); ``medium`` one that touches shell scripts,
 database migrations, dependency manifests or container and infrastructure
 files; anything else is ``low``. The tier is the highest any path reaches, so
 adding files never lowers it, and size plays no part.
@@ -21,14 +23,17 @@ without a person, and this is not routine.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
+
+from services.contracts import protected_paths
 
 RISK_LOW = "low"
 RISK_MEDIUM = "medium"
 RISK_HIGH = "high"
 _RANK = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2}
 _MAX_REASONS = 10
+GRADER_AREA = "grader"
 
 # Words in a path (split on separators and camelCase) that mark it.
 _HIGH_WORDS = {
@@ -145,11 +150,19 @@ def _classify_path(path: str) -> tuple[str, str] | None:
     return None
 
 
-def classify(paths: Iterable[str], declared_risk: Any = None) -> dict[str, Any]:
+def classify(
+    paths: Iterable[str],
+    declared_risk: Any = None,
+    protected: Sequence[str] | None = None,
+) -> dict[str, Any]:
     """The tier of a delivery and the reasons for it.
 
     *declared_risk* is the producer's own ``{"tier", "reason"}``: it may raise
     the tier (with its reason quoted as the producer's), never lower it.
+    *protected* is the protected-path list in force for a company that hosts
+    the factory (``services/contracts/protected_paths.py``): a path it matches
+    is ``high`` with the area ``grader``, before any other area. ``None`` (any
+    other company) leaves those paths to the rest of the classification.
     """
     tier = RISK_LOW
     reasons: list[str] = []
@@ -158,7 +171,11 @@ def classify(paths: Iterable[str], declared_risk: Any = None) -> dict[str, Any]:
         if not isinstance(path, str) or not path or path in seen:
             continue
         seen.add(path)
-        found = _classify_path(path)
+        found = (
+            (RISK_HIGH, GRADER_AREA)
+            if protected and protected_paths.matches([path], protected)
+            else _classify_path(path)
+        )
         if found is None:
             continue
         path_tier, area = found
@@ -234,6 +251,18 @@ def raise_for_tool_calls(result: dict[str, Any], tool_calls: Any) -> dict[str, A
             "MCP tools without a read-only annotation ran: " + ", ".join(writers[:5])
         )
     return {"tier": tier, "reasons": reasons}
+
+
+def held_for_a_person(check: dict[str, Any], reason: str) -> dict[str, Any]:
+    """The ``risk_tier`` check raised to ``high`` for *reason*, never lowered:
+    what a guard does when the data it needs cannot be read (fail closed)."""
+    reasons = [*check.get("reasons", []), f"{GRADER_AREA}: {reason}"][-_MAX_REASONS:]
+    return {
+        **check,
+        "tier": RISK_HIGH,
+        "reasons": reasons,
+        "observation": f"{RISK_HIGH} — " + "; ".join(reasons),
+    }
 
 
 def is_high(tier: str | None) -> bool:

@@ -3002,6 +3002,12 @@
     "title": "Funciones y accesos",
     "subtitle": "Quien pide un cambio no lo aprueba; quién puede entrar en la empresa se revisa con un calendario.",
     "ownerOnly": "Solo los propietarios gestionan las funciones y las revisiones de acceso. Tu rol aquí es {{role}}.",
+    "protectedPaths": {
+      "title": "Rutas protegidas",
+      "hint": "Para una empresa que aloja la propia fábrica. Activado, una entrega que cambia una ruta protegida (los evaluadores, la evidencia, la CI, las reglas) espera a una persona, y ninguna regla del agente Manager la acepta. Cada cambio queda auditado.",
+      "label": "Esta empresa aloja la fábrica: retener para una persona los cambios en rutas protegidas",
+      "list": "La lista vigente ({{count}} patrones)"
+    },
     "policy": {
       "title": "Segregación de funciones",
       "mode": "Qué aprobaciones sujeta la regla",

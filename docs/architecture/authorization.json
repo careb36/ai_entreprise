@@ -263,6 +263,9 @@
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/protected_paths": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/service-accounts": {
       "access": "Owner"
     },
@@ -885,6 +888,12 @@
     },
     "PUT /v1/companies/{company_id}/model_settings": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/protected_paths": {
+      "access": "Owner",
+      "body": {
+        "enabled": false
+      }
     },
     "PUT /v1/companies/{company_id}/research": {
       "access": "Manager"

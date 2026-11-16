@@ -90,6 +90,11 @@ class Company(SQLModel, table=True):
     # approved it in a review (services/release/integration_review.py); off by
     # default, so nothing changes for a company that does not ask. An Owner writes it.
     integration_review_required: bool = False
+    # The company hosts the factory itself: the Verifier holds for a person a
+    # delivery whose observed paths match services/contracts/protected_paths.py
+    # (services/platform/protected_paths_setting.py). Off by default; only a
+    # signed-in Owner changes it, audited, never the Manager agent.
+    protected_paths_enabled: bool = False
 
 
 class Agent(SQLModel, table=True):

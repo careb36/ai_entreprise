@@ -293,6 +293,14 @@ class IntegrationReviewSetting(RequestModel):
     required: bool
 
 
+class ProtectedPathsSetting(RequestModel):
+    """Payload for ``PUT /v1/companies/{id}/protected_paths`` (a signed-in Owner)."""
+
+    model_config = STRICT
+
+    enabled: bool
+
+
 class AgentRunApprovalRequest(RequestModel):
     """Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."""
 
