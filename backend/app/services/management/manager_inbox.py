@@ -17,7 +17,6 @@ from models.agent_run import IN_HOUSE_PRODUCERS, TASK_WORKER_PRODUCER, Verificat
 from models.company import BusinessUnit
 from sqlmodel import Session, select
 
-from services.contracts import protected_paths
 from services.evidence import protected_check
 from services.loop.carry_over import carried_over, carry_mark, is_carry_over
 from services.loop.sprint_control import HUMAN_LED_REASON
@@ -130,21 +129,24 @@ def protected_touched(
 ) -> list[str]:
     """The protected paths a run touched, for a company that hosts the factory.
 
-    The Verifier's ``protected_paths`` matches, plus the paths observed or
-    declared on the run matched again against the running backend's list, so
-    a delivery verified before an Owner turned the flag on is held too. A
-    declared path only adds to the match.
+    The Verifier's ``protected_paths`` matches, plus the run's paths matched
+    again against the running backend's list from the same sources as at
+    delivery (``protected_check.touched``), so a delivery verified before an
+    Owner turned the flag on is held too. Without the list it fails closed:
+    the reason stands in for a path, so no rule accepts the item.
     """
     if run is None:
         return recorded
-    evidence = (verification.evidence if verification else None) or {}
-    paths = [
-        *(_paths((run.claims or {}).get("files")) or []),
-        *(_paths((run.subject or {}).get("changed_files")) or []),
-        *(protected_check.observed_paths(evidence) or []),
-    ]
-    found = protected_paths.matches(paths, protected_check.patterns_in_force())
-    return list(dict.fromkeys([*recorded, *(m.path for m in found)]))
+    row = (
+        {"checks": verification.checks, "evidence": verification.evidence}
+        if verification
+        else None
+    )
+    try:
+        found = protected_check.touched(run.claims, run.subject, row)
+    except protected_check.ProtectedListUnavailable:
+        found = [protected_check.UNAVAILABLE]
+    return list(dict.fromkeys([*recorded, *found]))
 
 
 def _criteria_and_standards(checks: list[dict]) -> dict[str, Any]:

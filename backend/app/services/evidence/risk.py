@@ -253,5 +253,17 @@ def raise_for_tool_calls(result: dict[str, Any], tool_calls: Any) -> dict[str, A
     return {"tier": tier, "reasons": reasons}
 
 
+def held_for_a_person(check: dict[str, Any], reason: str) -> dict[str, Any]:
+    """The ``risk_tier`` check raised to ``high`` for *reason*, never lowered:
+    what a guard does when the data it needs cannot be read (fail closed)."""
+    reasons = [*check.get("reasons", []), f"{GRADER_AREA}: {reason}"][-_MAX_REASONS:]
+    return {
+        **check,
+        "tier": RISK_HIGH,
+        "reasons": reasons,
+        "observation": f"{RISK_HIGH} — " + "; ".join(reasons),
+    }
+
+
 def is_high(tier: str | None) -> bool:
     return tier == RISK_HIGH

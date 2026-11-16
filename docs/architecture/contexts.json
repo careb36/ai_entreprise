@@ -881,6 +881,9 @@
       "test_protected_paths_guard.py": [
         "management"
       ],
+      "test_protected_paths_review.py": [
+        "management"
+      ],
       "test_provider_connections.py": [
         "models"
       ],
