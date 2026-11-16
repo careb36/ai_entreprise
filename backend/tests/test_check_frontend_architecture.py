@@ -83,9 +83,10 @@ def test_the_repository_keeps_to_the_rule():
     assert analysis["stale"] == [] and analysis["network_stale"] == []
     # The network is used by the listed services modules only.
     assert all(key.startswith("services/") for key in analysis["network"])
-    # The parser finds the imports: the router reaches the pages.
+    # The parser finds the imports: the routes (app/AppRoutes.tsx) reach the pages.
     assert any(
-        src == "App.tsx" and dst.startswith("pages/") for src, dst in analysis["edges"]
+        src == "app/AppRoutes.tsx" and dst.startswith("pages/")
+        for src, dst in analysis["edges"]
     )
 
 
