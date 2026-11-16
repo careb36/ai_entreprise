@@ -322,8 +322,10 @@
         "test_bench_broker.py",
         "test_bench_budget.py",
         "test_bench_compare.py",
+        "test_bench_graders.py",
         "test_bench_grading.py",
         "test_bench_prompt_weight.py",
+        "test_bench_repeated.py",
         "test_bench_routing.py",
         "test_bench_scorecard.py",
         "test_bench_specs.py",
@@ -466,11 +468,18 @@
       "test_bench_compare.py": [
         "planning"
       ],
+      "test_bench_graders.py": [
+        "planning",
+        "repo"
+      ],
       "test_bench_grading.py": [
         "planning"
       ],
       "test_bench_prompt_weight.py": [
         "repo"
+      ],
+      "test_bench_repeated.py": [
+        "planning"
       ],
       "test_bench_routing.py": [
         "planning"
@@ -863,6 +872,9 @@
       ],
       "test_prompt_weight.py": [
         "models"
+      ],
+      "test_protected_paths.py": [
+        "contracts"
       ],
       "test_provider_connections.py": [
         "models"

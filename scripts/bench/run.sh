@@ -2,9 +2,17 @@
 # The bench: drive each reference specification through the factory against
 # a real stack and record a scorecard graded by tests a person wrote.
 #
-#   scripts/bench/run.sh [--out DIR] [SPEC_DIR...]
+#   scripts/bench/run.sh [--out DIR] [--graders SHA] [SPEC_DIR...]
 #
-# Without SPEC_DIR, every bench/specs/*/ holding a spec.json. The stack is the
+# Without SPEC_DIR, every bench/specs/*/ holding a spec.json. With --graders,
+# the specifications, their acceptance tests, the fake's answers and the
+# grader (bench/ and scripts/bench/) are read from that commit's objects into
+# BENCH_WORKDIR/graders (scripts/bench/graders.py), never from this checkout:
+# a SPEC_DIR names a specification of that commit by its folder's name, the
+# acceptance tests run with that commit's scorecard.py grade, and the card
+# records the commit, git's tree id of each path and the sha256 of the files
+# taken (graders). The stack, the collection of the numbers and the card are
+# this checkout's (REQ-4, docs/design/rsi-loop.md). The stack is the
 # e2e's (scripts/e2e/run.sh): a Postgres you provide, a NATS broker of the
 # bench's own, the backend, the workspace daemon and, by default, a fake LLM proxy
 # (scripts/bench/fake_llm.py) that answers each spec from its fake/ folder.
@@ -78,23 +86,19 @@
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 OUT_DIR="$REPO/bench/scorecards"
+GRADERS_REV=""
 SPECS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out=*) OUT_DIR="${1#--out=}"; shift ;;
     --out) [ $# -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
+    --graders=*) GRADERS_REV="${1#--graders=}"; [ -n "$GRADERS_REV" ] || { echo "--graders requires a commit" >&2; exit 2; }; shift ;;
+    --graders) [ $# -ge 2 ] || { echo "--graders requires a commit" >&2; exit 2; }; GRADERS_REV="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;
     *) SPECS+=("$(cd "$1" 2>/dev/null && pwd || echo "$1")"); shift ;;
   esac
 done
 case "$OUT_DIR" in /*) ;; *) OUT_DIR="$PWD/$OUT_DIR" ;; esac
-if [ ${#SPECS[@]} -eq 0 ]; then
-  for d in "$REPO"/bench/specs/*/; do [ -f "$d/spec.json" ] && SPECS+=("${d%/}"); done
-fi
-[ ${#SPECS[@]} -gt 0 ] || { echo "no reference specification found" >&2; exit 2; }
-for d in "${SPECS[@]}"; do
-  [ -f "$d/spec.json" ] && [ -d "$d/acceptance" ] || { echo "$d needs a spec.json and an acceptance/ folder" >&2; exit 2; }
-done
 
 PG_HOST=${BENCH_POSTGRES_HOST:-${E2E_POSTGRES_HOST:-127.0.0.1}}
 PG_PORT=${BENCH_POSTGRES_PORT:-${E2E_POSTGRES_PORT:-5432}}
@@ -116,6 +120,29 @@ case "$BUDGET" in ''|*[!0-9]*|0) [ -z "$BUDGET" ] || { echo "BENCH_TOKEN_BUDGET 
 WORK=${BENCH_WORKDIR:-$(mktemp -d -t fabrique-bench-XXXXXX)}
 mkdir -p "$WORK/projects" "$WORK/audit" "$WORK/entries"
 rm -f "$WORK"/entries/*.json
+
+# The graders: this checkout's own, or those of --graders' commit, taken from
+# its objects (never this tree) with their record for the card.
+SPECS_ROOT="$REPO/bench/specs"
+GRADER="$REPO/scripts/bench/scorecard.py"
+GRADERS_FLAG=()
+if [ -n "$GRADERS_REV" ]; then
+  rm -f "$WORK/graders.json"
+  "$PY" "$REPO/scripts/bench/graders.py" checkout --repo "$REPO" --rev "$GRADERS_REV" \
+    --dest "$WORK/graders" --out "$WORK/graders.json" > /dev/null || { echo "--graders $GRADERS_REV: the graders could not be taken"; exit 2; }
+  SPECS_ROOT="$WORK/graders/bench/specs"
+  GRADER="$WORK/graders/scripts/bench/scorecard.py"
+  GRADERS_FLAG=(--graders "$WORK/graders.json")
+  echo "graders: $("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d["sha"], "sha256", d["sha256"])' "$WORK/graders.json")"
+  for i in "${!SPECS[@]}"; do SPECS[i]="$SPECS_ROOT/$(basename "${SPECS[i]}")"; done
+fi
+if [ ${#SPECS[@]} -eq 0 ]; then
+  for d in "$SPECS_ROOT"/*/; do [ -f "$d/spec.json" ] && SPECS+=("${d%/}"); done
+fi
+[ ${#SPECS[@]} -gt 0 ] || { echo "no reference specification found" >&2; exit 2; }
+for d in "${SPECS[@]}"; do
+  [ -f "$d/spec.json" ] && [ -d "$d/acceptance" ] || { echo "$d needs a spec.json and an acceptance/ folder" >&2; exit 2; }
+done
 API=http://127.0.0.1:$BACKEND_PORT
 TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
 cleanup() { kill ${BPID:-} ${DPID:-} ${LPID:-} ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
@@ -144,7 +171,7 @@ EOF
 
 if [ -z "$LLM_URL" ]; then
   if port_busy "$LLM_PORT"; then echo "port $LLM_PORT is already in use: set BENCH_LLM_PORT."; exit 2; fi
-  FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS="$WORK/fake_llm.prompts.log" \
+  FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS="$WORK/fake_llm.prompts.log" BENCH_SPECS="$SPECS_ROOT" \
     "$PY" "$REPO/scripts/bench/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
   LLM_URL=http://127.0.0.1:$LLM_PORT
   LLM_LABEL=fake
@@ -242,7 +269,7 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  "$PY" "$REPO/scripts/bench/scorecard.py" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
+  "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
     || fail "the grade of $name did not run"
   echo "   criteria passed: $(json "d.get('passed'), 'of', d.get('total')" < "$WORK/$name.grade.json")"
   "$PY" "$REPO/scripts/bench/scorecard.py" collect --api "$API" --name "$name" --status "$status" \
@@ -280,7 +307,7 @@ ENTRIES=("$WORK"/entries/*.json)
   || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
 CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
-  --budget "$BUDGET" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} "${ENTRIES[@]}") \
+  --budget "$BUDGET" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"

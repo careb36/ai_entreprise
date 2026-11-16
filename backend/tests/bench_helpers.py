@@ -3,7 +3,8 @@
 The reference specifications under ``bench/specs`` and a reader for them, and
 a scorecard entry and card built from a board's comments. The tests are
 ``test_bench_specs.py``, ``test_bench_grading.py``, ``test_bench_scorecard.py``,
-``test_bench_compare.py``, ``test_bench_routing.py`` and ``test_bench_broker.py``.
+``test_bench_compare.py``, ``test_bench_routing.py``, ``test_bench_broker.py``,
+``test_bench_graders.py`` and ``test_bench_repeated.py``.
 """
 
 import json

@@ -26,12 +26,10 @@ Subcommands, used by ``scripts/bench/run.sh``:
   checks it against the schema (``validate``) and writes
   ``<stamp>.json`` and ``<stamp>.md``. ``--budget N [--cut] [--skipped NAME]``
   add the run-level block (``run``, ``budget.py``): whether the token budget
-  cut the run, and the specifications it skipped.
+  cut the run, and the specifications it skipped. ``--graders FILE`` adds
+  the commit the grade's tests came from (``graders.py``, ``run.sh --graders``).
 
-The pure functions (``criterion_of_test``, ``criteria_from_junit``,
-``summarize_spec``, ``build_scorecard``, ``validate``, ``render_markdown``)
-are what ``backend/tests/test_bench_grading.py`` and
-``test_bench_scorecard.py`` check.
+The pure functions are what ``backend/tests/test_bench_*.py`` check.
 
 Credit: OpenHands' evaluation harness, which states the harness version
 beside every number (here: the schema version, the factory's commit and the
@@ -54,6 +52,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget
+import graders
 import prompt_weight
 from junit_xml import JUnitError, testcases
 from readers import difficulty_estimates, prompt_sections, reported_tokens
@@ -342,9 +341,10 @@ def build_scorecard(
     llm: str,
     policy: str = "default",
     run: dict[str, Any] | None = None,
+    graders_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them, and
-    the run-level block (``run``) when given."""
+    the run-level block (``run``) and the graders' commit when given."""
     criteria_passed = sum(s["criteria"]["passed"] for s in specs)
     criteria_total = sum(s["criteria"]["total"] for s in specs)
     tasks = sum(s["tasks"]["total"] for s in specs)
@@ -374,6 +374,7 @@ def build_scorecard(
             "prompt": prompt_weight.merge([s.get("prompt") for s in specs]),
         },
         **({"run": run} if run is not None else {}),
+        **({"graders": graders_record} if graders_record else {}),
     }
 
 
@@ -394,6 +395,7 @@ def render_markdown(card: dict[str, Any]) -> str:
         f"Factory commit `{card['commit']}`, models from `{card['llm']}`, routing policy `{card.get('policy', 'default')}`, schema v{card['schema_version']}.",
         "Criteria are graded by the acceptance tests a person wrote for each specification;",
         "tokens count only the turns whose usage the provider reported.",
+        *graders.render_lines(card),
         *budget.render_lines(card),
         "",
         "| Spec | Status | Criteria | First attempt | Rework / task | Blocked | Wall-clock | Tokens |",
@@ -553,6 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--budget", default="", help="the run's token budget, if any")
     w.add_argument("--cut", action="store_true", help="the budget cut the run")
     w.add_argument("--skipped", action="append", default=[], help="a spec not run")
+    w.add_argument("--graders", type=Path, help="the graders' record (graders.py)")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -577,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
             cut=args.cut,
             skipped=args.skipped,
         ),
+        graders_record=json.loads(args.graders.read_text()) if args.graders else None,
     )
     problems = validate(card)
     if problems:

@@ -39,7 +39,10 @@ bench/
   run-level block.
 - `scripts/bench/schema.py` is the scorecard's schema.
 - `scripts/bench/compare.py` diffs a scorecard with the previous one and exits
-  1 beyond a threshold.
+  1 beyond a threshold; with several cards per side it reads repeated runs
+  (`scripts/bench/repeated.py`, see "Repeated runs, medians and spread").
+- `scripts/bench/graders.py` takes the graders from a commit for
+  `run.sh --graders` (see "Graders from a commit").
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
   self-hosted runner, with the fake, and on real models behind a kill switch
   (see "The nightly real-model run").
@@ -101,6 +104,94 @@ fails unless every specification completes and every criterion passes: that
 is the circuit check. With a real proxy it exits 0 once the scorecard is
 written, and `compare.py` judges the numbers (`--rate`, `--rework`,
 `--tokens` set the thresholds).
+
+Wall-clock is shown and not judged unless `--time` is passed: alone it
+judges a growth of more than 25% (0.25, the owner's wall-clock threshold
+in `docs/design/rsi-loop.md` §10, decision 4), and `--time 0.4` sets
+another, in the totals and per specification. Wall-clock depends on the
+machine, so use `--time` only for runs made on the same one. Put `--time`
+after the cards, or write `--time=0.4`, so the flag does not take a card's
+path as its value.
+
+## Graders from a commit
+
+`scripts/bench/run.sh --graders <sha>` grades with the tests of that commit,
+not with the checkout's own (REQ-4 of `docs/design/rsi-loop.md`). Before the
+stack starts, `scripts/bench/graders.py` reads `bench/` (the specifications,
+their acceptance tests, the fake's answers) and `scripts/bench/` (the
+grader) from the commit's objects (`git ls-tree`, `git cat-file`) into
+`BENCH_WORKDIR/graders`. The working tree is never read, so a test edited,
+added or removed in the checkout does not reach the grade. A symbolic link
+or a submodule under those paths is refused. Then:
+
+- the specifications run are that commit's: without `SPEC_DIR`, every one
+  it holds; a `SPEC_DIR` names one by its folder's name, and a name the
+  commit does not hold stops the run;
+- the fake producer answers from that commit's `fake/` folders;
+- the acceptance tests run with that commit's `scorecard.py grade`;
+- the card carries `graders`: the full `sha`, git's tree id of `bench` and
+  of `scripts/bench` at that commit (`trees`, the same values `git rev-parse
+  <commit>:bench` gives, so another commit's copy can be checked against
+  them), and the `sha256` of the files taken, computed by the runner from
+  their bytes. The card's Markdown and `compare.py`'s header name the
+  graders' commit; a card without the block was graded by the build's own
+  copy.
+
+The stack, the collection of the numbers and the writing of the card stay
+the checkout's: they read the factory under test, not the exam. The block is
+optional and additive in schema v3; older cards are read as before.
+
+```bash
+B=$(git rev-parse origin/main)
+scripts/bench/run.sh --graders "$B" --out /tmp/rsi/C-fake
+```
+
+## Repeated runs, medians and spread
+
+One run per side is noisy with real models, so a candidate (C) is compared
+with a baseline (B) over K runs each, made alternately (B, C, B, C, B, C;
+`docs/design/rsi-loop.md` §2.5). Give `compare.py` every card of C and each
+card of B with its own `--previous`:
+
+```bash
+python3 scripts/bench/compare.py /tmp/rsi/C-real-{1,2,3}/*.json \
+  --previous /tmp/rsi/B-real-1/<stamp>.json --previous /tmp/rsi/B-real-2/<stamp>.json \
+  --previous /tmp/rsi/B-real-3/<stamp>.json --time
+```
+
+More than one card on either side, or `--runs K`, reads repeated runs
+(`scripts/bench/repeated.py`):
+
+- **Pairs.** Each side is put in the order of its stamps, and the i-th card
+  of B is paired with the i-th of C. A pair whose models served per role
+  differ (the card's `models`, over every specification) is **void**:
+  neither card is counted (REQ-7). A card without a partner is not counted.
+- **Complete runs.** A specification's numbers count only from runs where
+  it `completed`, and the totals only from runs where every specification
+  completed and the budget did not cut the run. A `timeout`, `error` or
+  `budget_exceeded` leaves its numbers out; they are never read as zero.
+- **K.** `--runs K`, by default the number of cards on the larger side.
+  With fewer than K complete, counted runs on either side, a metric is
+  `unmeasured`: the table shows `unmeasured` and the diff lists it under
+  "Unmeasured (never a pass)" (REQ-16).
+- **Medians and spread.** Each metric is read as its median over the runs,
+  and its spread is the range (max − min) over B's runs. C regresses on
+  criteria passed, first attempt or blocked share when it is worse than B's
+  median by more than `max(--rate, spread_B)`, on rework per task by more
+  than `max(--rework, spread_B)`, and on reported tokens (totals only),
+  wall-clock (`--time`) or prompt tokens (`--prompt-tokens`) when it grew by
+  more than `max(threshold, spread_B / median_B)`. So a change cannot be
+  called worse by less than the baseline's own variation.
+- **Completion.** A specification that completed in fewer counted pairs on
+  C than on B is a regression (pairs where the budget stopped it on either
+  side are left out).
+
+The exit status is 1 on a regression, 2 when a card does not match the
+schema (or no `--previous` was given), 3 when nothing regressed but a judged
+metric is unmeasured (not a pass), and 0 otherwise. The tables by
+difficulty and by prompt section are shown only for two single cards. One
+card per side keeps the behaviour above (the nightly comparison with a
+reference); with `--runs 1` it is read as a pair, void if its models differ.
 
 ## Comparing two routing policies
 

@@ -82,7 +82,7 @@ root's profile), before anything is automated.
 | **Act**: a sprint on the factory's own repository | `scripts/self_host/self_host.py` (steps `checkout`, `company`, `records`, `issue`, `wait`, `review`, `pack`); per-folder suites and every-delivery checks (`services/workspace/stack_roots.py`, `services/loop/delivery_suites.py`); no foundation sprint for an existing repository (`services/loop/foundation_setup.py`) | The `issue` step takes `--spec <file>` (PR 6, `scripts/self_host/spec_source.py`: checked by `spec_check`, a target measure required, run by the `measure` step). The snapshot has no remote, and bringing the result back is a manual step (README, step 7) |
 | **Measure** | The bench: `scripts/bench/run.sh`, `scorecard.py` (`grade`, `collect`), `compare.py` (`DEFAULTS`: rate 0.05, rework 0.25, tokens 0.5), `budget.py`, schema v3; the Verifier bench (`bench/verifier/`, `python -m verifier.run`); the prompt weight (`services/loop/worker/prompt_budget.py` → `prompt_sections`); the cost (`services/models/run_cost.py`); the claim gap (`services/tasks/progress_snapshot.claim_gap`) | Graders pinned to B (`run.sh --graders <sha>` **(missing)**); repeated runs with medians and spread (**missing**); a wall-clock threshold in `compare.py` (**missing**); CI conclusions read by commit from GitHub's check-runs (**missing**: today `evidence["ci"]` is only the daemon's exit status, `services/workspace/workspace_daemon.py`; nothing reads a pull request's check-runs); a real-model reference card (`bench/scorecards/real/` holds only `.gitkeep`) |
 | **Learn** | `services/learning/retrospective.build` (board counts, contradictions, notes); procedures proposed and measured (`procedures.propose`, `evaluate`); retrospectives written by a person (`docs/retrospectives/`) | Findings as records with a target measure (`Finding`, **missing**). Today a finding exists only as prose |
-| **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, true by default in `backend/app/config.py`) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up must stay off (REQ-21) |
+| **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, off by default since decision 8 in §10) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up must stay off (REQ-21) |
 | **Apply** | The Verifier (`verify_agent_run`), the risk tier (`services/evidence/risk.classify`; `.github/workflows/` already raises it to high), segregation of duties (`services/platform/sod.enforce`), the integration review and its merge gate (`integration_review.py`, `local_merge.integration_merge_spec`, `companies.integration_review_required`), the history check (`backend/app/history_check.py`) | A protected-paths check (§3); a hold no Manager rule can accept; the same check on the pull request in CI |
 | **Keep or revert** | Procedures: kept or reverted against a baseline of two sprints with tolerances (`REWORK_TOLERANCE` 0.25, `BLOCKED_TOLERANCE` 0.10, `GAP_TOLERANCE` 0.10); `unmeasured` is never `kept` | The same discipline for code changes: `services/evidence/fitness.py` **(missing)**, the cycle record **(missing)**, and a watch after the merge that opens a revert pull request **(missing)** |
 
@@ -723,28 +723,45 @@ Design only, no code taken.
   bench's sources): graded by person-written tests, every number beside the
   harness version. Pinning graders to B extends the same idea.
 
-## 10. Open decisions for the owner
+## 10. Decisions of the owner (2026-11-16)
 
-1. **Who merges a kept change.** This design says a person, always, at
-   first (`merge_self_change` in `ALWAYS_ESCALATE`). Should autonomy 3 ever
-   merge a `keep` whose diff touches no protected path?
-2. **The breadth of the protected list.** §3.1 goes beyond the brief:
-   `scripts/self_host/`, `scripts/e2e/`, the ratchets, `history_check.py`,
-   `board.py`, `procedures.py`, `manager_policy.py`, `sod.py`. Keep all, or
-   narrow?
-3. **How a company is marked as hosting the factory.** By an Owner's flag
-   (proposed), or observed by the daemon (for example a file's hash in the
-   snapshot)?
-4. **Thresholds and K.** Tokens 0.15 and wall-clock 0.25 per cycle, K = 3,
-   N = 3, a 20-file / 600-line cap, 6 hours, 1 cycle a day: confirm or set.
-5. **A held-out bench.** Specifications kept outside the repository and
-   every path the daemon serves, so the factory cannot overfit to them.
-   Where they live and who writes them.
-6. **#182.** "Require review from Code Owners" on `main` is the backstop of
-   layer 4. Turn it on before PR 4, or accept layer 4 as advisory.
-7. **The budget per cycle**, in reported tokens, and whether cost in cents
-   (priced by `model_prices`) should replace tokens once every served model
-   is priced.
-8. **`AUTO_SELF_IMPROVEMENT_ENABLED`** defaults to true for every company
-   at autonomy 3. Should the model-planned follow-up stay on for other
-   companies, or be retired in favour of finding-driven sprints?
+The owner decided the questions this design left open:
+
+1. **Who merges a kept change: in stages.** A person merges the first five
+   kept changes, to check the decision against reality. After them, at
+   autonomy 3, the factory merges a `keep` itself when its diff touches no
+   protected path and every guard passed; a diff that touches a protected
+   path is always merged by a person (`merge_self_change` stays in
+   `ALWAYS_ESCALATE` for that case).
+2. **The protected list stays wide**, as §3.1 lists it, additions included
+   (`scripts/self_host/`, `scripts/e2e/`, the ratchets, `history_check.py`,
+   `board.py`, `procedures.py`, `manager_policy.py`, `sod.py`): it costs
+   only a person's approval when touched, and it also covers the rules that
+   judge.
+3. **The company hosting the factory is marked by an Owner's flag**,
+   audited; the daemon does not infer it, so the factory cannot avoid being
+   recognised.
+4. **Thresholds and K as proposed**: tokens 0.15 and wall-clock 0.25 per
+   cycle, K = 3 runs per side, stop after N = 3 cycles without a keep, a
+   20-file / 600-line cap, 6 hours, 1 cycle a day. Reviewed after two weeks
+   of data (two cycles a day is the first candidate change).
+5. **A held-out bench: yes.** Its specifications live outside the
+   repository the factory snapshots (a separate private repository, or a
+   path never served to a sprint), written by a person or by an agent in a
+   session the factory does not use; three specifications to start. The
+   factory sees only their results.
+6. **#182: on, before PR 4.** Without "Require review from Code Owners" the
+   protected-path check would be advisory, and the automation of decision 1
+   would not be safe.
+7. **The budget per cycle is in reported tokens**, capped at twice what the
+   first manual iteration's sprint costs (measured there); cost in cents
+   replaces tokens once every served model is priced.
+8. **`AUTO_SELF_IMPROVEMENT_ENABLED` is off by default.** The model-planned
+   follow-up ran unguarded (`governance.py` protected nothing); a company
+   turns it on deliberately, and it is retired once the finding-driven
+   cycle replaces it.
+
+The first manual iteration (§7) used finding F4, which #599 has since
+delivered; the finding for it is chosen and written in PR 6, among the
+retrospective's open findings with a measure that fails before and passes
+after.
