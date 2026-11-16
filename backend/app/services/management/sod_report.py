@@ -5,10 +5,11 @@ Computed from records, never claimed:
 
 - **approvals**: every approval a person or an agent recorded — a held
   delivery accepted and another producer's run approved (``run_reviews``), a
-  specification or an architecture approved (``approved_by``), a run or a
-  sprint's integration merged into the base branch (``run_publications`` with
-  ``how=local``, the integration's ``local_merge``) — each beside who asked
-  for the work (``services/loop/sod_requesters.py``). Each is ``separated``
+  specification or an architecture approved (``approved_by``), an integration's
+  review approval (``integration_reviews``), a run or a sprint's integration
+  merged into the base branch (``run_publications`` with ``how=local``, the
+  integration's ``local_merge``) — each beside who asked for the work
+  (``services/loop/sod_requesters.py``). Each is ``separated``
   (requester and approver differ), ``exception`` (the same person, with the
   ``sod_exception_applied`` audit row of the single-person exception),
   ``violation`` (the same person with no such row: approved before the rule,
@@ -36,6 +37,7 @@ from models import (
     Architecture,
     AuditLog,
     CompanyMember,
+    IntegrationReview,
     RunPublication,
     RunReview,
     Specification,
@@ -200,6 +202,35 @@ def _approvals(session: Session, company_id: int) -> list[dict[str, Any]]:
                 sod_requesters.of_sprint(session, sprint),
                 row.created_at,
                 f"{sprint.sprint_name if sprint else row.sprint_id} → {row.base}",
+            )
+        )
+
+    for review in session.exec(
+        select(IntegrationReview).where(
+            IntegrationReview.company_id == company_id,
+            IntegrationReview.event == "approve",
+            IntegrationReview.outcome == "approved",
+        )
+    ).all():
+        uid = review.author_user_id if (review.author_user_id or 0) > 0 else None
+        approver = sod.person_of_user_id(session, uid)
+        if not approver.known():
+            approver = Person(label=review.author_name or "")
+        sprint = session.get(Sprint, review.sprint_id)
+        label = (
+            f"Review #{review.id} of "
+            f"{sprint.sprint_name if sprint else review.sprint_id} "
+            f"integration #{review.integration_id}"
+        )
+        out.append(
+            (
+                sod.RELEASE,
+                "sprint_integration_review",
+                review.integration_id,
+                approver,
+                sod_requesters.of_sprint(session, sprint),
+                review.created_at,
+                label,
             )
         )
     return out

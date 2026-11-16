@@ -261,7 +261,9 @@ def check_tests_run(evidence: dict) -> dict:
     the code was not shown to work, which is different from it failing.
 
     When the daemon had to cut the output, the observation says it, so a
-    truncated tail is never read as the whole story.
+    truncated tail is never read as the whole story. When the output named
+    the tests that failed, they come first — with the criteria they speak
+    for — and the end of the output comes last (``failure_summary``).
     """
     run = evidence.get("test_run") or {}
     command = run.get("command")
@@ -313,11 +315,12 @@ def check_tests_run(evidence: dict) -> dict:
                 ),
             }
         tail = (run.get("output_tail") or "").strip()[-400:]
+        detail = criteria_tests.failure_summary(run) or tail
         return {
             "name": "tests_run",
             "outcome": VERDICT_REFUTED,
             "observation": f"{target} exited {exit_code}"
-            + (f": {tail}" if tail else "")
+            + (f": {detail}" if detail else "")
             + truncated,
         }
     reason = run.get("reason") or "no exit status reported"

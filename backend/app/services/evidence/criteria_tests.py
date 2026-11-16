@@ -155,6 +155,44 @@ def failing_tests(output: str) -> list[str]:
     )
 
 
+# How many failing tests a refuted run's observation quotes. A suite that broke
+# broadly still says how many it left out, but the first names come first.
+FAILING_TESTS_QUOTED = 20
+
+
+def failure_summary(test_run: dict[str, Any]) -> str:
+    """What a failed run's observation leads with: the failing tests the
+    daemon's output named (bounded, with how many more), the criteria they
+    speak for, and the end of the output last. ``""`` when the output named
+    no test, so the caller falls back to the tail alone."""
+    names = [
+        name
+        for name in test_run.get("failing_tests") or []
+        if isinstance(name, str) and name
+    ]
+    if not names:
+        return ""
+    shown = names[:FAILING_TESTS_QUOTED]
+    count = test_run.get("failing_count")
+    total = (
+        count if isinstance(count, int) and not isinstance(count, bool) else len(names)
+    )
+    more = max(total - len(shown), 0)
+    parts = ["failing tests: " + ", ".join(shown)]
+    if more:
+        parts[0] += f" (and {more} more)"
+    criteria = test_run.get("criteria")
+    if isinstance(criteria, dict) and criteria:
+        results = ", ".join(
+            f"{criterion} {result}" for criterion, result in criteria.items()
+        )
+        parts.append(f"criteria: {results}")
+    tail = (test_run.get("output_tail") or "").strip()[-400:]
+    if tail:
+        parts.append(f"output ends: {tail}")
+    return "; ".join(parts)
+
+
 def verbose_command(command: str) -> str:
     """The test command with per-test output where the runner is known.
 
@@ -181,13 +219,16 @@ def verbose_command(command: str) -> str:
 
 def record_results(evidence: dict[str, Any], output: str) -> None:
     """Add to ``evidence["test_run"]`` what the runner's output says per
-    criterion (``criteria``) and which tests failed (``failing_tests``)."""
+    criterion (``criteria``), which tests failed (``failing_tests``, at most
+    50) and how many did (``failing_count``, uncapped)."""
     acceptance = evidence.get("acceptance")
     test_run = evidence.get("test_run")
     if not acceptance or not isinstance(test_run, dict):
         return
     test_run["criteria"] = results_from_output(output, acceptance.get("all") or [])
-    test_run["failing_tests"] = failing_tests(output)[:50]
+    names = failing_tests(output)
+    test_run["failing_tests"] = names[:50]
+    test_run["failing_count"] = len(names)
 
 
 def excused_failures(evidence: dict[str, Any]) -> tuple[bool, list[str]]:
