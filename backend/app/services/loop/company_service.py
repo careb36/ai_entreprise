@@ -61,6 +61,7 @@ class CompanyService:
         git_workflow: bool = False,
         git_base_branch: str | None = None,
         doc_language: str | None = None,
+        plan_foundation: bool = True,
     ) -> dict[str, Any]:
         """
         Bootstrap a new company tenant with its AI agents and project credentials.
@@ -71,6 +72,12 @@ class CompanyService:
 
         ``git_workflow`` is what the caller observed in the folder
         (``services/release/git_setup.py``): off unless it is a repository.
+
+        ``plan_foundation`` False creates no Sprint 0 at all: the caller
+        decided from the daemon's observation of the folder (a repository
+        with code does not need one) or from the request's own word
+        (``services/loop/foundation_setup.py``, retrospective F8); the
+        summary's ``sprint_id`` is then None.
 
         This involves multiple tables and a non-critical Neo4j seed operation.
         Returns a summary of the created entities.
@@ -146,67 +153,81 @@ class CompanyService:
                         )
                     )
 
-        # 4. Plan and Create Foundation Sprint
-        plan = plan_foundation_sprint(
-            company_name=company_name,
-            agents=agents,
-            detected_stack=detected_stack,
-            project_path=project_path,
-        )
-
-        starts = start_now and not sprint_control.needs_person_acceptance(
-            autonomy_level
-        )
-        sprint = Sprint(
-            company_id=company.id,
-            sprint_name="Sprint 0 — Foundations",
-            start_date=datetime.now(UTC).date().isoformat(),
-            scope_size=default_scope_size,
-            status=sprint_control.ACTIVE if starts else sprint_control.PLANNED,
-            goal=plan.get("goal", f"Foundation sprint for {company_name}"),
-        )
-        self.session.add(sprint)
-        self.session.flush()
-
-        # 5. Create Backlog Items and Outbox Events
-        tasks = plan.get("tasks", [])
-        for task in tasks:
-            bi = BacklogItem(
-                sprint_id=sprint.id,
-                title=task.get("title", "Untitled task"),
-                description=task.get("description", ""),
-                priority=task.get("priority", "medium"),
-                assignee=task.get("assignee", "PO"),
-                status="todo",
+        # 4. Plan and Create Foundation Sprint — unless the caller decided
+        # not to (services/loop/foundation_setup.py): a folder the daemon
+        # observed to be a repository with code needs no Sprint 0, and the
+        # request itself may decline one.
+        sprint: Sprint | None = None
+        tasks: list[dict[str, Any]] = []
+        if plan_foundation:
+            plan = plan_foundation_sprint(
+                company_name=company_name,
+                agents=agents,
+                detected_stack=detected_stack,
+                project_path=project_path,
             )
-            self.session.add(bi)
+
+            starts = start_now and not sprint_control.needs_person_acceptance(
+                autonomy_level
+            )
+            sprint = Sprint(
+                company_id=company.id,
+                sprint_name="Sprint 0 — Foundations",
+                start_date=datetime.now(UTC).date().isoformat(),
+                scope_size=default_scope_size,
+                status=sprint_control.ACTIVE if starts else sprint_control.PLANNED,
+                goal=plan.get("goal", f"Foundation sprint for {company_name}"),
+            )
+            self.session.add(sprint)
             self.session.flush()
-            if not starts:
-                continue
 
-            nats_payload = {
-                "subject": "task.assign",
-                "message": {
-                    "backlog_item_id": bi.id,
-                    "interaction_id": str(uuid4()),
-                    "agent": task.get("assignee", "PO"),
-                    "sprint_id": sprint.id,
-                },
-            }
-            self.session.add(
-                OutboxEvent(
-                    aggregate_type="backlog_item",
-                    aggregate_id=str(bi.id),
-                    event_type="nats_publish",
-                    payload=nats_payload,
+            # 5. Create Backlog Items and Outbox Events
+            tasks = plan.get("tasks", [])
+            for task in tasks:
+                bi = BacklogItem(
+                    sprint_id=sprint.id,
+                    title=task.get("title", "Untitled task"),
+                    description=task.get("description", ""),
+                    priority=task.get("priority", "medium"),
+                    assignee=task.get("assignee", "PO"),
+                    status="todo",
                 )
-            )
+                self.session.add(bi)
+                self.session.flush()
+                if not starts:
+                    continue
+
+                nats_payload = {
+                    "subject": "task.assign",
+                    "message": {
+                        "backlog_item_id": bi.id,
+                        "interaction_id": str(uuid4()),
+                        "agent": task.get("assignee", "PO"),
+                        "sprint_id": sprint.id,
+                    },
+                }
+                self.session.add(
+                    OutboxEvent(
+                        aggregate_type="backlog_item",
+                        aggregate_id=str(bi.id),
+                        event_type="nats_publish",
+                        payload=nats_payload,
+                    )
+                )
 
         self.session.commit()
 
         # 6. Seed Neo4j (Non-critical)
         self._seed_neo4j(company.id, company_name)
 
+        if sprint is None:
+            return {
+                "company_id": company.id,
+                "sprint_id": None,
+                "sprint_status": None,
+                "task_count": 0,
+                "message": "Company initialized without a foundation sprint",
+            }
         return {
             "company_id": company.id,
             "sprint_id": sprint.id,

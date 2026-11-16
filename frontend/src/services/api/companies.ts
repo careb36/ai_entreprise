@@ -26,13 +26,34 @@ export interface InitCompanyRequest {
   git_base_branch?: string | null
   /** The language of the project's documentation packs (issue #530). */
   doc_language?: 'en' | 'es'
+  /**
+   * Sprint 0 — Foundations: true plans it, false skips it; omitted (null)
+   * lets the daemon's observation of the folder decide — a repository with
+   * code gets none (retrospective F8). The observation is the daemon's; this
+   * field is only the person's word.
+   */
+  foundation_sprint?: boolean | null
+}
+
+/** Whether the foundation sprint was planned, and why (retrospective F8). */
+export interface FoundationSprintOutcome {
+  planned: boolean
+  /** Decision code: requested | declined | repository_with_code | folder_without_code | no_folder | daemon_unobserved. */
+  reason: string
+  /** The backend's sentence for `reason` (English). */
+  detail: string
+  /** What the daemon observed about the folder; null when nobody observed it. */
+  observed_repository_with_code: boolean | null
 }
 
 export interface InitCompanyResponse {
   company_id: number
-  sprint_id: number
+  /** Null when no foundation sprint was planned; `foundation_sprint` says why. */
+  sprint_id: number | null
+  sprint_status?: string | null
   task_count: number
   message: string
+  foundation_sprint?: FoundationSprintOutcome
 }
 
 export interface DetectedStack {
