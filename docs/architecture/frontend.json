@@ -34,8 +34,8 @@
     },
     {
       "name": "app",
-      "description": "The router and the entry point.",
-      "paths": ["App.tsx", "main.tsx"]
+      "description": "The router and the entry point: App.tsx (the router's provider), main.tsx, and app/ (the routes and the layout around them).",
+      "paths": ["App.tsx", "main.tsx", "app"]
     }
   ],
   "aliases": {},

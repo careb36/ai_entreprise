@@ -11,11 +11,15 @@ The last validation (a ``GET {base_url}/models`` with the key) is kept as an
 observation of the provider, with when it ran and what it answered.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Column, Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class ProviderConnection(SQLModel, table=True):
@@ -39,5 +43,5 @@ class ProviderConnection(SQLModel, table=True):
     # The model ids the provider listed at its last successful validation.
     listed_models: list[Any] | None = Field(default=None, sa_column=Column(JSON))
     created_by: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
