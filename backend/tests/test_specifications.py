@@ -11,7 +11,6 @@ import json
 
 import pytest
 from services.planning import spec_author, spec_check, spec_planning
-
 from specification_helpers import GOOD
 
 # --- the check ---------------------------------------------------------------

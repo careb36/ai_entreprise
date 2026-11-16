@@ -22,7 +22,6 @@ from models import (
     User,
 )
 from sqlmodel import select
-
 from task_views_helpers import _company, _ids, _run, _sprint, _task
 
 # ── Saved views: access, locks, roles (REQ-3) ────────────────────────────────

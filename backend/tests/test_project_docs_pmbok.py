@@ -6,12 +6,11 @@ results compute what the records answer and leave the rest. The shared
 snapshot is in ``project_docs_helpers``.
 """
 
+from project_docs_helpers import _docs, _empty, _snapshot
 from services.planning.project_docs import (
     checks,
     layout,
 )
-
-from project_docs_helpers import _docs, _empty, _snapshot
 
 # --- PMBOK Guide, 8th edition: placement, person sections, logs, checks ------------
 

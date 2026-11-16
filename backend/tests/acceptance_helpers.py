@@ -13,7 +13,6 @@ from pathlib import Path
 from models.agent_run import AgentRun, Verification
 from services.planning import spec_check
 from sqlmodel import select
-
 from test_specifications import GOOD
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"

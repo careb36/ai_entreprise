@@ -7,7 +7,9 @@ the target under the company's lock, so it happens once. The shared rows are
 in ``board_moves_helpers``.
 """
 
+import board_moves_helpers
 import pytest
+from board_moves_helpers import _assignments, _company, _history, _item, _sprint
 from models import (
     BacklogItem,
     Specification,
@@ -17,9 +19,6 @@ from services.evidence import acceptance
 from services.loop import board_moves, carry_over
 from services.platform import locks
 from sqlmodel import Session, select
-
-import board_moves_helpers
-from board_moves_helpers import _assignments, _company, _history, _item, _sprint
 
 # The shared fixtures.
 db = board_moves_helpers.db

@@ -10,16 +10,15 @@ member of the company only. The shared fixtures are in
 import secrets
 from unittest.mock import MagicMock
 
+import auth_enforcement_helpers
 import pytest
+from auth_enforcement_helpers import _member, _run
 from config import settings
 from models import (
     AuditLog,
     Company,
 )
 from sqlmodel import select
-
-import auth_enforcement_helpers
-from auth_enforcement_helpers import _member, _run
 
 # The shared fixtures.
 enforcement = auth_enforcement_helpers.enforcement

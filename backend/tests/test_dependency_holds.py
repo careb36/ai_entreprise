@@ -6,10 +6,9 @@ settled, and a closed sprint is left alone. The shared rows are in
 ``dependencies_helpers``.
 """
 
-from services.tasks import dependencies
-
 import worker_stages
 from dependencies_helpers import _company, _sprint, _task
+from services.tasks import dependencies
 
 
 def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_released_when_it_gets_done(

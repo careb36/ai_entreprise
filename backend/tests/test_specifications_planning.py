@@ -9,7 +9,6 @@ import json
 from models import BacklogItem, Sprint
 from models.specification import Specification
 from services.planning import spec_author, spec_check, spec_planning
-
 from specification_helpers import GOOD, _company
 
 # --- planning from it, and what the tasks cover ------------------------------

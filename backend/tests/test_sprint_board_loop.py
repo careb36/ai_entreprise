@@ -22,9 +22,8 @@ from models.agent_run import TASK_WORKER_PRODUCER
 from services.learning import retrospective
 from services.loop.worker import prompt_budget, sprint_notes
 from services.tasks import sprint_board, task_projection
-from sqlmodel import select
-
 from sprint_board_helpers import _setup
+from sqlmodel import select
 
 
 def _verified_run(session, company, item, paths, verdict="verified"):

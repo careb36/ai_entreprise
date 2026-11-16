@@ -6,14 +6,13 @@ in ``architecture_helpers``.
 import asyncio
 
 import pytest
+from architecture_helpers import GOOD_ARCH, _approved_spec, _company, _Daemon
 from models.architecture import Architecture
 from models.company import ProjectDiscovery
 from services.planning import (
     arch_author,
     arch_check,
 )
-
-from architecture_helpers import GOOD_ARCH, _approved_spec, _company, _Daemon
 
 
 def test_the_approved_architecture_is_written_to_the_repository_with_the_daemons_hash(

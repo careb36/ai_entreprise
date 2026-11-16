@@ -10,17 +10,16 @@ from __future__ import annotations
 
 import asyncio
 
+import grounding_signatures_helpers
 import pytest
 import signatures as daemon_signatures  # the daemon's module, on sys.path via conftest
+import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
 from services.loop.worker import deliver as worker_deliver
 from services.tools import signature_lookup
 from sqlmodel import Session, select
-
-import grounding_signatures_helpers
-import worker_stages
 
 # The shared fixtures.
 daemon = grounding_signatures_helpers.daemon

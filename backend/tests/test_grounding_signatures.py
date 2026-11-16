@@ -14,11 +14,10 @@ from __future__ import annotations
 import asyncio
 import json
 
+import grounding_signatures_helpers
 import pytest
 import signatures as daemon_signatures  # the daemon's module, on sys.path via conftest
 from services.evidence import signatures as symbol_check
-
-import grounding_signatures_helpers
 
 # The shared fixtures.
 daemon = grounding_signatures_helpers.daemon

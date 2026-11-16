@@ -6,7 +6,9 @@ unit's company and the enterprise reads refused to non-members. The shared
 fixtures are in ``auth_enforcement_helpers``.
 """
 
+import auth_enforcement_helpers
 import pytest
+from auth_enforcement_helpers import _member
 from auth_policy import require_authenticated, require_company_role
 from config import settings
 from fastapi import HTTPException
@@ -16,9 +18,6 @@ from models import (
     Company,
     Sprint,
 )
-
-import auth_enforcement_helpers
-from auth_enforcement_helpers import _member
 
 # The shared fixtures.
 enforcement = auth_enforcement_helpers.enforcement

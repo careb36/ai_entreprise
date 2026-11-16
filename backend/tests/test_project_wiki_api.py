@@ -17,11 +17,10 @@ from models import (
     CompanyMember,
     User,
 )
+from project_wiki_helpers import _project
 from services.contracts import wiki
 from services.learning import wiki_store
 from sqlmodel import select
-
-from project_wiki_helpers import _project
 
 # ── The API ──────────────────────────────────────────────────────────────────
 

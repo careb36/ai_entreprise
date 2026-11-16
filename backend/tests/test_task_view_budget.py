@@ -20,7 +20,6 @@ from services.contracts import task_filters
 from services.tasks import task_filter
 from sqlalchemy import event
 from sqlmodel import select
-
 from task_views_helpers import WAITS, _company, _sprint
 
 # ── Performance ──────────────────────────────────────────────────────────────

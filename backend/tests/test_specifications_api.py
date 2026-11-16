@@ -8,10 +8,9 @@ revision. The shared rows are in ``specification_helpers``.
 import json
 
 import pytest
-from services.planning import spec_author
-
 from factories import enforcement  # noqa: F401 - the fixture, by name
 from factories import member_headers as _member
+from services.planning import spec_author
 from specification_helpers import CRITERION, GOOD, _company
 
 # --- the routes --------------------------------------------------------------

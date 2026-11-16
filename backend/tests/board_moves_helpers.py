@@ -10,6 +10,7 @@ import secrets
 
 import history_check
 import pytest
+import worker_stages
 from models import (
     AgentMessage,
     BacklogItem,
@@ -19,8 +20,6 @@ from models import (
     TaskEvent,
 )
 from sqlmodel import select
-
-import worker_stages
 
 TRIAGE = "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: too short"
 

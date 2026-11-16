@@ -10,6 +10,8 @@ import asyncio
 import json
 
 import pytest
+import worker_stages
+from dependencies_helpers import _company, _sprint, _task
 from models import BacklogItem, OutboxEvent
 from models.specification import Specification
 from services.loop import sprint_control
@@ -17,9 +19,6 @@ from services.loop.worker import intake, task_run
 from services.planning import spec_author, spec_check
 from services.tasks import dependencies
 from sqlmodel import select
-
-import worker_stages
-from dependencies_helpers import _company, _sprint, _task
 from test_specifications import GOOD
 
 # --- the checks on what a plan or a request asks ----------------------------

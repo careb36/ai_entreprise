@@ -8,7 +8,6 @@ company's run is a 404 that writes nothing. The shared rows are in
 from models.agent_run import AgentRun, Verification
 from models.audit import AuditLog
 from sqlmodel import select
-
 from verification_helpers import _ingest, _make_company, _payload, _verify
 
 

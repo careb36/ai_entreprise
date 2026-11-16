@@ -18,7 +18,17 @@ import asyncio
 import secrets
 from unittest.mock import patch
 
+import board_moves_helpers
 import pytest
+from board_moves_helpers import (
+    NEEDS_WORK,  # noqa: F401 - imported from here by other tests
+    TRIAGE,
+    _assignments,
+    _company,
+    _history,
+    _item,
+    _sprint,
+)
 from models import (
     AgentMessage,
     AuditLog,
@@ -32,17 +42,6 @@ from services.loop.worker import close as worker_close
 from services.loop.worker import procedures_round
 from services.tasks.board import is_send_back, rework_requests_by
 from sqlmodel import select
-
-import board_moves_helpers
-from board_moves_helpers import (
-    NEEDS_WORK,  # noqa: F401 - imported from here by other tests
-    TRIAGE,
-    _assignments,
-    _company,
-    _history,
-    _item,
-    _sprint,
-)
 from test_review_gate import _FakeNATS
 
 # The shared fixtures.

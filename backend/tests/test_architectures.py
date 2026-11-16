@@ -9,6 +9,12 @@ to the repository in ``test_architectures_repo.py``; the shared rows in
 
 import json
 
+from architecture_helpers import (
+    GOOD_ARCH,
+    _approved_spec,
+    _company,
+    _Daemon,  # noqa: F401 - imported from here by other tests
+)
 from models import BacklogItem, Sprint
 from models.architecture import Architecture
 from services.planning import (
@@ -16,13 +22,6 @@ from services.planning import (
     arch_check,
     spec_check,
     spec_planning,
-)
-
-from architecture_helpers import (
-    GOOD_ARCH,
-    _approved_spec,
-    _company,
-    _Daemon,  # noqa: F401 - imported from here by other tests
 )
 from test_specifications import GOOD
 

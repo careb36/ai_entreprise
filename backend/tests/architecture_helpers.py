@@ -11,7 +11,6 @@ from models.specification import Specification
 from services.planning import (
     spec_check,
 )
-
 from test_specifications import GOOD
 
 GOOD_ARCH = {

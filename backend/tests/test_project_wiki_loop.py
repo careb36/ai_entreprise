@@ -16,12 +16,11 @@ from config import settings
 from models import (
     AuditLog,
 )
+from project_wiki_helpers import SHA, _project
 from services.contracts import wiki
 from services.learning import wiki_compile, wiki_store
 from services.loop import wiki_close
 from sqlmodel import select
-
-from project_wiki_helpers import SHA, _project
 
 
 def _answer(run_id: int, heading: str = "Responsibility"):

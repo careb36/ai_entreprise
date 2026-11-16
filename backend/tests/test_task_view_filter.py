@@ -21,7 +21,6 @@ from services.evidence import risk
 from services.tasks import task_filter
 from sqlalchemy import inspect
 from sqlmodel import select
-
 from task_views_helpers import WAITS, _company, _ids, _run, _sprint, _task
 
 RETRIES = [{"author": "System", "text": "Agent error: the call timed out."}]

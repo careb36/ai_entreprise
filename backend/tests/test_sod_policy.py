@@ -12,6 +12,11 @@ from __future__ import annotations
 
 import secrets
 
+import sod_helpers
+from chat_fakes import (
+    drain_chat_outbox,  # noqa: F401 - an autouse fixture
+    held_task,
+)
 from models import (
     AuditLog,
     IntegrationReview,
@@ -23,12 +28,6 @@ from models import (
 )
 from services.management import sod_report
 from services.platform import api_tokens, sod
-
-import sod_helpers
-from chat_fakes import (
-    drain_chat_outbox,  # noqa: F401 - an autouse fixture
-    held_task,
-)
 from sod_helpers import _approve, _audits, _company, _person, _started_by
 
 # The shared fixtures.

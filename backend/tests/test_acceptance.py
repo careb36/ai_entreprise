@@ -14,15 +14,6 @@ import sys
 
 import history_check
 import pytest
-from config import settings
-from models import BacklogItem, Company, ProjectDiscovery, Sprint
-from models.agent_run import AgentRun, Verification
-from models.specification import Specification
-from services.loop.worker import deliver as worker_deliver
-from services.loop.worker import record as worker_record
-from services.planning import spec_planning
-from sqlmodel import select
-
 import worker_stages
 from acceptance_helpers import (
     ACCEPTANCE_TESTS,
@@ -33,6 +24,14 @@ from acceptance_helpers import (
     _checks,
     _load_daemon,
 )
+from config import settings
+from models import BacklogItem, Company, ProjectDiscovery, Sprint
+from models.agent_run import AgentRun, Verification
+from models.specification import Specification
+from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import record as worker_record
+from services.planning import spec_planning
+from sqlmodel import select
 
 # --- through the real daemon ------------------------------------------------
 

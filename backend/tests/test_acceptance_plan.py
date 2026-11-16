@@ -9,10 +9,9 @@ observed test run. The shared rows are in ``acceptance_helpers``.
 import textwrap
 
 import history_check
+from acceptance_helpers import SPEC
 from models.agent_run import Verification
 from services.evidence import acceptance, criteria_tests
-
-from acceptance_helpers import SPEC
 
 # --- reading the runner's output ---------------------------------------------
 

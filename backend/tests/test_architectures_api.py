@@ -8,6 +8,9 @@ approved one with the prompts following it. The shared rows are in
 import json
 
 import pytest
+from architecture_helpers import GOOD_ARCH, _approved_spec, _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import BacklogItem, Sprint
 from models.company import ProjectDiscovery
 from models.specification import Specification
@@ -17,10 +20,6 @@ from services.planning import (
     spec_check,
     spec_planning,
 )
-
-from architecture_helpers import GOOD_ARCH, _approved_spec, _company
-from factories import enforcement  # noqa: F401 - the fixture, by name
-from factories import member_headers as _member
 from test_specifications import GOOD
 
 # --- the routes --------------------------------------------------------------

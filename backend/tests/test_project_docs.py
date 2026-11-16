@@ -10,16 +10,15 @@ drift lint are in ``test_project_docs_diagrams.py``, the PMBOK documents in
 import copy
 import re
 
-from services.planning.project_docs import (
-    pack,
-    sanitize,
-)
-
 from project_docs_helpers import (
     _docs,
     _empty,
     _Pack,  # noqa: F401 - imported from here by other tests
     _snapshot,
+)
+from services.planning.project_docs import (
+    pack,
+    sanitize,
 )
 
 EVIL = '<script>alert(1)</script> [x](javascript:alert(1)) | "]) --> click n1 call x() %%{init}%%\n# Heading'

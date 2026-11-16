@@ -18,9 +18,8 @@ from models import (
     TaskEvent,
     User,
 )
-from sqlmodel import select
-
 from sprint_board_helpers import _setup
+from sqlmodel import select
 
 # ── The API ──────────────────────────────────────────────────────────────────
 

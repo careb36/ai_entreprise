@@ -9,6 +9,7 @@ declared inputs. The shared snapshot is in ``project_docs_helpers``.
 import copy
 
 import pytest
+from project_docs_helpers import _docs, _empty, _Pack, _snapshot
 from services.planning.project_docs import (
     c4,
     control_docs,
@@ -17,8 +18,6 @@ from services.planning.project_docs import (
     refs,
     scope_docs,
 )
-
-from project_docs_helpers import _docs, _empty, _Pack, _snapshot
 
 # --- C4 -----------------------------------------------------------------------------
 

@@ -11,7 +11,9 @@ and with the flag off nothing is enforced. The routes' roles are in
 
 import secrets
 
+import auth_enforcement_helpers
 import pytest
+from auth_enforcement_helpers import _member, _run
 from config import settings
 from models import (
     AuditLog,
@@ -22,9 +24,6 @@ from models import (
 from models.github import GitHubRepoBinding
 from services.loop.company_service import CompanyService
 from sqlmodel import select
-
-import auth_enforcement_helpers
-from auth_enforcement_helpers import _member, _run
 from test_github_adapter import _webhook
 
 # The shared fixtures.

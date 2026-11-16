@@ -7,7 +7,6 @@ The history and audit of a verification are in
 """
 
 import pytest
-
 from verification_helpers import _ingest, _make_company, _payload, _verify
 
 

@@ -13,6 +13,15 @@ from __future__ import annotations
 
 import secrets
 
+import sod_helpers
+from chat_fakes import (
+    drain_chat_outbox,  # noqa: F401 - an autouse fixture
+    held_task,
+    slack_action,
+    slack_request,
+    world,
+)
+from chat_fakes import link as link_account
 from models import (
     ChatApprovalMessage,
     RunPublication,
@@ -23,18 +32,8 @@ from models import (
 from services.integrations.chat_messages import APPROVE
 from services.platform import api_tokens, sod
 from services.platform.sod import Person, Requester
-from sqlmodel import select
-
-import sod_helpers
-from chat_fakes import (
-    drain_chat_outbox,  # noqa: F401 - an autouse fixture
-    held_task,
-    slack_action,
-    slack_request,
-    world,
-)
-from chat_fakes import link as link_account
 from sod_helpers import _approve, _audits, _company, _person, _started_by
+from sqlmodel import select
 
 # The shared fixtures.
 # The shared fixtures.

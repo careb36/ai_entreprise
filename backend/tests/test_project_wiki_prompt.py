@@ -16,11 +16,10 @@ from models import (
     BacklogItem,
     WikiPage,
 )
+from project_wiki_helpers import _project
 from services.contracts import wiki
 from services.learning import wiki_store
 from services.loop.worker import prompt_budget, wiki_section
-
-from project_wiki_helpers import _project
 
 # ── The prompt ───────────────────────────────────────────────────────────────
 
