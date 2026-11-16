@@ -7,7 +7,7 @@ What happens from `POST /v1/start_sprint` to the close of a sprint, step by step
 Tasks are executed by the **task worker**, split by stage into `backend/app/services/loop/worker/` (ADR 0014): `intake` (the consumer, the claim, queue markers, dispatch) and `task_run` (one claimed task up to QA's handoff), `prompt`, `execute`, `deliver`, `record`, `review` (with `qa_review` and `quality_gate`), `close` (with `procedures_round`), `messages` and the shared `board_writes`; `services/loop/task_worker.py` is the facade that re-exports them (`process_backlog_tasks`, the `engine`), and `services/task_worker.py` a shim of it;
 the LangGraph graph is only an optional kickoff conversation.
 
-1. `POST /v1/start_sprint` writes the sprint with its team (`services/planning/sprint_team.py`; or `POST /v1/init_company` Sprint 0, which with `start_now: false` stays `planned` until `POST /v1/sprints/{id}/start`), one `BacklogItem` per task and one
+1. `POST /v1/start_sprint` writes the sprint with its team (`services/planning/sprint_team.py`; or `POST /v1/init_company` Sprint 0, which with `start_now: false` stays `planned` until `POST /v1/sprints/{id}/start`, and which a folder the daemon observes to be a repository with code does not get at all unless the request asks — `services/loop/foundation_setup.py`, retrospective F8), one `BacklogItem` per task and one
    outbox event per task on `task.assign`; the outbox processor stores them in the
    JetStream stream `FABRIQUE_TASKS` (an outbox row completes only once stored).
 2. The task worker consumes `task.assign` as the durable consumer `task-worker`,
