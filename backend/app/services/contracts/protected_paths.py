@@ -48,6 +48,11 @@ PROTECTED: tuple[tuple[str, str], ...] = (
     ("backend/tests/test_bench_*.py", "the tests of the bench"),
     (".github/workflows/**", "CI is the evidence of a run"),
     (".github/CODEOWNERS", "who must review a protected change"),
+    (
+        "scripts/protected_paths_check.py",
+        "the CI check that requires a code owner's approval of a protected change",
+    ),
+    ("backend/tests/test_protected_paths_check.py", "the test of that check"),
     ("docs/POSITIONING.md", "the rules"),
     ("backend/app/services/contracts/protected_paths.py", "the list itself"),
     (
