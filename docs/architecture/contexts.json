@@ -930,6 +930,12 @@
       "test_specifications.py": [
         "loop"
       ],
+      "test_specifications_api.py": [
+        "loop"
+      ],
+      "test_specifications_planning.py": [
+        "loop"
+      ],
       "test_sprint_board.py": [
         "loop"
       ],
