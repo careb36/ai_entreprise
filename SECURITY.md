@@ -478,8 +478,10 @@ BlueOak-1.0.0) or is unknown, with exceptions only in
 gitleaks over the pull request's commits; and Semgrep failing on the findings
 the pull request adds. The gating Trivy and the full Semgrep and gitleaks
 scans run weekly (`.github/workflows/security-baseline.yml`). Every
-third-party action is pinned by commit sha and every `docker://` image by
-digest, checked by `backend/tests/test_workflow_pinning.py` (the SLSA
+third-party action is pinned by commit sha, and no workflow names a
+`docker://` image (the repository's Actions policy refuses one before the run
+starts, so tools come from pinned, checksummed release downloads), checked by
+`backend/tests/test_workflow_pinning.py` (the SLSA
 generator is the one exception: it runs only from a release tag). A release
 attaches a CycloneDX SBOM of each component's lock (`release.yml`), and
 `images.yml` signs each published image by digest with keyless cosign (GitHub
