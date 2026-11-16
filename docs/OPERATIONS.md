@@ -491,12 +491,14 @@ has the design):
 - **Which jobs run.** A pull request runs only the jobs its files can affect
   (`.github/workflows/changes.yml`); a push to `main` runs everything. Widen a
   job's paths there, never with `on.pull_request.paths`.
-- **How many e2e jobs run at once: the runner label `e2e`.** An e2e job that
-  runs the loop needs a runner carrying `e2e` as well as `lafabrique`; the
-  number of runners with the label is the limit (two). **Label two runners
-  before the change that introduced it is merged**, or every e2e job waits
-  for a runner until GitHub cancels it after 24 hours. In Settings > Actions >
-  Runners, open a runner and add the label, or:
+- **How many e2e jobs run at once: the runner label `e2e`.** Off by default:
+  an e2e job takes any `lafabrique` runner. To allow at most two at once,
+  **first** add the label `e2e` to two runners, **then** set the repository
+  variable `E2E_RUNS_ON` to `["self-hosted","linux","x64","lafabrique","e2e"]`
+  (`gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique","e2e"]'`).
+  The number of runners with the label is then the limit. In the other order
+  every e2e job waits for a runner until GitHub cancels it after 24 hours. In
+  Settings > Actions > Runners, open a runner and add the label, or:
 
   ```bash
   gh api repos/{owner}/{repo}/actions/runners \
@@ -508,9 +510,8 @@ has the design):
   (`orgs/<org>/actions/runners/...` when the runners are registered to the
   organisation.) Add the label to a third runner to allow three, remove one to
   allow one. The runners with the label still take other jobs, so an e2e job
-  can wait behind a backend run on them. To lift the limit, or to point e2e at
-  other runners, set the repository variable `E2E_RUNS_ON` to a JSON label
-  list: `gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique"]'`.
+  can wait behind a backend run on them. To lift the limit again, delete the
+  variable (`gh variable delete E2E_RUNS_ON`).
 - **Backend test workers: `BACKEND_TEST_WORKERS`.** `backend-tests.yml` runs
   pytest with `-n 4`; each worker is a Python process with the application
   imported and its own SQLite database. `gh variable set BACKEND_TEST_WORKERS

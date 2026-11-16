@@ -296,14 +296,14 @@ def test_a_new_push_cancels_the_superseded_run(name):
     assert concurrency["cancel-in-progress"] is True
 
 
-def test_the_e2e_job_runs_only_on_runners_with_the_e2e_label():
+def test_the_e2e_job_asks_for_the_e2e_label_only_once_the_variable_names_it():
     job = _workflow("e2e.yml")["jobs"]["e2e"]
     runs_on = job["runs-on"]
     assert runs_on == (
         "${{ fromJSON(("
         f"{FAIL_OPEN} || needs.changes.outputs.e2e == 'true') && "
         "(vars.E2E_RUNS_ON || "
-        """'["self-hosted","linux","x64","lafabrique","e2e"]') || """
+        """'["self-hosted","linux","x64","lafabrique"]') || """
         """'["self-hosted","linux","x64","lafabrique"]') }}"""
     )
     labels = yaml.safe_load((REPO / ".github" / "actionlint.yaml").read_text())

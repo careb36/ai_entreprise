@@ -428,16 +428,16 @@ bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
 skip their steps, ending in seconds as a success. When the `changes` job
 itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
 
-**At most two e2e jobs at once.** An e2e job that runs the loop asks for the
-runner label `e2e` besides `lafabrique`, and only two of the seven runners
-carry it, so GitHub queues any further e2e job until one of the two is free,
-across every pull request, without cancelling anything. A concurrency group
-cannot do this: it holds one running and one pending run per group, and a
-third arrival cancels the pending one, a failed check. An e2e job with nothing
-to run takes any runner. To change the number, add or remove the label on
-runners (`docs/OPERATIONS.md`, Runner capacity); the repository variable
-`E2E_RUNS_ON` replaces the label list (a JSON array), and
-`["self-hosted","linux","x64","lafabrique"]` lifts the limit. Each workflow's
+**At most two e2e jobs at once, once turned on.** By default an e2e job takes
+any runner, as before. Setting the repository variable `E2E_RUNS_ON` to
+`["self-hosted","linux","x64","lafabrique","e2e"]` makes an e2e job that runs
+the loop ask for the runner label `e2e` besides `lafabrique`; with only two of
+the seven runners carrying it, GitHub queues any further e2e job until one of
+the two is free, across every pull request, without cancelling anything. Label
+the runners first, then set the variable (`docs/OPERATIONS.md`, Runner
+capacity). A concurrency group cannot do this: it holds one running and one
+pending run per group, and a third arrival cancels the pending one, a failed
+check. An e2e job with nothing to run takes any runner. Each workflow's
 own group (`<workflow>-${{ github.ref }}`, `cancel-in-progress: true`, #559)
 still cancels the older run of a pull request when it gets a new push.
 

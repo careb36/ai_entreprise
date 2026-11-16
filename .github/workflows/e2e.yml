@@ -50,14 +50,17 @@ jobs:
     # At most two e2e jobs on the machine at once (each starts Postgres, NATS,
     # the backend and the daemon: two at a time is what four cores and 16 GB
     # hold beside the other jobs). A job that runs the loop asks for the
-    # extra label `e2e`, which only two of the seven runners carry; GitHub
-    # queues the rest until one of those two is free and cancels nothing. The limit is the number of runners with the label
-    # (docs/OPERATIONS.md, Runner capacity); the repository variable
-    # E2E_RUNS_ON replaces the label list, e.g. with the plain
-    # '["self-hosted","linux","x64","lafabrique"]' to lift the limit. A job
+    # extra label `e2e` once the repository variable E2E_RUNS_ON is set to
+    # '["self-hosted","linux","x64","lafabrique","e2e"]' and two of the seven
+    # runners carry that label; GitHub then queues the rest until one of
+    # those two is free and cancels nothing. Unset (the default), an e2e job
+    # takes any runner, as before: setting the variable before any runner has
+    # the label would leave every e2e job waiting until GitHub cancels it.
+    # The limit is the number of runners with the label (docs/OPERATIONS.md,
+    # Runner capacity). A job
     # with nothing to run takes any runner, so a skipped e2e never waits for
     # an e2e slot.
-    runs-on: ${{ fromJSON((needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true') && (vars.E2E_RUNS_ON || '["self-hosted","linux","x64","lafabrique","e2e"]') || '["self-hosted","linux","x64","lafabrique"]') }}
+    runs-on: ${{ fromJSON((needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true') && (vars.E2E_RUNS_ON || '["self-hosted","linux","x64","lafabrique"]') || '["self-hosted","linux","x64","lafabrique"]') }}
     timeout-minutes: 25
     # Once with agent-written code on the host, once in a container per run
     # (DELIVERY_SANDBOX=container): the daemon's report must say which.
