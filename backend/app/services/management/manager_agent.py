@@ -290,29 +290,6 @@ def _settle(session: Session, row: ManagerDecision, state: str) -> None:
     session.commit()
 
 
-WAITING_FOR_INTEGRATION_REVIEW = (
-    "Waiting for a person's review of the integration before merging it locally."
-)
-
-
-def _integration_merge_wait(
-    session: Session, company_id: int, row: ManagerDecision
-) -> bool:
-    """With the company's review gate on, a local merge of the integration waits for an approval."""
-    if row.category != "merge_local" or row.item_kind != "integration":
-        return False
-    from models.integration import SprintIntegration
-
-    from services.release import integration_review
-
-    integration = session.get(SprintIntegration, row.item_id)
-    if integration is None or integration.company_id != company_id:
-        return False
-    if not integration_review.required(session, company_id):
-        return False
-    return integration_review.approving_review(session, integration) is None
-
-
 def decide(session: Session, company: Company, row: ManagerDecision) -> str:
     """Apply the policy to a stored suggestion, from what holds *now*.
 
@@ -331,11 +308,6 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
     ):
         _settle(session, row, STALE)
         return STALE
-    if _integration_merge_wait(session, company.id, row):
-        row.suggested_decision = ESCALATE
-        row.suggested_reason = WAITING_FOR_INTEGRATION_REVIEW
-        _settle(session, row, NOT_ALLOWED)
-        return NOT_ALLOWED
     record = manager_record.track_record(session, company.id)
     policy = manager_policy.load(session, company.id)
     flagged = set(record.get("flagged_rules") or [])

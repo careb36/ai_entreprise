@@ -28,6 +28,7 @@ from services.loop import carry_over
 from services.loop.carry_over import CARRY_MARK_PREFIX, carry_mark
 from services.management import (
     manager_actions,
+    manager_agent,
     manager_observe,
     manager_policy,
     manager_record,
@@ -1032,10 +1033,24 @@ def test_the_agent_waits_for_an_integration_review_before_merging_when_required(
 
     assert calls == []
     (row,) = _rows(sqlite_session, company)
-    assert row.suggested_decision == "escalate"
-    assert "Waiting for a person's review" in (row.suggested_reason or "")
+    # The agent's claim is kept as it answered; the refusal is the rule's.
+    assert row.suggested_decision == "merge"
     assert row.action_state == "not_allowed"
     assert row.outcome is None
+    assert row.rule is None
+    (item,) = [
+        i
+        for i in manager_agent.inbox_items(sqlite_session, company)
+        if i["kind"] == "integration"
+    ]
+    assert item["facts"]["integration_review_required"] is True
+    assert item["facts"]["integration_approved"] is False
+    assert item["state"].endswith(":awaiting_review")
+    assert "requires a person's review" in item["text"]
+    assert (
+        manager_rules.rule_holds("merge_local", item["facts"], P())
+        == manager_rules.WAITING_FOR_INTEGRATION_REVIEW
+    )
 
 
 def test_the_agent_merges_the_integration_once_an_approving_review_exists(
