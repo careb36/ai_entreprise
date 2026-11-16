@@ -827,7 +827,13 @@
       "test_project_docs.py": [
         "planning"
       ],
+      "test_project_docs_diagrams.py": [
+        "planning"
+      ],
       "test_project_docs_language.py": [
+        "planning"
+      ],
+      "test_project_docs_pmbok.py": [
         "planning"
       ],
       "test_project_wiki.py": [
