@@ -255,6 +255,15 @@
     "infrastructure": "Infraestructura",
     "filesScanned_one": "{{count}} archivo analizado",
     "filesScanned_other": "{{count}} archivos analizados",
+    "foundationOutcome": {
+      "requested": "Se planificó el Sprint 0 — Foundations, como pidió la solicitud.",
+      "declined": "No se planificó ningún sprint de fundamentos: la solicitud lo descartó.",
+      "repository_with_code": "No se planificó ningún sprint de fundamentos: el daemon del espacio de trabajo observó un repositorio existente con código en la carpeta del proyecto.",
+      "folder_without_code": "Se planificó el Sprint 0 — Foundations: el daemon no observó un repositorio existente con código en la carpeta.",
+      "no_folder": "Se planificó el Sprint 0 — Foundations: no hay ninguna carpeta de proyecto que observar.",
+      "daemon_unobserved": "Se planificó el Sprint 0 — Foundations: no se pudo contactar al daemon del espacio de trabajo, por lo que la carpeta no fue observada.",
+      "unknown": "La compañía se creó sin un sprint de fundamentos."
+    },
     "aiSuggestion": "Equipo sugerido por IA",
     "rulesSuggestion": "Sugerencia basada en reglas",
     "complexity": "Complejidad {{level}}",
