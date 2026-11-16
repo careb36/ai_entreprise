@@ -27,7 +27,7 @@ from nats_client import NATSClient
 from sqlmodel import Session
 
 from services.contracts.manifest import parse_file_manifest
-from services.evidence import risk, standards
+from services.evidence import protected_check, risk, standards
 from services.learning import procedures
 from services.loop import review_digest, sprint_control
 from services.loop.answers import REVIEW_MAX_TOKENS
@@ -38,6 +38,7 @@ from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import close, execute, messages, record
 from services.models import model_routing
 from services.planning import spec_planning
+from services.platform import protected_paths_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW,
@@ -212,9 +213,16 @@ async def _person_hold(
     if risk_check is None and not needs_work:
         # No recorded check (the run was not recorded): unknown is
         # not low, so the paths the deliverable declares decide; a
-        # claim, which can only raise the tier.
+        # claim, which can only raise the tier; a protected path of a
+        # company that hosts the factory raises it to high too.
+        protected = (
+            protected_check.patterns_in_force()
+            if protected_paths_setting.enabled(session, sprint.company_id)
+            else None
+        )
         risk_check = risk.classify(
-            [f["path"] for f in parse_file_manifest(deliverable)]
+            [f["path"] for f in parse_file_manifest(deliverable)],
+            protected=protected,
         )
     risk_hold = risk_check is not None and risk.is_high(risk_check.get("tier"))
     company = session.get(Company, sprint.company_id)

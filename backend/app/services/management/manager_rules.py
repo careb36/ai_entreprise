@@ -35,9 +35,22 @@ def _verified_low(facts: dict[str, Any], label: str = "latest run") -> str | Non
     return None
 
 
+def _protected(facts: dict[str, Any]) -> str | None:
+    """A protected path (``docs/design/rsi-loop.md``, REQ-11): a person reviews
+    it through the normal review; no rule accepts it."""
+    touched = facts.get("protected_paths")
+    if touched:
+        shown = ", ".join(str(p) for p in touched[:10])
+        return f"it touches protected paths ({shown}): a person reviews it"
+    return None
+
+
 def _accept_delivery(facts, policy) -> str | None:
     if facts.get("frozen"):
         return "an operator froze the task"
+    why = _protected(facts)
+    if why:
+        return why
     if not facts.get("human_led_hold"):
         return "the hold is not only the autonomy level's"
     why = _verified_low(facts) or _size(facts.get("files"), policy.max_files)
@@ -195,6 +208,9 @@ def _approve_architecture(facts, policy) -> str | None:
 def _accept_high_risk(facts, policy) -> str | None:
     if facts.get("frozen"):
         return "an operator froze the task"
+    why = _protected(facts)
+    if why:
+        return why
     if facts.get("verdict") != "verified":
         return f"the latest run is {facts.get('verdict') or 'not verified'}"
     if not facts.get("criteria"):

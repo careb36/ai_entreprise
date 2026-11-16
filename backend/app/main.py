@@ -48,6 +48,7 @@ from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.model_settings import router as model_settings_router
 from routers.procedures import router as procedures_router
+from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.run_secrets import router as run_secrets_router
@@ -179,6 +180,7 @@ app.include_router(webhooks_router)
 app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
 app.include_router(sod_router)
+app.include_router(protected_paths_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)
 app.include_router(usage_router)

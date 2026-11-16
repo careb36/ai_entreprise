@@ -31,7 +31,7 @@ For support: from the address a person reports to the file to read. The routes a
 | `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` |
 | `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
 | `/companies/new`, `/companies/select` | `CompanyNew`, `CompanySelect` |
-| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` (segregation of duties, access review, service accounts: `components/SodPolicyPanel`, `SodReportPanel`, `AccessReviewPanel`, `ServiceAccountsPanel`) |
+| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` (segregation of duties, protected paths, access review, service accounts: `components/SodPolicyPanel`, `ProtectedPathsPanel`, `SodReportPanel`, `AccessReviewPanel`, `ServiceAccountsPanel`) |
 | `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
 | `/company/usage`, `/company/quotas`, `/company/models` | `Usage`, `components/QuotaPanel`, `Models` |
 | `/company/audit-anchors`, `/company/procedures`, `/company/wiki` | `AuditAnchors`, `Procedures`, `Wiki` |
@@ -106,5 +106,5 @@ It is a step of `.github/workflows/frontend-build.yml`, which runs on a change t
 - A page or component is described with the backend service it shows: the Models page in [models](models.md), the Review page and the Manager policy in [management](management.md), Files changed, reviews and the sprint's controls in [evidence](evidence.md), [loop](loop.md), [release](release.md) and [workspace](workspace.md).
 - Running the dev server and the production build: [`CLAUDE.md`](../../CLAUDE.md), Running the System.
 - The Chat approvals page (`pages/ChatApprovals.tsx`, `components/ChatConnectionForm.tsx`, `hooks/useChat.ts`, `services/api/chat.ts`): [integrations](integrations.md#approvals-in-slack-and-teams).
-- The Duties and access page (`pages/CompanyDuties.tsx`, Owner; `components/SodPolicyPanel.tsx`, `AccessReviewPanel.tsx`, `SodReportPanel.tsx`, `ServiceAccountsPanel.tsx`, `hooks/useDuties.ts`, `services/api/duties.ts`; issue #543): [platform](platform.md#auth-and-multi-tenancy) and [management](management.md).
+- The Duties and access page (`pages/CompanyDuties.tsx`, Owner; `components/SodPolicyPanel.tsx`, `ProtectedPathsPanel.tsx` (whether the company hosts the factory, the list read-only), `AccessReviewPanel.tsx`, `SodReportPanel.tsx`, `ServiceAccountsPanel.tsx`, `hooks/useDuties.ts`, `services/api/duties.ts`; issue #543): [platform](platform.md#auth-and-multi-tenancy) and [management](management.md).
 - The Teams page (`pages/CompanyTeams.tsx`, Owner; `hooks/useTeams.ts`, `services/api/teams.ts`) and the effective role `useCurrentRole` returns (`effective_role` from `/v1/auth/me`, else `human_role`): [platform](platform.md#auth-and-multi-tenancy). The Usage page (`pages/Usage.tsx`, Manager; `services/api/usage.ts`, the CSV through `fetchText`): [models](models.md#who-used-what-the-usage-report).

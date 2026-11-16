@@ -146,6 +146,13 @@ export interface ServiceAccountsInventory {
   deployment: ServiceAccount[]
 }
 
+/** Whether the company hosts the factory, so its protected paths hold, and the list in force. */
+export interface ProtectedPathsSetting {
+  company_id: number
+  enabled: boolean
+  patterns: { pattern: string; why: string }[]
+}
+
 // The policy, the exception, the review and the inventory are a signed-in
 // Owner's (never an API token's); the report is a Manager's. All audited.
 export const dutiesEndpoints = (http: Http) => ({
@@ -170,4 +177,11 @@ export const dutiesEndpoints = (http: Http) => ({
 
   getServiceAccounts: (companyId: number) =>
     http.get<ServiceAccountsInventory>(`/v1/companies/${companyId}/service-accounts`),
+
+  // Any member reads the protected paths; only a signed-in Owner turns them on or off.
+  getProtectedPaths: (companyId: number) =>
+    http.get<ProtectedPathsSetting>(`/v1/companies/${companyId}/protected_paths`),
+
+  setProtectedPaths: (companyId: number, enabled: boolean) =>
+    http.put<ProtectedPathsSetting>(`/v1/companies/${companyId}/protected_paths`, { enabled }),
 })

@@ -76,3 +76,23 @@ export function useServiceAccounts(companyId: number | null, enabled: boolean) {
     enabled: enabled && companyId !== null,
   })
 }
+
+const protectedKey = (companyId: number | null) => ['protected-paths', companyId] as const
+
+/** Whether the company hosts the factory, so its protected paths hold, and the list in force. */
+export function useProtectedPaths(companyId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: protectedKey(companyId),
+    queryFn: () => api.getProtectedPaths(companyId as number),
+    enabled: enabled && companyId !== null,
+  })
+}
+
+/** Turn the protected paths on or off: a signed-in Owner's, audited. */
+export function useSetProtectedPaths(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.setProtectedPaths(companyId as number, enabled),
+    onSuccess: data => client.setQueryData(protectedKey(companyId), data),
+  })
+}

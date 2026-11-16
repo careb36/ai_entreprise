@@ -161,6 +161,15 @@ Copy `.env.example` to `.env` and fill in:
   sprint planned by a model (`services/loop/worker/close.py`). It runs with no
   protected-path guard, so it is off unless a company turns it on; the
   finding-driven cycle of that design replaces it.
+- Protected paths are a company setting, not an environment variable:
+  `companies.protected_paths_enabled` (migration `0041`, false for every
+  company) marks the company that hosts the factory itself. A signed-in Owner
+  turns it on or off (`PUT /v1/companies/{id}/protected_paths`, never an API
+  token or the Manager agent; audited `protected_paths_setting_changed`), on
+  the Duties and access page. With it on, a delivery whose observed paths
+  match `services/contracts/protected_paths.py` (the running backend's list)
+  is high risk with the area `grader` and waits for a person. The model-planned
+  follow-up above is not yet held off for such a company (PR 3 of the design).
 - `MANAGER_AGENT_ENABLED` — optional, default `false`. The Manager agent
   (`services/management/manager_agent.py`) reads the inbox every
   `MANAGER_AGENT_INTERVAL_SECONDS` (60): each task blocked for a person or

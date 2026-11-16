@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Scale } from 'lucide-react'
 import AccessReviewPanel from '../components/AccessReviewPanel'
+import ProtectedPathsPanel from '../components/ProtectedPathsPanel'
 import ServiceAccountsPanel from '../components/ServiceAccountsPanel'
 import SodPolicyPanel from '../components/SodPolicyPanel'
 import SodReportPanel from '../components/SodReportPanel'
@@ -10,8 +11,9 @@ import { useAppStore } from '../store/useAppStore'
 /**
  * Duties and access, for the company's Owners (issue #543): who asked for a
  * change does not approve it (the policy and its single-person exception),
- * the report of every approval, the periodic access review and the service
- * accounts. The backend enforces the rule at each approval point and audits
+ * the report of every approval, the periodic access review, the service
+ * accounts, and whether the company's protected paths hold (it hosts the
+ * factory itself). The backend enforces the rule at each approval point and audits
  * every change; this page shows and sets it.
  */
 export default function CompanyDuties() {
@@ -37,6 +39,7 @@ export default function CompanyDuties() {
       ) : (
         <div className="space-y-4">
           <SodPolicyPanel companyId={companyId} />
+          <ProtectedPathsPanel companyId={companyId} />
           <AccessReviewPanel companyId={companyId} />
           <SodReportPanel companyId={companyId} />
           <ServiceAccountsPanel companyId={companyId} />

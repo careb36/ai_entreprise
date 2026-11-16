@@ -73,7 +73,15 @@ const accounts = {
   deployment: [{ kind: 'llm_proxy_token', name: 'LLM_PROXY_INTERNAL_TOKEN', scope: 'backend to LLM proxy', present: true }],
 }
 
+const protectedPaths = {
+  company_id: 4,
+  enabled: false,
+  patterns: [{ pattern: 'bench/**', why: 'the exam and its answers' }],
+}
+
 function api(url: string, init?: RequestInit) {
+  if (init?.method === 'PUT' && url.includes('/protected_paths')) return response(200, { ...protectedPaths, enabled: true })
+  if (url.includes('/protected_paths')) return response(200, protectedPaths)
   if (init?.method === 'POST' && url.includes('/access-review')) return response(201, { id: 1, on_time: false })
   if (init?.method === 'POST' && url.includes('/sod/exception')) return response(200, { ...policy, solo_exception: true, solo_in_force: true })
   if (url.includes('/sod/policy')) return response(200, policy)
@@ -173,6 +181,23 @@ describe('CompanyDuties', () => {
     const [url, init] = calls(fetch, 'POST')[0]
     expect(String(url)).toContain('/v1/companies/4/sod/exception')
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({ reason: 'One person runs it.' })
+  })
+
+  it('shows the protected list read-only and lets the owner turn it on', async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => api(url, init))
+    vi.stubGlobal('fetch', fetch)
+    renderAs('Owner')
+    const section = await screen.findByRole('region', { name: 'Protected paths' })
+    expect(within(section).getByText('bench/**')).toBeInTheDocument()
+    expect(within(section).getByText('The list in force (1 patterns)')).toBeInTheDocument()
+    const box = within(section).getByRole('checkbox')
+    expect(box).not.toBeChecked()
+    fireEvent.click(box)
+    await vi.waitFor(() => expect(calls(fetch, 'PUT')).toHaveLength(1))
+    const [url, init] = calls(fetch, 'PUT')[0]
+    expect(String(url)).toContain('/v1/companies/4/protected_paths')
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ enabled: true })
+    await vi.waitFor(() => expect(within(section).getByRole('checkbox')).toBeChecked())
   })
 
   it('lists service accounts by name and the proxy token by presence only', async () => {

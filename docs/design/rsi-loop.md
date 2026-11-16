@@ -291,7 +291,7 @@ read from the company's project, because the snapshot under change is
 exactly what the sprint's agents can write.
 
 The list applies to a company an Owner marks as hosting the factory
-(`companies.protected_paths_enabled` **(missing)**, set by the harness's
+(`companies.protected_paths_enabled`, migration `0041`, set by the harness's
 `company` step). Turning it off is Owner-only, audited, and added to
 `ALWAYS_ESCALATE` as `change_protected_paths`, so neither the Manager agent
 nor an API token can do it.
@@ -303,7 +303,8 @@ declares can add to the match, never remove from it (the rule
 `risk.classify` already follows for `declared_risk`).
 
 1. **At delivery: the Verifier.** A new check, `protected_paths`, in
-   `services/evidence/protected_paths.py` **(missing)**, called from
+   `services/evidence/protected_check.py` (named apart from the contract,
+   since the dependency check names edges by stem), called from
    `verify_agent_run`. It reads `evidence["workspace_writes"]` (the daemon's
    report of what it wrote and read back, status `written`) plus the
    declared paths. A match raises the risk tier to high with the area

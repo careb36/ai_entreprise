@@ -17,6 +17,8 @@ from models.agent_run import IN_HOUSE_PRODUCERS, TASK_WORKER_PRODUCER, Verificat
 from models.company import BusinessUnit
 from sqlmodel import Session, select
 
+from services.contracts import protected_paths
+from services.evidence import protected_check
 from services.loop.carry_over import carried_over, carry_mark, is_carry_over
 from services.loop.sprint_control import HUMAN_LED_REASON
 from services.tasks import task_projection
@@ -80,6 +82,7 @@ def run_facts(run: AgentRun | None, verification: Verification | None) -> dict:
         "files": None,
         "run_id": run.id if run else None,
         "verification_id": verification.id if verification else None,
+        "protected_paths": [],
     }
     if run is None:
         return facts
@@ -106,6 +109,12 @@ def run_facts(run: AgentRun | None, verification: Verification | None) -> dict:
         for check in checks:
             if check.get("name") == "risk_tier":
                 facts["risk_tier"] = check.get("tier")
+            if check.get("name") == protected_check.CHECK_NAME:
+                facts["protected_paths"] = [
+                    str(m.get("path"))
+                    for m in check.get("matches") or []
+                    if isinstance(m, dict) and m.get("path")
+                ]
         facts.update(_criteria_and_standards(checks))
     known = [paths for paths in sources if paths is not None]
     facts["files"] = len({p for paths in known for p in paths}) if known else None
@@ -114,6 +123,28 @@ def run_facts(run: AgentRun | None, verification: Verification | None) -> dict:
         for c in checks
     ]
     return facts
+
+
+def protected_touched(
+    run: AgentRun | None, verification: Verification | None, recorded: list[str]
+) -> list[str]:
+    """The protected paths a run touched, for a company that hosts the factory.
+
+    The Verifier's ``protected_paths`` matches, plus the paths observed or
+    declared on the run matched again against the running backend's list, so
+    a delivery verified before an Owner turned the flag on is held too. A
+    declared path only adds to the match.
+    """
+    if run is None:
+        return recorded
+    evidence = (verification.evidence if verification else None) or {}
+    paths = [
+        *(_paths((run.claims or {}).get("files")) or []),
+        *(_paths((run.subject or {}).get("changed_files")) or []),
+        *(protected_check.observed_paths(evidence) or []),
+    ]
+    found = protected_paths.matches(paths, protected_check.patterns_in_force())
+    return list(dict.fromkeys([*recorded, *(m.path for m in found)]))
 
 
 def _criteria_and_standards(checks: list[dict]) -> dict[str, Any]:
@@ -183,7 +214,12 @@ def _task_item(
     record: task_projection.TaskRecord | None = None,
 ) -> dict:
     run = _task_run(session, company.id, item.id)
-    facts = run_facts(run, _latest_verification(session, run.id) if run else None)
+    verification = _latest_verification(session, run.id) if run else None
+    facts = run_facts(run, verification)
+    if company.protected_paths_enabled:
+        facts["protected_paths"] = protected_touched(
+            run, verification, facts["protected_paths"]
+        )
     record = record or task_projection.record_of(session, item)
     hold = record.awaits_risk_acceptance()
     facts["human_led_hold"] = hold and HUMAN_LED_REASON in record.risk_hold_note()
@@ -205,7 +241,11 @@ def _task_item(
     facts["second_attempt"] = is_carry_over(item, record)
     facts["marked_for_carry_over"] = carry_mark(item, record) is True
     if hold:
-        high = facts["risk_tier"] == "high" or not facts["human_led_hold"]
+        high = (
+            facts["risk_tier"] == "high"
+            or bool(facts["protected_paths"])
+            or not facts["human_led_hold"]
+        )
         category = "accept_high_risk" if high else "accept_delivery"
     else:
         category = "blocked_task"
@@ -218,6 +258,11 @@ def _task_item(
         f"Files: {facts['files']}; criteria covered: {facts['criteria']}",
         *[f"- {c}" for c in facts.get("checks") or []],
     ]
+    if facts["protected_paths"]:
+        lines.append(
+            "Protected paths touched (a person reviews them): "
+            + ", ".join(facts["protected_paths"][:20])
+        )
     if triage:
         lines.append(f"ScrumMaster's triage (a claim): {_json(triage)}")
     return {

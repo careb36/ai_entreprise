@@ -18,6 +18,7 @@ from services.evidence import (
     context_read,
     criteria_tests,
     grounding,
+    protected_check,
     risk,
     secops_checks,
     security_probe,
@@ -26,6 +27,7 @@ from services.evidence import (
     wstg_tests,
 )
 from services.evidence.console_run import check_console_run
+from services.platform import protected_paths_setting
 from services.platform.agent_service import AgentService
 from services.platform.orchestration_metrics import ACTION_AGENT_RUN_VERIFIED
 
@@ -331,14 +333,26 @@ def check_tests_run(evidence: dict) -> dict:
     }
 
 
-def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
+def declared_paths(run: AgentRun, evidence: dict | None) -> list[str]:
+    """The paths the producer declared (claims), and those the edit tool recorded."""
+    claims = run.claims or {}
+    declared = [p for p in claims.get("files") or [] if isinstance(p, str)]
+    edited = sorted(context_read.files_edited((evidence or {}).get("tool_calls")))
+    return [*declared, *extract_claimed_paths(claims), *edited]
+
+
+def check_risk_tier(
+    run: AgentRun, evidence: dict | None, protected: tuple[str, ...] | None = None
+) -> dict:
     """
     How much the delivery needs a person (``services/risk.py``).
 
     A classification, not a verdict: its outcome is always ``pass`` and the
     tier travels in ``tier`` and ``reasons``. The paths are the ones the
     daemon reports written plus the ones the producer declared, which can
-    only raise the tier.
+    only raise the tier. *protected* is the protected list in force when the
+    company hosts the factory: a match is ``high``, area ``grader``, and the
+    files the daemon saw a console producer change are classified too.
     """
     claims = run.claims or {}
     writes = (evidence or {}).get("workspace_writes") or []
@@ -348,8 +362,13 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
         if isinstance(w, dict) and w.get("status") == "written"
     ]
     declared = [p for p in claims.get("files") or [] if isinstance(p, str)]
+    if protected:
+        written += protected_check.observed_paths(evidence) or []
+        declared = declared_paths(run, evidence)
     result = risk.classify(
-        [*written, *declared, *extract_claimed_paths(claims)], claims.get("risk")
+        [*written, *declared, *extract_claimed_paths(claims)],
+        claims.get("risk"),
+        protected=protected,
     )
     result = risk.raise_for_tool_calls(result, (evidence or {}).get("tool_calls"))
     result = risk.raise_for_unread_changes(
@@ -490,7 +509,18 @@ def verify_agent_run(
         k in evidence for k in ("dependency_audit", "secret_scan", "sast")
     ):
         checks.extend(secops_checks.check_all(evidence))
-    checks.append(check_risk_tier(run, evidence))
+    # The protected paths of a company that hosts the factory
+    # (``services/evidence/protected_check.py``): a match holds it for a person.
+    protected = (
+        protected_check.patterns_in_force()
+        if protected_paths_setting.enabled(session, run.company_id)
+        else None
+    )
+    if protected:
+        checks.append(
+            protected_check.check(evidence, declared_paths(run, evidence), protected)
+        )
+    checks.append(check_risk_tier(run, evidence, protected))
     verdict = aggregate_verdict(checks)
     verification = Verification(
         company_id=run.company_id,
