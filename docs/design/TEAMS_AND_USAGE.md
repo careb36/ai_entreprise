@@ -148,7 +148,7 @@ Manager); the audit rows name the account.
 `backend/tests/test_usage_report.py` (T7–T12, the numbers, unknown cost,
 periods, determinism, CSV escaping, the endpoints' roles and the audit row),
 `frontend/src/pages/CompanyTeams.test.tsx`, `frontend/src/pages/Usage.test.tsx`
-and the menu cases in `frontend/src/App.test.tsx`.
+and the menu cases in `frontend/src/AppNavigation.test.tsx`.
 
 ## Residual risks
 

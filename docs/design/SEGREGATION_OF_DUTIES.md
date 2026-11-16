@@ -167,7 +167,7 @@ and matrix),
 the listing with team roles, decisions and removals, the missed flag and the
 late record, the inventory without values),
 `frontend/src/pages/CompanyDuties.test.tsx` and the menu cases in
-`frontend/src/App.test.tsx`.
+`frontend/src/AppNavigation.test.tsx`.
 
 ## Residual risks
 
