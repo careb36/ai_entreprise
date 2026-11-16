@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/release/`
 - **Responsibility:** What leaves the factory once accepted: publishing a branch, merging locally, a sprint's integration and its jobs and events, undoing a delivery from its snapshot, and bringing a request's comments back. It starts when the loop has closed work, through an event, never from inside the loop.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [planning](planning.md), [loop](loop.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `delivery_undo`, `git_publish`, `integration`, `local_merge`. Another context imports only these modules and the package; the rest are internal.
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `delivery_undo`, `git_publish`, `integration`, `integration_review` (the review gate: `required`, `approving_review`), `local_merge`. Another context imports only these modules and the package; the rest are internal.
 - **Modules:** `delivery_undo`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `local_merge`, `review_sync`.
 
 ## Components

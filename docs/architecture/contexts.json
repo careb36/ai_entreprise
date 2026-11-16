@@ -234,6 +234,7 @@
         "delivery_undo",
         "git_publish",
         "integration",
+        "integration_review",
         "local_merge"
       ],
       "modules": []
