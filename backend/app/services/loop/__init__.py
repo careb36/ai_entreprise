@@ -8,7 +8,9 @@ the console producer's host (``console_host``); the moves a person makes on
 the board (``board_moves``, ``carry_over``, ``run_review``), who decides when
 a sprint's agents work (``sprint_control``), how it closes and is archived
 (``sprint_close``, ``sprint_archive``), several replicas over one database
-(``replicas``) and the company's bootstrap (``company_service``). It decides
+(``replicas``) and the company's bootstrap (``company_service``, and whether
+it gets a foundation sprint from what the daemon observed of its folder,
+``foundation_setup``). It decides
 what happens next from the evidence and never computes a verdict itself.
 What leaves the factory once a sprint closes starts from the ``sprint.closed``
 event (``platform.hooks``), never from a call into ``release``. It imports

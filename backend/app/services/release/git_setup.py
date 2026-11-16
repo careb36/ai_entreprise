@@ -8,6 +8,11 @@ from what the workspace daemon observed in the folder (``workspace.inspect``:
 for a repository. A person may still turn it off at creation, and change it
 later on the company's settings (``PUT /v1/companies/{id}/git``).
 
+The creation route (``POST /v1/init_company``) shares its one inspection of
+the folder with the foundation-sprint decision
+(``services/loop/foundation_setup.py``) and hands the inspection to
+``is_repository`` here.
+
 Without an observation (no daemon answered, and the backend cannot see the
 folder either) the workflow stays off: an unobserved folder is not taken for
 a repository. ``base_status`` asks the daemon how the company's base branch
@@ -30,7 +35,6 @@ from services.workspace.workspace_daemon import (
     DaemonError,
     DaemonUnavailable,
     daemon_request,
-    inspect_project,
 )
 
 # A fetch of one branch on the daemon (15 s there) and its reply.
@@ -55,20 +59,6 @@ def is_repository(project: dict[str, Any] | None, path: str | None) -> bool | No
         if folder.is_dir():
             return (folder / ".git").exists()
     return None
-
-
-async def observe(request: Request, path: str | None) -> bool | None:
-    """Ask the daemon whether *path* is a repository (``None``: nobody could say)."""
-    if not path or not path.strip():
-        return None
-    project = None
-    try:
-        project = await inspect_project(
-            getattr(request.app.state, "nats_client", None), path.strip()
-        )
-    except (DaemonUnavailable, DaemonError):
-        project = None
-    return is_repository(project, path.strip())
 
 
 def workflow_for(observed: bool | None, requested: bool | None) -> bool:
