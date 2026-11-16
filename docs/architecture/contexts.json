@@ -445,6 +445,9 @@
       "test_events.py": [
         "loop"
       ],
+      "test_foundation_sprint.py": [
+        "release"
+      ],
       "test_git_acceptance.py": [
         "release"
       ],
