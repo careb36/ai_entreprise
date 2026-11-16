@@ -24,7 +24,6 @@ jobs:
   changes:
     permissions:
       contents: read
-      pull-requests: read
     uses: ./.github/workflows/changes.yml
 
   build:

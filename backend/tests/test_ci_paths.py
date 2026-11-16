@@ -2,8 +2,9 @@
 
 Seven self-hosted runners share one machine of about 4 cores and 16 GB. A
 pull request runs only the jobs its files can affect: ``changes.yml`` lists
-the files once (``dorny/paths-filter``) and each workflow gates its job on
-one of its outputs. These tests hold that design in place:
+the files once (``scripts/changed_paths.py`` over ``git diff base...head``) and
+each workflow gates its job on one of its outputs. These tests hold that design
+in place:
 
 - no workflow filters ``on.pull_request`` by path, which would leave a
   required check waiting forever on a pull request that skips it;
@@ -20,6 +21,7 @@ one of its outputs. These tests hold that design in place:
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -30,6 +32,13 @@ REPO = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO / ".github" / "workflows"
 TESTS = Path(__file__).resolve().parent
 RUNNER = ["self-hosted", "linux", "x64", "lafabrique"]
+
+_spec = importlib.util.spec_from_file_location(
+    "changed_paths", REPO / "scripts" / "changed_paths.py"
+)
+assert _spec and _spec.loader
+changed_paths = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(changed_paths)
 
 # Workflow file -> (gated job, output of changes.yml it reads).
 GATED = {
@@ -54,32 +63,12 @@ def _workflow(name: str) -> dict:
 def _filters() -> dict[str, list[str]]:
     job = _workflow("changes.yml")["jobs"]["filter"]
     step = next(s for s in job["steps"] if s.get("id") == "filter")
-    return yaml.safe_load(step["with"]["filters"])
-
-
-def _glob(pattern: str) -> re.Pattern:
-    """A picomatch-style glob as a regex: ``**`` spans folders, ``*`` does not."""
-    out = ""
-    i = 0
-    while i < len(pattern):
-        if pattern.startswith("**/", i):
-            out += "(?:.*/)?"
-            i += 3
-        elif pattern.startswith("**", i):
-            out += ".*"
-            i += 2
-        elif pattern[i] == "*":
-            out += "[^/]*"
-            i += 1
-        else:
-            out += re.escape(pattern[i])
-            i += 1
-    return re.compile(f"^{out}$")
+    return changed_paths.parse_filters(step["env"]["FILTERS"])
 
 
 def _matches(filter_name: str, path: str, filters=None) -> bool:
     filters = filters or _filters()
-    return any(_glob(p).match(path) for p in filters[filter_name])
+    return any(changed_paths.glob_regex(p).match(path) for p in filters[filter_name])
 
 
 def _outputs(files: list[str]) -> set[str]:
@@ -99,10 +88,21 @@ def test_changes_is_a_reusable_workflow_pinned_by_sha():
     assert set(data["on"]) == {"workflow_call"}
     job = data["jobs"]["filter"]
     assert job["runs-on"] == RUNNER
-    assert job["permissions"] == {"contents": "read", "pull-requests": "read"}
-    step = next(s for s in job["steps"] if s.get("id") == "filter")
-    assert re.match(r"^dorny/paths-filter@[0-9a-f]{40}$", step["uses"])
+    # Only a checkout: the filter is a script in this repository, not an action
+    # the repository's allowlist has to admit.
+    assert job["permissions"] == {"contents": "read"}
+    checkout, step = job["steps"]
+    assert re.match(r"^actions/checkout@[0-9a-f]{40}$", checkout["uses"])
+    assert checkout["if"] == "github.event_name == 'pull_request'"
+    assert checkout["with"]["fetch-depth"] == 0
+    assert step["id"] == "filter"
     assert step["if"] == "github.event_name == 'pull_request'"
+    assert "uses" not in step
+    assert step["env"]["BASE_SHA"] == "${{ github.event.pull_request.base.sha }}"
+    assert step["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    assert "scripts/changed_paths.py" in step["run"]
+    assert '"$GITHUB_OUTPUT"' in step["run"]
+    assert set(_filters()) == set(job["outputs"])
 
 
 def test_every_filter_is_an_output_that_is_true_off_pull_requests():
@@ -148,7 +148,7 @@ def test_each_workflow_gates_its_job_on_the_filter_and_fails_open(name):
     data = _workflow(name)
     changes = data["jobs"]["changes"]
     assert changes["uses"] == "./.github/workflows/changes.yml"
-    assert changes["permissions"] == {"contents": "read", "pull-requests": "read"}
+    assert changes["permissions"] == {"contents": "read"}
     job_name, output = GATED[name]
     job = data["jobs"][job_name]
     assert job["needs"] == "changes"
@@ -277,10 +277,11 @@ def test_every_path_a_backend_test_reads_starts_the_backend_tests():
 
 
 def test_the_glob_reads_like_the_filter():
-    assert _glob("backend/**").match("backend/app/main.py")
-    assert _glob("docker-compose*.yml").match("docker-compose.yml")
-    assert not _glob("docker-compose*.yml").match("deploy/docker-compose.yml")
-    assert not _glob("scripts/*.py").match("scripts/e2e/x.py")
+    glob = changed_paths.glob_regex
+    assert glob("backend/**").match("backend/app/main.py")
+    assert glob("docker-compose*.yml").match("docker-compose.yml")
+    assert not glob("docker-compose*.yml").match("deploy/docker-compose.yml")
+    assert not glob("scripts/*.py").match("scripts/e2e/x.py")
 
 
 # --- capacity ----------------------------------------------------------------------

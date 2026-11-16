@@ -497,6 +497,9 @@
         "integrations",
         "release"
       ],
+      "test_changed_paths.py": [
+        "repo"
+      ],
       "test_check_architecture_interfaces.py": [
         "repo"
       ],

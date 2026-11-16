@@ -557,9 +557,12 @@ e2e removes its NATS container) and avoids the ports a local stack uses.
 
 **Which jobs a pull request runs.** The seven runners share one machine of
 about 4 cores and 16 GB, so a pull request runs only the jobs its files can
-affect. `.github/workflows/changes.yml` (a reusable workflow, `dorny/paths-filter`
-pinned by sha) lists the pull request's files once; each workflow calls it as
-its `changes` job and gates its own job on one output:
+affect. `.github/workflows/changes.yml` (a reusable workflow that runs
+`git diff --name-only <base>...<head>` through `scripts/changed_paths.py`) lists
+the pull request's files once; each workflow calls it as its `changes` job and
+gates its own job on one output. The filters stay in that one workflow, as the
+step's `FILTERS` block scalar; the script reads them and prints one
+`<filter>=true|false` line per filter, so no third-party action is needed:
 
 | Job | Runs when the pull request changes |
 |-----|-----------------------------------|
@@ -590,6 +593,12 @@ jobs cannot be skipped that way (a skipped matrix job reports once under its
 bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
 skip their steps, ending in seconds as a success. When the `changes` job
 itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
+
+The `changes` job runs only steps GitHub provides and `git`: this repository's
+Actions policy allows GitHub-owned and Marketplace-verified actions only, and a
+called workflow that uses anything else fails at startup before a job is
+created, which takes every caller with it. Keep it that way, or widen the
+policy deliberately in Settings → Actions → General.
 
 **At most two e2e jobs at once, once turned on.** By default an e2e job takes
 any runner, as before. Setting the repository variable `E2E_RUNS_ON` to
