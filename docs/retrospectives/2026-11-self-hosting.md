@@ -289,7 +289,12 @@ review before the local merge (`services/release/integration_review.py`,
    (segregation of duties); `self_host.py --merge` records an approving
    review first. *Measure:* the e2e review step's report carries
    `integration_review` beside `merged`.
-8. **No foundation sprint for an existing repository.**
+8. **No foundation sprint for an existing repository.** — **Done**
+   (`services/loop/foundation_setup.py`): `init_company` asks the daemon to
+   inspect the folder and plans no foundation sprint when it observes a
+   repository with code, unless the request asks for one
+   (`foundation_sprint`); the response names the decision and its reason, and
+   an unobserved folder keeps the old behaviour.
    *Problem:* F8. *Proposal:* `init_company` on a folder the daemon observes to
    be a repository with code plans no foundation sprint unless asked.
 
