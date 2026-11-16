@@ -1,0 +1,68 @@
+{
+  "$comment": "The finding of the first manual iteration of the self-improvement loop (docs/design/rsi-loop.md, section 7), written as a La Fabrique specification in the PO's shape: requirements with criteria in Given/When/Then form, read as EARS event-driven requirements (WHEN <trigger> THE SYSTEM SHALL <response>), after Kiro's requirements.md (design only). The finding is the item F5's follow-up left open in docs/retrospectives/2026-11-self-hosting.md: the lint after an edit still reads the root's profile, not the edited file's folder. Post it with scripts/self_host/self_host.py --steps issue --spec <this file>; the harness checks it with the product's spec_check first and refuses it on a blocking finding or without a target measure. target_measure is the person-written check (a grader, protected) that fails on main on 2026-11-16 and should pass once the sprint's change is in; it is not posted. This file specifies the finding; it does not implement it.",
+  "title": "The lint after an edit runs the edited file's folder's linter",
+  "summary": "A repository may hold several projects and no project at its root, as La Fabrique does (backend/, frontend/, llm-proxy/). The delivery's suites already resolve per folder (services/workspace/stack_roots.py), but the lint after an edit (services/tools/edit_lint.py) reads the root's profile only, so an edit of backend/app/x.py is told that the project names no lint command and is never linted. A folder's profile gains a lint command, named by the company or detected from the folder's stack, and the lint after an edit runs the command of the folder that holds the edited file, in that folder, narrowed to the file. Open item of follow-up 5 of the self-hosting retrospective.",
+  "target_measure": "scripts/self_host/measures/test_folder_lint.py",
+  "requirements": [
+    {
+      "title": "A folder's profile carries a lint command",
+      "description": "Company.stack_profile[\"folders\"] accepts a lint command per folder beside stack, install and test (stack_roots.validate_overrides), and stack_roots.resolve_folders returns each folder's lint with where it came from: the company's command first, else the one stack_profiles.detect gives the folder's stack; an empty command turns the folder's lint off.",
+      "criteria": [
+        {
+          "given": "a company profile whose folders name backend with the lint command python -m ruff check .",
+          "when": "the profile is validated and the folders are resolved",
+          "then": "the profile is accepted, and the resolved backend folder carries that lint command with the source company"
+        },
+        {
+          "given": "a detected python folder with no lint command named, and a node folder whose lint the company set to the empty text",
+          "when": "the folders are resolved",
+          "then": "the python folder carries its stack's detected lint command with the source detected, and the node folder carries no lint command"
+        }
+      ]
+    },
+    {
+      "title": "The lint after an edit runs the edited file's folder's linter, in that folder",
+      "description": "After workspace__edit applies a change to a file under a folder with a lint command, edit_lint.after_edit asks the daemon to run that folder's command in the folder (stack_roots.in_folder), narrowed to the file's path inside the folder, and the observation names the folder. A file in no folder keeps the root's profile. The profile the tool loop loads for the lint (edit_lint.load_profile) carries the resolved folders.",
+      "criteria": [
+        {
+          "given": "folders backend (python, lint python -m ruff check .) and frontend (node), and no lint command at the root",
+          "when": "an edit of backend/app/services/x.py is applied",
+          "then": "the daemon is asked to run cd backend && python -m ruff check app/services/x.py, and the lint observation names the folder backend"
+        },
+        {
+          "given": "the same folders",
+          "when": "an edit of docs/notes.py, a file in no folder, or of backend/app/x.ts, a file the python linter does not read, is applied",
+          "then": "nothing is run, and the result says the project names no lint command or that the folder's linter does not read such files"
+        },
+        {
+          "given": "a company whose stored profile names the two folders with their lint commands",
+          "when": "the tool loop loads the profile for the lint after an edit",
+          "then": "the profile carries both folders with their lint commands, and an edit in backend/ runs the backend folder's command"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "at most 1 lint command runs per applied edit, bounded by EDIT_LINT_TIMEOUT_SECONDS (60 s by default), and the folders are read at most 1 time per task"
+    },
+    {
+      "attribute": "security",
+      "target": "0 lint commands that may rewrite files are run (edit_lint.writes_files applies to a folder's command as to the root's), and every command runs under the daemon's command policy and the company's sandbox"
+    },
+    {
+      "attribute": "reliability",
+      "target": "a folder whose linter is not installed reports the lint unavailable and the edit stands: 0 edits refused because a lint could not run"
+    },
+    {
+      "attribute": "accessibility",
+      "target": "no user interface is required; any control added for a folder's lint command meets WCAG 2.2 AA, with 0 serious or critical axe findings"
+    }
+  ],
+  "constraints": [
+    "No protected path of docs/design/rsi-loop.md section 3.1 changes: the change stays in services/workspace/, services/tools/ and their tests",
+    "A single-root project behaves as before: its sub-folders are never searched and its root's lint command runs as today",
+    "The lint is an observation, never a verdict: the delivery's own checks decide"
+  ]
+}
