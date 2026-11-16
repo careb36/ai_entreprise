@@ -18,6 +18,31 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 
 - **Documentation** (`pages/Documentation.tsx`, `/company/documentation`; `services/documentation.ts`, `components/PackMarkdown.tsx`, `components/C4DiagramView.tsx`, `lib/c4Layout.ts`; issue #530) — The project's documentation packs: the versions, the drift lint, each document as Markdown (`react-markdown` with `remark-gfm` for tables, raw HTML skipped, no images, only `#` and http(s) links kept) with its PMBOK 8th edition domain and focus area, sources, claims and person sections, and the C4 diagrams drawn as SVG from their data (the Mermaid source shown as text, never run). A Manager compiles and writes an approved pack; an Owner approves while the lint finds no drift.
 
+## Routes and the page that serves each
+
+For support: from the address a person reports to the file to read. The routes are in `App.tsx`; every page is in `pages/` unless a component is named.
+
+| Route | Page |
+|---|---|
+| `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete` |
+| `/` | redirects to `/evidence` |
+| `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
+| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`) |
+| `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` |
+| `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
+| `/companies/new`, `/companies/select` | `CompanyNew`, `CompanySelect` |
+| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` (segregation of duties, access review, service accounts: `components/SodPolicyPanel`, `SodReportPanel`, `AccessReviewPanel`, `ServiceAccountsPanel`) |
+| `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
+| `/company/usage`, `/company/quotas`, `/company/models` | `Usage`, `components/QuotaPanel`, `Models` |
+| `/company/audit-anchors`, `/company/procedures`, `/company/wiki` | `AuditAnchors`, `Procedures`, `Wiki` |
+| `/company/specifications[/:id]` | `Specifications`, `SpecificationDetail` |
+| `/company/specifications/:specId/architecture[s/:id]` | `ArchitectureDetail` |
+| `/company/documentation` | `Documentation` |
+| `/agents`, `/governance` | `AgentSettings`, `components/GovernancePanel` |
+| `/support` | `HelpDesk` (bug reports and the Support chat) |
+| `/lineage`, `/memory`, `/generate` | `Lineage`, `MemorySearch`, `Generate` |
+| anything else | `NotFound` |
+
 ## The desktop app
 
 **`frontend/electron/`** — the Electron main process and preload, compiled by

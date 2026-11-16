@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Support documentation that keeps up with the code.** Every context document's Modules line now matches its folder (platform gained its SSO, session, egress and anchor modules, workspace `run_logs`, planning the `project_docs/` package by path), with a short entry for each module that had none; `scripts/check_context_docs.py` fails on a module missing from its document, a listed module that does not exist or a module with no entry (`backend/tests/test_check_context_docs.py`). `docs/contexts/frontend.md` maps each route to its page. `docs/OPERATIONS.md` says how to find a log line from an error id and what to do for today's CI failures on the shared runners: a port collision (#580), an image tag removed by another job (#589), wall-clock tests on a busy machine (#590), runs killed for lack of memory and a frozen runner.
+
 * **The browser sandbox image is published for linux/amd64 only (#529).** Its arm64 variant builds under QEMU on the runner, but its browser aborts under emulation (the first `browser-image-probe.yml` run), so nobody has seen it work; `images.yml` no longer sets up QEMU or publishes arm64 until it has been run with its probe on arm64 hardware.
 
 * **The e2e web project's port is picked at run time.** `E2E_WEB_PORT` was fixed at 18765, and the self-hosted runners share one machine: when two runs reached step 9c together, the daemon refused the second greeting's busy port, no browser check ran, no hold was placed and step 10 reported a misleading `worked_before_dependency`. `e2e.yml` now picks it like the backend's and the fake model's ports, `run.sh` defaults to a free port, and step 9c checks the port is free first.

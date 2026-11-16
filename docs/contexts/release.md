@@ -25,6 +25,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 A local merge into the base branch is a release (issue #543, [`docs/design/SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md)): `POST /v1/agent_runs/{id}/merge` and `POST /v1/sprints/{id}/integration/merge` call `sod.enforce` before the daemon is asked, so the person who started the sprint does not merge its work (403, audited `sod_refused`). `record_integration_merge` records `merged_by_user_id` from the session, read by the segregation-of-duties report. Approving a sprint's integration in a review is held to the same rule (above). Publishing a pull request is not an approval: the platform's own review decides it.
 
+### Other modules
+
+- `integration_events` (`record_for_tasks`): writes each task's part in a sprint's integration (merged, skipped, stopped at a conflict, branch missing) as that task's `integration` event; the task's status does not change.
+
 ## Described elsewhere
 
 - `git_publish`, `local_merge` and `review_sync`: the Git workflow paragraph in [workspace](workspace.md).

@@ -13,6 +13,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 **`backend/app/services/contracts/roles.py`** (`services/contracts/roles.py` is its shim) — The role catalogue: `ROLES` is the `AgentRole` values of `services/models/model_factory.py` (CamelCase like `ScrumMaster`: PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter, and the new BackendDeveloper, FrontendDeveloper, DevOps (DevOps/SRE), Designer (UX/UI) and DataEngineer (Data/DBA)); `canonical` reads the older stored spellings as aliases (`Dev`, `BackendDev`, `FrontendDev`, `Data`, `SM`, `Security`…), nothing stored is rewritten. `DEVELOPER_ROLES` (Developer and the four coding roles) take the Developer's path: the delivery is role-agnostic, and `orchestration_metrics.canonical_kpi_role` maps them to `Developer`, so the Architect's consultation, the edit plan and the KPIs follow; `FILE_ROLES` add QA and the Designer (it writes UI specifications and markup, reading the existing components first) for the workspace tools; `RESEARCH_ROLES` is the research default. The coding roles' default model mirrors the Developer's (and `AGENT_MODEL_DEVELOPER` when they have no `AGENT_MODEL_<ROLE>`), `company_models` falls back to the company's Developer choice for them, and `model_suggestions` suggests them as code roles (the Designer as a deciding role). Agent roles stay free text (no validation on `POST /v1/agents`); the Agents page, the New company wizard and the Models page list the new roles, labelled from `teamRoles.*`.
 
+### Other modules
+
+- `sandbox_schemas`: the pydantic shapes of a sandbox run (`SandboxExecutionRequest`, `SandboxExecutionResponse`, `SandboxHealthResult`) that `workspace/sandbox_manager.py` exchanges with the sandbox.
+
 ## Described elsewhere
 
 - `manifest` (`parse_file_manifest`) and `edit_blocks` (SEARCH/REPLACE edits): step 3 of [the sprint loop](../SPRINT_LOOP.md).
