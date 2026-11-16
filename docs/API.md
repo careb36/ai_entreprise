@@ -114,7 +114,7 @@ the OpenAPI tags do not follow the module boundaries.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/v1/init_company` | Bootstrap a tenant and its agents |
+| `POST` | `/v1/init_company` | Bootstrap a tenant and its agents; the foundation sprint is planned unless the daemon observes a repository with code (`foundation_sprint` asks or declines) |
 | `POST` | `/v1/plan_sprint` | Plan without starting |
 | `POST` | `/v1/plan_self_improvement_sprint` | Plan from the factory's own findings |
 | `POST` | `/v1/start_sprint` | Create a sprint with its backlog |

@@ -465,6 +465,7 @@ def test_a_filter_s_queries_grow_only_by_its_chunks_never_per_task(sqlite_sessio
     assert few <= many <= few + 2 * chunks, (few, many, chunks)
 
 
+@pytest.mark.xdist_group("wall_clock")
 def test_a_filter_over_five_thousand_tasks_answers_within_the_page_budget(
     sqlite_session,
 ):
