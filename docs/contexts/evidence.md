@@ -6,7 +6,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** Judging a run from what was observed: the Verifier's checks and verdict, the risk tier, the quality standards check, acceptance tests per criterion, the context-read check, the application and browser checks as read from the daemon's reply, SecOps scans, the gate before QA, the changes of a run and the ingestion of AgentRun records. It reads the daemon's reply as data from contracts; it never calls the daemon, the loop, the tools or a producer.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`. Another context imports only these modules and the package; the rest are internal.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `governance`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
 
 ## Components
 
@@ -65,7 +65,6 @@ from the daemon's reply, never from the producer's claim.
 ### Other modules
 
 - `agent_run_service` (`ingest_agent_run`): stores a run handed in by an outside producer (`POST /v1/agent_runs`, the GitHub adapter) as an `AgentRun`. The backend computes the artifact's sha256 itself, refuses one over 2 MiB (`ArtifactTooLargeError`), returns the latest version unchanged when the artifact and claims match, and otherwise adds a version and an audit entry.
-- `governance` (`classify_artifact`, `classify_artifacts`): classifies the paths a self-improvement sprint proposes against `SELF_IMPROVEMENT_PROTECTED_PATHS`, and may redirect a write to a sandbox folder for review.
 - `secops_checks` (`check_dependencies`, `check_secrets_scan`, `check_sast`, `check_all`): SecOps as verification: the dependency audit, secret scan and SAST the Verifier runs (`verification`), each able to block.
 
 ## Described elsewhere
