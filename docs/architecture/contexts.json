@@ -426,6 +426,12 @@
       "test_architectures.py": [
         "loop"
       ],
+      "test_architectures_api.py": [
+        "loop"
+      ],
+      "test_architectures_repo.py": [
+        "loop"
+      ],
       "test_audit_anchor_delivery.py": [
         "integrations"
       ],
