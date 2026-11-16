@@ -102,7 +102,7 @@ ensure_node_modules() {
 
 # The interpreter of a Poetry project's venv, installed when missing or stale.
 # Prints only the path on stdout; everything else goes to stderr.
-poetry_python() {  # project dir, then extra install commands run with the venv's python
+poetry_python() {  # project dir, then requirements files to pip install into the venv
   local dir="$1"; shift
   local lock="$dir/poetry.lock" venv="" want
   want="$(file_hash "$lock" "$@" 2>/dev/null || file_hash "$lock")"
