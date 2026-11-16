@@ -897,6 +897,9 @@
       "test_protected_paths.py": [
         "contracts"
       ],
+      "test_protected_paths_check.py": [
+        "repo"
+      ],
       "test_provider_connections.py": [
         "models"
       ],

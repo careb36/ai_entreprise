@@ -125,6 +125,8 @@
 /backend/tests/test_rsi_fitness_keep.py         @careb36
 /backend/tests/test_protected_paths.py           @careb36
 /backend/app/services/contracts/protected_paths.py @careb36
+/scripts/protected_paths_check.py                @careb36
+/backend/tests/test_protected_paths_check.py     @careb36
 /backend/app/history_check.py                    @careb36
 /backend/app/services/learning/procedures.py     @careb36
 /backend/app/services/management/manager_policy.py @careb36
