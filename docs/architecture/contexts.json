@@ -728,6 +728,9 @@
       "test_manager_policy.py": [
         "management"
       ],
+      "test_manager_refusal_reason.py": [
+        "management"
+      ],
       "test_manager_rules.py": [
         "management"
       ],

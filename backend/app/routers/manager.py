@@ -5,7 +5,8 @@ The Manager agent's routes (issue #331).
 - ``PUT  /v1/companies/{id}/manager_policy`` — replace it (Manager); a rule of
   the confirmation set is refused (422). The agent never writes it.
 - ``GET  /v1/manager_decisions?company_id=`` — what the agent suggested and
-  decided, newest first (Viewer).
+  decided, newest first, with ``refusal_reason`` when the policy did not let
+  it decide alone (Viewer).
 - ``POST /v1/manager_decisions/{id}/override`` — take back a decision the
   agent took alone (Manager); counted in the record.
 - ``GET  /v1/manager_record?company_id=`` — its suggestions against the
@@ -53,6 +54,9 @@ def serialize_decision(row: ManagerDecision) -> dict:
         "overridden_by": row.overridden_by,
         "overridden_at": row.overridden_at.isoformat() if row.overridden_at else None,
         "action_state": row.action_state,
+        # The platform's sentence when the policy did not let the agent
+        # decide alone; never the model's claim.
+        "refusal_reason": row.refusal_reason,
         "audit_log_id": row.audit_log_id,
         "override_audit_log_id": row.override_audit_log_id,
     }

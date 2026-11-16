@@ -24,6 +24,24 @@ export interface ManagerDecision {
   decided_at: string | null
   overridden_by: string | null
   overridden_at: string | null
+  /** pending, done, not_allowed, stale, unusable or failed. */
+  action_state?: string | null
+  /** Why the policy did not let the agent decide alone: the platform's sentence, never the model's claim. */
+  refusal_reason?: string | null
+}
+
+/** A suggestion the policy did not let the agent take alone, in the brief. */
+export interface ClientBriefRefusal {
+  id: number
+  item_kind: string
+  item_id: number
+  category: string
+  /** The model's suggestion and reason: claims. */
+  decision: string | null
+  reason: string | null
+  action_state: string | null
+  /** The platform's sentence. */
+  refusal_reason: string
 }
 
 /** A blocked task with the Manager agent's suggestion, and its carry-over mark (the policy's carry_over rule). */
@@ -42,7 +60,13 @@ export type InboxWithManager = Omit<Inbox, 'blocked_tasks'> & {
 export interface ClientBrief {
   since: string
   done: { count: number }
-  agent: { suggested: number; taken_alone: number; overridden: number }
+  agent: {
+    suggested: number
+    taken_alone: number
+    overridden: number
+    refused?: number
+    refusals?: ClientBriefRefusal[]
+  }
   waiting: { total: number }
   cost: { tokens_since: number; tokens_total: number; over_budget: boolean }
 }
