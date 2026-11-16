@@ -191,6 +191,16 @@ output, which was pytest-asyncio's deprecation warning on stderr; the failing
 tests, which the evidence records (`failing_tests`, the per-criterion
 results), are not in the text a person reads first.
 
+*Done (follow-up 6).* The Verifier's `tests_run` check now builds its
+observation from the daemon's output (`criteria_tests.failure_summary`):
+`failing tests:` and at most 20 names, then `(and N more)` from the uncapped
+`failing_count` `record_results` keeps beside the 50-name `failing_tests`;
+`criteria:` with each requirement's result when the run recorded them; and
+the end of the output last, the truncation note still closing the text. A run
+whose output named no test keeps the previous wording, and the comment and the
+block reason reach the observation unchanged
+([evidence](../contexts/evidence.md#what-a-failed-test-run-says)).
+
 ### F7. No review object for the sprint's request
 
 The sprint's integration is the one request a person should read, but a
@@ -274,9 +284,13 @@ review before the local merge (`services/release/integration_review.py`,
    leaves the delivery unverifiable. A sprint's integration runs every
    folder's suite. Not done: the lint after an edit still reads the root's
    profile, not the edited file's folder.
-6. **Quote the failing tests in a "tests failed" comment.**
+6. **Quote the failing tests in a "tests failed" comment.** *Done.*
    *Problem:* F6. *Proposal:* the comment and the block reason lead with
    `failing_tests` and the per-criterion results, then the output's tail.
+   *Built:* `criteria_tests.failure_summary` and the `tests_run` check's
+   refuted branch; at most 20 names, `(and N more)` from `failing_count`, the
+   criteria when recorded, the output's tail last, and the previous wording
+   when no test can be named. *Measure:* `tests/test_verification.py`.
 7. **A person's review of a sprint's integration.** *Done.*
    *Problem:* F7. *Proposal:* reviews and line comments on the integration as
    on a run, recorded and audited, whether or not it is published to a forge.
