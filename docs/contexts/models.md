@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/models/`
 - **Responsibility:** Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `effort`, `model_factory`, `model_routing`. Another context imports only these modules and the package; the rest are internal. Still allowlisted (`interface_allowlist`): `loop/task_routing` imports `difficulty` and `routing_policy`, which `model_routing.route` already composes, until the estimate from the task's plan and board moves here.
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `effort`, `model_factory`, `model_routing`. Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
 - **Modules:** `calibration`, `company_models`, `difficulty`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `usage_csv`, `usage_report`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `model_catalog` (the models.dev fetch) and `provider_client` (`list_models`, raising `ProviderUnreachable`; `provider_connections.validate` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
@@ -97,7 +97,11 @@ by that name) and the routing says so. **The choice**
 `routing: {policy, source, band, requested, chosen, reason}` (`configured`: a
 person's choice, never re-routed; `no_policy`, `no_band`, `band`,
 `tier_role_default`, `editor_plan`); `resolve_agent_model` is its model. The
-task worker calls it through `services/loop/task_routing.py`, which stores the
+task worker calls it through `services/loop/task_routing.py`, which reads the
+approved architecture (planning's), asks `model_routing.estimate_task` for the
+estimate from the task's plan and board (its `delivered` events, the
+`NEEDS WORK:` requests and send-backs on its board) and
+`model_routing.effective_policy` for the policy, and stores the
 estimate and the routing on the task as an `estimated` event and on the run's
 evidence (`difficulty`, `routing`); the served model stays `AgentRun.model`,
 the proxy's report. Whether it pays is counted, never claimed:
