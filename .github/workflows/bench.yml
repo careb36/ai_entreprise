@@ -103,13 +103,13 @@ jobs:
       # tasks in 300 ms), held strictly here, at night, where the machine has
       # CPU to spare. Every pull request holds them to a loose guard and
       # checks the deterministic half (the SQL statements); see
-      # backend/tests/test_task_views.py.
+      # backend/tests/test_task_view_budget.py.
       - name: Strict performance budgets
         working-directory: ./backend
         env:
           PERF_STRICT: "1"
         run: |
-          PYTHONPATH=.:app poetry run python -m pytest tests/test_task_views.py -q -p no:cacheprovider -k page_budget
+          PYTHONPATH=.:app poetry run python -m pytest tests/test_task_view_budget.py -q -p no:cacheprovider -k page_budget
 
       - name: Run the bench (fake LLM)
         env:

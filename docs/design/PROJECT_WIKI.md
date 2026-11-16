@@ -209,7 +209,7 @@ crosses B1.
 | W2 | B5→B4 | T/E | Prompt injection: a page tells a later agent to do something (exfiltrate, skip tests, write elsewhere) | M | M | Medium | New: the section header calls pages claims and not instructions; control-looking lines (file-manifest fences with `path=`, `NOTE kind=`, `DECISION`, `END`, conflict markers) are quoted (`wiki.for_prompt`); bounded by `WIKI_MAX_CHARS` and the budget; only `current` pages; uncited agent text is only a proposal. Existing: the Verifier judges every delivery from observations, so a misled agent's work is still checked; the daemon's command policy and sandbox |
 | W3 | B5 | T | Laundering: the model invents sources so a claim looks verified | M | M | Medium | New: every citation resolved against the company's records; unknown → refused; the verdict and observer shown are read from the records; uncited → proposal |
 | W4 | B5→B3 | T/E | Writing to the repo: a slug or path escapes `docs/wiki/`, or overwrites the person's work | L | H | Medium | New: slugs match `^[a-z0-9][a-z0-9-]{0,79}$`, the path is built by the backend; off by default (Manager); branch `fabrique/wiki` with the Git workflow. Existing: the daemon's path resolution refuses paths outside the workspace; snapshot without the workflow |
-| W5 | B1 | E/S | A Viewer or another company's member edits or decides | L | M | Medium | `require_company_role` Manager for writes, Viewer for reads; versions are looked up and their company checked (`test_project_wiki_loop.py::test_roles_edit_history_and_decisions`) |
+| W5 | B1 | E/S | A Viewer or another company's member edits or decides | L | M | Medium | `require_company_role` Manager for writes, Viewer for reads; versions are looked up and their company checked (`test_project_wiki_api.py::test_roles_edit_history_and_decisions`) |
 | W6 | B1 | I | Citations reveal another company's records | L | M | Low | Resolution scoped to `company_id` for every kind (`test_citations_resolve_only_against_the_companys_records`) |
 | W7 | B4 | D | Compilation cost or time grows without bound | M | L | Low | At most `WIKI_COMPILE_MAX_PAGES` calls per close, bounded inputs (runs, diff excerpts, notes, retrospective), bounded answer; failures recorded, the close goes on |
 | W8 | — | R | Who changed a page is unknown | L | L | Low | Every version records its author kind and id; person writes audited; compilations audited with their summary |
@@ -218,8 +218,9 @@ crosses B1.
 **Tests that prove the mitigations.** `backend/tests/test_project_wiki.py`
 (citation resolution and refusal, company scoping, person precedence, lint
 rules, stale pages out of force), `backend/tests/test_project_wiki_loop.py`
-(compilation refuses unknown citations, prompt excludes stale pages, budget
-cut, API roles), `frontend/src/components/WikiMarkdown.test.tsx` (no raw HTML,
+(compilation refuses unknown citations), `test_project_wiki_prompt.py`
+(prompt excludes stale pages, budget cut), `test_project_wiki_api.py` (API
+roles), `frontend/src/components/WikiMarkdown.test.tsx` (no raw HTML,
 unsafe URLs and images dropped).
 
 **Residual risks.** A cited, plausible but wrong statement in a page a person

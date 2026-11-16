@@ -373,6 +373,9 @@
       "test_acceptance.py": [
         "loop"
       ],
+      "test_acceptance_plan.py": [
+        "loop"
+      ],
       "test_access_review.py": [
         "management"
       ],
@@ -418,6 +421,12 @@
       "test_architectures.py": [
         "loop"
       ],
+      "test_architectures_api.py": [
+        "loop"
+      ],
+      "test_architectures_repo.py": [
+        "loop"
+      ],
       "test_audit_anchor_delivery.py": [
         "integrations"
       ],
@@ -431,6 +440,12 @@
         "platform"
       ],
       "test_auth_enforcement.py": [
+        "management"
+      ],
+      "test_auth_enforcement_audit.py": [
+        "management"
+      ],
+      "test_auth_enforcement_routes.py": [
         "management"
       ],
       "test_auth_jwt.py": [
@@ -470,6 +485,9 @@
         "tasks"
       ],
       "test_board_moves.py": [
+        "loop"
+      ],
+      "test_board_moves_carry.py": [
         "loop"
       ],
       "test_brief_mail.py": [
@@ -581,6 +599,12 @@
       "test_dependencies.py": [
         "loop"
       ],
+      "test_dependency_history.py": [
+        "loop"
+      ],
+      "test_dependency_holds.py": [
+        "loop"
+      ],
       "test_developer_tools.py": [
         "loop"
       ],
@@ -661,6 +685,12 @@
         "management"
       ],
       "test_grounding_manifests.py": [
+        "management"
+      ],
+      "test_grounding_signature_check.py": [
+        "management"
+      ],
+      "test_grounding_signature_deliver.py": [
         "management"
       ],
       "test_grounding_signatures.py": [
@@ -804,13 +834,25 @@
       "test_project_docs.py": [
         "planning"
       ],
+      "test_project_docs_diagrams.py": [
+        "planning"
+      ],
       "test_project_docs_language.py": [
+        "planning"
+      ],
+      "test_project_docs_pmbok.py": [
         "planning"
       ],
       "test_project_wiki.py": [
         "loop"
       ],
+      "test_project_wiki_api.py": [
+        "loop"
+      ],
       "test_project_wiki_loop.py": [
+        "loop"
+      ],
+      "test_project_wiki_prompt.py": [
         "loop"
       ],
       "test_prompt_budget.py": [
@@ -928,10 +970,25 @@
       "test_sod.py": [
         "management"
       ],
+      "test_sod_policy.py": [
+        "management"
+      ],
       "test_specifications.py": [
         "loop"
       ],
+      "test_specifications_api.py": [
+        "loop"
+      ],
+      "test_specifications_planning.py": [
+        "loop"
+      ],
       "test_sprint_board.py": [
+        "loop"
+      ],
+      "test_sprint_board_api.py": [
+        "loop"
+      ],
+      "test_sprint_board_loop.py": [
         "loop"
       ],
       "test_sprint_close.py": [
@@ -1013,6 +1070,12 @@
       "test_task_relations.py": [
         "loop"
       ],
+      "test_task_view_budget.py": [
+        "loop"
+      ],
+      "test_task_view_filter.py": [
+        "loop"
+      ],
       "test_task_views.py": [
         "loop"
       ],
@@ -1035,6 +1098,12 @@
         "evidence"
       ],
       "test_verification.py": [
+        "management"
+      ],
+      "test_verification_checks.py": [
+        "management"
+      ],
+      "test_verification_records.py": [
         "management"
       ],
       "test_webhooks.py": [

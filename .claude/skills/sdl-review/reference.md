@@ -111,8 +111,8 @@ named.
 | CSP, other security headers, clickjacking, browser cache | latest@87cf4a4 CONF-12, CONF-14; WSTG-v42-CLNT-09, ATHN-06 | `test_security_headers.py` (per route class: authenticated JSON, public, docs, 404/401/422, unhandled 500, a stream) |
 | Account enumeration | WSTG-v42-IDNT-04 | `test_auth_limits.py`, `test_auth_jwt.py` |
 | Lockout, rate limits | WSTG-v42-ATHN-03 | `test_auth_limits.py`, `test_sessions.py` (refresh), `test_sso_flow.py` (SSO) |
-| Weak authentication, default credentials | WSTG-v42-ATHN-02, ATHN-07 | `test_passwords.py`, `test_auth_enforcement.py` |
-| Authorization schema, IDOR, function and object level | WSTG-v42-ATHZ-02, ATHZ-04; latest@87cf4a4 APIT-02, APIT-04 | `test_authorization_matrix.py` (every route, deny by default), `test_cross_company_access.py`, `test_tenant_scoping.py`, `test_auth_enforcement.py` |
+| Weak authentication, default credentials | WSTG-v42-ATHN-02, ATHN-07 | `test_passwords.py`, `test_auth_enforcement*.py` |
+| Authorization schema, IDOR, function and object level | WSTG-v42-ATHZ-02, ATHZ-04; latest@87cf4a4 APIT-02, APIT-04 | `test_authorization_matrix.py` (every route, deny by default), `test_cross_company_access.py`, `test_tenant_scoping.py`, `test_auth_enforcement*.py` |
 | Session management, cookies, CSRF, logout, timeout | WSTG-v42-SESS-01 to SESS-07 | `test_sessions.py`, `test_cors_credentials.py` |
 | JSON Web Tokens | latest@87cf4a4 SESS-10 | `test_jwt_claims.py` (`iss`/`aud`, `alg: none`, HS/RS confusion, ticket vs access token), `test_auth_jwt.py`, `test_sso_tokens.py` |
 | SSRF | WSTG-v42-INPV-19 (latest@87cf4a4 INJT-19) | `test_ssrf_vectors.py` (one vector set against the webhook, the OIDC client and research fetches), `test_webhooks.py`, `test_sso_tokens.py` |

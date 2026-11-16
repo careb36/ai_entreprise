@@ -1,169 +1,37 @@
-"""An acceptance test per criterion (``services.evidence.acceptance``): the plan puts
-QA's test-writing tasks first and the implementation tasks after them; the
-runner's per-test lines are read back into criterion ids; through the real
-daemon, QA's failing tests are expected before their implementation, the
-implementation that makes them pass verifies the criteria on the
-specification, a failing one is refuted, an implementation that edits an
-acceptance test is refuted, and the independent history check refuses a
-criterion verified without an observed test run.
+"""An acceptance test per criterion through the real daemon
+(``services.evidence.acceptance``): QA's failing tests are expected before
+their implementation, the implementation that makes them pass verifies the
+criteria on the specification, a failing one is refuted, an implementation
+that edits an acceptance test is refuted and the test restored, and the
+latest run across tasks speaks for a criterion. Reading the runner's output,
+the plan's test-writing tasks and the independent history check are in
+``test_acceptance_plan.py``; the shared rows in ``acceptance_helpers``.
 """
 
 import asyncio
-import importlib.util
 import secrets
 import sys
-import textwrap
-from pathlib import Path
 
 import history_check
 import pytest
 import worker_stages
+from acceptance_helpers import (
+    ACCEPTANCE_TESTS,
+    BOARD,
+    MOVE_TESTS,
+    SPEC,
+    _answer,
+    _checks,
+    _load_daemon,
+)
 from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.specification import Specification
-from services.evidence import acceptance, criteria_tests
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import record as worker_record
-from services.planning import spec_check, spec_planning
+from services.planning import spec_planning
 from sqlmodel import select
-from test_specifications import GOOD
-
-_DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
-
-
-def _load_daemon():
-    spec = importlib.util.spec_from_file_location(
-        "fabrique_daemon_acceptance", _DAEMON_PATH
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-# --- reading the runner's output ---------------------------------------------
-
-
-def test_criterion_ids_become_test_name_tokens_and_are_found_as_whole_words():
-    assert criteria_tests.token("REQ-1.2") == "req_1_2"
-    assert criteria_tests.names_criterion(
-        "tests/test_a.py::test_req_1_2_lists", "REQ-1.2"
-    )
-    assert criteria_tests.names_criterion("REQ-1.2 lists the tasks", "REQ-1.2")
-    # ``req_1_2`` is not ``req_1_21``, nor ``req_11_2``.
-    assert not criteria_tests.names_criterion("test_req_1_21_x", "REQ-1.2")
-    assert not criteria_tests.names_criterion("test_req_11_2_x", "REQ-1.2")
-
-
-PYTEST_OUTPUT = textwrap.dedent(
-    """
-    tests/test_req_1.py::test_req_1_1_name PASSED                      [ 33%]
-    tests/test_req_1.py::test_req_1_2_empty FAILED                     [ 66%]
-    tests/test_other.py::test_helper PASSED                            [100%]
-    =================================== FAILURES ===================================
-    FAILED tests/test_req_1.py::test_req_1_2_empty - AssertionError
-    ========================= 1 failed, 2 passed in 0.02s ==========================
-    """
-)
-JEST_OUTPUT = "  ✓ REQ-1.1 greets by name (3 ms)\n  ✕ REQ-1.2 greets the world (1 ms)\n"
-
-
-def test_per_test_lines_of_pytest_jest_go_and_cargo_are_read():
-    assert criteria_tests.results_from_output(
-        PYTEST_OUTPUT, ["REQ-1.1", "REQ-1.2", "REQ-2.1"]
-    ) == {
-        "REQ-1.1": "pass",
-        "REQ-1.2": "fail",
-        "REQ-2.1": "missing",
-    }
-    assert criteria_tests.failing_tests(PYTEST_OUTPUT) == [
-        "tests/test_req_1.py::test_req_1_2_empty"
-    ]
-    assert criteria_tests.results_from_output(JEST_OUTPUT, ["REQ-1.1", "REQ-1.2"]) == {
-        "REQ-1.1": "pass",
-        "REQ-1.2": "fail",
-    }
-    assert criteria_tests.results_from_output(
-        "--- PASS: TestReq_1_1 (0.00s)\n--- FAIL: TestReq_1_2 (0.00s)\n",
-        ["REQ-1.1", "REQ-1.2"],
-    ) == {"REQ-1.1": "pass", "REQ-1.2": "fail"}
-    assert criteria_tests.results_from_output(
-        "test req_1_1_name ... ok\ntest req_1_2_empty ... FAILED\n",
-        ["REQ-1.1", "REQ-1.2"],
-    ) == {"REQ-1.1": "pass", "REQ-1.2": "fail"}
-    # Two tests of one criterion: it passes only when both do.
-    assert criteria_tests.results_from_output(
-        "a.py::test_req_1_1_a PASSED\na.py::test_req_1_1_b FAILED\n", ["REQ-1.1"]
-    ) == {"REQ-1.1": "fail"}
-    # ANSI colour is ignored; a summary line names no test.
-    assert criteria_tests.results_from_output(
-        "\x1b[32ma.py::test_req_1_1_a PASSED\x1b[0m\n2 passed in 0.1s\n", ["REQ-1.1"]
-    ) == {"REQ-1.1": "pass"}
-
-
-def test_pytest_gets_per_test_output_and_other_runners_are_left_alone():
-    assert (
-        criteria_tests.verbose_command("python -m pytest -q") == "python -m pytest -v"
-    )
-    assert criteria_tests.verbose_command("pytest -v tests") == "pytest -v tests"
-    assert criteria_tests.verbose_command(
-        "python -m pytest -q -p no:cacheprovider"
-    ) == ("python -m pytest -p no:cacheprovider -v")
-    assert criteria_tests.verbose_command("npm test --silent") == "npm test --silent"
-
-
-# --- the test-writing tasks in a plan ---------------------------------------
-
-
-SPEC = spec_check.normalize(GOOD)
-
-
-def test_the_plan_puts_a_test_task_per_requirement_first_and_repoints_dependencies():
-    tasks = [
-        {"title": "Store", "covers": ["REQ-1.1"], "depends_on": []},
-        {"title": "Endpoint", "covers": ["REQ-1.2"], "depends_on": [0]},
-        {"title": "Board", "covers": ["REQ-2.1", "REQ-1.1"], "depends_on": [1]},
-    ]
-    planned = acceptance.with_test_tasks(tasks, SPEC, item_limit=8)
-    assert [t["title"] for t in planned] == [
-        "Acceptance tests for REQ-1: List the tasks",
-        "Acceptance tests for REQ-2: Move a task",
-        "Store",
-        "Endpoint",
-        "Board",
-    ]
-    assert [t["kind"] for t in planned] == [
-        "acceptance_tests",
-        "acceptance_tests",
-        None,
-        None,
-        None,
-    ]
-    assert planned[0]["assignee"] == "QA" and planned[0]["covers"] == [
-        "REQ-1.1",
-        "REQ-1.2",
-    ]
-    assert "test_req_1_1_<what it checks>" in planned[0]["description"]
-    assert [t["depends_on"] for t in planned] == [[], [], [0], [0, 2], [1, 0, 3]]
-    # Already planned with its tests: left as it is.
-    assert acceptance.with_test_tasks(planned, SPEC, 8) == planned
-
-
-def test_the_plan_stays_within_the_scope_dropping_tasks_from_the_end():
-    tasks = [
-        {"title": "Store", "covers": ["REQ-1.1"], "depends_on": []},
-        {"title": "Board", "covers": ["REQ-2.1"], "depends_on": [0]},
-    ]
-    planned = acceptance.with_test_tasks(tasks, SPEC, item_limit=3)
-    assert [t["title"] for t in planned] == [
-        "Acceptance tests for REQ-1: List the tasks",
-        "Store",
-    ]
-    # A task without criteria needs no test task and no budget for one.
-    assert [
-        t["title"] for t in acceptance.with_test_tasks([{"title": "Docs"}], SPEC, 1)
-    ] == ["Docs"]
-
 
 # --- through the real daemon ------------------------------------------------
 
@@ -204,33 +72,7 @@ class _DaemonOverNATS:
         pass
 
 
-def _answer(files: dict[str, str]) -> str:
-    blocks = "".join(
-        f"```python path={path}\n{body}```\n\n" for path, body in files.items()
-    )
-    return f"Delivered.\n\n{blocks}"
-
-
-ACCEPTANCE_TESTS = textwrap.dedent(
-    """\
-    def test_req_1_1_lists_the_tasks():
-        from src.board import tasks_of
-
-        assert tasks_of("acme") == ["a", "b"]
-
-
-    def test_req_1_2_one_row_per_task():
-        from src.board import tasks_of
-
-        assert len(tasks_of("acme")) == 2
-    """
-)
-BOARD = 'def tasks_of(company):\n    return ["a", "b"]\n'
 BROKEN_BOARD = 'def tasks_of(company):\n    return ["a"]\n'
-MOVE_TESTS = (
-    "def test_req_2_1_drop_on_done():\n    from src.move import move\n\n"
-    '    assert move("t", "done") == "done"\n'
-)
 
 
 @pytest.fixture()
@@ -300,21 +142,6 @@ def _deliver(nats, item, sprint, files):
             _answer(files),
         )
     )
-
-
-def _checks(session, item):
-    session.expire_all()
-    run = session.exec(
-        select(AgentRun)
-        .where(AgentRun.external_ref == f"task-{item.id}")
-        .order_by(AgentRun.version.desc())
-    ).first()
-    verification = session.exec(
-        select(Verification)
-        .where(Verification.agent_run_id == run.id)
-        .order_by(Verification.id.desc())
-    ).first()
-    return verification, {c["name"]: c for c in verification.checks}
 
 
 def test_failing_tests_first_then_the_implementation_that_verifies_the_criteria(
@@ -625,87 +452,3 @@ def test_without_a_specification_nothing_changes(factory, monkeypatch):
     _verification, checks = _checks(session, board_task)
     assert nats.commands[-1].endswith("-q -p no:cacheprovider")
     assert "criteria_tests" not in checks and "acceptance_tests_untouched" not in checks
-
-
-# --- the independent check ---------------------------------------------------
-
-
-def test_a_criterion_verified_without_an_observed_run_is_illegal():
-    task = {"id": 1, "status": "done", "comments": []}
-    legal = [
-        {
-            "version": 1,
-            "status": "verified",
-            "verified_criteria": ["REQ-1.1"],
-            "observed_test_run": True,
-        }
-    ]
-    illegal = [
-        {
-            "version": 1,
-            "status": "verified",
-            "verified_criteria": ["REQ-1.1"],
-            "observed_test_run": False,
-        }
-    ]
-    assert not [
-        v
-        for v in history_check.check_task(task, legal, [])
-        if v.startswith("criteria_verified")
-    ]
-    assert history_check.check_task(task, illegal, []) == [
-        "done_without_approval",
-        "criteria_verified_without_run: run v1 marks REQ-1.1 as passed with no test run observed",
-    ]
-    facts = history_check._run_facts(
-        Verification(
-            company_id=1,
-            agent_run_id=1,
-            verdict="verified",
-            checks=[
-                {
-                    "name": "criteria_tests",
-                    "results": {"REQ-1.1": "pass", "REQ-1.2": "fail"},
-                }
-            ],
-            evidence={"test_run": {"exit_code": 1}},
-        )
-    )
-    assert facts == {
-        "verified_criteria": ["REQ-1.1"],
-        "observed_test_run": True,
-        "reads_without_hash": [],
-    }
-    assert history_check._run_facts(None) == {
-        "verified_criteria": [],
-        "observed_test_run": False,
-        "reads_without_hash": [],
-    }
-    # An exit status that travelled as text still counts; a key that is not
-    # text is read as text.
-    odd = history_check._run_facts(
-        Verification(
-            company_id=1,
-            agent_run_id=1,
-            verdict="verified",
-            checks=[{"name": "criteria_tests", "results": {7: "pass"}}],
-            evidence={"test_run": {"exit_code": "0"}},
-        )
-    )
-    assert odd == {
-        "verified_criteria": ["7"],
-        "observed_test_run": True,
-        "reads_without_hash": [],
-    }
-    assert (
-        history_check._run_facts(
-            Verification(
-                company_id=1,
-                agent_run_id=1,
-                verdict="verified",
-                checks=[],
-                evidence={"test_run": {"exit_code": "x"}},
-            )
-        )["observed_test_run"]
-        is False
-    )

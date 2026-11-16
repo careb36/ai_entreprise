@@ -160,13 +160,14 @@ visibly rather than silently.
 
 ## Tests that prove the mitigations
 
-`backend/tests/test_sod.py` (S1–S8: each refusal, the token, chat, the
-policy and the exception, the report's statuses and matrix),
+`backend/tests/test_sod.py` (S1–S8: each refusal, the token, chat) and
+`test_sod_policy.py` (the policy and the exception, the report's statuses
+and matrix),
 `backend/tests/test_access_review.py` (S9–S12: the schedule, inactivity,
 the listing with team roles, decisions and removals, the missed flag and the
 late record, the inventory without values),
 `frontend/src/pages/CompanyDuties.test.tsx` and the menu cases in
-`frontend/src/App.test.tsx`.
+`frontend/src/AppNavigation.test.tsx`.
 
 ## Residual risks
 

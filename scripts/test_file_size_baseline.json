@@ -1,22 +1,7 @@
 {
-  "backend/tests/test_acceptance.py": 711,
   "backend/tests/test_app_check.py": 1320,
-  "backend/tests/test_architectures.py": 610,
-  "backend/tests/test_auth_enforcement.py": 695,
-  "backend/tests/test_board_moves.py": 718,
   "backend/tests/test_browser_image.py": 642,
   "backend/tests/test_browser_smoke.py": 802,
-  "backend/tests/test_dependencies.py": 710,
-  "backend/tests/test_grounding_signatures.py": 683,
   "backend/tests/test_manager_rules.py": 1103,
-  "backend/tests/test_project_docs.py": 671,
-  "backend/tests/test_project_wiki_loop.py": 722,
-  "backend/tests/test_run_logs.py": 704,
-  "backend/tests/test_sod.py": 616,
-  "backend/tests/test_specifications.py": 902,
-  "backend/tests/test_sprint_board.py": 629,
-  "backend/tests/test_task_views.py": 727,
-  "backend/tests/test_verification.py": 746,
-  "frontend/src/App.test.tsx": 613,
-  "frontend/src/pages/CompanyNew.test.tsx": 741
+  "backend/tests/test_run_logs.py": 704
 }
