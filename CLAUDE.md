@@ -131,6 +131,7 @@ The whole section (both tables of test files, the e2e run, the bench, CI) is [`d
 ```bash
 # Backend (no Postgres, NATS, Neo4j or LLM proxy needed)
 cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
+# runs on every core with pytest-xdist (dev group) by default; -n 0 for one process
 
 # Backend lint: the ruff version CI pins, since the default rule set moves between releases
 pip install "ruff==0.17.1"
