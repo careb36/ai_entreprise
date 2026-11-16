@@ -12,13 +12,15 @@ import json
 
 import pytest
 from config import settings
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models.company import Company
 from models.specification import Specification
 from services.planning import spec_author
 from services.tools import developer_tools, mcp_config, research_tools
 from test_developer_tools import _answer, _answer_with_calls
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import GOOD, _company
+from test_specifications import GOOD
 
 PAGE = b"<html><head><style>p{}</style><script>x()</script></head><body><h1>Pytest 9.0</h1><p>Released &amp; stable.</p></body></html>"
 

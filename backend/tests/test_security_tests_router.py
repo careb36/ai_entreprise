@@ -8,11 +8,13 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import AuditLog, Company, WstgReview
 from models.agent_run import AgentRun, Verification
 from services.planning.project_docs import collect
-from test_documentation_router import _company, _records
-from test_git_workflow import _member, enforcement  # noqa: F401
+from test_documentation_router import _records
 
 
 def _body(**overrides):

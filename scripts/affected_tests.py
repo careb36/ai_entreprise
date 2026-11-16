@@ -48,7 +48,8 @@ The test files go to stdout, one per line (``backend/tests`` for the whole
 suite), the reasons to stderr. ``--run`` runs pytest on them with the
 interpreter running this script, from ``backend/`` with ``PYTHONPATH=.:app``,
 and passes what follows ``--`` through. ``--suggest`` prints the contexts a
-test file's imports and URLs point at, to start its entry in the map; the
+test file's imports and URLs point at (and those of the helper modules it
+imports, such as ``factories.py``), to start its entry in the map; the
 entry is still read and fixed by hand. The script only reads the repository
 (and asks git which files changed). Standard library only.
 """
@@ -207,7 +208,17 @@ def urls_in(path: Path) -> set[str]:
     except (OSError, SyntaxError, ValueError):
         return set()
     found = set()
+    # The pieces of an f-string are read with it, never alone: the ``"/v1/x/"``
+    # of ``f"/v1/x/{id}/y"`` is not a call to ``/v1/x/``.
+    pieces = {
+        id(v)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.JoinedStr)
+        for v in node.values
+    }
     for node in ast.walk(tree):
+        if id(node) in pieces:
+            continue
         if isinstance(node, ast.JoinedStr):
             text = "".join(
                 v.value if isinstance(v, ast.Constant) else "X" for v in node.values
@@ -221,15 +232,36 @@ def urls_in(path: Path) -> set[str]:
     return found
 
 
+def _with_helpers(path: Path) -> list[Path]:
+    """*path* and the helper modules of its folder it imports, transitively
+    (``factories``, ``chat_fakes``...): a helper's imports are the test's too.
+    Another test file it imports is not followed: what it borrows from one is
+    a helper, and the map says what that test file exercises."""
+    out, todo = [path], [path]
+    while todo:
+        for name in imported_names(todo.pop()):
+            helper = path.parent / f"{name.split('.')[0]}.py"
+            if helper.stem.startswith(("test_", "conftest")):
+                continue
+            if helper.is_file() and helper not in out:
+                out.append(helper)
+                todo.append(helper)
+    return out
+
+
 def suggest(path: Path, data: dict) -> list[str]:
-    """The contexts a test file's imports and URLs point at, reduced to the top."""
+    """The contexts a test file's imports and URLs point at, its helpers'
+    too, reduced to the top."""
     contexts = data["contexts"]
-    names = imported_names(path)
-    # A patch by name (``mock.patch("services.loop.x.y")``) reaches it too.
-    names |= set(_PATCHED.findall(path.read_text(encoding="utf-8")))
+    names: set[str] = set()
+    sources = _with_helpers(path)
+    for source in sources:
+        names |= imported_names(source)
+        # A patch by name (``mock.patch("services.loop.x.y")``) reaches it too.
+        names |= set(_PATCHED.findall(source.read_text(encoding="utf-8")))
     found = contexts_of_names(names, contexts)
     table = routes()
-    for url in urls_in(path):
+    for url in {u for source in sources for u in urls_in(source)}:
         for pattern, router in table:
             if pattern.fullmatch(url):
                 found |= contexts_of_names({f"routers.{router}"}, contexts)
