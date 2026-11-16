@@ -272,6 +272,9 @@ def test_every_path_codeowners_names_exists():
     for pattern in _codeowners():
         if pattern == "*":
             continue
+        if "*" in pattern:
+            assert any(REPO.glob(pattern.lstrip("/"))), pattern
+            continue
         assert (REPO / pattern.lstrip("/")).exists(), pattern
 
 

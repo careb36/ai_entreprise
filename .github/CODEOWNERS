@@ -69,8 +69,27 @@
 /.env.example                       @careb36
 
 # Los ficheros de política: un cambio aquí reescribe qué se considera evidencia.
-/backend/app/services/evidence/verification.py  @careb36
 /backend/app/services/tasks/board.py            @careb36
+
+# Las rutas protegidas (docs/design/rsi-loop.md §3): lo que los sprints de la
+# propia fábrica no cambian sin una persona. La lista es
+# backend/app/services/contracts/protected_paths.py, y
+# backend/tests/test_protected_paths.py falla si una de sus rutas no tiene
+# aquí una línea con dueño (REQ-9).
+/bench/                                          @careb36
+/scripts/bench/                                  @careb36
+/scripts/self_host/                              @careb36
+/backend/app/services/evidence/                  @careb36
+/backend/tests/test_verificador_benchmark.py     @careb36
+/backend/tests/test_bench_*.py                   @careb36
+/backend/tests/test_secops_checks.py             @careb36
+/backend/tests/test_protected_paths.py           @careb36
+/backend/app/services/contracts/protected_paths.py @careb36
+/backend/app/history_check.py                    @careb36
+/backend/app/services/learning/procedures.py     @careb36
+/backend/app/services/management/manager_policy.py @careb36
+/backend/app/services/platform/sod.py            @careb36
+/docs/POSITIONING.md                             @careb36
 
 # La regla de dependencias, las decisiones de arquitectura y la política.
 /docs/architecture/                 @careb36
