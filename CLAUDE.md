@@ -160,7 +160,7 @@ python3 scripts/check_file_sizes.py
 
 `scripts/check.sh quick` runs the backend tests through `scripts/affected_tests.py --run` (it reads each test's context from `tests` in `docs/architecture/contexts.json` and says when it falls back to the whole suite) and the frontend's through `npm run test:changed`.
 
-`scripts/check_file_sizes.py` keeps a source file at or under 600 lines; the files already over it (`scripts/file_size_baseline.json`) may shrink but never grow, and `--update` lowers an entry.
+`scripts/check_file_sizes.py` keeps a source file at or under 600 lines; the files already over it (`scripts/file_size_baseline.json`) may shrink but never grow, and `--update` lowers an entry. Test files (`backend/tests`, `llm-proxy/tests`, `vscode-daemon/tests`, the frontend's `*.test.ts(x)`) follow the same rule with their own baseline, `scripts/test_file_size_baseline.json`.
 
 ## Frontend i18n
 
