@@ -14,10 +14,14 @@
   refused by the unique key.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class ChatConnection(SQLModel, table=True):
@@ -42,8 +46,8 @@ class ChatConnection(SQLModel, table=True):
     last_status: str | None = None
     last_error: str | None = None
     created_by: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
+    updated_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class ChatIdentity(SQLModel, table=True):
@@ -60,7 +64,7 @@ class ChatIdentity(SQLModel, table=True):
     workspace_id: str
     external_user_id: str
     display_name: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class ChatLinkCode(SQLModel, table=True):
@@ -72,7 +76,7 @@ class ChatLinkCode(SQLModel, table=True):
     provider: str
     code_hash: str = Field(unique=True, index=True)
     expires_at: datetime
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class ChatApprovalMessage(SQLModel, table=True):
@@ -98,7 +102,7 @@ class ChatApprovalMessage(SQLModel, table=True):
     decided_by_user_id: int | None = None
     decided_at: datetime | None = None
     outcome: str | None = None
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)
 
 
 class ChatInteraction(SQLModel, table=True):
@@ -109,4 +113,4 @@ class ChatInteraction(SQLModel, table=True):
     provider: str
     interaction_key: str
     connection_id: int | None = None
-    received_at: datetime | None = Field(default_factory=datetime.utcnow)
+    received_at: datetime | None = Field(default_factory=_utcnow)

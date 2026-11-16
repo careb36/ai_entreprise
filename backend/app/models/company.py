@@ -12,11 +12,15 @@ Tables defined here represent the multi-tenancy core of Fabrique:
 - ``ProjectDiscovery`` — result of the automatic stack-detection scan.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Company(SQLModel, table=True):
@@ -193,4 +197,4 @@ class ProjectDiscovery(SQLModel, table=True):
     detected_stack: str | None = None  # JSON: language, framework, database, complexity
     suggested_team: str | None = None  # JSON: list of {role, seniority, specialty}
     status: str = "completed"
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=_utcnow)

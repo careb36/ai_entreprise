@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, UniqueConstraint
@@ -11,6 +11,10 @@ from sqlmodel import Column, Field, SQLModel
 TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
 GRAPH_PRODUCER = "le-fabrique-graph"
 IN_HOUSE_PRODUCERS = (TASK_WORKER_PRODUCER, GRAPH_PRODUCER)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class AgentRun(SQLModel, table=True):
@@ -32,7 +36,7 @@ class AgentRun(SQLModel, table=True):
     status: str = "ingested"
     started_at: datetime | None = None
     finished_at: datetime | None = None
-    ingested_at: datetime = Field(default_factory=datetime.utcnow)
+    ingested_at: datetime = Field(default_factory=_utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
     # The Reviewer agent's suggestion: a claim kept apart from the approval a
     # person records (``AgentRunApproval``). ``reviewed_at`` with no decision
@@ -53,7 +57,7 @@ class Verification(SQLModel, table=True):
     verdict: str
     checks: list | None = Field(default=None, sa_column=Column(JSON))
     evidence: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    observed_at: datetime = Field(default_factory=datetime.utcnow)
+    observed_at: datetime = Field(default_factory=_utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
 
 
@@ -67,5 +71,5 @@ class AgentRunApproval(SQLModel, table=True):
     decision: str
     feedback: str | None = None
     rejection_category: str | None = None
-    decided_at: datetime = Field(default_factory=datetime.utcnow)
+    decided_at: datetime = Field(default_factory=_utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
