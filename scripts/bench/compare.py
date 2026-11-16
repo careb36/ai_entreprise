@@ -3,7 +3,9 @@
 
     python3 scripts/bench/compare.py bench/scorecards/<stamp>.json \\
         [--previous FILE] [--dir bench/scorecards] [--rate 0.05] [--rework 0.25] [--tokens 0.5] \\
-        [--prompt-tokens 0.2]
+        [--prompt-tokens 0.2] [--time [0.25]]
+    python3 scripts/bench/compare.py C1.json C2.json C3.json \\
+        --previous B1.json --previous B2.json --previous B3.json [--runs 3] [...]
 
 Without ``--previous`` the previous scorecard is the newest one in ``--dir``
 whose stamp sorts before the current one's (the stamps are UTC
@@ -22,7 +24,10 @@ A regression, in the totals or in any specification both cards hold:
 - a specification that completed before did not complete now;
 - with ``--prompt-tokens`` (off by default), the mean estimated prompt tokens
   per task grew by more than that (relative, 0.2 = +20%), in the totals or a
-  specification, when both cards measured prompts (schema v3).
+  specification, when both cards measured prompts (schema v3);
+- with ``--time`` (off by default; alone it means 0.25, the wall-clock
+  threshold of ``docs/design/rsi-loop.md`` §10 decision 4), wall-clock grew by
+  more than that (relative, 0.25 = +25%), in the totals or a specification.
 
 A run the token budget cut (``run.status: budget_exceeded``, ``budget.py``)
 on either side is not judged in the totals, which cover fewer
@@ -31,7 +36,8 @@ the run was cut, shows its budget and tokens, lists the specifications it
 skipped (never graded, never a drop) and judges only the specifications
 both cards ran in full. A card without ``run`` is a complete run.
 
-Wall-clock is shown, never judged: it depends on the machine. Two runs made
+Without ``--time``, wall-clock is shown, never judged: it depends on the
+machine, so judge it only for runs made on the same one. Two runs made
 under different routing policies (``scorecard.py write --policy``, each run
 with its own ``AGENT_MODEL_POLICY``) are compared the same way, and the diff
 adds a table by difficulty: per band, the tasks, the share done at the first
@@ -43,6 +49,12 @@ prompts' weight per section (estimated tokens, schema v3) is shown the same
 way, never judged; only ``--prompt-tokens`` judges the mean. Prints the diff
 as Markdown (the job summary and the issue body) and exits 1 on a
 regression, 2 when a card does not match the schema, 0 otherwise.
+
+Several cards per side (or ``--runs K``) are repeated runs: each side reads as
+medians with their spread, a pair of runs served different models is void,
+and a metric with fewer than K complete runs is unmeasured (``repeated.py``,
+which says how). Then the exit status is 3 when nothing regressed but a
+judged metric is unmeasured.
 """
 
 import argparse
@@ -53,39 +65,24 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget  # the sibling modules, by path
+import graders
 import prompt_weight
+import repeated
 import routing_split
 from schema import validate
 
-DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5, "prompt_tokens": None}
-# (field, label, direction): +1 when higher is better, -1 when lower is.
-_JUDGED = (
-    ("criteria_rate", "criteria passed", +1, "rate"),
-    ("first_attempt_rate", "done at the first attempt", +1, "rate"),
-    ("blocked_share", "blocked share", -1, "rate"),
-    ("rework_per_task", "rework per task", -1, "rework"),
-)
-
-
-def _spec_rate(spec: dict[str, Any]) -> float:
-    total = spec["criteria"]["total"]
-    return round(spec["criteria"]["passed"] / total, 4) if total else 0.0
-
-
-def _numbers(row: dict[str, Any], *, is_spec: bool) -> dict[str, float]:
-    if is_spec:
-        return {
-            "criteria_rate": _spec_rate(row),
-            "first_attempt_rate": row["first_attempt_rate"],
-            "blocked_share": row["blocked_share"],
-            "rework_per_task": row["rework_per_task"],
-            "tokens_reported": row["tokens"]["reported"],
-            "wall_clock_seconds": row["wall_clock_seconds"],
-        }
-    return {
-        k: row[k]
-        for k in (*(j[0] for j in _JUDGED), "tokens_reported", "wall_clock_seconds")
-    }
+DEFAULTS = {
+    "rate": 0.05,
+    "rework": 0.25,
+    "tokens": 0.5,
+    "prompt_tokens": None,
+    "time": None,
+}
+TIME_DEFAULT = 0.25  # docs/design/rsi-loop.md §10, decision 4
+EXIT_UNMEASURED = 3
+# (field, label, direction, limit): +1 when higher is better, -1 when lower is.
+_JUDGED = repeated.ABSOLUTE
+_numbers = repeated.numbers
 
 
 def _judge(
@@ -102,6 +99,16 @@ def _judge(
                 f"{where}: {label} went from {before[field]:.2f} to {after[field]:.2f}"
             )
     return found
+
+
+def _judge_time(
+    where: str, before: dict[str, Any], after: dict[str, Any], limit: float | None
+) -> list[str]:
+    """Wall-clock, judged only with ``--time``: relative growth beyond it."""
+    b, a = before["wall_clock_seconds"], after["wall_clock_seconds"]
+    if limit is None or not b or (a - b) / b <= limit + 1e-9:
+        return []
+    return [f"{where}: wall-clock grew from {b:.0f} s to {a:.0f} s"]
 
 
 def _judge_prompt(
@@ -127,12 +134,10 @@ def _judge_totals(
     previous: dict[str, Any], current: dict[str, Any], limits: dict[str, Any]
 ) -> list[str]:
     """The regressions in the totals of two complete runs."""
-    found = _judge(
-        "total",
-        _numbers(previous["totals"], is_spec=False),
-        _numbers(current["totals"], is_spec=False),
-        limits,
-    )
+    before = _numbers(previous["totals"], is_spec=False)
+    after = _numbers(current["totals"], is_spec=False)
+    found = _judge("total", before, after, limits)
+    found += _judge_time("total", before, after, limits["time"])
     found += _judge_prompt(
         "total",
         previous["totals"].get("prompt"),
@@ -181,6 +186,7 @@ def compare(
             unjudged.append(spec["name"])  # stopped by the budget: not run in full
             continue
         regressions += _judge(spec["name"], b, a, limits)
+        regressions += _judge_time(spec["name"], b, a, limits["time"])
         regressions += _judge_prompt(
             spec["name"], old.get("prompt"), spec.get("prompt"), limits["prompt_tokens"]
         )
@@ -310,7 +316,8 @@ def render(
         "",
         (
             f"Commits `{previous['commit'][:12]}` → `{current['commit'][:12]}`; models `{previous['llm']}` → `{current['llm']}`; "
-            f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`."
+            f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`; "
+            f"graders {graders.label(previous)} → {graders.label(current)}."
         ),
         "",
         *render_cut(previous, current, result),
@@ -370,8 +377,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Compare a bench scorecard with the previous one."
     )
-    parser.add_argument("current", type=Path)
-    parser.add_argument("--previous", type=Path)
+    parser.add_argument("current", type=Path, nargs="+", help="the candidate's card(s)")
+    parser.add_argument(
+        "--previous",
+        type=Path,
+        action="append",
+        default=[],
+        help="the baseline's card; repeat it for repeated runs",
+    )
     parser.add_argument("--dir", type=Path, default=Path("bench/scorecards"))
     parser.add_argument("--rate", type=float, default=DEFAULTS["rate"])
     parser.add_argument("--rework", type=float, default=DEFAULTS["rework"])
@@ -382,31 +395,70 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULTS["prompt_tokens"],
         help="judge the mean estimated prompt tokens per task (relative); off by default",
     )
+    parser.add_argument(
+        "--time",
+        type=float,
+        nargs="?",
+        const=TIME_DEFAULT,
+        default=DEFAULTS["time"],
+        help=f"judge wall-clock (relative; {TIME_DEFAULT} when given alone); off by default",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        help="K, the complete runs each side needs (repeated runs); "
+        "by default the number of cards on the larger side",
+    )
     args = parser.parse_args(argv)
-    current = _load(args.current)
+    if args.runs is not None and args.runs < 1:
+        parser.error("--runs must be at least 1")
+    limits = {
+        "rate": args.rate,
+        "rework": args.rework,
+        "tokens": args.tokens,
+        "prompt_tokens": args.prompt_tokens,
+        "time": args.time,
+    }
+    if len(args.current) > 1 or len(args.previous) > 1 or args.runs is not None:
+        return _main_repeated(args.current, args.previous, limits, args.runs)
+    current = _load(args.current[0])
     if current is None:
         return 2
-    previous_path = args.previous or previous_of(args.current, args.dir)
+    previous_path = (
+        args.previous[0] if args.previous else previous_of(args.current[0], args.dir)
+    )
     if previous_path is None:
         print(
-            f"No previous scorecard in {args.dir}: {args.current.name} is the first reference."
+            f"No previous scorecard in {args.dir}: {args.current[0].name} is the first reference."
         )
         return 0
     previous = _load(previous_path)
     if previous is None:
         return 2
-    result = compare(
-        previous,
-        current,
-        {
-            "rate": args.rate,
-            "rework": args.rework,
-            "tokens": args.tokens,
-            "prompt_tokens": args.prompt_tokens,
-        },
-    )
+    result = compare(previous, current, limits)
     print(render(previous, current, result), end="")
     return 1 if result["regressions"] else 0
+
+
+def _main_repeated(
+    current: list[Path],
+    previous: list[Path],
+    limits: dict[str, Any],
+    runs: int | None,
+) -> int:
+    """Repeated runs per side: medians, spread, void pairs (``repeated.py``)."""
+    if not previous:
+        print("repeated runs need the baseline's cards (--previous)", file=sys.stderr)
+        return 2
+    after = [_load(p) for p in current]
+    before = [_load(p) for p in previous]
+    if any(card is None for card in (*after, *before)):
+        return 2
+    result = repeated.compare_runs(before, after, limits, runs)
+    print(repeated.render(before, after, result), end="")
+    if result["regressions"]:
+        return 1
+    return EXIT_UNMEASURED if result["unmeasured"] else 0
 
 
 if __name__ == "__main__":

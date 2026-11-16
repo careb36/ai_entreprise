@@ -24,6 +24,12 @@ and without reported usage, and the specifications ``skipped`` for the budget,
 which have no entry and are never graded), and the spec status
 ``budget_exceeded`` for the sprint the budget stopped. A card without ``run``
 (every card before it) reads as a complete run.
+
+Also in version 3, optional and additive (``run.sh --graders``, REQ-4 of
+``docs/design/rsi-loop.md``): ``graders``, the commit the acceptance tests
+and the grader were taken from (``graders.py``: ``sha``, git's ``trees`` per
+grading path, and the ``sha256`` of the files the runner wrote). A card
+without it was graded by the build's own copy.
 """
 
 import math
@@ -32,7 +38,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import budget  # the sibling module, by path
+import budget  # the sibling modules, by path
+import graders
 
 SCHEMA_VERSION = 3
 READABLE_VERSIONS = (1, 2, 3)
@@ -281,6 +288,7 @@ def validate(card: Any) -> list[str]:
         if version == 3:
             problems.extend(_prompt_problems("totals", totals.get("prompt")))
     problems.extend(budget.run_problems(card, _count))
+    problems.extend(graders.problems(card))
     if not budget.is_cut(card) and any(
         isinstance(s, dict) and s.get("status") == budget.BUDGET_EXCEEDED for s in specs
     ):
