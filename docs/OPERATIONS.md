@@ -520,15 +520,17 @@ recurs, look for a fixed port added back, or a leftover container holding it
 **An image the job just built is gone (Docker Build).** The smoke test fails
 with `Unable to find image 'fabrique-<name>:ci' locally … pull access denied`
 a second after a green build. Cause: another job's cleanup
-(`docker rmi -f`) removed the same fixed tag. #589 tags each build
-`fabrique-<name>:ci-<run_id>-<attempt>`; until it is merged, rerun the job.
+(`docker rmi -f`) removed the same fixed tag. Since #589 each build is
+tagged `fabrique-<name>:ci-<run_id>-<attempt>`; if it happens again, a job
+still uses a fixed tag or name on the shared daemon: give it the run id.
 
 **A timing test fails on a busy machine.** A wall-clock assertion fails, for
 example the task filter's page budget with timings of 0.4 to 1.4 s against
 300 ms, while the code did not change. Cause: other jobs on the same machine.
-#590 counts the filter's SQL statements on every pull request and keeps the
-strict timing for the nightly bench (`PERF_STRICT=1`). Rerun; a timing test
-that fails twice on a quiet machine is a real regression.
+Since #590 (merged with #588 and #589) every pull request counts the filter's
+SQL statements and holds the timing to a loose 1 s guard; the strict 300 ms
+runs in the nightly bench (`PERF_STRICT=1`). A timing test that fails twice
+on a quiet machine is a real regression.
 
 **A run killed for lack of memory.** The job ends with `exit code 137`,
 `Killed`, or pytest-xdist's `node down: Not properly terminated` and

@@ -29,6 +29,7 @@ report() { "$PY" -c "import sys, json; d = json.load(open(sys.argv[1])); print($
 self_host first --steps checkout,company,records,issue,wait
 check "the harness ran without an API error" test "$(report first "d.get('error', '')")" = ""
 check "the company's project is a snapshot of this repository, outside it, as one commit" test "$(report first "d['checkout']['created'], d['checkout']['files'] > 1000")" = "True True"
+check "an existing repository: init_company planned no foundation sprint, as the daemon observed (retrospective F8)" test "$(report first "(d['company'].get('foundation_sprint') or {}).get('planned'), (d['company'].get('foundation_sprint') or {}).get('reason')")" = "False repository_with_code"
 check "with the Git workflow on its main branch, the delivery tests named, and the sandbox set ($SANDBOX)" test "$(report first "d['company']['git_workflow'], d['company']['git_base_branch'], d['company']['test_command'].endswith(' tests'), d['company']['sandbox']")" = "True main True $SANDBOX"
 check "La Fabrique's own specification and architecture pass the product's checks and are approved" test "$(report first "[d['records'][k] for k in ('specification_status', 'specification_blocking', 'architecture_status', 'architecture_blocking', 'modules', 'decisions')]")" = "['approved', 0, 'approved', 0, 15, 6]"
 check "the stored record renders docs/ARCHITECTURE.md as the repository has it" test "$(report first "d['records']['document_matches']")" = True
