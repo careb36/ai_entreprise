@@ -1042,6 +1042,12 @@
       "test_verification.py": [
         "management"
       ],
+      "test_verification_checks.py": [
+        "management"
+      ],
+      "test_verification_records.py": [
+        "management"
+      ],
       "test_webhooks.py": [
         "integrations"
       ],
