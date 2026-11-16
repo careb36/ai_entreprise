@@ -975,6 +975,12 @@
       "test_sprint_board.py": [
         "loop"
       ],
+      "test_sprint_board_api.py": [
+        "loop"
+      ],
+      "test_sprint_board_loop.py": [
+        "loop"
+      ],
       "test_sprint_close.py": [
         "loop"
       ],
