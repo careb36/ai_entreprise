@@ -323,6 +323,12 @@
     "GET /v1/enterprise/quotas": {
       "access": "Viewer"
     },
+    "GET /v1/findings": {
+      "access": "Viewer"
+    },
+    "GET /v1/findings/{finding_id}": {
+      "access": "Viewer"
+    },
     "GET /v1/glassroom/stream": {
       "access": "signed",
       "why": "A five-minute ticket for one sprint; membership checked again."

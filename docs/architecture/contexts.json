@@ -147,6 +147,7 @@
       ],
       "public": [
         "architect",
+        "findings",
         "procedures",
         "retrospective",
         "scrum_master",
@@ -671,6 +672,9 @@
       ],
       "test_factories.py": [
         "platform"
+      ],
+      "test_findings.py": [
+        "learning"
       ],
       "test_foundation_sprint.py": [
         "release"
