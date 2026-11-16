@@ -453,74 +453,6 @@ def check_model_factory() -> None:
         print(fail(f"get_model_for_complexity: {exc}"))
 
 
-def check_governance() -> None:
-    """Unit-level regression for governance path blocking."""
-    print(head("7 · governance (unit, path-blocking)"))
-
-    import importlib, sys as _sys
-    repo_root = Path(__file__).resolve().parent.parent
-    for c in [str(repo_root / "backend" / "app"), "/app/app", "/app"]:
-        if c not in _sys.path:
-            _sys.path.insert(0, c)
-
-    try:
-        gov = importlib.import_module("app.services.evidence.governance")
-    except ImportError:
-        try:
-            gov = importlib.import_module("services.evidence.governance")
-        except ImportError:
-            print(warn("  governance module not importable — skipping"))
-            return
-
-    check_fn = getattr(gov, "check_write_path", None) or getattr(gov, "is_protected_path", None)
-    if check_fn is None:
-        print(warn("  check_write_path / is_protected_path not found — skipping"))
-        return
-
-    # Protected paths from CLAUDE.md: SELF_IMPROVEMENT_PROTECTED_PATHS
-    protected_examples = [
-        "backend/app/services/evidence/governance.py",
-        "db/init-db/init.sql",
-        "docker-compose.yml",
-    ]
-    safe_examples = [
-        "workspace/output/my_feature.py",
-        "generated/report.md",
-    ]
-
-    all_pass = True
-    for path in protected_examples:
-        t0 = time.monotonic()
-        try:
-            result = check_fn(path, is_self_improvement=True)
-            elapsed = time.monotonic() - t0
-            # Should be blocked (return False/raise/return 'blocked' sentinel)
-            blocked = (result is False) or (result == "blocked") or (result == "sandbox")
-            if not blocked:
-                print(fail(f"protected path NOT blocked: {path}  ({elapsed:.2f}s)"))
-                all_pass = False
-            else:
-                print(ok(f"protected path blocked: {path}  ({elapsed:.2f}s)"))
-        except (ValueError, PermissionError) as exc:
-            print(ok(f"protected path raised expected exception for {path}: {type(exc).__name__}"))
-        except Exception as exc:  # noqa: BLE001
-            print(warn(f"  governance check for {path}: {exc}"))
-
-    for path in safe_examples:
-        t0 = time.monotonic()
-        try:
-            result = check_fn(path, is_self_improvement=True)
-            elapsed = time.monotonic() - t0
-            allowed = result is not False and result != "blocked"
-            if not allowed:
-                print(fail(f"safe path unexpectedly blocked: {path}"))
-                all_pass = False
-            else:
-                print(ok(f"safe path allowed: {path}  ({elapsed:.2f}s)"))
-        except Exception as exc:  # noqa: BLE001
-            print(warn(f"  governance safe-path check for {path}: {exc}"))
-
-
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -560,7 +492,6 @@ def main() -> int:
     if not args.skip_unit:
         check_workspace_snapshot()
         check_model_factory()
-        check_governance()
 
     return s.summary()
 

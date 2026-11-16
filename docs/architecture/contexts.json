@@ -864,6 +864,9 @@
       "test_prompt_weight.py": [
         "models"
       ],
+      "test_protected_paths.py": [
+        "contracts"
+      ],
       "test_provider_connections.py": [
         "models"
       ],
