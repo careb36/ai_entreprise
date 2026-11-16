@@ -212,6 +212,26 @@ def test_a_well_formed_superseded_by_is_kept_and_never_a_models_one():
 # --- the record through the API --------------------------------------------------
 
 
+def _la_fabrique(sqlite_session, test_client):
+    """A company holding La Fabrique's specification and architecture, approved."""
+    company = Company(company_name="La Fabrique")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    api = _ClientApi(test_client)
+    spec = self_host._approved_spec(
+        api,
+        company.id,
+        json.loads(
+            (REPO / "docs/architecture/specification.json").read_text(encoding="utf-8")
+        ),
+    )
+    arch_record = json.loads(
+        (REPO / "docs/architecture/architecture.json").read_text(encoding="utf-8")
+    )
+    self_host._approved_architecture(api, spec["id"], arch_record)
+    return company, spec, api
+
+
 def test_la_fabriques_record_round_trips_through_the_api(sqlite_session, test_client):
     company = Company(company_name="La Fabrique")
     sqlite_session.add(company)
@@ -387,3 +407,136 @@ def test_a_hung_git_command_fails_naming_the_command(tmp_path, monkeypatch):
     assert "git ls-files -z" in message
     assert str(self_host.GIT_TIMEOUT_SECONDS) in message
     assert "user.email" not in message  # the identity flags are not the command
+
+
+# --- the issue step's specification: #535, or --spec (spec_source.py) ----------
+
+spec_source = self_host.spec_source
+FINDING = SELF_HOST / "specs" / "folder-lint-specification.json"
+
+
+def test_without_spec_the_issue_step_runs_on_issue_535_as_before():
+    source = spec_source.load()
+    assert source == {
+        "spec": _fixture("issue-535-specification.json"),
+        "change": _fixture("issue-535-architecture.json"),
+        "sprint_name": "Saved views 1",
+    }
+    # The e2e's step 9d reads the report as it was: no key of a --spec file.
+    assert not {"source", "target_measure", "warnings"} & set(source)
+
+
+def test_a_spec_file_is_checked_and_carries_its_measure_and_revision():
+    source = spec_source.load(str(FINDING))
+    assert source["spec"]["title"] == (
+        "The lint after an edit runs the edited file's folder's linter"
+    )
+    assert source["target_measure"] == "scripts/self_host/measures/test_folder_lint.py"
+    assert source["revision"] == str(
+        SELF_HOST / "specs" / "folder-lint-architecture.json"
+    )
+    assert source["warnings"] == [] and source["sprint_name"] == source["spec"]["title"]
+    spec = spec_check.normalize(source["spec"])
+    assert spec_check.check(spec)["findings"] == []
+    criteria = [c["id"] for r in spec["requirements"] for c in r["criteria"]]
+    assert criteria == ["REQ-1.1", "REQ-1.2", "REQ-2.1", "REQ-2.2", "REQ-2.3"]
+    # Each criterion has a test of its own in the target measure.
+    measure = (REPO / source["target_measure"]).read_text(encoding="utf-8")
+    for criterion in criteria:
+        name = criterion.lower().replace("-", "_").replace(".", "_")
+        assert f"def test_{name}_" in measure, criterion
+    base = json.loads(
+        (REPO / "docs/architecture/architecture.json").read_text(encoding="utf-8")
+    )
+    revised = arch_check.normalize(
+        self_host.revised_architecture(base, source["change"])
+    )
+    assert arch_check.check(revised, ["REQ-1", "REQ-2"])["findings"] == []
+
+
+def _write(path: Path, data) -> str:
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+def test_a_spec_file_the_product_would_not_approve_is_refused(tmp_path):
+    record = json.loads(FINDING.read_text(encoding="utf-8"))
+    _write(tmp_path / "x-architecture.json", {"title": "Revised"})
+    no_criteria = {
+        **record,
+        "requirements": [{"title": "Something", "description": "x" * 30}],
+    }
+    with pytest.raises(spec_source.SpecRefused, match="REQ-1 no_criteria"):
+        spec_source.load(_write(tmp_path / "x-specification.json", no_criteria))
+    without = {k: v for k, v in record.items() if k != "target_measure"}
+    with pytest.raises(spec_source.SpecRefused, match="no target_measure"):
+        spec_source.load(_write(tmp_path / "x-specification.json", without))
+    outside = {**record, "target_measure": "../etc/passwd"}
+    with pytest.raises(spec_source.SpecRefused, match="no such file"):
+        spec_source.load(_write(tmp_path / "x-specification.json", outside))
+    (tmp_path / "x-architecture.json").unlink()
+    with pytest.raises(spec_source.SpecRefused, match="x-architecture.json"):
+        spec_source.load(_write(tmp_path / "x-specification.json", record))
+    (tmp_path / "broken.json").write_text("{", encoding="utf-8")
+    with pytest.raises(spec_source.SpecRefused, match="broken.json"):
+        spec_source.load(str(tmp_path / "broken.json"))
+    # Named, the revision is read from where it says.
+    other = _write(tmp_path / "other.json", {"title": "Other"})
+    loaded = spec_source.load(_write(tmp_path / "y.json", record), other)
+    assert loaded["change"] == {"title": "Other"}
+
+
+def test_the_harness_refuses_before_any_call(tmp_path, capsys):
+    bad = _write(tmp_path / "bad-specification.json", {"title": "No requirement"})
+    # The API's port is closed: a call would be an ApiError, not this exit.
+    common = ["--api", "http://127.0.0.1:9", "--checkout", str(tmp_path / "snap")]
+    with pytest.raises(SystemExit) as refused:
+        self_host.main([*common, "--steps", "issue", "--spec", bad])
+    assert refused.value.code == 2
+    assert "no_requirements" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as refused:
+        self_host.main([*common, "--steps", "measure"])
+    assert refused.value.code == 2
+    assert "the measure step needs --spec" in capsys.readouterr().err
+    assert "measure" not in self_host.STEPS  # never part of "all"
+
+
+def test_a_spec_files_specification_and_revision_go_through_the_api(
+    sqlite_session, test_client
+):
+    company, earlier, api = _la_fabrique(sqlite_session, test_client)
+    source = spec_source.load(str(FINDING))
+    spec = self_host._approved_spec(api, company.id, source["spec"])
+    assert spec["status"] == "approved" and spec["check"]["findings"] == []
+    assert "target_measure" not in spec  # the grader is the harness's, never posted
+    revised = self_host._revised_version(api, company.id, spec["id"], source["change"])
+    assert (revised["status"], revised["version"]) == ("approved", 2)
+    assert revised["specification_ids"] == [spec["id"], earlier["id"]]
+    assert revised["check"]["findings"] == []
+    covering = {m["name"]: m["covers"] for m in revised["modules"] if m["covers"]}
+    assert covering == {"workspace": ["REQ-1", "REQ-2"], "tools": ["REQ-2"]}
+
+
+def test_the_measure_runs_on_the_builds_backend_and_is_hashed_here(
+    tmp_path, monkeypatch
+):
+    graders = tmp_path / "graders"
+    (graders / "m").mkdir(parents=True)
+    (graders / "m" / "test_ok.py").write_text(
+        "import os\n\n\ndef test_in_the_build():\n"
+        "    assert os.getcwd().endswith('backend')\n",
+        encoding="utf-8",
+    )
+    (graders / "m" / "test_fails.py").write_text(
+        "def test_not_yet():\n    assert False\n", encoding="utf-8"
+    )
+    (tmp_path / "build" / "backend").mkdir(parents=True)
+    monkeypatch.setattr(spec_source, "REPO", graders)
+    python = self_host.sys.executable
+    passed = spec_source.run_measure("m/test_ok.py", tmp_path / "build", python)
+    assert (passed["exit_code"], passed["passed"]) == (0, True)
+    assert len(passed["output_sha256"]) == 64
+    assert passed["target_measure"] == "m/test_ok.py"
+    failed = spec_source.run_measure("m/test_fails.py", tmp_path / "build", python)
+    assert (failed["exit_code"], failed["passed"]) == (1, False)
+    assert any("1 failed" in line for line in failed["tail"])

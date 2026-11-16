@@ -23,11 +23,12 @@ Steps (``--steps``, comma-separated; ``all`` by default):
   architecture; the architecture's document and ADRs read back through the
   API and compared with ``docs/ARCHITECTURE.md`` and ``docs/adr/`` in the
   snapshot, then written into it by the daemon and compared with git.
-- ``issue``: issue #535 as a specification (``fixtures/``), approved; the
-  Architect's revision for it as the next version of La Fabrique's one
-  architecture (the covers of #469's specification kept by the product, the
-  fixture adding #535's), approved; the PO's plan, acceptance tests first;
-  the sprint started on the plan.
+- ``issue``: issue #535 as a specification (``fixtures/``), or with
+  ``--spec FILE`` a finding's, checked first by the product's ``spec_check``
+  (``spec_source.py``), approved; the Architect's revision for it as the
+  next version of La Fabrique's one architecture (#469's covers kept by the
+  product, the change adding the new ones), approved; the PO's plan,
+  acceptance tests first; the sprint started on the plan.
 - ``wait``: until that sprint completes (``--timeout``).
 - ``review``: the tasks waiting for a person, the task branches and the
   sprint's integration (its branches merged and the suite run, the one
@@ -37,6 +38,8 @@ Steps (``--steps``, comma-separated; ``all`` by default):
   it into ``main`` locally (nothing is pushed: the snapshot has no remote).
 - ``pack``: the documentation pack (#530) compiled in English and in Spanish,
   with what each could not say.
+- ``measure`` (by name only, with ``--spec``): the file's target measure run
+  on ``--build``'s backend (the snapshot by default); exit status 3 if it fails.
 
 It prints a JSON report (also written to ``--report``) that the e2e checks
 read and the retrospective cites. Taken from OpenHands, which develops
@@ -60,9 +63,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+sys.path.append(str(HERE))  # spec_source beside this file, whether run or imported
+import spec_source
+from spec_source import revised_architecture, step_measure  # noqa: F401 - a step; re-exported
+
 COMPANY_NAME = "La Fabrique"
 ADR_FIRST_NUMBER_KEY = "adr_first_number"
-STEPS = ("checkout", "company", "records", "issue", "wait", "review", "pack")
+STEPS = ("checkout", "company", "records", "issue", "wait", "review", "pack")  # "all"; "measure" by name
 AGENTS = [
     {"role": "PO", "name": "Po Fab"},
     {"role": "Architect", "name": "Ari Fab"},
@@ -332,23 +339,6 @@ def step_records(api, args, state, report):
     }
 
 
-def revised_architecture(base: dict, change: dict) -> dict:
-    """The draft version *base* revised by a fixture: new title, the new
-    specification's covers, appended interfaces and decisions. A module keeps
-    what *base* holds for the earlier specifications (``earlier_covers``)."""
-    covers = change.get("covers") or {}
-    return {
-        "title": change["title"],
-        "overview": base["overview"],
-        "modules": [{**m, "covers": list(covers.get(m["name"], []))} for m in base["modules"]],
-        "interfaces": list(base["interfaces"]) + list(change.get("interfaces") or []),
-        # The accepted decisions keep their dates; the new one is accepted
-        # when a person approves the revision.
-        "decisions": list(base["decisions"]) + list(change.get("decisions") or []),
-        "conventions": list(base["conventions"]),
-    }
-
-
 def _revised_version(api: Api, cid: int, spec_id: int, change: dict) -> dict:
     """The next version of the company's architecture for *spec_id*: opened by
     the company's revision route, the fixture's change written into it, approved.
@@ -371,11 +361,9 @@ def _revised_version(api: Api, cid: int, spec_id: int, change: dict) -> dict:
 
 
 def step_issue(api, args, state, report):
-    cid = state["company_id"]
-    spec_record = _load(HERE / "fixtures/issue-535-specification.json")
-    change = _load(HERE / "fixtures/issue-535-architecture.json")
-    spec = _approved_spec(api, cid, spec_record)
-    arch = _revised_version(api, cid, spec["id"], change)
+    cid, source = state["company_id"], args.source  # spec_source.load: #535, or --spec
+    spec = _approved_spec(api, cid, source["spec"])
+    arch = _revised_version(api, cid, spec["id"], source["change"])
     state["issue_specification_id"], state["issue_architecture_id"] = spec["id"], arch["id"]
     view = api.get(f"/v1/companies/{cid}/architecture")
     earlier = str(state.get("specification_id"))
@@ -393,6 +381,7 @@ def step_issue(api, args, state, report):
         "current_id": (view.get("current") or {}).get("id"),
         "earlier_covers_kept": sum(1 for m in arch["modules"] if (m.get("earlier_covers") or {}).get(earlier)),
         "planned_against": api.get(f"/v1/specifications/{spec['id']}").get("architecture_id"),
+        **{k: source[k] for k in ("source", "target_measure", "warnings") if k in source},
     }
     if not state.get("sprint_id"):
         plan = api.post(
@@ -407,7 +396,7 @@ def step_issue(api, args, state, report):
             "/v1/start_sprint",
             {
                 "company_id": cid,
-                "sprint_name": "Saved views 1",
+                "sprint_name": source["sprint_name"],
                 "start_date": time.strftime("%Y-%m-%d"),
                 "scope_size": args.scope,
                 "specification_id": spec["id"],
@@ -571,11 +560,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--accept", help="review: accept the tasks waiting for a person, with this comment")
     parser.add_argument("--merge", action="store_true", help="review: merge the sprint's integration into main, locally, once a person has read it")
     parser.add_argument("--prose", action="store_true", help="pack: ask the TechWriter for the charter's background")
+    parser.add_argument("--spec", help="issue, measure: a finding's specification file, checked first (spec_source.py)")
+    parser.add_argument("--revision", help="issue: its architecture change (default: <name>-architecture.json beside it)")
+    parser.add_argument("--build", help="measure: the build whose backend/ the measure runs on (default: --checkout)")
+    parser.add_argument("--python", default=sys.executable, help="measure: a Python with the backend's dependencies")
     args = parser.parse_args(argv)
     steps = STEPS if args.steps == "all" else tuple(s.strip() for s in args.steps.split(","))
-    unknown = [s for s in steps if s not in STEPS]
+    unknown = [s for s in steps if s not in (*STEPS, "measure")]
     if unknown:
         parser.error(f"unknown step(s): {', '.join(unknown)}")
+    if "measure" in steps and not args.spec:
+        parser.error("the measure step needs --spec: the target measure is the specification's")
+    try:  # Before any call: a refused file posts nothing.
+        args.source = spec_source.load(args.spec, args.revision)
+    except spec_source.SpecRefused as e:
+        parser.error(str(e))
     state_file = Path(args.state or f"{Path(args.checkout).resolve()}.self_host.json")
     state = _load(state_file) if state_file.exists() else {}
     api = Api(args.api, os.environ.get("FABRIQUE_API_TOKEN"))
@@ -593,7 +592,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.report:
         Path(args.report).write_text(text + "\n", encoding="utf-8")
     print(text)
-    return 1 if "error" in report else 0
+    failed = "measure" in report and not report["measure"]["passed"]
+    return 1 if "error" in report else 3 if failed else 0
 
 
 if __name__ == "__main__":
