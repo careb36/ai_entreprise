@@ -11,6 +11,8 @@ The backend has a pytest test suite under `backend/tests/`.  No external service
 cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
 ```
 
+The suite runs in parallel with pytest-xdist (dev group): `tests/conftest.py` applies `-n auto --dist loadgroup` when the command names no `-n` (a hook rather than `addopts`, so `-p no:xdist` and an environment without xdist still work); `-n 0` or `--pdb` runs in one process, which is also quicker for a handful of tests (starting the workers costs about 3 s). Each worker has its own in-memory SQLite database, and `sqlite_session` empties it after every test, so no test reads rows another left behind. The tests that time themselves (`xdist_group("wall_clock")`) share one worker, warm up first and keep the best of their timings. CI runs `-n 4`, since the self-hosted runners share one machine. On a 4-core machine the whole suite took 557 s in one process before (`--durations` showed single tests at 49 s and 39 s, paying for the rows of earlier tests, which the review cycle read again); now it takes about 370 s in one process and about 105 s with `-n auto`.
+
 Test files:
 
 | File | What it covers |
