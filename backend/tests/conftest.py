@@ -333,9 +333,18 @@ def _empty_shared_database():
     # by a row's id goes too: a later test's task 1 is not this test's.
     from services.loop.worker import intake
     from services.management import manager_observe
+    from services.platform import locks
+    from services.release import integration, integration_jobs
 
     intake.LAST_AUTONOMOUS_QUEUE_AT.clear()
     manager_observe._last_credit_probe.clear()
+    # Locks and jobs are kept by a sprint's id as well: a background integration
+    # that an earlier test's event loop dropped mid-attempt never released its
+    # lock, so a later test's sprint 1 found it held and was never integrated.
+    with locks._local_lock:
+        locks._local_held.clear()
+    integration._LOCKS.clear()
+    integration_jobs._RUNNING.clear()
 
 
 class _FakeNATSClient:
