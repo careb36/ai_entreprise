@@ -12,10 +12,10 @@ import json
 
 import pytest
 from config import settings
+from factories import company as _company
 from llm_proxy_client import LLMProxyClient
 from models import ProviderConnection
 from services.models import provider_connections
-from test_specifications import _company
 
 
 @pytest.fixture

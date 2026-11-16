@@ -16,13 +16,14 @@ import pytest
 import sandbox as daemon_sandbox  # the daemon's module, on sys.path via conftest
 import shell_exec
 from config import settings
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models.company import Company
 from services.evidence import verification
 from services.loop import delivery_checks
 from services.tools import developer_tools
 from services.workspace import sandbox, workspace_daemon
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import _company
 
 FAKE_IMAGE_ID = "a" * 64
 FAKE_DIGEST = "b" * 64

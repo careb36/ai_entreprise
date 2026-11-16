@@ -13,13 +13,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
+from factories import company as _company
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import AuditLog, BacklogItem, Sprint, TaskEvent
 from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from services.models import calibration, effort
 from services.tasks import task_events, task_projection
 from sqlmodel import select
-from test_git_workflow import _member, enforcement  # noqa: F401
-from test_specifications import _company
 
 T0 = datetime(2026, 11, 1, 9, 0, 0)
 

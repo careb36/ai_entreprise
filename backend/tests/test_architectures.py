@@ -10,6 +10,8 @@ import json
 import secrets
 
 import pytest
+from factories import enforcement  # noqa: F401 - the fixture, by name
+from factories import member_headers as _member
 from models import BacklogItem, Company, Sprint
 from models.architecture import Architecture
 from models.company import ProjectDiscovery
@@ -21,7 +23,6 @@ from services.planning import (
     spec_check,
     spec_planning,
 )
-from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import GOOD
 
 GOOD_ARCH = {
