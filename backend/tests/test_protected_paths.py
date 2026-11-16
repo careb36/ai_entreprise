@@ -329,3 +329,11 @@ def test_a_line_break_in_a_path_still_matches():
     assert pp.matches(["a/\n.py"], ["a/?.py"]) == [pp.Match("a/\n.py", "a/?.py")]
     assert pp.matches(["a/\n/.py"], ["a/?/.py"]) == [pp.Match("a/\n/.py", "a/?/.py")]
     assert pp.matches(["a//.py"], ["a/?.py"]) == []
+
+
+def test_two_files_that_share_a_reading_are_both_kept():
+    backslashed, nested = "bench/a\\b.py", "bench/a/b.py"
+    for order in ([backslashed, nested], [nested, backslashed]):
+        found = pp.matches(order)
+        assert len(found) == 2, found
+    assert len(pp.matches([nested, "./bench/a/b.py"])) == 1

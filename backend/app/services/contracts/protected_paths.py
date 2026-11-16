@@ -170,14 +170,16 @@ def matches(paths: Iterable[str], patterns: Sequence[str] = PATTERNS) -> list[Ma
     """The paths that match a pattern, in their order, each once, with its first pattern.
 
     Each path is tried under both of its ``interpretations``; the match names
-    the reading that matched.
+    the reading that matched. Two inputs are the same path only when every
+    reading is the same: ``bench/a\\b.py`` and ``bench/a/b.py`` are two files
+    on a POSIX disk, so both are kept.
     """
     compiled = [(pattern, _compile(pattern)) for pattern in patterns]
     found: list[Match] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, ...]] = set()
     for raw in paths:
         readings = interpretations(raw)
-        if not readings or any(r in seen for r in readings):
+        if not readings or readings in seen:
             continue
         hit = next(
             (
@@ -189,6 +191,6 @@ def matches(paths: Iterable[str], patterns: Sequence[str] = PATTERNS) -> list[Ma
             None,
         )
         if hit is not None:
-            seen.update(readings)
+            seen.add(readings)
             found.append(hit)
     return found
