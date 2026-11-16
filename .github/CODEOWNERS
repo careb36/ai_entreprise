@@ -84,6 +84,9 @@
 /backend/tests/test_verificador_benchmark.py     @careb36
 /backend/tests/test_bench_*.py                   @careb36
 /backend/tests/test_secops_checks.py             @careb36
+/backend/tests/test_rsi_decide.py               @careb36
+/backend/tests/test_rsi_fitness.py              @careb36
+/backend/tests/test_rsi_fitness_keep.py         @careb36
 /backend/tests/test_protected_paths.py           @careb36
 /backend/app/services/contracts/protected_paths.py @careb36
 /backend/app/history_check.py                    @careb36
