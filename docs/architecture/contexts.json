@@ -210,9 +210,14 @@
       ],
       "bench/": [
         "mentions",
+        "test_bench_broker.py",
         "test_bench_budget.py",
+        "test_bench_compare.py",
+        "test_bench_grading.py",
         "test_bench_prompt_weight.py",
+        "test_bench_routing.py",
         "test_bench_scorecard.py",
+        "test_bench_specs.py",
         "test_verificador_benchmark.py"
       ],
       "docs/": "mentions",
@@ -279,6 +284,12 @@
       "test_agent_tools.py": [
         "loop"
       ],
+      "test_agent_tools_delivery.py": [
+        "loop"
+      ],
+      "test_agent_tools_edit.py": [
+        "loop"
+      ],
       "test_api_token_auth.py": [
         "models"
       ],
@@ -318,13 +329,28 @@
       "test_backlog_comments.py": [
         "loop"
       ],
+      "test_bench_broker.py": [
+        "planning"
+      ],
       "test_bench_budget.py": [
         "repo"
+      ],
+      "test_bench_compare.py": [
+        "planning"
+      ],
+      "test_bench_grading.py": [
+        "planning"
       ],
       "test_bench_prompt_weight.py": [
         "repo"
       ],
+      "test_bench_routing.py": [
+        "planning"
+      ],
       "test_bench_scorecard.py": [
+        "planning"
+      ],
+      "test_bench_specs.py": [
         "planning"
       ],
       "test_board.py": [
@@ -358,6 +384,9 @@
         "integrations",
         "release"
       ],
+      "test_check_file_sizes.py": [
+        "repo"
+      ],
       "test_check_frontend_architecture.py": [
         "repo"
       ],
@@ -382,7 +411,19 @@
       "test_console_capabilities.py": [
         "producers"
       ],
-      "test_console_producers.py": [
+      "test_console_producers_command.py": [
+        "loop"
+      ],
+      "test_console_producers_daemon.py": [
+        "loop"
+      ],
+      "test_console_producers_private_git.py": [
+        "loop"
+      ],
+      "test_console_producers_setting.py": [
+        "loop"
+      ],
+      "test_console_producers_worker.py": [
         "loop"
       ],
       "test_cors_credentials.py": [
@@ -416,6 +457,15 @@
         "loop"
       ],
       "test_developer_tools.py": [
+        "loop"
+      ],
+      "test_developer_tools_evidence.py": [
+        "loop"
+      ],
+      "test_developer_tools_limits.py": [
+        "loop"
+      ],
+      "test_developer_tools_toolbox.py": [
         "loop"
       ],
       "test_difficulty_routing.py": [
@@ -479,6 +529,15 @@
       "test_grounding.py": [
         "management"
       ],
+      "test_grounding_imports.py": [
+        "management"
+      ],
+      "test_grounding_lookups.py": [
+        "management"
+      ],
+      "test_grounding_manifests.py": [
+        "management"
+      ],
       "test_grounding_signatures.py": [
         "management"
       ],
@@ -525,6 +584,18 @@
         "release"
       ],
       "test_manager_agent.py": [
+        "management"
+      ],
+      "test_manager_agent_brief.py": [
+        "management"
+      ],
+      "test_manager_agent_cycle.py": [
+        "management"
+      ],
+      "test_manager_agent_overrides.py": [
+        "management"
+      ],
+      "test_manager_agent_safety.py": [
         "management"
       ],
       "test_manager_policy.py": [
@@ -578,7 +649,16 @@
       "test_nats_namespace.py": [
         "platform"
       ],
-      "test_nats_security.py": [
+      "test_nats_security_config.py": [
+        "management"
+      ],
+      "test_nats_security_connect.py": [
+        "management"
+      ],
+      "test_nats_security_live.py": [
+        "management"
+      ],
+      "test_nats_security_logs.py": [
         "management"
       ],
       "test_needs_split.py": [
@@ -690,6 +770,12 @@
       "test_scrum_master.py": [
         "loop"
       ],
+      "test_scrum_master_decision.py": [
+        "loop"
+      ],
+      "test_scrum_master_record.py": [
+        "loop"
+      ],
       "test_secops_checks.py": [
         "evidence"
       ],
@@ -726,7 +812,19 @@
       "test_sprint_crud.py": [
         "management"
       ],
-      "test_sprint_integration.py": [
+      "test_sprint_integration_api.py": [
+        "management"
+      ],
+      "test_sprint_integration_daemon.py": [
+        "management"
+      ],
+      "test_sprint_integration_events.py": [
+        "management"
+      ],
+      "test_sprint_integration_jobs.py": [
+        "management"
+      ],
+      "test_sprint_integration_request.py": [
         "management"
       ],
       "test_sprint_list.py": [
@@ -776,6 +874,12 @@
         "management"
       ],
       "test_task_events.py": [
+        "management"
+      ],
+      "test_task_events_history.py": [
+        "management"
+      ],
+      "test_task_events_transitions.py": [
         "management"
       ],
       "test_task_relations.py": [

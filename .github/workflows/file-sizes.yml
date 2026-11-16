@@ -1,5 +1,6 @@
-# File sizes — a source file over the line limit may not grow
-# (scripts/check_file_sizes.py, baseline in scripts/file_size_baseline.json).
+# File sizes — a source or test file over the line limit may not grow
+# (scripts/check_file_sizes.py, baselines in scripts/file_size_baseline.json
+# and scripts/test_file_size_baseline.json).
 #
 # Run the same check locally with:
 #   python3 scripts/check_file_sizes.py

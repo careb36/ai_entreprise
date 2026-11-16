@@ -832,7 +832,7 @@ part of the daemon's attack surface, not plumbing behind it (issue #327).
 
 - **One user per component.** `scripts/nats_config.py` writes
   `nats/nats-server.conf` (`--check` fails when the committed file is stale;
-  the backend suite checks it too, `test_nats_security.py`). The `backend` user publishes the work (`workspace.>`,
+  the backend suite checks it too, `test_nats_security_config.py`). The `backend` user publishes the work (`workspace.>`,
   `task.>`, `glassroom.>`, `audit.>`, `system.>`) and owns JetStream; its
   replies arrive under `_INBOX.backend`. The `daemon` user subscribes to
   `workspace.>` and `_INBOX.daemon.>`, answers under `_INBOX.backend.>`
