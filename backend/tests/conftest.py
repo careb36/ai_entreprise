@@ -234,15 +234,21 @@ def empty_process_state():
     for dotted in PROCESS_STATE:
         name, attr = dotted.rsplit(".", 1)
         for loaded in (name, "app." + name):
-            if loaded in sys.modules:
-                getattr(sys.modules[loaded], attr).clear()  # atomic under the GIL
+            # A module still importing may not define it yet (nothing kept);
+            # test_every_listed_container_exists catches a misspelt name.
+            container = getattr(sys.modules.get(loaded), attr, None)
+            if container is not None:
+                container.clear()  # atomic under the GIL
 
 
 def _listen_for_closed_sprints(hooks):
     """Install ``integration_jobs`` if it is loaded, else a stand-in that
     loads and installs it when a sprint first closes."""
     jobs = sys.modules.get("services.release.integration_jobs")
-    if jobs is not None:
+    # A test whose first import is integration_jobs loads hooks from inside
+    # it: the module is then in sys.modules without install() yet, and counts
+    # as not loaded (the stand-in installs it at the first close).
+    if jobs is not None and hasattr(jobs, "install"):
         hooks.off(hooks.SPRINT_CLOSED, _integrate_after_close)
         jobs.install()
     else:

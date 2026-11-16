@@ -17,6 +17,7 @@ import importlib
 import sys
 from pathlib import Path
 
+import conftest
 from conftest import PROCESS_STATE, empty_process_state, when_loaded
 
 APP = Path(__file__).resolve().parents[1] / "app"
@@ -112,3 +113,26 @@ def test_when_loaded_acts_now_or_right_after_a_later_import(tmp_path, monkeypatc
     when_loaded("process_state_probe", lambda module: seen.append(2))
     assert seen == [1, 2]
     del sys.modules[process_state_probe.__name__]
+
+
+def test_hooks_loaded_while_integration_jobs_is_still_importing(monkeypatch):
+    # A test whose first import is integration_jobs loads hooks from inside
+    # it: the after-import action then finds the jobs module in sys.modules
+    # without install() yet, and must register the stand-in, not call it.
+    import types
+
+    calls = []
+
+    class Hooks:
+        SPRINT_CLOSED = "sprint.closed"
+
+        def on(self, event, handler):
+            calls.append(("on", handler))
+
+        def off(self, event, handler):
+            calls.append(("off", handler))
+
+    half = types.ModuleType("services.release.integration_jobs")
+    monkeypatch.setitem(sys.modules, "services.release.integration_jobs", half)
+    conftest._listen_for_closed_sprints(Hooks())
+    assert calls == [("on", conftest._integrate_after_close)]
