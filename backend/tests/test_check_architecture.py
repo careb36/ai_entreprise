@@ -7,7 +7,8 @@ allowlist) and on small trees of their own: an unassigned module, a new
 edge against the rule, a cycle between contexts, a module moved into a
 context folder, a shim left at the flat path, an allowlist that only
 shrinks, and HTTP imported only by the listed adapter modules (a list that
-only shrinks too), and every test file with a context in the test map, which
+only shrinks too), another context imported only through its public
+modules (ADR 0018; an interface allowlist that only shrinks), and every test file with a context in the test map, which
 names only known contexts, existing files and known rules. They also keep the
 records under ``docs/architecture`` approvable by the product's own checks
 and ``docs/ARCHITECTURE.md`` equal to their rendering.
@@ -43,6 +44,9 @@ def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
 
 
 def _data(allowlist: list[str] | None = None, **contexts: dict) -> dict:
+    # A context that names no interface is all interface here; the
+    # interface rule has its own tests below.
+    contexts = {n: {"public": ["*"], **c} for n, c in contexts.items()}
     return {"contexts": contexts, "allowlist": allowlist or []}
 
 
@@ -98,6 +102,12 @@ def test_the_repository_keeps_to_the_rule():
     assert analysis["http_new"] == []
     assert analysis["http_stale"] == []
     assert sorted(analysis["http"]) == sorted(check_architecture.http_adapters(data))
+    # Every context names its interface; across contexts only it is imported,
+    # but for the interface allowlist, which holds only imports that exist.
+    assert all(isinstance(c.get("public"), list) for c in data["contexts"].values())
+    assert analysis["internal_new"] == []
+    assert analysis["internal_stale"] == []
+    assert analysis["internal"] == sorted(data["interface_allowlist"])
 
 
 def test_a_tree_that_keeps_to_the_rule_passes(tmp_path):

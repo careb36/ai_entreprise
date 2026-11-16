@@ -5,6 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/management/`
 - **Responsibility:** The owner as a client: the Manager agent with its inbox, policy, rules, observations, actions and record, the client's brief and its mail, the Reviewer agent and the Support agent. It may read and act through every other context; no other context imports it.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): none: no other context imports it, and the rule keeps it so.
 - **Modules:** `brief_mail`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `sod_report`, `support_agent`.
 
 ## Components

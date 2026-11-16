@@ -5,6 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/learning/`
 - **Responsibility:** How the company learns from its sprints: procedures kept or reverted by numbers, the retrospective, the ScrumMaster's triage and proposals, the Architect's record. It reads the task record and asks models through the proxy; it never moves a task.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `architect`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_store`. Another context imports only these modules and the package; the rest are internal.
 - **Modules:** `architect`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_sources`, `wiki_store`.
 
 ## Components

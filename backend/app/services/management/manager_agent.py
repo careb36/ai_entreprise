@@ -199,7 +199,7 @@ def _billed_call(
 ) -> Callable[[str], str]:
     """The model call for one company: billed to its business unit, and each
     call's tokens audited as the company's spending (the brief sums them)."""
-    from services.planning.spec_author import business_unit_id
+    from services.models.company_models import business_unit_id
     from services.platform.agent_service import AgentService
     from services.platform.orchestration_metrics import extract_usage_tokens
 

@@ -5,6 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/tasks/`
 - **Responsibility:** A task's record: its events and their hash chain (task_events), the projections that answer the board's questions (task_projection, TaskRecord), the comment-thread readers (board), the dependencies between a sprint's tasks. It records and answers; it never dispatches, reviews or calls a model.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `board`, `dependencies`, `progress_snapshot`, `relations`, `sprint_board`, `task_events`, `task_projection`. Another context imports only these modules and the package; the rest are internal.
 - **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `sprint_board`, `task_events`, `task_filter`, `task_projection`.
 
 ## Components

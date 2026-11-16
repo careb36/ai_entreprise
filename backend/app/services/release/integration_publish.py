@@ -27,7 +27,7 @@ from models import AgentRun, BacklogItem, Sprint, Verification
 from models.integration import PUBLISHABLE, SprintIntegration
 from sqlmodel import Session
 
-from services.evidence.review_changes import _workspace_file, run_changes
+from services.evidence.review_changes import run_changes, workspace_file
 from services.platform.agent_service import AgentService
 from services.release.git_publish import (
     MAX_BODY_CHARS,
@@ -192,7 +192,7 @@ def _task_lines(
     writes = ((verification.evidence if verification else None) or {}).get(
         "workspace_writes"
     ) or []
-    files = [_workspace_file(w) for w in writes if isinstance(w, dict)]
+    files = [workspace_file(w) for w in writes if isinstance(w, dict)]
     observed += [_file_line(f) for f in files[:MAX_FILES_PER_TASK]]
     if len(files) > MAX_FILES_PER_TASK:
         observed.append(f"- … and {len(files) - MAX_FILES_PER_TASK} more")

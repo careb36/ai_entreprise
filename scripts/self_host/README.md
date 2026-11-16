@@ -20,7 +20,7 @@ The retrospective of the first run is
 `docs/architecture/specification.json` and `architecture.json` are La
 Fabrique's own specification and architecture, in the shapes the PO and the
 Architect write for any company. `docs/ARCHITECTURE.md` is their rendering by
-`arch_check.as_markdown`, and `docs/adr/0012-…` to `0017-…` are the rendering
+`arch_check.as_markdown`, and `docs/adr/0012-…` to `0018-…` are the rendering
 of the architecture's decisions by `adr_docs.adr_documents`, numbered from the
 record's `adr_first_number` (ADRs 0010 and 0011 predate the record). Edit the
 JSON, never the rendered files:

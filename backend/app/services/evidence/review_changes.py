@@ -94,7 +94,8 @@ def parse_unified_diff(text: str | None) -> list[dict[str, Any]]:
     return files
 
 
-def _workspace_file(write: dict[str, Any]) -> dict[str, Any]:
+def workspace_file(write: dict[str, Any]) -> dict[str, Any]:
+    """One entry of a verification's ``workspace_writes`` as a reviewable file."""
     path = write.get("path") or ""
     if write.get("status") != "written":
         return {
@@ -179,7 +180,7 @@ def run_changes(session: Session, run: AgentRun) -> dict[str, Any]:
             "observed_at": report.observed_at,
         }
         writes = (report.evidence or {}).get("workspace_writes") or []
-        files = [_workspace_file(w) for w in writes if isinstance(w, dict)]
+        files = [workspace_file(w) for w in writes if isinstance(w, dict)]
         git = (report.evidence or {}).get("git")
     hidden = max(0, len(files) - MAX_FILES)
     files = files[:MAX_FILES]
