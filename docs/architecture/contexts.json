@@ -809,7 +809,13 @@
       "test_project_wiki.py": [
         "loop"
       ],
+      "test_project_wiki_api.py": [
+        "loop"
+      ],
       "test_project_wiki_loop.py": [
+        "loop"
+      ],
+      "test_project_wiki_prompt.py": [
         "loop"
       ],
       "test_prompt_budget.py": [
