@@ -15,9 +15,8 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - '.github/workflows/**'
-      - '.github/actionlint.yaml'
+  # Which pull requests run the lint: the `changes` job (changes.yml), when a
+  # workflow or .github/actionlint.yaml changed.
 
 permissions:
   contents: read
@@ -31,7 +30,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/changes.yml
+
   lint:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.workflows == 'true') }}
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 5
     steps:

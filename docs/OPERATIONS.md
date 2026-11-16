@@ -480,6 +480,54 @@ that stack is down), and the named images belong to the other repositories
 sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
 a finished run leaks nothing.
 
+## Runner capacity
+
+The seven self-hosted runners (`lafabrique`) share one machine of about 4
+cores and 16 GB with the workspace daemon, so CI jobs compete for CPU and
+memory; too many at once failed wall-clock tests and had runs killed for lack
+of memory. Four knobs bound that, all outside the code (`docs/TESTING.md`, CI,
+has the design):
+
+- **Which jobs run.** A pull request runs only the jobs its files can affect
+  (`.github/workflows/changes.yml`); a push to `main` runs everything. Widen a
+  job's paths there, never with `on.pull_request.paths`.
+- **How many e2e jobs run at once: the runner label `e2e`.** An e2e job that
+  runs the loop needs a runner carrying `e2e` as well as `lafabrique`; the
+  number of runners with the label is the limit (two). **Label two runners
+  before the change that introduced it is merged**, or every e2e job waits
+  for a runner until GitHub cancels it after 24 hours. In Settings > Actions >
+  Runners, open a runner and add the label, or:
+
+  ```bash
+  gh api repos/{owner}/{repo}/actions/runners \
+    --jq '.runners[] | [.id, .name, ([.labels[].name] | join(","))] | @tsv'
+  gh api -X POST repos/{owner}/{repo}/actions/runners/<id>/labels -f 'labels[]=e2e'
+  gh api -X DELETE repos/{owner}/{repo}/actions/runners/<id>/labels/e2e
+  ```
+
+  (`orgs/<org>/actions/runners/...` when the runners are registered to the
+  organisation.) Add the label to a third runner to allow three, remove one to
+  allow one. The runners with the label still take other jobs, so an e2e job
+  can wait behind a backend run on them. To lift the limit, or to point e2e at
+  other runners, set the repository variable `E2E_RUNS_ON` to a JSON label
+  list: `gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique"]'`.
+- **Backend test workers: `BACKEND_TEST_WORKERS`.** `backend-tests.yml` runs
+  pytest with `-n 4`; each worker is a Python process with the application
+  imported and its own SQLite database. `gh variable set BACKEND_TEST_WORKERS
+  --body 2` halves that memory and roughly doubles the suite's time (about 2
+  minutes with four, about 11 in one process); `gh variable delete
+  BACKEND_TEST_WORKERS` goes back to four.
+- **Memory caps on the e2e containers: `E2E_POSTGRES_MEMORY`,
+  `E2E_NATS_MEMORY`.** Passed to `docker run --memory` (for example `1g` and
+  `256m`); unset means no cap, the default. The backend, the daemon and the
+  fake model of an e2e run are processes on the runner, not containers, and
+  have no cap; most of the run's memory is theirs, so the label above is the
+  knob that bounds it.
+
+A superseded run is still cancelled: each workflow's concurrency group is
+per ref with `cancel-in-progress: true` (#559), so a new push to a pull
+request stops its older run, queued e2e jobs included.
+
 ## Backups
 
 `scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`
