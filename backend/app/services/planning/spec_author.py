@@ -19,11 +19,12 @@ from typing import Any
 
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
-from models import Agent, BusinessUnit
+from models import Agent
 from models.specification import Specification
 from sqlmodel import Session, select
 
 from services.evidence import standards
+from services.models.company_models import business_unit_id
 from services.planning import spec_check
 from services.planning.sprint_planner import _build_stack_summary
 from services.tools import mcp_tools, research_tools
@@ -55,14 +56,6 @@ def _stack(value: Any) -> dict[str, Any] | None:
         except ValueError:
             return None
     return value if isinstance(value, dict) and value else None
-
-
-def business_unit_id(session: Session, company_id: int) -> int | None:
-    """The company's business unit the proxy bills, or ``None`` when it has none."""
-    unit = session.exec(
-        select(BusinessUnit).where(BusinessUnit.company_id == company_id)
-    ).first()
-    return unit.id if unit else None
 
 
 def po_profile(session: Session, company_id: int) -> tuple[str, str | None, str]:

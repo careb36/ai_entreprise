@@ -7,7 +7,8 @@ allowlist) and on small trees of their own: an unassigned module, a new
 edge against the rule, a cycle between contexts, a module moved into a
 context folder, a shim left at the flat path, an allowlist that only
 shrinks, and HTTP imported only by the listed adapter modules (a list that
-only shrinks too), and every test file with a context in the test map, which
+only shrinks too), another context imported only through its public
+modules (ADR 0018; an interface allowlist that only shrinks), and every test file with a context in the test map, which
 names only known contexts, existing files and known rules. They also keep the
 records under ``docs/architecture`` approvable by the product's own checks
 and ``docs/ARCHITECTURE.md`` equal to their rendering.
@@ -43,6 +44,9 @@ def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
 
 
 def _data(allowlist: list[str] | None = None, **contexts: dict) -> dict:
+    # A context that names no interface is all interface here; the
+    # interface rule has its own tests below.
+    contexts = {n: {"public": ["*"], **c} for n, c in contexts.items()}
     return {"contexts": contexts, "allowlist": allowlist or []}
 
 
@@ -98,6 +102,120 @@ def test_the_repository_keeps_to_the_rule():
     assert analysis["http_new"] == []
     assert analysis["http_stale"] == []
     assert sorted(analysis["http"]) == sorted(check_architecture.http_adapters(data))
+    # Every context names its interface; across contexts only it is imported,
+    # but for the interface allowlist, which holds only imports that exist.
+    assert all(isinstance(c.get("public"), list) for c in data["contexts"].values())
+    assert analysis["internal_new"] == []
+    assert analysis["internal_stale"] == []
+    assert analysis["internal"] == sorted(data["interface_allowlist"])
+
+
+# Three contexts in folders: loop may import evidence, whose interface is
+# ``verify``; ``checks`` is internal to evidence.
+INTERFACE = {
+    "contracts": {"depends_on": [], "public": ["*"], "modules": []},
+    "evidence": {"depends_on": ["contracts"], "public": ["verify"], "modules": []},
+    "loop": {"depends_on": ["contracts", "evidence"], "public": [], "modules": []},
+}
+INTERFACE_FILES = {
+    "contracts/__init__.py": "",
+    "contracts/shapes.py": "VERIFIED = 'verified'\n",
+    "evidence/__init__.py": "",
+    "evidence/verify.py": "from . import checks\nfrom services.contracts import shapes\n",
+    "evidence/checks.py": "",
+    "loop/__init__.py": "",
+    "loop/worker.py": "from services.evidence.verify import run\nimport services.evidence\n",
+}
+
+
+def _interface(allowlist: list[str] | None = None, **public: list[str]) -> dict:
+    contexts = json.loads(json.dumps(INTERFACE))
+    for name, modules in public.items():
+        contexts[name]["public"] = modules
+    return {
+        "contexts": contexts,
+        "allowlist": [],
+        "interface_allowlist": allowlist or [],
+    }
+
+
+def test_an_import_of_a_public_module_passes(tmp_path):
+    services = _tree(tmp_path, INTERFACE_FILES)
+    result = check_architecture.analyse(_interface(), services)
+    assert result["problems"] == []
+    assert result["internal"] == []
+    # The context's package is public, "*" makes every module public, and a
+    # context imports its own internals freely.
+    assert ("loop.worker", "evidence") in result["edges"]
+    assert ("evidence.verify", "evidence.checks") in result["edges"]
+    assert result["public"]["contracts"] == {"contracts", "contracts.shapes"}
+    assert result["public"]["evidence"] == {"evidence", "evidence.verify"}
+
+
+def test_an_import_of_another_contexts_internal_module_fails(tmp_path):
+    files = {
+        **INTERFACE_FILES,
+        "loop/runner.py": "from services.evidence import checks\n",
+    }
+    result = check_architecture.analyse(_interface(), _tree(tmp_path, files))
+    assert result["internal_new"] == ["runner -> checks"]
+    assert any(
+        p.startswith("runner -> checks: evidence.checks is internal to evidence")
+        for p in result["problems"]
+    )
+    # An edge against the dependency rule is reported by that rule only.
+    files["evidence/checks.py"] = "from services.loop import worker\n"
+    result = check_architecture.analyse(_interface(), _tree(tmp_path / "up", files))
+    assert result["new"] == ["checks -> worker"]
+    assert result["internal_new"] == ["runner -> checks"]
+
+    # A context must name its interface, and only modules it holds.
+    data = _interface(evidence=["verify", "ghost"])
+    del data["contexts"]["loop"]["public"]
+    problems = check_architecture.analyse(data, _tree(tmp_path / "ghost", files))[
+        "problems"
+    ]
+    assert any(
+        p.startswith("context loop: declares no public modules") for p in problems
+    )
+    assert any(
+        "context evidence: public names ghost, but no such module" in p
+        for p in problems
+    )
+
+
+def test_an_allowlisted_internal_import_passes_and_a_stale_one_is_dropped(
+    tmp_path, capsys
+):
+    files = {
+        **INTERFACE_FILES,
+        "loop/runner.py": "from services.evidence import checks\n",
+    }
+    services = _tree(tmp_path, files)
+    allowed = check_architecture.analyse(_interface(["runner -> checks"]), services)
+    assert allowed["problems"] == []
+    assert allowed["internal"] == ["runner -> checks"]
+    assert allowed["internal_stale"] == []
+
+    # Once checks is declared public, the entry is stale: reported, and
+    # --update drops it.
+    data_file = tmp_path / "contexts.json"
+    data = _interface(["runner -> checks"], evidence=["verify", "checks"])
+    data_file.write_text(json.dumps(data))
+    assert check_architecture.analyse(data, services)["internal_stale"] == [
+        "runner -> checks"
+    ]
+    assert check_architecture.main([], data_file, services) == 0
+    assert "The interface allowlist can shrink" in capsys.readouterr().out
+    assert check_architecture.main(["--update"], data_file, services) == 0
+    assert json.loads(data_file.read_text())["interface_allowlist"] == []
+
+    # A new internal import: exit 1 and nothing written.
+    (services / "loop" / "runner.py").write_text("from services.evidence import x\n")
+    (services / "evidence" / "x.py").write_text("")
+    before = data_file.read_text()
+    assert check_architecture.main(["--update"], data_file, services) == 1
+    assert data_file.read_text() == before
 
 
 def test_a_tree_that_keeps_to_the_rule_passes(tmp_path):

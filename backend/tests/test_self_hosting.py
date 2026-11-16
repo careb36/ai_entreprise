@@ -45,6 +45,7 @@ def test_architecture_md_and_the_adrs_are_the_rendering_of_the_record():
         "docs/adr/0015-parallel-trees.md",
         "docs/adr/0016-migration-order.md",
         "docs/adr/0017-http-adapters.md",
+        "docs/adr/0018-context-interfaces.md",
     ]
     # Edit docs/architecture/architecture.json, then
     # python3 scripts/self_host/render_docs.py --write
