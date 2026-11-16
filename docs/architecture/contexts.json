@@ -903,9 +903,11 @@
         "repo"
       ],
       "test_protected_paths_guard.py": [
+        "evidence",
         "management"
       ],
       "test_protected_paths_review.py": [
+        "evidence",
         "management"
       ],
       "test_provider_connections.py": [

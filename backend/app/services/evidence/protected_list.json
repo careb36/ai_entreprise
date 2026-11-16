@@ -47,6 +47,8 @@
     "backend/tests/test_grounding_signatures.py",
     "backend/tests/test_kickoff_failure.py",
     "backend/tests/test_mcp_tools.py",
+    "backend/tests/test_protected_paths_guard.py",
+    "backend/tests/test_protected_paths_review.py",
     "backend/tests/test_review_changes.py",
     "backend/tests/test_risk_tier.py",
     "backend/tests/test_roles.py",
