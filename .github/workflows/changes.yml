@@ -104,6 +104,9 @@ jobs:
               - 'scripts/bench/**'
               - 'scripts/e2e/**'
               - 'scripts/self_host/**'
+              # test_check_file_sizes.py reads every top-level script and its
+              # baselines; test_affected_tests.py and test_check_script.py read theirs.
+              - 'scripts/*'
               - 'scripts/check_architecture.py'
               - 'scripts/check_frontend_architecture.py'
               - 'scripts/licence_scan.py'
