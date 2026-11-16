@@ -406,6 +406,9 @@
       "test_architect.py": [
         "loop"
       ],
+      "test_architecture_adr_files.py": [
+        "loop"
+      ],
       "test_architectures.py": [
         "loop"
       ],

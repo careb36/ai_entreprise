@@ -143,6 +143,72 @@ def test_only_a_well_formed_date_and_slug_are_kept_and_never_a_models_date():
     )
 
 
+def test_a_decision_already_written_keeps_its_file_and_number():
+    arch = _arch(
+        [
+            {
+                "title": "No queue",
+                "decision": "Write synchronously.",
+                "slug": "no-queue",
+            },
+            {"title": "One writer at a time", "decision": "Serialize the writes."},
+        ]
+    )
+    entries = [
+        "docs/adr/0004-an-earlier-decision.md",
+        "docs/adr/0007-no-queue.md",
+        "docs/adr/0009-Not-A-Slug.md",
+    ]
+    # A file whose slug is not well formed still takes its number; a gap does
+    # not lend one to a new decision.
+    assert adr_docs.first_free_number(entries) == 10
+    assert adr_docs.adr_files(entries) == {"an-earlier-decision": 4, "no-queue": 7}
+    files = adr_docs.adr_documents(
+        arch,
+        "Shop spec",
+        3,
+        first_number=adr_docs.first_free_number(entries),
+        existing=adr_docs.adr_files(entries),
+    )
+    assert [(f["number"], f["path"]) for f in files] == [
+        (7, "docs/adr/0007-no-queue.md"),
+        (10, "docs/adr/0010-one-writer-at-a-time.md"),
+    ]
+    assert (adr_docs.first_free_number([]), adr_docs.adr_files([])) == (1, {})
+
+
+def test_a_well_formed_superseded_by_is_kept_and_never_a_models_one():
+    arch = _arch(
+        [
+            {"title": "A", "decision": "d", "superseded_by": "ADR 2"},
+            {"title": "B", "decision": "d", "superseded_by": "adr-1"},
+        ]
+    )
+    assert [d.get("superseded_by") for d in arch["decisions"]] == [None, "ADR-1"]
+    files = adr_docs.adr_documents(arch, "Shop spec", 1, first_number=5)
+    # The superseding decision is named by its file's number, not its id.
+    assert "Superseded by ADR 0005." in files[1]["markdown"]
+    assert "Accepted" not in files[1]["markdown"]
+    assert "Proposed. ADR-1" in files[0]["markdown"]
+    # A decision the record no longer holds is named as the record says.
+    alone = _arch([{"title": "C", "decision": "d", "superseded_by": "ADR-9"}])
+    only = adr_docs.adr_documents(alone, "Shop spec", 1)[0]["markdown"]
+    assert "Superseded by ADR-9." in only
+    drafted = arch_author.parse_draft(
+        json.dumps(
+            {
+                "title": "Shop",
+                "modules": [{"name": "Cart", "responsibility": "Holds the items."}],
+                "decisions": [
+                    {"title": "B", "decision": "d", "superseded_by": "ADR-1"}
+                ],
+            }
+        )
+    )
+    # What supersedes a decision is a person's record, not the Architect's.
+    assert "superseded_by" not in drafted["decisions"][0]
+
+
 # --- the record through the API --------------------------------------------------
 
 

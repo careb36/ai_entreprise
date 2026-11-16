@@ -497,8 +497,9 @@ def test_without_an_approved_architecture_the_prompts_carry_the_requirements_alo
 class _Daemon:
     jetstream_enabled = False
 
-    def __init__(self, reply):
+    def __init__(self, reply=None, replies=None):
         self.reply = reply
+        self.replies = dict(replies or {})
         self.requests = []
 
     async def close(self):
@@ -506,9 +507,10 @@ class _Daemon:
 
     async def request(self, subject, payload, timeout=5.0):
         self.requests.append((subject, payload))
-        if isinstance(self.reply, Exception):
-            raise self.reply
-        return self.reply
+        reply = self.replies.get(subject, self.reply)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
 
 
 def test_the_approved_architecture_is_written_to_the_repository_with_the_daemons_hash(
@@ -529,40 +531,67 @@ def test_the_approved_architecture_is_written_to_the_repository_with_the_daemons
     test_client.post(f"/v1/architectures/{arch['id']}/approve")
 
     daemon = _Daemon(
-        {
-            "ok": True,
-            "files": [
-                {
-                    "path": "docs/ARCHITECTURE.md",
-                    "status": "written",
-                    "sha256": "ab" * 32,
-                    "bytes": 10,
-                }
-            ],
+        replies={
+            "workspace.list": {
+                "path": "docs/adr",
+                "entries": [],
+                "truncated": False,
+            },
+            "workspace.generate": {
+                "ok": True,
+                "files": [
+                    {
+                        "path": "docs/ARCHITECTURE.md",
+                        "status": "written",
+                        "sha256": "ab" * 32,
+                        "bytes": 10,
+                    },
+                    {
+                        "path": "docs/adr/0001-sqlite-for-the-store.md",
+                        "status": "written",
+                        "sha256": "cd" * 32,
+                        "bytes": 20,
+                    },
+                ],
+            },
         }
     )
     app.state.nats_client = daemon
     written = test_client.post(f"/v1/architectures/{arch['id']}/write")
     assert written.status_code == 200, written.text
-    assert (written.json()["written_path"], written.json()["written_sha256"]) == (
+    body = written.json()
+    assert (body["written_path"], body["written_sha256"]) == (
         "docs/ARCHITECTURE.md",
         "ab" * 32,
     )
-    subject, payload = daemon.requests[0]
-    assert (
-        subject == "workspace.generate" and payload["workspace_root"] == "/home/ana/app"
-    )
-    assert payload["files"][0]["path"] == "docs/ARCHITECTURE.md" and payload["files"][
-        0
-    ]["content"].startswith("# Board service")
+    assert [f["path"] for f in body["written_files"]] == [
+        "docs/ARCHITECTURE.md",
+        "docs/adr/0001-sqlite-for-the-store.md",
+    ]
+    assert body["written_files"][1]["sha256"] == "cd" * 32
+    assert body["written_files"][1]["decision_id"] == "ADR-1"
+    subjects = [subject for subject, _ in daemon.requests]
+    assert subjects == ["workspace.list", "workspace.generate"]
+    _, listing = daemon.requests[0]
+    assert listing["path"] == "docs/adr"
+    _, payload = daemon.requests[1]
+    assert payload["workspace_root"] == "/home/ana/app"
+    assert [f["path"] for f in payload["files"]] == [
+        "docs/ARCHITECTURE.md",
+        "docs/adr/0001-sqlite-for-the-store.md",
+    ]
+    assert payload["files"][0]["content"].startswith("# Board service")
     assert payload["files"][0]["overwrite_existing"] is True
+    assert payload["files"][1]["content"].startswith("# ADR 0001: SQLite for the store")
 
-    daemon.reply = {
+    daemon.replies["workspace.generate"] = {
         "ok": False,
         "files": [{"path": "docs/ARCHITECTURE.md", "status": "rejected"}],
     }
     assert test_client.post(f"/v1/architectures/{arch['id']}/write").status_code == 502
-    daemon.reply = RuntimeError("nats: no responders available for request")
+    daemon.replies["workspace.list"] = RuntimeError(
+        "nats: no responders available for request"
+    )
     assert test_client.post(f"/v1/architectures/{arch['id']}/write").status_code == 503
 
 
