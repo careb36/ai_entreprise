@@ -9,6 +9,7 @@ of those lines fails this suite.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -253,3 +254,78 @@ def test_the_catch_all_and_an_ownerless_override_do_not_cover():
     assert uncovered(
         ("backend/tests/test_bench_*.py",), "/backend/tests/test_bench_x.py  @owner\n"
     ) == ["backend/tests/test_bench_*.py"]
+
+
+# --- review findings: the evidence's tests, backslashes, line breaks ------------
+
+
+def _imports_the_evidence(path: Path) -> bool:
+    """Whether a test file imports ``services.evidence`` (or ``app.services.evidence``)."""
+    roots = (["services", "evidence"], ["app", "services", "evidence"])
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            parts = node.module.split(".")
+            if any(parts[: len(r)] == r for r in roots):
+                return True
+            if parts in (["services"], ["app", "services"]) and any(
+                alias.name == "evidence" for alias in node.names
+            ):
+                return True
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if any(parts[: len(r)] == r for r in roots):
+                    return True
+    return False
+
+
+def test_every_test_that_imports_the_evidence_is_protected():
+    tests = REPO / "backend" / "tests"
+    importing = sorted(
+        f"backend/tests/{p.name}"
+        for p in tests.glob("test_*.py")
+        if _imports_the_evidence(p)
+    )
+    assert "backend/tests/test_verification_checks.py" in importing
+    assert "backend/tests/test_grounding.py" in importing
+    patterns = _patterns()
+    unprotected = [p for p in importing if not pp.matches([p], patterns)]
+    assert unprotected == []
+
+
+def test_a_backslash_is_read_both_ways():
+    # On POSIX, ``..\frontend`` is a folder inside bench; on Windows, a step up.
+    assert pp.matches(["bench/..\\frontend/x.py"]) == [
+        pp.Match("bench/..\\frontend/x.py", "bench/**")
+    ]
+    # Either reading protects: a Windows path still matches.
+    assert pp.matches(["scripts\\bench\\run.sh"]) == [
+        pp.Match("scripts/bench/run.sh", "scripts/bench/**")
+    ]
+    # Outside the repository under one reading, inside and unprotected under
+    # the other: no match.
+    assert pp.matches(["..\\bench/x.py"]) == []
+    assert pp.interpretations("bench/..\\frontend/x.py") == (
+        "bench/..\\frontend/x.py",
+        "frontend/x.py",
+    )
+    assert pp.interpretations("bench/x.py") == ("bench/x.py",)
+    assert pp.interpretations("../x") == ()
+
+
+def test_a_line_break_in_a_path_still_matches():
+    assert pp.matches(["bench/line\nbreak.py"]) == [
+        pp.Match("bench/line\nbreak.py", "bench/**")
+    ]
+    assert pp.matches(["a/line\nbreak.py"], ["a/**"]) == [
+        pp.Match("a/line\nbreak.py", "a/**")
+    ]
+    assert pp.matches(["a/x\ny/c.py"], ["a/**/c.py"]) == [
+        pp.Match("a/x\ny/c.py", "a/**/c.py")
+    ]
+    # ``*`` and ``?`` still stop at a folder, line break or not.
+    assert pp.matches(["a/b\n/c.py"], ["a/*.py"]) == []
+    assert pp.matches(["a/b\nc.py"], ["a/*.py"]) == [pp.Match("a/b\nc.py", "a/*.py")]
+    assert pp.matches(["a/\n.py"], ["a/?.py"]) == [pp.Match("a/\n.py", "a/?.py")]
+    assert pp.matches(["a/\n/.py"], ["a/?/.py"]) == [pp.Match("a/\n/.py", "a/?/.py")]
+    assert pp.matches(["a//.py"], ["a/?.py"]) == []

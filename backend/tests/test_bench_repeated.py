@@ -255,3 +255,21 @@ def test_served_models_are_the_union_per_role():
         "Developer": ["fake-model", "m3"],
         "QA": ["m2"],
     }
+
+
+def test_the_same_card_twice_on_a_side_is_refused(tmp_path, capsys):
+    before = [str(_write(tmp_path, c)) for c in _side("1", passed=[10, 10, 10])]
+    prev = [x for p in before for x in ("--previous", p)]
+    one = _run("21", passed=5)
+    first = _write(tmp_path, one)
+    copy = tmp_path / "copy"
+    copy.mkdir()
+    second = _write(copy, one)  # the same card under another path
+    for current in ([str(first)] * 3, [str(first), str(second), str(first)]):
+        assert compare.main([*current, *prev]) == 2
+        assert "20260102T000001Z" in capsys.readouterr().err
+    # On the baseline's side too.
+    others = [str(_write(tmp_path, c)) for c in _side("3", passed=[10, 10, 10])]
+    dup = ["--previous", before[0]] * 3
+    assert compare.main([*others, *dup]) == 2
+    assert "20260101T000000Z" in capsys.readouterr().err
