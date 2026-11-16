@@ -89,6 +89,12 @@ WAITING_FOR_INTEGRATION_REVIEW = (
 )
 
 
+WAITING_FOR_PROTECTED_ACK = (
+    "the integration changes protected paths: waiting for an Owner to "
+    "acknowledge each by name in an approving review"
+)
+
+
 def _merge_local(facts, policy) -> str | None:
     if facts.get("merged"):
         return "the branch is merged already"
@@ -102,6 +108,11 @@ def _merge_local(facts, policy) -> str | None:
             "integration_approved"
         ):
             return WAITING_FOR_INTEGRATION_REVIEW
+        # The merge guard's refusal (rsi-loop REQ-13), kept on the integration.
+        touched = facts.get("protected_paths")
+        if touched and not facts.get("protected_paths_acked"):
+            shown = ", ".join(str(p) for p in touched[:10])
+            return f"{WAITING_FOR_PROTECTED_ACK} ({shown})"
         return None
     return _done_branch(facts, policy)
 

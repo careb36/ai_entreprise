@@ -159,8 +159,9 @@ Copy `.env.example` to `.env` and fill in:
 - `AUTO_SELF_IMPROVEMENT_ENABLED` — optional, default `false` (decision 8 of
   `docs/design/rsi-loop.md`). At autonomy 3, a closed sprint gets a follow-up
   sprint planned by a model (`services/loop/worker/close.py`). It runs with no
-  protected-path guard, so it is off unless a company turns it on; the
-  finding-driven cycle of that design replaces it.
+  protected-path guard, so it is off unless a company turns it on, and never
+  runs for a company with protected paths on (below); the finding-driven cycle
+  of that design replaces it.
 - Protected paths are a company setting, not an environment variable:
   `companies.protected_paths_enabled` (migration `0041`, false for every
   company) marks the company that hosts the factory itself. A signed-in Owner
@@ -168,8 +169,12 @@ Copy `.env.example` to `.env` and fill in:
   token or the Manager agent; audited `protected_paths_setting_changed`), on
   the Duties and access page. With it on, a delivery whose observed paths
   match `services/contracts/protected_paths.py` (the running backend's list)
-  is high risk with the area `grader` and waits for a person. The model-planned
-  follow-up above is not yet held off for such a company (PR 3 of the design).
+  is high risk with the area `grader` and waits for a person; a local merge
+  of a sprint's integration whose git diff touches a protected path is refused
+  until a signed-in Owner names each such path in an approving review of that
+  commit (`protected_paths_ack`, migration `0042`); and the model-planned
+  follow-up above does not run for such a company, whatever
+  `AUTO_SELF_IMPROVEMENT_ENABLED` says (audited `follow_up_sprint_skipped`).
 - `MANAGER_AGENT_ENABLED` — optional, default `false`. The Manager agent
   (`services/management/manager_agent.py`) reads the inbox every
   `MANAGER_AGENT_INTERVAL_SECONDS` (60): each task blocked for a person or

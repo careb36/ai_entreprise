@@ -285,6 +285,10 @@ class IntegrationReviewCreate(RunReviewCreate):
 
     company_id: int | None = None
     integration_id: int | None = None
+    # With ``approve``, for a company that hosts the factory: the protected
+    # paths of the diff a signed-in Owner acknowledges by name
+    # (``services/release/protected_merge.py``).
+    protected_paths_ack: list[str] | None = Field(default=None, max_length=300)
 
 
 class IntegrationReviewSetting(RequestModel):

@@ -359,6 +359,37 @@ def _branch_items(
     return items
 
 
+def _protected(session, row, facts, state, text) -> tuple[str, str]:
+    """The merge guard's last check of *row* (rsi-loop REQ-13), as facts.
+
+    A refusal or an Owner's acknowledgement changes the state, so the agent
+    is asked again.
+    """
+    from services.release import local_merge
+
+    protected = local_merge.protected_facts(session, row)
+    if protected is None:
+        return state, text
+    facts.update(protected)
+    touched = protected["protected_paths"]
+    if touched is None:
+        return state + ":protected_unchecked", text
+    if not touched:
+        return state + ":protected_none", text
+    acked = protected["protected_paths_acked"]
+    shown = ", ".join(touched[:10])
+    return (
+        state + (":protected_acked" if acked else ":protected_awaiting_ack"),
+        text
+        + f"; it changes protected paths ({shown})"
+        + (
+            ", which an Owner acknowledged"
+            if acked
+            else ": the merge was refused until an Owner acknowledges each by name"
+        ),
+    )
+
+
 def _integration_items(session: Session, company: Company) -> list[dict]:
     from services.release import integration, integration_review
 
@@ -396,6 +427,7 @@ def _integration_items(session: Session, company: Company) -> list[dict]:
                 else "; the company requires a person's review before a local merge"
                 ", and none approves this commit yet"
             )
+        state, text = _protected(session, row, facts, state, text)
         items.append(
             {
                 "kind": "integration",

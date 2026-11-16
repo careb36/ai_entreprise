@@ -31,6 +31,8 @@ from services.workspace.workspace_daemon import (
 )
 from sqlmodel import Session
 
+from routers.sod import owner_person
+
 router = APIRouter(prefix="/v1", tags=["Integration"])
 
 
@@ -183,10 +185,15 @@ async def create_integration_review(
     """Submit a review of the latest integration: ``comment``, ``approve`` or ``request_changes``.
 
     An approval is held to segregation of duties: the person who started the
-    sprint does not approve its integration (403, audited).
+    sprint does not approve its integration (403, audited). Its
+    ``protected_paths_ack`` (a company that hosts the factory) is recorded
+    only for a signed-in Owner, never an API token.
     """
     sprint = _sprint(session, user, sprint_id, "Manager")
     _same_company(sprint, payload.company_id)
+    if payload.protected_paths_ack:
+        # A person's decision: a signed-in Owner, never an API token.
+        owner_person(session, user, sprint.company_id)
     row = _latest(session, sprint, payload.integration_id)
     author_name, author_id = _author(user, payload.author_name)
     try:
@@ -202,6 +209,7 @@ async def create_integration_review(
             author_name=author_name,
             author_user_id=author_id,
             actor=sod.actor_of(session, user),
+            protected_paths_ack=payload.protected_paths_ack,
         )
     except _FAILURES as exc:
         session.rollback()

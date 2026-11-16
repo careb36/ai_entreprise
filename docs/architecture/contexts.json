@@ -875,6 +875,9 @@
       "test_prompt_weight.py": [
         "models"
       ],
+      "test_protected_merge.py": [
+        "management"
+      ],
       "test_protected_paths.py": [
         "contracts"
       ],

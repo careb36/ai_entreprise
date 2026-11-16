@@ -17,6 +17,7 @@ hashes. Nothing here is taken from the client but the words and where they go.
 
 from datetime import UTC, datetime
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 # What a submitted review did: comment → recorded, approve → approved,
@@ -47,6 +48,10 @@ class IntegrationReview(SQLModel, table=True):
     published_url: str | None = None
     # The segregation-of-duties outcome of an approval (services/platform/sod.py).
     sod: str | None = None
+    # The protected paths a signed-in Owner named in an approval (migration
+    # 0042; services/release/protected_merge.py): their decision, recorded
+    # beside the diff_sha256 it was made on.
+    protected_paths_ack: list | None = Field(default=None, sa_column=Column(JSON))
     author_name: str
     author_user_id: int | None = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=_utcnow)

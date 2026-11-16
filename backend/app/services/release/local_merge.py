@@ -17,7 +17,10 @@ commit, a fast-forward or a merge) is an observation: kept as a
 
 A sprint's integration is merged only once a person approved it when the
 company asks for that (``services/release/integration_review.py``); the
-merge records the review it stood on.
+merge records the review it stood on. For a company that hosts the factory,
+an integration whose diff (read from git by the daemon) touches a protected
+path is merged only once a signed-in Owner acknowledged each such path in that
+approval (``services/release/protected_merge.py``).
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from sqlmodel import Session
 
 from services.evidence.review_changes import run_changes
 from services.platform.agent_service import AgentService
-from services.release import integration_review
+from services.release import integration_review, protected_merge
 from services.release.git_publish import PublishRefused
 
 LOCAL = "local"
@@ -66,8 +69,27 @@ def run_merge_spec(session: Session, run: AgentRun) -> dict[str, Any]:
     }
 
 
-def integration_merge_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
-    """The ``workspace.git.merge`` request for the sprint's integrated branch, or why not."""
+def needs_diff(session: Session, row: SprintIntegration) -> bool:
+    """Whether the merge of *row* needs its diff read first (protected paths)."""
+    return protected_merge.applies(session, row.company_id)
+
+
+def protected_facts(session: Session, row: SprintIntegration) -> dict[str, Any] | None:
+    """The protected-path facts of *row* for the Manager agent, or ``None``."""
+    return protected_merge.facts(
+        session, row, integration_review.approving_review(session, row)
+    )
+
+
+def integration_merge_spec(
+    session: Session, row: SprintIntegration, diff: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The ``workspace.git.merge`` request for the sprint's integrated branch, or why not.
+
+    *diff* is the daemon's diff of *row* (``integration_review.read_diff``),
+    needed when ``needs_diff``: a protected path in it is merged only with an
+    Owner's acknowledgement (``protected_merge.guard``).
+    """
     if row.status == "conflict":
         raise PublishRefused(
             409,
@@ -80,6 +102,13 @@ def integration_merge_spec(session: Session, row: SprintIntegration) -> dict[str
         )
     if not row.repository or not row.commit:
         raise PublishRefused(409, "This integration names no commit to merge")
+    try:
+        # Observed from git, never from what the tasks declared.
+        protected_merge.guard(
+            session, row, diff, integration_review.approving_review(session, row)
+        )
+    except protected_merge.ProtectedMergeRefused as refused:
+        raise PublishRefused(refused.status, refused.detail) from refused
     try:
         # The company may ask for a person's approving review first.
         integration_review.require_approval(session, row)
@@ -188,6 +217,8 @@ def record_integration_merge(
 ) -> SprintIntegration:
     facts = _observed(reply)
     approval = integration_review.approving_review(session, row)
+    checked = protected_merge.observation(row) or {}
+    protected = checked.get("matched") or []
     audit_id = _audit(
         session,
         row.company_id,
@@ -199,6 +230,7 @@ def record_integration_merge(
             "integration_id": row.id,
             "user_id": merged_by_user_id,
             "review_id": approval.id if approval else None,
+            "protected_paths": protected,
         },
         facts,
         agent_id,
@@ -212,6 +244,8 @@ def record_integration_merge(
         "audit_log_id": audit_id,
         # The person's approving review the merge stood on, when there was one.
         "review_id": approval.id if approval else None,
+        # The protected paths the Owner acknowledged in that review, if any.
+        "protected_paths": protected,
     }
     # A new dict, so the JSON column is seen as changed.
     row.details = {**(row.details or {}), "local_merge": merged}
