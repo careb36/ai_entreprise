@@ -393,6 +393,26 @@ def test_a_top_level_change_selects_every_test_that_loads_the_module(tmp_path):
     assert "test_other_api.py" not in _by_module(root, VERIFY, assume="body")["tests"]
 
 
+def test_a_module_a_fixture_acts_on_once_loaded_is_no_edge(tmp_path):
+    root = _fake_repo(tmp_path)
+    (root / "backend/tests/conftest.py").write_text(
+        "import pytest\n\n\ndef _install(jobs):\n    jobs.install()\n\n\n"
+        "@pytest.fixture(autouse=True)\ndef wire():\n"
+        '    when_loaded("services.release.jobs", _install)\n'
+    )
+    # Only the tests that reach verification themselves (an import, a URL), and
+    # the ones that emit the event jobs handles (``hooks.emit`` to ``hooks.on``).
+    assert _by_module(root, VERIFY, assume="top")["tests"] == [
+        "test_api.py",
+        "test_close.py",
+        "test_helper_user.py",
+        "test_patch.py",
+        "test_plain.py",
+        "test_verify.py",
+        "test_walks.py",
+    ]
+
+
 def test_the_router_rule_and_the_wiring(tmp_path):
     root = _fake_repo(tmp_path)
     items = _by_module(root, "backend/app/routers/items.py", assume="body")

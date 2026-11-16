@@ -372,7 +372,8 @@
     "always": {
       "$comment": "The tests that run whatever changed, each with its reason. Keep this list short.",
       "test_check_architecture.py": "Holds every module of backend/app/services and every test file to this map; a new module, import or test anywhere can break it.",
-      "test_authorization_matrix.py": "Reads every module under backend/app for its endpoints and their roles, so a change anywhere in the app can break it."
+      "test_authorization_matrix.py": "Reads every module under backend/app for its endpoints and their roles, so a change anywhere in the app can break it.",
+      "test_process_state.py": "Reads every module of backend/app/services for the containers it keeps at its top level, so a new one anywhere can break it."
     },
     "files": {
       "test_acceptance.py": [
