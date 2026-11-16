@@ -2,14 +2,15 @@
 
 After the root's test run (``delivery_checks._run_tests``), a delivery runs:
 
-- the test suite of each folder it wrote in (``stack_roots.selected``: the
+- the test suite of each folder it wrote in
+  (``delivery_commands.folders_to_run``, ``stack_roots.selected``: the
   files are the daemon's report of what it wrote, never the agent's list);
   a file in no folder runs the root's suite when there is one, and every
   folder's otherwise;
 - the commands the company runs on every delivery (``every_delivery``).
 
-Each runs through ``workspace.execute`` in the sandbox the company's policy
-names (``DELIVERY_SANDBOX``), as ``cd <folder> && <command>`` since the
+Each runs through ``workspace.execute`` (``delivery_commands.run_in_folder``)
+in the sandbox the company's policy names (``DELIVERY_SANDBOX``), as ``cd <folder> && <command>`` since the
 daemon runs every command in the project's root, and is kept in
 ``evidence["command_runs"]`` with its folder, exit status and the sha256 the
 backend computed over the output it received. The Verifier's
@@ -28,8 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.evidence import command_runs, criteria_tests, wstg_tests
-from services.workspace import stack_roots
-from services.workspace.folder_commands import execute, sandbox_box
+from services.workspace import delivery_commands
 from services.workspace.project_profile import Context
 from services.workspace.workspace_daemon import TEST_OUTPUT_TAIL_CHARS
 
@@ -41,14 +41,11 @@ def _append(evidence: dict[str, Any], record: dict[str, Any]) -> None:
 async def run(ctx: Context, root_command: str | None) -> None:
     """The touched folders' suites, then the every-delivery commands."""
     evidence = ctx.evidence
-    folders = await ctx.folders()
-    chosen, why = stack_roots.selected(
-        folders, stack_roots.changed_paths(evidence), bool(root_command)
-    )
+    chosen, why = await delivery_commands.folders_to_run(ctx, root_command)
     commands = ctx.every_delivery()
     if not chosen and not commands:
         return
-    box, unavailable = await sandbox_box(ctx)
+    box, unavailable = await delivery_commands.sandbox_box(ctx)
     suites: list[tuple[dict[str, Any], str]] = []
     for folder in chosen:
         command = folder.get("test")
@@ -56,7 +53,7 @@ async def run(ctx: Context, root_command: str | None) -> None:
             continue
         if evidence.get("acceptance"):
             command = criteria_tests.verbose_command(command)
-        record, output = await execute(
+        record, output = await delivery_commands.run_in_folder(
             ctx, "suite", folder["folder"], command, box, unavailable
         )
         record["source"] = (folder.get("source") or {}).get("test")
@@ -70,7 +67,7 @@ async def run(ctx: Context, root_command: str | None) -> None:
             "without_suite": [f["folder"] for f in chosen if not f.get("test")],
         }
     for entry in commands:
-        record, _output = await execute(
+        record, _output = await delivery_commands.run_in_folder(
             ctx,
             "every_delivery",
             entry.get("folder"),

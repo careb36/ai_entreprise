@@ -12,6 +12,11 @@ fallback. The model actually served stays recorded on the run
 Nothing here asks a model: the estimate is a function of the plan, and the
 policy is data a person writes. When no policy is configured the role
 default is used, so nothing changes for existing deployments.
+
+This module is the context's interface for routing (ADR 0018): the task
+worker gets a task's estimate from its plan and board (``estimate_task``) and
+the policy its company runs under (``effective_policy``) here, and passes both
+to ``route``; ``difficulty`` and ``routing_policy`` stay internal.
 """
 
 from __future__ import annotations
@@ -45,6 +50,55 @@ def estimate_difficulty(
     tasks it waits for and rework history each add weight.
     """
     return difficulty.estimate_item(item, arch, rework=rework)["score"]
+
+
+def _deliveries(session: Any, task_id: int) -> int:
+    from models import TaskEvent
+    from sqlmodel import func, select
+
+    return int(
+        session.exec(
+            select(func.count())
+            .select_from(TaskEvent)
+            .where(TaskEvent.task_id == task_id, TaskEvent.event_type == "delivered")
+        ).one()
+    )
+
+
+def estimate_task(
+    session: Any,
+    row: Any,
+    architecture: dict[str, Any] | None,
+    *,
+    rework: bool,
+) -> dict[str, Any]:
+    """The difficulty of *row*'s next attempt, from its plan and its board.
+
+    *architecture* is the approved architecture's content for the task's
+    specification (the caller reads it; ``None`` without one). The attempt is
+    the task's deliveries so far plus one; the rework history is the
+    ``NEEDS WORK:`` requests and a person's send-backs on its board.
+    """
+    from services.tasks import board
+
+    comments = board.comment_list(row.comments)
+    return difficulty.estimate_item(
+        row,
+        architecture,
+        attempt=_deliveries(session, row.id) + 1,
+        rework=rework,
+        rework_requests=board.rework_request_count(row.comments),
+        send_backs=sum(1 for c in comments if board.is_send_back(c)),
+    )
+
+
+def effective_policy(
+    session: Any, company_id: int | None
+) -> tuple[dict[str, Any], str | None]:
+    """The routing policy a company's tasks run under and where it came from
+    (``routing_policy.effective``): ``(policy, "company")``,
+    ``(policy, "deployment")`` or ``({}, None)``."""
+    return routing_policy.effective(session, company_id)
 
 
 def _policy() -> dict[str, Any]:

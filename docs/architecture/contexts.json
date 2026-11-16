@@ -105,6 +105,7 @@
       ],
       "public": [
         "daemon_liveness",
+        "delivery_commands",
         "git_workflow",
         "project_profile",
         "sandbox",
@@ -291,14 +292,7 @@
     ]
   },
   "allowlist": [],
-  "interface_allowlist": [
-    "delivery_checks -> dependency_install",
-    "delivery_checks -> run_logs",
-    "delivery_suites -> folder_commands",
-    "delivery_suites -> stack_roots",
-    "task_routing -> difficulty",
-    "task_routing -> routing_policy"
-  ],
+  "interface_allowlist": [],
   "tests": {
     "$comment": "Each backend/tests/test_*.py and the contexts it exercises, read by scripts/affected_tests.py to run only the tests a change can break, and checked by scripts/check_architecture.py: a test file in neither 'files' nor 'always', an unknown context, a rule naming no test, or an entry for a file that does not exist fails. A test's contexts are the top of what it imports and of the routes it calls (a router stands for the contexts it imports): a test of loop runs whenever loop or a context loop may import changes, so a context another of a test's contexts may import is left out as implied. 'repo' marks a test that reads repository files (scripts, workflows, docs, the frontend) rather than the backend's modules: it runs when a file it names changes ('mentions' in sources) or when it changes. A new test's entry starts from `python3 scripts/affected_tests.py --suggest backend/tests/<file>` and is read by hand.",
     "sources": {

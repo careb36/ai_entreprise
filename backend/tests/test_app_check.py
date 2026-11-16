@@ -31,7 +31,12 @@ from models.sprint import BacklogItem, Sprint
 from services.evidence import app_check, delivery_gate
 from services.loop import delivery_checks
 from services.loop.worker import deliver as worker_deliver
-from services.workspace import dependency_install, project_profile, stack_profiles
+from services.workspace import (
+    delivery_commands,
+    dependency_install,
+    project_profile,
+    stack_profiles,
+)
 from sqlmodel import select
 from test_delivery_tests import _load_daemon
 
@@ -614,15 +619,8 @@ def test_the_command_policy_refuses_before_anything_runs(tmp_path, monkeypatch):
     port, reply = _check(tmp_path)
     assert reply["refused"] and "started" not in reply
     assert not app_run.port_in_use(port)
-    check = app_check.check_app(
-        {
-            "app_run": {
-                "command": SERVE,
-                "port": port,
-                **delivery_checks._app_record(reply),
-            }
-        }
-    )
+    record = delivery_commands.app_record(reply)
+    check = app_check.check_app({"app_run": {"command": SERVE, "port": port, **record}})
     assert check["outcome"] == "unverifiable"
 
 
