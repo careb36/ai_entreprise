@@ -10,6 +10,7 @@ import json
 import os
 import re
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 # Directories that should never be walked (vendor code, build artefacts, VCS).
@@ -87,6 +88,19 @@ def _detect_language(files: list[Path]) -> tuple[str, Counter]:
     if not ext_counts:
         return "Unknown", ext_counts
     return ext_counts.most_common(1)[0][0], ext_counts
+
+
+def has_code_files(paths: Iterable[str]) -> bool:
+    """Whether any of *paths* is a source file, by the extension map above.
+
+    Reads the relative file paths of the daemon's project snapshot for the
+    foundation-sprint decision (``services/loop/foundation_setup.py``,
+    retrospective F8): deterministic, from the list alone — no model, no
+    network, no filesystem of this server.
+    """
+    return any(
+        isinstance(p, str) and Path(p).suffix.lower() in _EXT_LANGUAGE for p in paths
+    )
 
 
 def _read_json(path: Path) -> dict:
