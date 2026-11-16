@@ -163,6 +163,13 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
                 "sha256_new": _sha256_or_none(f.get("sha256_new")),
             }
         )
+    # Every path, unquoted (``--name-status -z``); None from an older daemon.
+    raw_paths = reply.get("paths")
+    paths = (
+        list(raw_paths)
+        if isinstance(raw_paths, list) and all(isinstance(p, str) for p in raw_paths)
+        else None
+    )
     digest = hashlib.sha256(
         json.dumps(
             {
@@ -172,6 +179,7 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
                     [f["path"], f["old_path"], f["sha256_old"], f["sha256_new"]]
                     for f in clean
                 ],
+                "paths": paths,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -184,6 +192,8 @@ def observed(reply: dict[str, Any], row: SprintIntegration) -> dict[str, Any]:
         "base_commit": str(reply.get("base_commit") or ""),
         "files": clean,
         "truncated": bool(reply.get("truncated")),
+        "paths": paths,
+        "paths_truncated": bool(reply.get("paths_truncated")),
         "diff_sha256": digest,
     }
 
@@ -408,6 +418,8 @@ def submit_review(
     )
     session.add(review)
     session.flush()
+    # A diff that changed since a refused merge replaces the check kept then.
+    protected_merge.refresh(session, row, diff)
     for comment in comments:
         comment.review_id = review.id
         session.add(comment)

@@ -363,7 +363,9 @@ def _protected(session, row, facts, state, text) -> tuple[str, str]:
     """The merge guard's last check of *row* (rsi-loop REQ-13), as facts.
 
     A refusal or an Owner's acknowledgement changes the state, so the agent
-    is asked again.
+    is asked again: the state names the observed diff's hash and the
+    approving review, so a new acknowledgement of a changed diff is a new
+    situation even when both read "acknowledged".
     """
     from services.release import local_merge
 
@@ -374,12 +376,16 @@ def _protected(session, row, facts, state, text) -> tuple[str, str]:
     touched = protected["protected_paths"]
     if touched is None:
         return state + ":protected_unchecked", text
+    seen = (
+        f":{(protected.get('protected_paths_diff') or '-')[:12]}"
+        f":r{protected.get('protected_paths_review_id') or '-'}"
+    )
     if not touched:
-        return state + ":protected_none", text
+        return state + ":protected_none" + seen, text
     acked = protected["protected_paths_acked"]
     shown = ", ".join(touched[:10])
     return (
-        state + (":protected_acked" if acked else ":protected_awaiting_ack"),
+        state + (":protected_acked" if acked else ":protected_awaiting_ack") + seen,
         text
         + f"; it changes protected paths ({shown})"
         + (

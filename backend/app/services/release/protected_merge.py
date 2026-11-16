@@ -67,14 +67,53 @@ def applies(session: Session, company_id: int | None) -> bool:
 
 
 def _diff_paths(diff: dict[str, Any]) -> Iterable[str]:
+    """The parsed files' paths, a rename's source included, then the inventory."""
     for entry in diff.get("files") or []:
         yield entry["path"]
         if entry.get("old_path"):
             yield entry["old_path"]
+    yield from diff.get("paths") or []
+
+
+def _normalized(paths: Iterable[Any]) -> set[str]:
+    return {
+        p
+        for p in (protected_paths.normalize(x) for x in paths if isinstance(x, str))
+        if p is not None
+    }
+
+
+def inventory_problem(diff: dict[str, Any]) -> str | None:
+    """Why the diff's path inventory cannot be trusted; ``None`` when it can.
+
+    The daemon lists every path with ``git diff --name-status -z``, which no
+    quoting hides; the patch parser skips a header git quotes. Each parsed
+    path must be listed, and with the whole diff shown every listed path must
+    be parsed: a disagreement means a file the parser could not read.
+    """
+    listed = diff.get("paths")
+    if not isinstance(listed, list) or diff.get("paths_truncated"):
+        return (
+            "The daemon did not report a complete list of the paths this "
+            "integration changes, so a protected path could be hidden: a person "
+            "merges it (update the workspace daemon)"
+        )
+    inventory = _normalized(listed)
+    parsed: set[str] = set()
+    for entry in diff.get("files") or []:
+        parsed |= _normalized([entry.get("path"), entry.get("old_path")])
+    if parsed - inventory or (not diff.get("truncated") and inventory - parsed):
+        unread = sorted((inventory - parsed) | (parsed - inventory))
+        return (
+            "The daemon's parsed diff and its list of changed paths do not agree "
+            f"({', '.join(unread[:10])}), so a protected path could be hidden: "
+            "a person merges it"
+        )
+    return None
 
 
 def matched(diff: dict[str, Any]) -> list[str]:
-    """Pure over the daemon's diff: the protected paths it shows, each once."""
+    """Pure over the daemon's diff: the protected paths it shows or lists, each once."""
     return [
         m.path
         for m in protected_paths.matches(
@@ -181,6 +220,8 @@ def _record(
         "diff_sha256": diff.get("diff_sha256"),
         "matched": found,
         "truncated": bool(diff.get("truncated")),
+        # The inventory missing or disagreeing with the parsed files.
+        "incomplete": inventory_problem(diff) is not None,
         "acknowledged": bool(found) and refusal is None,
         "review_id": approval.id if approval is not None else None,
         "refused": refusal,
@@ -220,7 +261,9 @@ def guard(
             "The daemon's diff of this integration was cut short, so a protected "
             "path could be among the files it did not show: a person merges it"
         )
-    elif found:
+    else:
+        refusal = inventory_problem(diff)
+    if refusal is None and found:
         refusal = _missing_ack(session, row, diff, approval, found)
     _record(session, row, diff, found, approval, refusal)
     if refusal is None:
@@ -276,12 +319,32 @@ def facts(
     if kept is None:
         return {"protected_paths": None, "protected_paths_acked": False}
     found = [str(p) for p in kept.get("matched") or []]
-    acked = bool(found) and not kept.get("truncated")
+    unreadable = bool(kept.get("truncated") or kept.get("incomplete"))
+    acked = bool(found) and not unreadable
     if acked:
         seen = {"diff_sha256": kept.get("diff_sha256")}
         acked = _missing_ack(session, row, seen, approval, found) is None
     return {
         "protected_paths": found,
         "protected_paths_acked": acked,
-        "protected_paths_truncated": bool(kept.get("truncated")),
+        "protected_paths_truncated": unreadable,
+        # Both change the item, so the agent is asked again after either.
+        "protected_paths_diff": str(kept.get("diff_sha256") or ""),
+        "protected_paths_review_id": approval.id if approval is not None else None,
     }
+
+
+def refresh(session: Session, row: SprintIntegration, diff: dict[str, Any]) -> None:
+    """Keep *diff*'s check when it differs from the one kept on *row*.
+
+    A review reads the diff again; when the base absorbed part of the
+    integration since a refused merge, the earlier attempt's paths and digest
+    no longer describe it, so they are replaced (committed with the review)
+    and the item can move on to a new guarded attempt.
+    """
+    if not applies(session, row.company_id) or diff.get("commit") != row.commit:
+        return
+    kept = observation(row)
+    if kept is not None and kept.get("diff_sha256") == diff.get("diff_sha256"):
+        return
+    _record(session, row, diff, matched(diff), None, None)

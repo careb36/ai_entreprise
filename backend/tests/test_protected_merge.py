@@ -346,7 +346,7 @@ def test_the_manager_agent_is_refused_and_then_sees_the_refusal(
     assert not (row.details or {}).get("local_merge")
 
     [item] = manager_inbox_extra._integration_items(sqlite_session, company)
-    assert item["state"].endswith(":protected_awaiting_ack")
+    assert ":protected_awaiting_ack:" in item["state"]
     assert item["facts"]["protected_paths"] == [GRADER]
     assert GRADER in item["text"]
     why = manager_rules.rule_holds(
@@ -360,7 +360,7 @@ def test_the_manager_agent_is_refused_and_then_sees_the_refusal(
     )
     sqlite_session.expire_all()
     [item] = manager_inbox_extra._integration_items(sqlite_session, company)
-    assert item["state"].endswith(":protected_acked")
+    assert ":protected_acked:" in item["state"]
     assert (
         manager_rules.rule_holds("merge_local", item["facts"], manager_policy.Policy())
         is None

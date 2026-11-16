@@ -8,6 +8,12 @@ never taken from the browser: the files between the merge base of ``base``
 and the pinned ``commit``, their hunks, and the sha256 of each file's bytes
 on both sides, read from git's own objects (``git cat-file --batch``).
 
+Beside them, ``paths`` lists every path the diff touches from
+``git diff --name-status -z --no-renames``: NUL-separated and never quoted, so
+a name git quotes in a patch header (a tab, a quote, a backslash), which the
+patch parser does not read, is still listed, and a rename lists its source
+and its destination. The backend matches protected paths against it.
+
 Read-only: no worktree, no checkout, no ref is written.
 """
 
@@ -25,6 +31,7 @@ from git_workspace import _SHA, GIT_TIMEOUT_SECONDS, TASK_BRANCH_PREFIX, GitErro
 
 MAX_FILES = 300
 MAX_PATCH_CHARS = 200_000
+MAX_PATHS = 5000
 _HEADER = re.compile(r"^diff --git a/(.*?) b/(.*)$")
 
 
@@ -116,6 +123,20 @@ def _sha256s(root: Path, objects: List[str]) -> List[Optional[str]]:
     return hashes
 
 
+def inventory(root: Path, merge_base: str, commit: str) -> List[str]:
+    """Every path between *merge_base* and *commit*, renames as both sides."""
+    raw = _git_bytes(
+        ["diff", "--no-color", "--no-ext-diff", "--no-renames", "--name-status", "-z", merge_base, commit],
+        root,
+    )
+    tokens = raw.split(b"\0")
+    if tokens and tokens[-1] == b"":
+        tokens.pop()
+    if len(tokens) % 2:
+        raise GitError("git listed the changed paths in a form this daemon cannot read")
+    return [tokens[i + 1].decode("utf-8", "replace") for i in range(0, len(tokens), 2)]
+
+
 def integration_diff(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """The files *spec*'s pinned ``commit`` changes against the merge base of ``base``."""
     commit = str(spec.get("commit") or "")
@@ -133,6 +154,7 @@ def integration_diff(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any
     merge_base = _out(["merge-base", base_commit, commit], root)
     raw = _git_bytes(["-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-M", merge_base, commit], root)
     files = parse(raw.decode("utf-8", "replace"))
+    paths = inventory(root, merge_base, commit)
     truncated = len(files) > MAX_FILES
     files = files[:MAX_FILES]
     wanted: List[str] = []
@@ -148,6 +170,7 @@ def integration_diff(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any
     return {
         "ok": True, "base": base, "base_commit": base_commit, "merge_base": merge_base,
         "commit": commit, "files": files, "truncated": truncated,
+        "paths": paths[:MAX_PATHS], "paths_truncated": len(paths) > MAX_PATHS,
     }
 
 
