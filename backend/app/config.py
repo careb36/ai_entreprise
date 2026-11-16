@@ -124,7 +124,9 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants
     # ---------------------------------------------------------------------------
-    AUTO_SELF_IMPROVEMENT_ENABLED: bool = True
+    # Off by default (docs/design/rsi-loop.md, decision 8): the model-planned
+    # follow-up sprint ran with no protected-path guard; a company turns it on.
+    AUTO_SELF_IMPROVEMENT_ENABLED: bool = False
     CONSOLE_ASSISTANTS_ENABLED: bool = True
     # The Support agent triages new help-desk tickets (suggested severity and
     # category, a first reply to the reporter). Off by default: reporting a
