@@ -1,5 +1,6 @@
 """The client's brief (issue #331): what got done, what the Manager agent
-decided and why, what waits for the client, and the cost so far.
+decided and why, what it was not allowed to decide alone and why, what waits
+for the client, and the cost so far.
 
 Deterministic: every number is read from the board, the agent's decision
 rows and the audit log; no model writes it. ``GET /v1/companies/{id}/brief``
@@ -124,11 +125,28 @@ def _decisions(session: Session, company_id: int, since: datetime) -> dict[str, 
     suggested = [r for r in rows if r.suggested_at and r.suggested_at >= since]
     alone = [r for r in rows if r.decided_by and r.decided_at and r.decided_at >= since]
     overridden = [r for r in rows if r.overridden_at and r.overridden_at >= since]
+    # Suggestions the policy did not let the agent take alone, with the
+    # platform's sentence; the model's own reason stays beside it as a claim.
+    refused = [r for r in suggested if r.refusal_reason]
     return {
         "suggested": sum(1 for r in suggested if r.suggested_decision),
         "unusable": sum(1 for r in suggested if r.suggested_decision is None),
         "taken_alone": len(alone),
         "overridden": len(overridden),
+        "refused": len(refused),
+        "refusals": [
+            {
+                "id": r.id,
+                "item_kind": r.item_kind,
+                "item_id": r.item_id,
+                "category": r.category,
+                "decision": r.suggested_decision,
+                "reason": r.suggested_reason,
+                "action_state": r.action_state,
+                "refusal_reason": r.refusal_reason,
+            }
+            for r in refused[:LIST_LIMIT]
+        ],
         "decisions": [
             {
                 "id": r.id,

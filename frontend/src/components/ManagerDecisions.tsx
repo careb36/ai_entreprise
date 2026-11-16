@@ -3,17 +3,27 @@ import { Bot, Undo2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { useClientBrief, useOverrideManagerDecision, type ManagerDecision } from '../services/manager'
 
+/** Why the policy did not let the agent decide alone: the platform's sentence, apart from the claim. */
+function RefusalReason({ reason }: { reason?: string | null }) {
+  const { t } = useTranslation()
+  if (!reason) return null
+  return <p className="text-xs text-gray-500">{t('manager.refusal', { reason, defaultValue: 'Not decided alone: {{reason}}' })}</p>
+}
+
 /** The Manager agent's suggestion on an item: a claim, shown beside the client's choice. */
 export function ManagerSuggestion({ suggestion }: { suggestion?: ManagerDecision | null }) {
   const { t } = useTranslation()
   if (!suggestion || suggestion.decided_by) return null
   return (
-    <p className="flex items-center gap-1.5 text-xs text-gray-400" title={suggestion.suggested_reason ?? undefined}>
-      <Bot size={12} aria-hidden="true" />
-      {suggestion.suggested_decision
-        ? t('manager.suggestion', { decision: suggestion.suggested_decision, defaultValue: 'Manager agent suggests: {{decision}}' })
-        : t('manager.suggestionUnusable', { defaultValue: 'The Manager agent could not suggest; it is yours to decide.' })}
-    </p>
+    <div className="space-y-0.5">
+      <p className="flex items-center gap-1.5 text-xs text-gray-400" title={suggestion.suggested_reason ?? undefined}>
+        <Bot size={12} aria-hidden="true" />
+        {suggestion.suggested_decision
+          ? t('manager.suggestion', { decision: suggestion.suggested_decision, defaultValue: 'Manager agent suggests: {{decision}}' })
+          : t('manager.suggestionUnusable', { defaultValue: 'The Manager agent could not suggest; it is yours to decide.' })}
+      </p>
+      <RefusalReason reason={suggestion.refusal_reason} />
+    </div>
   )
 }
 
@@ -38,6 +48,26 @@ export function ClientBriefCard({ companyId }: { companyId: number }) {
       </p>
       {cost.over_budget && (
         <p className="text-xs text-amber-400">{t('manager.overBudget', { defaultValue: 'Over the token budget: the agent decides nothing alone.' })}</p>
+      )}
+      {agent.refusals && agent.refusals.length > 0 && (
+        <div className="mt-2">
+          <h3 className="text-xs font-semibold text-gray-300">
+            {t('manager.refusalsTitle', { count: agent.refused ?? agent.refusals.length, defaultValue: 'Not decided alone ({{count}})' })}
+          </h3>
+          <ul className="list-inside list-disc text-xs text-gray-400">
+            {agent.refusals.map(r => (
+              <li key={r.id}>
+                {t('manager.refusalItem', {
+                  decision: r.decision ?? t('manager.noDecision', { defaultValue: 'no usable suggestion' }),
+                  kind: r.item_kind,
+                  id: r.item_id,
+                  reason: r.refusal_reason,
+                  defaultValue: '{{decision}} ({{kind}} #{{id}}): {{reason}}',
+                })}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   )

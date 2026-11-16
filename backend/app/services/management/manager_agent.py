@@ -89,6 +89,9 @@ ANSWER_MAX_TOKENS = 400
 ITEMS_PER_CYCLE = 5
 REASON_LIMIT = 2000
 ESCALATE = "escalate"
+# Why a row settled stale, written by the platform in ``refusal_reason``.
+LEFT_THE_INBOX = "the item no longer waits for a decision"
+SITUATION_CHANGED = "the situation changed after the agent looked at it"
 # The decisions each category allows; ``escalate`` leaves the item to the client.
 DECISIONS = {
     "accept_delivery": ("accept", "send_back", ESCALATE),
@@ -284,8 +287,15 @@ def current_item(
     )
 
 
-def _settle(session: Session, row: ManagerDecision, state: str) -> None:
+def _settle(
+    session: Session, row: ManagerDecision, state: str, why: str | None = None
+) -> None:
+    """Record the row's action state and, for a refusal, the platform's
+    sentence saying why (``refusal_reason``); the model's claim
+    (``suggested_*``) is never written here."""
     row.action_state = state
+    if why:
+        row.refusal_reason = why[:REASON_LIMIT]
     session.add(row)
     session.commit()
 
@@ -306,7 +316,12 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
         or current["state"] != row.item_state
         or current["category"] != row.category
     ):
-        _settle(session, row, STALE)
+        _settle(
+            session,
+            row,
+            STALE,
+            LEFT_THE_INBOX if current is None else SITUATION_CHANGED,
+        )
         return STALE
     record = manager_record.track_record(session, company.id)
     policy = manager_policy.load(session, company.id)
@@ -329,7 +344,7 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
     if not verdict["allowed"]:
         if _waits_for_a_probe(row, facts, policy, flagged):
             return PENDING
-        _settle(session, row, NOT_ALLOWED)
+        _settle(session, row, NOT_ALLOWED, refusal_reason(verdict))
         return NOT_ALLOWED
     try:
         manager_actions.act(session, row, verdict["rule"])
@@ -345,6 +360,14 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
         logger.info("Manager agent did not act on decision %s yet: %s", row.id, exc)
         return PENDING
     return DONE
+
+
+def refusal_reason(verdict: dict[str, Any]) -> str:
+    """The sentence a refused verdict records: the policy's or the rule's own
+    ``why``, after the rule's name when one was weighed."""
+    why = str(verdict.get("why") or "the policy did not allow it")
+    rule = verdict.get("rule")
+    return f"{rule}: {why}" if rule and not why.startswith(f"{rule}:") else why
 
 
 def _waits_for_a_probe(row, facts, policy, flagged) -> bool:

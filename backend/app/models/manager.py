@@ -7,7 +7,9 @@ size limits they read. Only a person writes it; the agent never does.
 ``ManagerDecision`` is one inbox item the agent looked at: its suggestion
 (``suggested_*``, a claim, empty when its answer was unusable) and, when the
 policy allowed it, the decision it took alone (``decided_by``, ``rule``,
-``outcome``), kept apart from what the client decides. ``overridden_*`` is
+``outcome``), kept apart from what the client decides. When the policy did
+not let it, ``refusal_reason`` is the platform's sentence saying why, a field
+of its own so the claim stays the model's. ``overridden_*`` is
 the client taking that decision back. ``item_state`` names the situation the
 agent looked at, so one situation gets one row even across replicas (the
 unique constraint), and a new situation of the same item gets a new one.
@@ -68,6 +70,11 @@ class ManagerDecision(SQLModel, table=True):
     # replica that stopped leaves it to be decided again), done, not_allowed,
     # stale (the situation changed before acting) or unusable.
     action_state: str | None = None
+    # Why the agent did not decide alone, written by the platform when the
+    # row settles not_allowed or stale: the policy's or the rule's sentence
+    # (migration 0040). An observation, never the model's claim, and never
+    # read by the track record.
+    refusal_reason: str | None = None
     # Set only when the policy let the agent decide alone.
     decided_by: str | None = None
     rule: str | None = None
