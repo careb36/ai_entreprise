@@ -32,6 +32,7 @@ from schemas import (
     CompanyInitRequest,
     DiscoveryRequest,
 )
+from services.loop import foundation_setup
 from services.loop.company_service import CompanyService
 from services.planning.discovery_service import DiscoveryService
 from services.platform import memory_graph
@@ -74,10 +75,17 @@ async def init_company(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Bootstrap a new company (CompanyService); its Git workflow follows the folder (``services/release/git_setup.py``)."""
+    """Bootstrap a new company (CompanyService); its Git workflow and its foundation sprint follow the folder, as the daemon observed it (``services/release/git_setup.py``, ``services/loop/foundation_setup.py``)."""
     require_authenticated(user)
     base = git_setup.clean_base(req.git_base_branch)
-    observed = await git_setup.observe(request, req.project_path)
+    # One inspection of the folder serves both observations — the Git
+    # workflow (a repository or not) and the foundation sprint (a repository
+    # with code or not). Both are the daemon's; the request's own word only
+    # asks for the sprint or declines it.
+    observed = await foundation_setup.observe_folder(
+        getattr(request.app.state, "nats_client", None), req.project_path
+    )
+    foundation = foundation_setup.decide(observed, req.foundation_sprint)
     service = CompanyService(session)
     try:
         result = service.init_company(
@@ -90,10 +98,19 @@ async def init_company(
             detected_stack=req.detected_stack,
             owner_user_id=user.id if user is not None else None,
             start_now=req.start_now,
-            git_workflow=git_setup.workflow_for(observed, req.git_workflow),
+            git_workflow=git_setup.workflow_for(
+                git_setup.is_repository(
+                    observed["project"], (req.project_path or "").strip()
+                ),
+                req.git_workflow,
+            ),
             git_base_branch=base,
             doc_language=req.doc_language,
+            plan_foundation=foundation["planned"],
         )
+        # The decision and its reason, with the daemon's observation beside
+        # it (services/loop/foundation_setup.py).
+        result["foundation_sprint"] = foundation
         return result
     except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.
         logger.error(f"Company initialization failed: {exc}")
