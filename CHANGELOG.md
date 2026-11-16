@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The backend suite runs in parallel.** pytest-xdist joins the dev group and `tests/conftest.py` makes `-n auto --dist loadgroup` the default (`-n 0` for one process; CI uses `-n 4` on the shared runners); `sqlite_session` empties the shared in-memory database after each test, so a worker cycle no longer reads every earlier test's tasks, and the wall-clock tests share one worker and keep their best timing after a warm-up. On 4 cores: 557 s serial before, about 370 s serial and 105 s parallel now.
 * **The browser sandbox image is published for linux/amd64 only (#529).** Its arm64 variant builds under QEMU on the runner, but its browser aborts under emulation (the first `browser-image-probe.yml` run), so nobody has seen it work; `images.yml` no longer sets up QEMU or publishes arm64 until it has been run with its probe on arm64 hardware.
 
 * **The e2e web project's port is picked at run time.** `E2E_WEB_PORT` was fixed at 18765, and the self-hosted runners share one machine: when two runs reached step 9c together, the daemon refused the second greeting's busy port, no browser check ran, no hold was placed and step 10 reported a misleading `worked_before_dependency`. `e2e.yml` now picks it like the backend's and the fake model's ports, `run.sh` defaults to a free port, and step 9c checks the port is free first.

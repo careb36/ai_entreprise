@@ -172,6 +172,9 @@ def test_an_unreachable_remote_proceeds_from_the_local_base(behind, tmp_path):
     assert "base_behind_remote" not in reply["git"]
 
 
+# A wall-clock bound (10 s for a 1 s fetch timeout): in the same xdist group
+# as the other wall-clock tests, so they never time themselves at once.
+@pytest.mark.xdist_group("wall_clock")
 def test_a_stalled_fetch_falls_back_to_the_local_base_within_the_budget(
     behind, monkeypatch
 ):
