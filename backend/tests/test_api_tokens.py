@@ -262,6 +262,9 @@ def test_a_removed_creators_tokens_stop_working(sqlite_session):
     sqlite_session.delete(member)
     sqlite_session.commit()
     assert api_tokens.verify(sqlite_session, raw) is None
+    # The request ends in a 401 and its session closes without a commit: the
+    # refusal must already be committed, or it is rolled back with the request.
+    sqlite_session.rollback()
     rows = _refusals(sqlite_session, token.id)
     assert [r.result["reason"] for r in rows] == ["creator_not_a_member"]
     assert rows[0].details["creator_role"] is None
