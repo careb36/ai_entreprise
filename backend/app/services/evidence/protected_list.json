@@ -45,6 +45,7 @@
     "backend/tests/test_developer_tools_evidence.py",
     "backend/tests/test_developer_tools_limits.py",
     "backend/tests/test_edit_blocks.py",
+    "backend/tests/test_gate_refutations.py",
     "backend/tests/test_graph_demotion.py",
     "backend/tests/test_grounding.py",
     "backend/tests/test_grounding_imports.py",

@@ -692,6 +692,10 @@
       "test_foundation_sprint.py": [
         "release"
       ],
+      "test_gate_refutations.py": [
+        "evidence",
+        "loop"
+      ],
       "test_git_acceptance.py": [
         "release"
       ],
