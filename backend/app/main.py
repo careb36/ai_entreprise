@@ -38,6 +38,7 @@ from routers.enterprise import router as enterprise_router
 from routers.enterprise_agents import router as enterprise_agents_router
 from routers.enterprise_analytics import router as enterprise_analytics_router
 from routers.events import router as events_router
+from routers.findings import router as findings_router
 from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
@@ -142,6 +143,7 @@ app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)
 app.include_router(enterprise_agents_router)
 app.include_router(events_router)
+app.include_router(findings_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)
 app.include_router(sprint_crud_router)

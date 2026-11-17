@@ -38,6 +38,7 @@ from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.board_note import SprintBoardNote
 from models.documentation import DocumentationPack
+from models.finding import Finding
 from models.intake import IntakeItem
 from models.integration import SprintIntegration
 from models.integration_review import IntegrationReviewComment
@@ -223,6 +224,17 @@ def build_world(session) -> World:
             proposed_by="ScrumMaster",
         ),
     )
+    finding = _add(
+        session,
+        Finding(
+            company_id=cid,
+            source="docs/retrospectives/2026-11-self-hosting.md",
+            source_ref="F5",
+            title="Authz finding",
+            specification_sha256=hashlib.sha256(b"authz specification").hexdigest(),
+            target_measure="scripts/self_host/measures/test_authz.py",
+        ),
+    )
     comment = _add(
         session,
         ReviewComment(
@@ -308,6 +320,7 @@ def build_world(session) -> World:
         "decision_id": decision.id,
         "note_id": note.id,
         "procedure_id": procedure.id,
+        "finding_id": finding.id,
         "comment_id": comment.id,
         "integration_id": integrated.id,
         "integration_comment_id": integration_comment.id,

@@ -33,6 +33,7 @@ from .company import (
 )
 from .documentation import DocumentationPack
 from .event import TaskEvent
+from .finding import Finding
 from .github import GitHubRepoBinding
 from .intake import IntakeItem
 from .integration import SprintIntegration
@@ -82,6 +83,7 @@ __all__ = [
     "CompanyMember",
     "CompanyWebhook",
     "DocumentationPack",
+    "Finding",
     "GitHubRepoBinding",
     "IntakeItem",
     "IntegrationReview",
