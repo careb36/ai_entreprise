@@ -84,7 +84,7 @@ describe('project folder on the user\'s computer', () => {
     const input = screen.getByLabelText('Project folder')
     expect(input).toHaveValue('')
     expect(input).toHaveAttribute('placeholder', '~/code/my-app')
-    expect(screen.getByRole('button', { name: '🔍 Scan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled()
     expect(screen.getByText('Workspace daemon connected on ana-mbp (macOS)')).toBeInTheDocument()
   })
 
@@ -153,7 +153,7 @@ describe('project folder on the user\'s computer', () => {
       .toHaveAttribute('href', 'https://github.com/careb36/la-fabrique')
     // The field now holds the canonical path the daemon resolved, not the symlink chosen.
     expect(screen.getByLabelText('Project folder')).toHaveValue('/Users/ana/code/la-fabrique')
-    expect(screen.getByRole('button', { name: '🔍 Scan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled()
   })
 
   it('says when a folder is not a git repository', async () => {
@@ -177,7 +177,7 @@ describe('project folder on the user\'s computer', () => {
 
     expect(await screen.findByText('This folder does not exist on ana-mbp: /Users/ana/code/missing'))
       .toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '🔍 Scan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled()
     fireEvent.keyDown(input, { key: 'Enter' })
     await act(async () => {})
     expect(discover).not.toHaveBeenCalled()
@@ -249,7 +249,7 @@ describe('project folder on the user\'s computer', () => {
 
     const input = screen.getByLabelText('Project folder')
     fireEvent.change(input, { target: { value: 'c:\\users\\ana\\source\\repos\\la-fabrique' } })
-    fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }))
 
     await screen.findByText(/Stack detected/)
     expect(discover).toHaveBeenCalledWith(null, 'c:\\users\\ana\\source\\repos\\la-fabrique')
@@ -281,7 +281,7 @@ describe('project folder on the user\'s computer', () => {
     renderWizard()
 
     fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: '/home/ana/app' } })
-    fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }))
     await screen.findByText(/Stack detected/)
     for (let step = 0; step < 5; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
 
@@ -309,7 +309,7 @@ describe('project folder on the user\'s computer', () => {
     renderWizard()
     const scan = async (path: string) => {
       fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: path } })
-      fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Scan' }))
       await waitFor(() => expect(screen.getByLabelText('Project folder')).toHaveValue(path))
       await screen.findByText(/Stack detected/)
     }
@@ -338,7 +338,7 @@ describe('project folder on the user\'s computer', () => {
     fireEvent.change(input, { target: { value: '~/code/la-fabrique' } })
     fireEvent.blur(input)
     expect(await screen.findByText('Checking folder…')).toBeInTheDocument()
-    const scan = screen.getByRole('button', { name: '🔍 Scan' })
+    const scan = screen.getByRole('button', { name: 'Scan' })
     expect(scan).toBeEnabled()
     fireEvent.click(scan)
 

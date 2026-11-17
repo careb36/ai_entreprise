@@ -8,6 +8,7 @@ import { useCurrentRole, useInbox } from '../../hooks/useQueries'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { StatusPill } from './StatusPill'
 import { sectionForPath, useNavLinks } from './navLinks'
+import { CountPill } from '../ui/CountPill'
 
 /** The top bar: logo, primary links, language, the Company menu, service status and the mobile menu. */
 export function NavBar() {
@@ -59,14 +60,13 @@ export function NavBar() {
     if (companyOpen) companyRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [companyOpen])
 
-  const linkClass = (isActive: boolean) =>
-    `flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-2 py-2 rounded-lg transition-colors
-     ${isActive
-       ? 'text-white bg-brand-600/20 border border-brand-600/30'
-       : 'text-gray-400 hover:text-white hover:bg-surface-800'}`
+  const linkClass = (isActive: boolean) => `nav-link ${isActive ? 'nav-link-current' : ''}`
+  const waitingPill = waiting > 0 && (
+    <CountPill count={waiting} label={t('inbox.navCount', { count: waiting, defaultValue: '{{count}} waiting for you' })} />
+  )
 
   return (
-    <header className="relative h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0"
+    <header className="relative h-12 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-3 lg:px-5 z-20 flex-shrink-0"
       onKeyDown={event => {
         if (event.key !== 'Escape') return
         if (companyOpen) {
@@ -79,24 +79,19 @@ export function NavBar() {
         }
       }}>
       {/* Logo */}
-      <Link to="/evidence" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
-        <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
-        <span className="text-lg font-black tracking-tight hidden xl:block">La Fabrique</span>
+      <Link to="/evidence" className="flex items-center gap-2 rounded-md hover:opacity-80 transition-opacity flex-shrink-0">
+        <img src="/fabrique-icon.svg" alt="La Fabrique" width={26} height={26} className="rounded-md" />
+        <span className="text-[15px] font-black tracking-tight hidden xl:block">La Fabrique</span>
       </Link>
 
       {/* Desktop nav */}
       {authenticated && (
-        <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-1 ml-4" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
+        <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-0.5 ml-3" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
           {links.map(({ to, section: linkSection, icon: Icon, label }) => (
             <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
-              <Icon size={16} />
+              <Icon size={15} aria-hidden="true" />
               <span>{label}</span>
-              {to === '/governance' && waiting > 0 && (
-                <span className="badge">
-                  <span aria-hidden="true">{waiting}</span>
-                  <span className="sr-only">{t('inbox.navCount', { count: waiting, defaultValue: '{{count}} waiting for you' })}</span>
-                </span>
-              )}
+              {to === '/governance' && waitingPill}
             </Link>
           ))}
         </nav>
@@ -111,7 +106,7 @@ export function NavBar() {
               if (!event.currentTarget.contains(event.relatedTarget)) setCompanyOpen(false)
             }}>
               <button ref={companyToggleRef} type="button"
-                className={`btn-ghost btn-sm max-w-36 xl:max-w-48 border ${companyCurrent ? 'text-white bg-brand-600/20 border-brand-600/30' : 'border-transparent'}`}
+                className={`btn-tool max-w-36 xl:max-w-48 ${companyCurrent ? 'nav-link-current' : ''}`}
                 aria-haspopup="menu" aria-expanded={companyOpen} title={companyLabel}
                 aria-current={companyCurrent ? 'page' : undefined}
                 onKeyDown={event => {
@@ -124,7 +119,7 @@ export function NavBar() {
                   setCompanyOpen(open => !open)
                   setMenuOpen(false)
                 }}>
-                <Building2 size={14} className="shrink-0" /><span className="truncate">{companyLabel}</span><ChevronDown size={14} className="shrink-0" />
+                <Building2 size={14} className="shrink-0" aria-hidden="true" /><span className="truncate">{companyLabel}</span><ChevronDown size={14} className="shrink-0" aria-hidden="true" />
               </button>
               {companyOpen && (
                 <div id="company-menu" role="menu" aria-label={companyLabel}
@@ -138,28 +133,28 @@ export function NavBar() {
                       : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
                     items[next]?.focus()
                   }}
-                  className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
-                  {memberships.length > 1 && <Link role="menuitem" to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany', { defaultValue: 'Switch company' })}</Link>}
-                  <Link role="menuitem" to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
-                  <Link role="menuitem" to="/agents" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.agents', { defaultValue: 'Agents' })}</Link>
-                  <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
-                  <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
-                  <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
-                  <Link role="menuitem" to="/company/findings" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.findings')}</Link>
-                  <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
-                  <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
-                  <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
-                  {canManage && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
-                  <Link role="menuitem" to="/invitations" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.invitations')}</Link>
-                  {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.teams')}</Link>}
-                  {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.duties')}</Link>}
-                  {canManage && <Link role="menuitem" to="/company/usage" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.usage')}</Link>}
-                  {role === 'Owner' && <Link role="menuitem" to="/company/sso"className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
-                  <Link role="menuitem" to="/company/chat" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.chatApprovals')}</Link>
-                  {canManage && <Link role="menuitem" to="/company/audit-anchors" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.auditAnchors')}</Link>}
-                  {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
-                  {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
-                  <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
+                  className="absolute right-0 top-full mt-2 max-h-[calc(100dvh-4rem)] w-60 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-surface-700 bg-surface-900 p-1.5 shadow-card-md">
+                  {memberships.length > 1 && <Link role="menuitem" to="/companies/select" className="menu-item">{t('auth.switchCompany', { defaultValue: 'Switch company' })}</Link>}
+                  <Link role="menuitem" to="/companies/new" className="menu-item">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
+                  <Link role="menuitem" to="/agents" className="menu-item">{t('nav.agents', { defaultValue: 'Agents' })}</Link>
+                  <Link role="menuitem" to="/company/quotas" className="menu-item">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
+                  <Link role="menuitem" to="/company/models" className="menu-item">{t('nav.models', { defaultValue: 'Models' })}</Link>
+                  <Link role="menuitem" to="/company/procedures" className="menu-item">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
+                  <Link role="menuitem" to="/company/findings" className="menu-item">{t('nav.findings')}</Link>
+                  <Link role="menuitem" to="/company/specifications" className="menu-item">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/documentation" className="menu-item">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
+                  <Link role="menuitem" to="/company/wiki" className="menu-item">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
+                  {canManage && <Link role="menuitem" to="/company/members" className="menu-item">{t('nav.members', { defaultValue: 'Members' })}</Link>}
+                  <Link role="menuitem" to="/invitations" className="menu-item">{t('nav.invitations')}</Link>
+                  {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="menu-item">{t('nav.teams')}</Link>}
+                  {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="menu-item">{t('nav.duties')}</Link>}
+                  {canManage && <Link role="menuitem" to="/company/usage" className="menu-item">{t('nav.usage')}</Link>}
+                  {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="menu-item">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
+                  <Link role="menuitem" to="/company/chat" className="menu-item">{t('nav.chatApprovals')}</Link>
+                  {canManage && <Link role="menuitem" to="/company/audit-anchors" className="menu-item">{t('nav.auditAnchors')}</Link>}
+                  {canManage && <Link role="menuitem" to="/company/github" className="menu-item">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
+                  {supportAdmin && <Link role="menuitem" to="/support" className="menu-item">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
+                  <button role="menuitem" type="button" className="menu-item" onClick={() => {
                     logout()
                     navigate('/login', { replace: true })
                   }}>{t('auth.logout', { defaultValue: 'Log out' })}</button>
@@ -182,9 +177,9 @@ export function NavBar() {
             setMenuOpen(v => !v)
             setCompanyOpen(false)
           }}
-          className="btn-ghost btn-icon lg:hidden"
+          className="btn-ghost btn-icon h-8 w-8 lg:hidden"
         >
-          {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          {menuOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
         </button>}
       </div>
 
@@ -198,14 +193,9 @@ export function NavBar() {
           <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation', { defaultValue: 'Mobile navigation' })}>
             {links.map(({ to, section: linkSection, icon: Icon, label }) => (
               <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
-                <Icon size={16} />
+                <Icon size={15} aria-hidden="true" />
                 <span>{label}</span>
-                {to === '/governance' && waiting > 0 && (
-                  <span className="badge">
-                    <span aria-hidden="true">{waiting}</span>
-                    <span className="sr-only">{t('inbox.navCount', { count: waiting, defaultValue: '{{count}} waiting for you' })}</span>
-                  </span>
-                )}
+                {to === '/governance' && waitingPill}
               </Link>
             ))}
           </nav>

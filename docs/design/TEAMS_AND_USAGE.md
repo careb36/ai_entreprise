@@ -31,8 +31,9 @@ effective(member, company) =
 
 The rule is one pure function, `services/platform/teams.effective_role`, read
 through `teams.member_role` by `auth_policy.require_company_role` (every
-company route), by the API token cap (`routers/api_tokens.py`: a token never
-outranks its creator's effective role), by the Manager brief's recipients
+company route), by the API token cap (`routers/api_tokens.py` when minted and
+`services/platform/api_tokens.verify` on every use: a token never outranks
+its creator's current effective role), by the Manager brief's recipients
 (`services/management/brief_mail.recipients`) and by `/v1/auth/me`
 (`effective_role` beside `human_role`; the frontend's `useCurrentRole` shows
 the effective one). Places that ask for `Owner` (SSO linking, break-glass,
@@ -128,7 +129,7 @@ name, a team name) wrote.
 | T2 | B1 | E | A team reaches `Owner` (API value, or a row edited by hand) | L | H | Medium | Pydantic pattern and `check_fields` refuse it (422); `effective_role` ignores any role outside `TEAM_ROLES`; tests for both |
 | T3 | B1 | E | A team row for a non-member (stale after removal, or another company's user) grants access | M | H | High | `effective_role(None, …) is None`; join refused for non-members (404); both company ids checked; `test_a_team_never_makes_a_member_nor_reaches_another_company` |
 | T4 | B1 | E | Access stays after a person leaves the team | M | M | Medium | The role is computed on every request (no cached role, the JWT carries none); `test_a_manager_team_grants_manager_routes_until_the_person_leaves_it` |
-| T5 | B1 | E | A token minted while a team made its creator Manager outlives the team membership | M | M | Medium | Residual, as for a member demoted today: the token keeps its role until revoked or expired (max 365 days). Documented; listed as next (revoke on demotion) |
+| T5 | B1 | E | A token minted while a team made its creator Manager outlives the team membership (or the creator is demoted or removed) | M | M | Medium | Closed: on every use `api_tokens.verify` reads the creator's current effective role in the token's company; a token above it, or one whose creator is no longer a member or has no account, is refused (401) and audited `api_token_refused` with the reason (`creator_role_below_token`, `creator_not_a_member`). Refused, not lowered (below). `tests/test_api_tokens.py`: demotion, removal, a gone account, an equal role, an Owner creator, a team seat ended, the HTTP 401 |
 | T6 | B1 | R | Grants and exports happen without a record | L | M | Low | Every team change and every CSV export is an audit row under `human:<email>` with the change; tested |
 | T7 | B1 | I | The report shows another company's data | L | H | Medium | Every query filters `company_id` (tasks through their sprint's company); `test_another_company_sees_none_of_it` |
 | T8 | B1 | I | The report exposes people's activity and names beyond who should see it | M | M | Medium | Manager+ only (a Viewer gets 403); names only, never emails (the Owner-only Teams page shows emails); `Cache-Control: no-store` on the CSV |
@@ -152,8 +153,23 @@ and the menu cases in `frontend/src/AppNavigation.test.tsx`.
 
 ## Residual risks
 
-- T5 (a token outliving the role it was minted under) is accepted by the
-  Owner for now, as it already is for a demotion.
+- T5 is closed for tokens with a recorded creator. A token minted while
+  authentication was off has none and is not capped; the access review and
+  the service-account inventory show it with no owner, to be removed there.
+- A refused token is not revoked: promoted back, its creator carries it again.
+  An Owner who wants it gone revokes it (the access review lists it).
+
+**Why refuse rather than lower the token's role (T5).** The token's role is
+what its holder, usually a script, was promised. Lowered silently, a Manager
+token of a demoted creator would keep reading and fail only on writes, a
+half-working integration whose cause is invisible to the holder; refused, it
+fails at once and the Owner sees why in the audit chain. Refusing is also
+the narrower rule: the request never acts with a role nobody holds, and no
+code path has to compute a role different from the one stored on the token.
+The holder gets the same 401 as for a revoked or expired token, so a leaked
+token does not learn that its creator was demoted or left. The refusal is
+audited at most once per token, reason and hour, so a script retrying does
+not flood the chain.
 - A person's team in the report is today's, not the one at the time of the
   work; the report says so.
 
@@ -170,8 +186,6 @@ and the menu cases in `frontend/src/AppNavigation.test.tsx`.
   missing claim removing access (treat absent as "no change", present-and-empty
   as "remove"), and group overage tokens (Entra omits the claim past 200
   groups).
-- **Revoke on demotion**: a token whose role exceeds its creator's effective
-  role is refused at use, closing T5.
 - **Personal notifications** from task events (read, snooze, preferences; the
   Plane study in the #512 comments): design only, not started.
 - A usage history that keeps the team a person was in at the time of the work.

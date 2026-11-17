@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAccessReview, useCompleteAccessReview } from '../hooks/useDuties'
+import { CalendarClock, Clock } from 'lucide-react'
 import { errorDetail, type AccessDecision, type AccessReviewListing } from '../services/api'
+import { Panel } from './ui'
+import { TABLE, TD, TH, TR } from './adminTable'
 
 type Key = `${'member' | 'token'}:${number}`
 const CHOICES: AccessDecision['decision'][] = ['confirm', 'remove']
@@ -19,12 +22,11 @@ export default function AccessReviewPanel({ companyId }: { companyId: number | n
   if (review.isError) return <div role="alert" className="alert-error text-sm">{errorDetail(review.error)}</div>
   if (!review.data) return null
   return (
-    <section className="card p-4 space-y-4" aria-label={t('duties.review.title')}>
-      <h2 className="text-base font-semibold text-gray-100">{t('duties.review.title')}</h2>
-      <Schedule schedule={review.data.schedule} />
+    <Panel title={t('duties.review.title')}>
+      <div className="p-3"><Schedule schedule={review.data.schedule} /></div>
       <ReviewForm key={review.data.history[0]?.id ?? 'first'} listing={review.data} companyId={companyId} />
-      <History history={review.data.history} />
-    </section>
+      <div className="border-t border-surface-700 px-3 py-2"><History history={review.data.history} /></div>
+    </Panel>
   )
 }
 
@@ -34,7 +36,11 @@ function Schedule({ schedule }: { schedule: AccessReviewListing['schedule'] }) {
   const text = t(`duties.review.state.${schedule.state}`, { due, days: schedule.interval_days })
   return schedule.state === 'missed'
     ? <div role="alert" className="alert-error text-sm">{text}</div>
-    : <p role="status" className="text-sm text-gray-300">{text}</p>
+    : (
+      <p role="status" className="flex items-center gap-1.5 text-[13px] text-gray-200">
+        <CalendarClock size={14} aria-hidden="true" className="flex-shrink-0 text-gray-400" />{text}
+      </p>
+    )
 }
 
 function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; companyId: number | null }) {
@@ -56,59 +62,67 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
 
   return (
     <form className="space-y-3" onSubmit={e => { e.preventDefault(); if (decided) submit() }}>
-      {complete.isError && <div role="alert" className="alert-error text-sm">{errorDetail(complete.error)}</div>}
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-gray-400">
-          <tr>
-            <th className="py-1">{t('duties.review.account')}</th>
-            <th>{t('duties.review.access')}</th>
-            <th>{t('duties.review.lastActivity')}</th>
-            <th>{t('duties.review.decision')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map(item => {
-            const key: Key = `${item.kind}:${item.id}`
-            const access = item.kind === 'member'
-              ? [
-                  t('duties.review.roles', { own: item.own_role, effective: item.effective_role ?? '—' }),
-                  ...item.teams.map(team => t('duties.review.team', { name: team.name, role: team.role })),
-                  item.sso_linked ? t('duties.review.sso') : null,
-                  ...item.chat_links.map(p => t('duties.review.chat', { provider: p })),
-                ].filter(Boolean).join(' · ')
-              : t('duties.review.token', { role: item.role, by: item.created_by ?? '—' })
-            return (
-              <tr key={key} className="border-t border-surface-700 align-top">
-                <td className="py-2">
-                  <div className="text-gray-100">{item.label}</div>
-                  {item.inactive && <span className="text-xs text-amber-300">{t('duties.review.inactive')}</span>}
-                </td>
-                <td className="py-2 text-gray-300">{access}</td>
-                <td className="py-2 text-gray-400">
-                  {item.last_activity ? new Date(item.last_activity).toLocaleDateString() : t('duties.review.never')}
-                </td>
-                <td className="py-2">
-                  <fieldset aria-label={t('duties.review.decideFor', { name: item.label })} className="flex gap-3">
-                    {CHOICES.map(value => (
-                      <label key={value} className="flex items-center gap-1">
-                        <input type="radio" name={key} checked={decisions[key] === value} onChange={() => choose(key, value)} />
-                        {t(`duties.review.${value}`)}
-                      </label>
-                    ))}
-                  </fieldset>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <label className="block">
-        <span className="input-label">{t('duties.review.note')}</span>
-        <input className="input w-full" maxLength={1000} value={note} onChange={e => setNote(e.target.value)} />
-      </label>
-      <button type="submit" className="btn-primary btn-sm" disabled={!decided || complete.isPending}>
-        {t('duties.review.complete')}
-      </button>
+      {complete.isError && <div className="px-3"><div role="alert" className="alert-error text-sm">{errorDetail(complete.error)}</div></div>}
+      <div className="overflow-x-auto">
+        <table className={TABLE}>
+          <thead>
+            <tr>
+              <th className={TH}>{t('duties.review.account')}</th>
+              <th className={TH}>{t('duties.review.access')}</th>
+              <th className={TH}>{t('duties.review.lastActivity')}</th>
+              <th className={TH}>{t('duties.review.decision')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => {
+              const key: Key = `${item.kind}:${item.id}`
+              const access = item.kind === 'member'
+                ? [
+                    t('duties.review.roles', { own: item.own_role, effective: item.effective_role ?? '—' }),
+                    ...item.teams.map(team => t('duties.review.team', { name: team.name, role: team.role })),
+                    item.sso_linked ? t('duties.review.sso') : null,
+                    ...item.chat_links.map(p => t('duties.review.chat', { provider: p })),
+                  ].filter(Boolean).join(' · ')
+                : t('duties.review.token', { role: item.role, by: item.created_by ?? '—' })
+              return (
+                <tr key={key} className={`${TR} align-top`}>
+                  <td className={TD}>
+                    <div className="text-[13px] text-gray-100">{item.label}</div>
+                    {item.inactive && (
+                      <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-amber-300">
+                        <Clock size={11} aria-hidden="true" />{t('duties.review.inactive')}
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} text-gray-300`}>{access}</td>
+                  <td className={`${TD} tabular-nums text-gray-400`}>
+                    {item.last_activity ? new Date(item.last_activity).toLocaleDateString() : t('duties.review.never')}
+                  </td>
+                  <td className={TD}>
+                    <fieldset aria-label={t('duties.review.decideFor', { name: item.label })} className="flex gap-3">
+                      {CHOICES.map(value => (
+                        <label key={value} className="flex items-center gap-1 text-gray-200">
+                          <input type="radio" className="accent-brand-500" name={key} checked={decisions[key] === value} onChange={() => choose(key, value)} />
+                          {t(`duties.review.${value}`)}
+                        </label>
+                      ))}
+                    </fieldset>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-end gap-2 px-3 pb-3">
+        <label className="block min-w-[14rem] flex-1">
+          <span className="input-label">{t('duties.review.note')}</span>
+          <input className="input w-full" maxLength={1000} value={note} onChange={e => setNote(e.target.value)} />
+        </label>
+        <button type="submit" className="btn-primary btn-sm" disabled={!decided || complete.isPending}>
+          {t('duties.review.complete')}
+        </button>
+      </div>
     </form>
   )
 }

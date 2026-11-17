@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, type SupportTicket } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
-import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
+import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, Circle, UserRound } from 'lucide-react'
+import { TICKET_STATUS_LOOK, TicketStatusBadge } from './TicketStatusBadge'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,24 +12,10 @@ type View     = 'chat' | 'bug-form' | 'my-tickets' | 'ticket-detail'
 
 type TicketSummary = SupportTicket
 
-// ── Status config (Linear-style) ──────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<string, { label_key: string; color: string; icon: React.ReactNode }> = {
-  open:        { label_key: 'support.status.open',        color: 'bg-blue-100 text-blue-700',    icon: <Circle size={12} className="text-blue-500" /> },
-  in_progress: { label_key: 'support.status.in_progress', color: 'bg-yellow-100 text-yellow-700',icon: <Clock size={12} className="text-yellow-500" /> },
-  waiting:     { label_key: 'support.status.waiting',     color: 'bg-orange-100 text-orange-700',icon: <AlertCircle size={12} className="text-orange-500" /> },
-  resolved:    { label_key: 'support.status.resolved',    color: 'bg-green-100 text-green-700',  icon: <CheckCircle2 size={12} className="text-green-500" /> },
-  closed:      { label_key: 'support.status.closed',      color: 'bg-gray-100 text-gray-500',    icon: <CheckCircle2 size={12} className="text-gray-400" /> },
-}
-
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
 
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  high:     'bg-orange-100 text-orange-700',
-  medium:   'bg-yellow-100 text-yellow-700',
-  low:      'bg-gray-100 text-gray-500',
-}
+// A field's label in the bug form: small, never below gray-400 on the dark panel.
+const LABEL = 'mb-1 block text-[11px] font-medium text-gray-400'
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -229,21 +216,19 @@ export const SupportBot: React.FC = () => {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const StatusBadge = ({ status }: { status: string }) => {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open
-    return (
-      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold ${cfg.color}`}>
-        {cfg.icon} {t(cfg.label_key, status)}
-      </span>
-    )
-  }
+  // An unknown status reads as open, as it always has here.
+  const StatusBadge = ({ status }: { status: string }) => (
+    <TicketStatusBadge status={status in TICKET_STATUS_LOOK ? status : 'open'} />
+  )
 
   const headerTitle = () => {
-    if (view === 'bug-form')      return `🐞 ${t('support.reportBug')}`
-    if (view === 'my-tickets')    return `🎫 ${t('support.myTickets')}`
+    if (view === 'bug-form')      return t('support.reportBug')
+    if (view === 'my-tickets')    return t('support.myTickets')
     if (view === 'ticket-detail') return selectedTicket?.ticket_num ?? '...'
     return t('support.title')
   }
+
+  const HeaderIcon = view === 'bug-form' ? Bug : view === 'chat' ? Bot : Ticket
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -258,119 +243,120 @@ export const SupportBot: React.FC = () => {
       <button
         onPointerDown={onPointerDown}
         onClick={() => { if (!dragMoved.current) setIsOpen(p => !p) }}
-        className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition-all hover:scale-110 cursor-grab active:cursor-grabbing select-none touch-none"
+        className="focus-ring flex h-12 w-12 cursor-grab touch-none select-none items-center justify-center rounded-full border border-brand-500/40 bg-brand-600 text-white shadow-2xl transition-transform hover:scale-105 hover:bg-brand-700 active:cursor-grabbing motion-reduce:transition-none motion-reduce:hover:scale-100"
         title={t('support.open')}>
-        {isOpen ? <X size={24} /> : <Bot size={26} />}
+        {isOpen ? <X size={22} aria-hidden="true" /> : <Bot size={24} aria-hidden="true" />}
       </button>
 
       {isOpen && (
-        <div data-chat-panel className="absolute bottom-20 right-0 w-[min(320px,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[80vh]">
+        <div data-chat-panel className="absolute bottom-16 right-0 flex max-h-[80vh] w-[min(340px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl">
 
           {/* Header */}
-          <div className="px-4 py-3 bg-indigo-600 text-white flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-2 border-b border-surface-700 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-1.5">
               {view !== 'chat' && (
-                <button type="button" aria-label={t('common.back')} onClick={() => setView('chat')} className="hover:bg-indigo-500 p-0.5 rounded shrink-0">
+                <button type="button" aria-label={t('common.back')} onClick={() => setView('chat')} className="btn-tool w-8 shrink-0 justify-center px-0">
                   <ChevronRight size={16} className="rotate-180" aria-hidden="true" />
                 </button>
               )}
+              <HeaderIcon size={15} aria-hidden="true" className="shrink-0 text-brand-300" />
               <div className="min-w-0">
-                <h3 className="font-bold text-sm truncate">{headerTitle()}</h3>
-                <p className="text-[11px] opacity-70">{t('support.online')}</p>
+                <h3 className="truncate text-[13px] font-semibold text-gray-100">{headerTitle()}</h3>
+                <p className="text-meta">{t('support.online')}</p>
               </div>
             </div>
-            <div className="flex gap-1 shrink-0">
-              <button onClick={() => setView('bug-form')}
-                className={`p-1.5 rounded transition-colors ${view==='bug-form' ? 'bg-red-500' : 'hover:bg-indigo-500'}`}
-                title={t('support.reportBug')}><Bug size={15} /></button>
-              <button onClick={() => { setView('my-tickets'); if (email) loadTickets() }}
-                className={`p-1.5 rounded transition-colors ${view==='my-tickets'||view==='ticket-detail' ? 'bg-white/25' : 'hover:bg-indigo-500'}`}
-                title={t('support.myTickets')}><Ticket size={15} /></button>
+            <div className="flex shrink-0 gap-0.5">
+              <button type="button" onClick={() => setView('bug-form')}
+                aria-pressed={view === 'bug-form'}
+                className={`btn-tool w-8 justify-center px-0 ${view === 'bug-form' ? 'btn-tool-on' : ''}`}
+                title={t('support.reportBug')}><Bug size={15} aria-hidden="true" /></button>
+              <button type="button" onClick={() => { setView('my-tickets'); if (email) loadTickets() }}
+                aria-pressed={view === 'my-tickets' || view === 'ticket-detail'}
+                className={`btn-tool w-8 justify-center px-0 ${view === 'my-tickets' || view === 'ticket-detail' ? 'btn-tool-on' : ''}`}
+                title={t('support.myTickets')}><Ticket size={15} aria-hidden="true" /></button>
             </div>
           </div>
 
           {/* ── CHAT ──────────────────────────────────────────────────── */}
           {view === 'chat' && (<>
-            <div className="h-56 p-3 overflow-y-auto bg-gray-50 flex flex-col gap-2">
+            <div className="flex h-56 flex-col gap-2 overflow-y-auto bg-surface-950/60 p-3">
               {messages.map(m => (
                 <div key={m.id}
-                  className={`max-w-[90%] px-3 py-2 rounded-xl text-sm leading-snug whitespace-pre-wrap break-words ${
+                  className={`max-w-[90%] whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-[13px] leading-snug ${
                     m.role === 'bot'
-                      ? 'bg-indigo-100 text-indigo-900 rounded-tl-none self-start'
-                      : 'bg-indigo-600 text-white rounded-tr-none self-end'
+                      ? 'self-start rounded-tl-none border border-surface-700 bg-surface-800 text-gray-100'
+                      : 'self-end rounded-tr-none bg-brand-600 text-white'
                   }`}>{m.text}</div>
               ))}
               {isSending && (
-                <div className="self-start bg-indigo-100 text-indigo-600 px-3 py-2 rounded-xl rounded-tl-none flex items-center gap-2">
-                  <Loader2 size={13} className="animate-spin" /><span className="text-xs">{t('support.thinking')}</span>
+                <div role="status" className="flex items-center gap-2 self-start rounded-xl rounded-tl-none border border-surface-700 bg-surface-800 px-3 py-2 text-gray-300">
+                  <Loader2 size={13} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /><span className="text-xs">{t('support.thinking')}</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="p-3 border-t bg-white">
-              <div className="flex gap-2 items-end">
+            <div className="border-t border-surface-700 p-3">
+              <div className="flex items-end gap-2">
                 <textarea ref={textareaRef} value={input} aria-label={t('support.inputLabel')}
                   onChange={handleInputChange} onKeyDown={handleKeyDown}
                   placeholder={t('support.inputPlaceholder')} rows={2}
-                  className="flex-1 p-2 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-indigo-400 outline-none" />
+                  className="input flex-1 resize-none text-[13px]" />
                 <button type="button" aria-label={t('support.send')} onClick={handleSend} disabled={isSending || !input.trim()}
-                  className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 self-end">
-                  <Send size={17} aria-hidden="true" />
+                  className="btn-primary self-end px-2.5">
+                  <Send size={16} aria-hidden="true" />
                 </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">{t('support.enterToSend')}</p>
+              <p className="text-meta mt-1">{t('support.enterToSend')}</p>
             </div>
           </>)}
 
           {/* ── BUG FORM — simple, fast ─────────────────────────────── */}
           {view === 'bug-form' && (
-            <div className="flex flex-col">
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-gray-500">{t('support.form.hint')}</p>
+            <div className="flex flex-col overflow-y-auto">
+              <div className="space-y-3 p-3">
+                <p className="text-xs text-gray-400">{t('support.form.hint')}</p>
 
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-600">{t('support.form.title')} *</span>
+                  <span className={LABEL}>{t('support.form.title')} *</span>
                   <input value={title} onChange={e => setTitle(e.target.value)}
                     placeholder={t('support.form.titlePlaceholder')}
-                    className="mt-1 w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
+                    className="input text-[13px]" />
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-600">{t('support.description')} *</span>
+                  <span className={LABEL}>{t('support.description')} *</span>
                   <textarea value={description} onChange={e => setDescription(e.target.value)}
                     placeholder={t('support.form.descPlaceholder')} rows={3}
-                    className="mt-1 w-full p-2 border rounded-lg text-sm resize-none focus:ring-2 focus:ring-indigo-400 outline-none" />
+                    className="input resize-none text-[13px]" />
                 </label>
 
-                <div className="flex gap-2">
-                  <label className="flex-1">
-                    <span className="text-xs font-semibold text-gray-600">{t('support.severity')}</span>
-                    <select value={severity} onChange={e => setSeverity(e.target.value as any)}
-                      className="mt-1 w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
-                      <option value="">{t('support.severityNotSure', { defaultValue: 'Not sure' })}</option>
-                      {SEVERITIES.map(s => (
-                        <option key={s} value={s}>{t(`support.${s}`)}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                <label className="block">
+                  <span className={LABEL}>{t('support.severity')}</span>
+                  <select value={severity} onChange={e => setSeverity(e.target.value as any)}
+                    className="select text-[13px]">
+                    <option value="">{t('support.severityNotSure', { defaultValue: 'Not sure' })}</option>
+                    {SEVERITIES.map(s => (
+                      <option key={s} value={s}>{t(`support.${s}`)}</option>
+                    ))}
+                  </select>
+                </label>
 
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-600">{t('support.emailToTrack')}</span>
+                  <span className={LABEL}>{t('support.emailToTrack')}</span>
                   <input type="email" value={reporterEmail} onChange={e => setReporterEmail(e.target.value)}
                     placeholder={t('support.emailPlaceholder', { defaultValue: 'you@company.com' })}
-                    className="mt-1 w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
-                  <p className="text-[10px] text-gray-400 mt-0.5">{t('support.emailHint')}</p>
+                    className="input text-[13px]" />
+                  <span className="text-meta mt-1 block">{t('support.emailHint')}</span>
                 </label>
               </div>
 
-              <div className="px-4 pb-4 flex gap-2">
-                <button onClick={() => setView('chat')}
-                  className="flex-1 py-2 border rounded-lg text-sm hover:bg-gray-50">{t('common.cancel')}</button>
-                <button onClick={handleSubmitBug}
+              <div className="flex gap-2 border-t border-surface-700 p-3">
+                <button type="button" onClick={() => setView('chat')}
+                  className="btn-secondary btn-sm flex-1">{t('common.cancel')}</button>
+                <button type="button" onClick={handleSubmitBug}
                   disabled={submitting || !title.trim() || !description.trim()}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40 flex items-center justify-center gap-1.5">
-                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  className="btn-primary btn-sm flex-1">
+                  {submitting && <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
                   {submitting ? t('support.submitting') : t('support.submit')}
                 </button>
               </div>
@@ -379,36 +365,38 @@ export const SupportBot: React.FC = () => {
 
           {/* ── MY TICKETS — status tracking ───────────────────────── */}
           {view === 'my-tickets' && (
-            <div className="flex flex-col h-[340px]">
-              <div className="p-3 border-b flex gap-2">
+            <div className="flex h-[340px] flex-col">
+              <div className="flex gap-2 border-b border-surface-700 p-3">
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                   aria-label={t('support.emailToSearch')}
                   onKeyDown={e => e.key==='Enter' && loadTickets()}
                   placeholder={t('support.emailToSearch')}
-                  className="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
+                  className="input control-sm flex-1" />
                 <button type="button" aria-label={t('support.searchTickets')} onClick={() => loadTickets()} disabled={!email.trim() || loadingTickets}
-                  className="p-2 bg-indigo-600 text-white rounded-lg disabled:opacity-40">
-                  {loadingTickets ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                  className="btn-tool w-8 justify-center border border-surface-700 px-0">
+                  {loadingTickets
+                    ? <Loader2 size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+                    : <RefreshCw size={15} aria-hidden="true" />}
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto divide-y">
+              <div className="data-list flex-1 overflow-y-auto">
                 {!loadingTickets && tickets.length === 0 && (
-                  <p className="text-xs text-gray-400 text-center mt-10 px-4">
+                  <p className="mt-10 px-4 text-center text-xs text-gray-400">
                     {ticketsForbidden
                       ? t('support.ownTicketsOnly', { email: accountEmail ?? '', defaultValue: 'You can only see the tickets reported with your account email ({{email}}).' })
                       : t('support.noTickets')}
                   </p>
                 )}
                 {tickets.map(tk => (
-                  <button key={tk.ticket_num} onClick={() => loadTicketDetail(tk.ticket_num)}
-                    className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-mono font-bold text-indigo-600">{tk.ticket_num}</span>
+                  <button type="button" key={tk.ticket_num} onClick={() => loadTicketDetail(tk.ticket_num)}
+                    className="data-row-link w-full text-left">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] font-semibold text-brand-300">{tk.ticket_num}</span>
                       <StatusBadge status={tk.status} />
                     </div>
-                    <p className="text-sm text-gray-800 truncate">{tk.title}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
+                    <p className="truncate text-[13px] text-gray-100">{tk.title}</p>
+                    <p className="text-meta mt-0.5 tabular-nums">
                       {relativeDate(tk.updated_at)}
                     </p>
                   </button>
@@ -419,66 +407,63 @@ export const SupportBot: React.FC = () => {
 
           {/* ── TICKET DETAIL — what the user cares about ──────────── */}
           {view === 'ticket-detail' && selectedTicket && (
-            <div className="overflow-y-auto max-h-[380px]">
-              <div className="p-4 space-y-4">
+            <div className="max-h-[380px] overflow-y-auto">
+              <div className="space-y-4 p-3">
 
                 {/* Status — front and centre */}
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">{t('support.currentStatus')}</p>
-                  <StatusBadge status={selectedTicket.status} />
+                <div className="rounded-lg border border-surface-700 bg-surface-950/60 p-3 text-center">
+                  <p className="text-meta mb-1 font-medium uppercase tracking-wide">{t('support.currentStatus')}</p>
+                  <div className="flex justify-center"><StatusBadge status={selectedTicket.status} /></div>
                   {selectedTicket.status === 'resolved' && selectedTicket.resolution && (
-                    <div className="mt-2 bg-green-50 border border-green-200 rounded-lg p-2 text-left">
-                      <p className="text-[10px] font-semibold text-green-700 uppercase">{t('support.resolution')}</p>
-                      <p className="text-xs text-green-800 mt-0.5">{selectedTicket.resolution}</p>
+                    <div className="mt-2 rounded-md border border-emerald-800/50 bg-emerald-950/40 p-2 text-left">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-300">{t('support.resolution')}</p>
+                      <p className="mt-0.5 text-xs text-emerald-100">{selectedTicket.resolution}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Ticket info */}
                 <div>
-                  <p className="font-semibold text-gray-900 text-sm">{selectedTicket.title}</p>
-                  <div className="flex gap-2 mt-1.5 flex-wrap">
-                    {selectedTicket.severity && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLOR[selectedTicket.severity]}`}>
-                        {selectedTicket.severity}
-                      </span>
-                    )}
-                    {selectedTicket.category && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{selectedTicket.category}</span>
-                    )}
+                  <p className="text-[13px] font-semibold text-gray-100">{selectedTicket.title}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    {selectedTicket.severity && <span className="chip">{selectedTicket.severity}</span>}
+                    {selectedTicket.category && <span className="chip">{selectedTicket.category}</span>}
                     {selectedTicket.assigned_to && (
-                      <span className="text-[10px] text-gray-400">👤 {selectedTicket.assigned_to}</span>
+                      <span className="text-meta inline-flex items-center gap-1">
+                        <UserRound size={11} aria-hidden="true" />{selectedTicket.assigned_to}
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-600 leading-relaxed">{selectedTicket.description}</p>
+                <p className="text-xs leading-relaxed text-gray-300">{selectedTicket.description}</p>
 
                 {selectedTicket.agent_reply && (
-                  <div className="p-3 bg-indigo-50 rounded-lg">
-                    <p className="text-[10px] font-semibold text-indigo-700 uppercase">{t('support.agentReply', { defaultValue: 'Reply from the Support agent' })}</p>
-                    <p className="text-xs text-indigo-900 mt-0.5 whitespace-pre-wrap">{selectedTicket.agent_reply}</p>
+                  // The agent's reply is a claim: dashed, as the board's reported signals are.
+                  <div className="rounded-lg border border-dashed border-surface-700 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t('support.agentReply', { defaultValue: 'Reply from the Support agent' })}</p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-200">{selectedTicket.agent_reply}</p>
                   </div>
                 )}
 
                 {/* Timeline */}
-                <div className="border-t pt-3 space-y-2">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">{t('support.timeline')}</p>
-                  <div className="space-y-1.5 text-[11px] text-gray-500">
-                    <div className="flex gap-2 items-start">
-                      <Circle size={10} className="text-indigo-400 mt-0.5 shrink-0" />
-                      <span>{t('support.created')}: <span className="text-gray-700">{relativeDate(selectedTicket.created_at)}</span></span>
+                <div className="space-y-2 border-t border-surface-700 pt-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t('support.timeline')}</p>
+                  <div className="text-meta space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      <Circle size={10} aria-hidden="true" className="mt-0.5 shrink-0 text-brand-300" />
+                      <span>{t('support.created')}: <span className="text-gray-200">{relativeDate(selectedTicket.created_at)}</span></span>
                     </div>
                     {selectedTicket.updated_at !== selectedTicket.created_at && (
-                      <div className="flex gap-2 items-start">
-                        <Clock size={10} className="text-yellow-400 mt-0.5 shrink-0" />
-                        <span>{t('support.updated')}: <span className="text-gray-700">{relativeDate(selectedTicket.updated_at)}</span></span>
+                      <div className="flex items-start gap-2">
+                        <Clock size={10} aria-hidden="true" className="mt-0.5 shrink-0 text-amber-300" />
+                        <span>{t('support.updated')}: <span className="text-gray-200">{relativeDate(selectedTicket.updated_at)}</span></span>
                       </div>
                     )}
                     {selectedTicket.resolved_at && (
-                      <div className="flex gap-2 items-start">
-                        <CheckCircle2 size={10} className="text-green-500 mt-0.5 shrink-0" />
-                        <span>{t('support.resolved')}: <span className="text-gray-700">{new Date(selectedTicket.resolved_at).toLocaleString()}</span></span>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 size={10} aria-hidden="true" className="mt-0.5 shrink-0 text-emerald-300" />
+                        <span>{t('support.resolved')}: <span className="text-gray-200">{new Date(selectedTicket.resolved_at).toLocaleString()}</span></span>
                       </div>
                     )}
                   </div>

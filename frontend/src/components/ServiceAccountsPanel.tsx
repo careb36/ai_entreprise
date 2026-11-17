@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { useServiceAccounts } from '../hooks/useDuties'
 import { errorDetail, type ServiceAccount } from '../services/api'
 import type { Translate } from '../i18n/translate'
+import { Panel } from './ui'
+import { TABLE, TD, TH, TR } from './adminTable'
 
 /**
  * The credentials that act without a person (issue #543): API tokens, the
@@ -16,41 +18,42 @@ export default function ServiceAccountsPanel({ companyId }: { companyId: number 
   if (accounts.isError) return <div role="alert" className="alert-error text-sm">{errorDetail(accounts.error)}</div>
   if (!accounts.data) return null
   return (
-    <section className="card p-4 space-y-3" aria-label={t('duties.accounts.title')}>
-      <h2 className="text-base font-semibold text-gray-100">{t('duties.accounts.title')}</h2>
-      <p className="text-xs text-gray-400">{t('duties.accounts.hint')}</p>
+    <Panel title={t('duties.accounts.title')}>
+      <p className="px-3 pt-3 text-xs text-gray-400">{t('duties.accounts.hint')}</p>
       {accounts.data.company.length === 0
-        ? <p className="text-sm text-gray-400">{t('duties.accounts.none')}</p>
+        ? <p className="px-3 py-3 text-xs text-gray-400">{t('duties.accounts.none')}</p>
         : (
-          <table className="w-full text-sm" aria-label={t('duties.accounts.company')}>
-            <thead className="text-left text-xs text-gray-400">
-              <tr>
-                <th className="py-1">{t('duties.accounts.kind')}</th>
-                <th>{t('duties.accounts.name')}</th>
-                <th>{t('duties.accounts.owner')}</th>
-                <th>{t('duties.accounts.scope')}</th>
-                <th>{t('duties.accounts.age')}</th>
-                <th>{t('duties.accounts.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.data.company.map((row, i) => (
-                <tr key={`${row.kind}-${i}`} className="border-t border-surface-700">
-                  <td className="py-1">{t(`duties.accounts.kinds.${row.kind}`, { defaultValue: row.kind })}</td>
-                  <td>{row.name ?? '—'}</td>
-                  <td>{row.owner ?? '—'}</td>
-                  <td>{row.scope}</td>
-                  <td>{row.age_days == null ? '—' : t('duties.accounts.days', { count: row.age_days })}</td>
-                  <td>{row.status ?? '—'}</td>
+          <div className="mt-2 overflow-x-auto">
+            <table className={TABLE} aria-label={t('duties.accounts.company')}>
+              <thead>
+                <tr>
+                  <th className={TH}>{t('duties.accounts.kind')}</th>
+                  <th className={TH}>{t('duties.accounts.name')}</th>
+                  <th className={TH}>{t('duties.accounts.owner')}</th>
+                  <th className={TH}>{t('duties.accounts.scope')}</th>
+                  <th className={TH}>{t('duties.accounts.age')}</th>
+                  <th className={TH}>{t('duties.accounts.status')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {accounts.data.company.map((row, i) => (
+                  <tr key={`${row.kind}-${i}`} className={TR}>
+                    <td className={TD}>{t(`duties.accounts.kinds.${row.kind}`, { defaultValue: row.kind })}</td>
+                    <td className={`${TD} font-mono`}>{row.name ?? '—'}</td>
+                    <td className={TD}>{row.owner ?? '—'}</td>
+                    <td className={TD}>{row.scope}</td>
+                    <td className={`${TD} tabular-nums`}>{row.age_days == null ? '—' : t('duties.accounts.days', { count: row.age_days })}</td>
+                    <td className={TD}>{row.status ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      <ul className="space-y-1 text-xs text-gray-400" aria-label={t('duties.accounts.deployment')}>
+      <ul className="space-y-1 border-t border-surface-700 px-3 py-2 text-xs text-gray-400" aria-label={t('duties.accounts.deployment')}>
         {accounts.data.deployment.map(row => <li key={row.kind}>{deploymentLine(row, t)}</li>)}
       </ul>
-    </section>
+    </Panel>
   )
 }
 

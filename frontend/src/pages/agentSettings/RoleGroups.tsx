@@ -1,9 +1,11 @@
+import { useTranslation } from 'react-i18next'
 import type { ManagedAgent, ModelCatalogEntry } from '../../services/api'
 import { ChevronRight } from 'lucide-react'
+import { CountPill, Panel } from '../../components/ui'
 import type { AgentDraft } from './drafts'
 import { AgentCard } from './AgentCard'
 
-/** The agents grouped by role, each group collapsible. */
+/** The agents grouped by role, one panel per role, each collapsible. */
 export function RoleGroups({
   orderedRoles, groupedByRole, collapsedRoles, toggleRoleCollapse, models, expandedAgents, confirmingDeleteId,
   readOnly, isSaving, isDeleting, toggleAgentExpand, handleSave, handleDeleteRequest, handleDuplicate,
@@ -23,31 +25,34 @@ export function RoleGroups({
   handleDeleteRequest: (agentId: number) => void
   handleDuplicate: (agent: ManagedAgent) => void
 }) {
+  const { t } = useTranslation()
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {orderedRoles.map(role => {
         const groupAgents = groupedByRole[role]
         const isCollapsed = collapsedRoles.has(role)
         return (
-          <section key={role}>
-            <button
-              type="button"
-              onClick={() => toggleRoleCollapse(role)}
-              className="w-full flex items-center gap-2 text-left mb-2.5 group"
-            >
-              <ChevronRight
-                size={14}
-                className={`text-gray-500 transition-transform group-hover:text-gray-300 ${isCollapsed ? '' : 'rotate-90'}`}
-              />
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-300">
+          <Panel
+            key={role}
+            title={
+              <button
+                type="button"
+                onClick={() => toggleRoleCollapse(role)}
+                aria-expanded={!isCollapsed}
+                className="group flex items-center gap-1.5 rounded-sm text-left"
+              >
+                <ChevronRight
+                  size={14}
+                  aria-hidden="true"
+                  className={`text-gray-400 transition-transform group-hover:text-gray-200 motion-reduce:transition-none ${isCollapsed ? '' : 'rotate-90'}`}
+                />
                 {role}
-              </h3>
-              <span className="rounded-full bg-surface-800 px-2 py-0.5 text-[10px] text-gray-400">
-                {groupAgents.length}
-              </span>
-            </button>
+              </button>
+            }
+            count={<CountPill count={groupAgents.length} label={t('agentsConfig.agentCount', { count: groupAgents.length })} />}
+          >
             {!isCollapsed && (
-              <div className="space-y-3">
+              <ul className="data-list">
                 {groupAgents.map(agent => (
                   <AgentCard
                     key={agent.id}
@@ -64,9 +69,9 @@ export function RoleGroups({
                     onDuplicate={handleDuplicate}
                   />
                 ))}
-              </div>
+              </ul>
             )}
-          </section>
+          </Panel>
         )
       })}
     </div>
