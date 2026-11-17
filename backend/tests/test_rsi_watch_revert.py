@@ -10,6 +10,7 @@ tests, and the token never reaches a command line, the body or the output.
 """
 
 import json
+import subprocess
 
 import pytest
 import yaml
@@ -18,6 +19,7 @@ from watch_helpers import (
     NIGHT_2,
     FakeRunner,
     card,
+    git,
     make_repo,
     record,
     revert,
@@ -47,7 +49,8 @@ def test_a_regression_beyond_threshold_and_spread_opens_the_revert(
     code = run_revert(tmp_path, shas, record(shas), [_regressed_night(shas)], runner)
     capsys.readouterr()
     assert code == 0
-    assert runner.ran("checkout", "-b", "rsi/revert-cycle-1-folder-lint")
+    add = runner.call_with("worktree", "add", "-b", "rsi/revert-cycle-1-folder-lint")
+    assert add is not None and add[-1] == "origin/main"  # from the base, always
     assert runner.ran("revert", "--no-edit", "-m", "1", shas["merged"])
     assert runner.ran("push", "-u", "origin", "rsi/revert-cycle-1-folder-lint")
     create = runner.call_with("pr", "create")
@@ -106,7 +109,7 @@ def test_an_open_revert_of_the_cycle_is_not_opened_twice(tmp_path, shas, capsys)
     capsys.readouterr()
     assert code == 0
     assert runner.ran("pr", "list")
-    assert not runner.ran("checkout")
+    assert not runner.ran("worktree")
     assert not runner.ran("pr", "create")
 
 
@@ -121,12 +124,62 @@ def test_a_revert_that_conflicts_is_left_to_a_person(tmp_path, shas, capsys):
 
 
 def test_a_branch_that_cannot_be_created_is_left_to_a_person(tmp_path, shas, capsys):
-    runner = FakeRunner({"checkout -b": (128, "fatal: a branch named 'x' exists")})
+    runner = FakeRunner({"worktree add": (128, "fatal: a branch named 'x' exists")})
     code = run_revert(tmp_path, shas, record(shas), [_regressed_night(shas)], runner)
     capsys.readouterr()
     assert code == 2
     assert not runner.ran("revert")
     assert not runner.ran("pr", "create")
+
+
+def test_a_failed_lookup_of_open_reverts_opens_nothing(tmp_path, shas, capsys):
+    # gh could not say whether a revert is open: fail closed, never open twice
+    runner = FakeRunner({"pr list": (1, "HTTP 502")})
+    code = run_revert(tmp_path, shas, record(shas), [_regressed_night(shas)], runner)
+    capsys.readouterr()
+    assert code == 2
+    assert not runner.ran("worktree")
+    assert not runner.ran("pr", "create")
+
+
+class _GitThenFakeGh(FakeRunner):
+    """Real git (into a bare origin in tmp_path), a fake gh: no network."""
+
+    def __call__(self, cmd, cwd=None, input_text=None):
+        if cmd[0] != "git":
+            return super().__call__(cmd, cwd, input_text)
+        self.calls.append(list(cmd))
+        return subprocess.run(
+            ["git", "-c", "user.name=Watch Test", "-c", "user.email=w@example.com"]
+            + list(cmd[1:]),
+            cwd=cwd,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
+def test_each_revert_is_cut_from_the_base_and_reverts_one_cycle(tmp_path, shas, capsys):
+    repo = shas["repo"]
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True)
+    git(repo, "remote", "add", "origin", str(origin))
+    git(repo, "push", "origin", f"{shas['after']}:refs/heads/main")
+    git(repo, "fetch", "origin")
+    git(repo, "checkout", "-q", "main")
+    runner = _GitThenFakeGh()
+    first = record(shas, cycle_id="cycle-a")
+    second = record(shas, cycle_id="cycle-b", merged_sha=shas["after"])
+    assert revert.open_revert(first, {}, repo, runner) == 0
+    assert revert.open_revert(second, {}, repo, runner) == 0
+    capsys.readouterr()
+    for cycle in ("cycle-a", "cycle-b"):
+        ahead = git(repo, "rev-list", f"origin/main..origin/rsi/revert-{cycle}")
+        assert len(ahead.split()) == 1, cycle  # one PR reverts exactly one cycle
+    # the person's checkout is where it was, and no worktree is left behind
+    assert git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert len(git(repo, "worktree", "list").splitlines()) == 1
 
 
 def test_a_merge_commit_reverts_its_first_parent_and_a_plain_commit_does_not(
@@ -242,6 +295,15 @@ def test_the_watch_job_runs_the_watch_over_the_cycle_records():
     assert "fetch-depth: 0" in json.dumps(watch_job) or any(
         (s.get("with") or {}).get("fetch-depth") == 0 for s in watch_job["steps"]
     )
+
+
+def test_the_watch_and_the_revert_run_only_on_main():
+    # a workflow_dispatch from a branch neither counts a night nor opens a revert
+    jobs = _workflow()["jobs"]
+    for name in ("watch", "revert"):
+        assert "github.ref == 'refs/heads/main'" in jobs[name]["if"], name
+    run = "\n".join(str(s.get("run", "")) for s in jobs["watch"]["steps"])
+    assert "--main-ref origin/main" in run
 
 
 def test_nothing_in_the_workflow_merges_the_revert():

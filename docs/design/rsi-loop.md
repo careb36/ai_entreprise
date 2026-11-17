@@ -268,6 +268,7 @@ and O8 is then "that metric's median better than B's by more than
 | `scripts/bench/` | The grader, the schema, the thresholds (`compare.py`), the budget |
 | `scripts/self_host/`, `scripts/e2e/` | The harness and checks that hold target measures |
 | `backend/app/services/evidence/` | The Verifier, the risk tier, the standards check, and `fitness.py` |
+| `scripts/rsi/`, `rsi/cycles/` | The keep-or-revert decision, the watch after a merge, and the cycle records (B's medians and spread) it judges against |
 | The tests whose contexts include `evidence`, read from `docs/architecture/contexts.json` (`tests.files`), plus `test_verificador_benchmark.py` and `test_bench_*.py` | The tests that hold the evidence to its behaviour. Derived from data, not a hand list |
 | `.github/workflows/`, `.github/CODEOWNERS` | CI is the evidence of a run |
 | `docs/POSITIONING.md` | The rules |

@@ -7,14 +7,18 @@
 Runs the same watch as ``scripts/rsi/watch.py`` (which it imports) over the
 same cards; unless the watch answers ``regressed``, nothing happens (exit 0).
 On a regression it reverts the cycle's ``merged_sha`` on a branch
-``rsi/revert-<cycle id>``, pushes it and opens a pull request naming the cycle,
+``rsi/revert-<cycle id>`` cut from ``<remote>/<base>`` in a worktree of its own
+(removed on every exit), so the checkout it runs in is never moved and one
+pull request reverts exactly one cycle, however many regressed in one night;
+it pushes the branch and opens a pull request naming the cycle,
 with the numbers and the reasons, through the gh API with the workflow's token
 (``GH_TOKEN``, never printed). **It never merges anything: a person reviews and
 merges the revert** (``docs/OPERATIONS.md``, "A revert pull request opened").
 
 A revert that does not apply cleanly is aborted and left to a person (exit 2,
 nothing pushed); a revert pull request already open for the cycle is reported
-and not opened twice (exit 0). The git and gh commands go through an injectable
+and not opened twice (exit 0), and when gh cannot say whether one is open
+nothing is opened (exit 2). The git and gh commands go through an injectable
 runner, so the tests run them without a network.
 """
 
@@ -24,6 +28,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -113,8 +118,16 @@ def _merge_flag(runner: Runner, repo: Path, sha: str) -> list[str]:
     return ["-m", "1"] if done.returncode == 0 and len(fields) > 2 else []
 
 
+class LookupFailed(RuntimeError):
+    """gh could not say whether a revert pull request is already open."""
+
+
 def _open_pr_already(runner: Runner, repo: Path, branch: str) -> str | None:
-    """The URL of an open revert pull request of *branch*, when there is one."""
+    """The URL of an open revert pull request of *branch*, when there is one.
+
+    Raises ``LookupFailed`` when gh does not answer: not knowing is not "none
+    open", and a second revert of one cycle is not opened on a guess.
+    """
     done = runner(
         [
             "gh",
@@ -130,11 +143,13 @@ def _open_pr_already(runner: Runner, repo: Path, branch: str) -> str | None:
         cwd=repo,
     )
     if done.returncode != 0:
-        return None
+        raise LookupFailed((done.stderr or done.stdout or "").strip())
     try:
         found = json.loads(done.stdout or "[]")
-    except ValueError:
-        return None
+    except ValueError as error:
+        raise LookupFailed(f"gh answered no JSON: {error}") from error
+    if not isinstance(found, list):
+        raise LookupFailed("gh answered no list of pull requests")
     if found:
         return str(found[0].get("url") or branch)
     return None
@@ -151,35 +166,70 @@ def open_revert(
 ) -> int:
     """Push the revert branch and open the pull request; the exit status."""
     branch = branch_name(record)
-    if (existing := _open_pr_already(runner, repo, branch)) is not None:
+    try:
+        existing = _open_pr_already(runner, repo, branch)
+    except LookupFailed as error:
+        print(
+            f"could not tell whether a revert pull request of {branch} is open; "
+            f"nothing opened ({error})",
+            file=sys.stderr,
+        )
+        return 2
+    if existing is not None:
         print(f"a revert pull request is already open: {existing}")
         return 0
     sha = record["merged_sha"]
-    if not watch.commit_exists(repo, sha):
+    start = f"{remote}/{base}"
+    if not watch.commit_exists(repo, sha) or not watch.has_ancestor(repo, sha, start):
         print(
-            f"the merged sha {sha[:12]} is not in the repository at {repo}",
+            f"the merged sha {sha[:12]} is not on {start} in the repository at {repo}",
             file=sys.stderr,
         )
         return 2
     flag = _merge_flag(runner, repo, sha)
-    checkout = runner(["git", "-C", str(repo), "checkout", "-b", branch])
-    if checkout.returncode != 0:
-        print(
-            f"the branch {branch} could not be created: "
-            f"{checkout.stderr.strip() or checkout.stdout.strip()}",
-            file=sys.stderr,
+    with tempfile.TemporaryDirectory(prefix="rsi-revert-") as scratch:
+        tree = Path(scratch) / "tree"
+        added = runner(
+            ["git", "-C", str(repo), "worktree", "add", "-b", branch, str(tree), start]
         )
-        return 2
-    done = runner(["git", "-C", str(repo), "revert", "--no-edit", *flag, sha], cwd=repo)
+        if added.returncode != 0:
+            print(
+                f"the branch {branch} could not be created from {start}: "
+                f"{added.stderr.strip() or added.stdout.strip()}",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            return _revert_and_open(
+                record, result, repo, tree, runner, sha, flag, base, remote
+            )
+        finally:
+            runner(["git", "-C", str(repo), "worktree", "remove", "--force", str(tree)])
+
+
+def _revert_and_open(
+    record: dict[str, Any],
+    result: dict[str, Any],
+    repo: Path,
+    tree: Path,
+    runner: Runner,
+    sha: str,
+    flag: list[str],
+    base: str,
+    remote: str,
+) -> int:
+    """In the worktree *tree*: revert, push, open the pull request."""
+    branch = branch_name(record)
+    done = runner(["git", "-C", str(tree), "revert", "--no-edit", *flag, sha], cwd=tree)
     if done.returncode != 0:
-        runner(["git", "-C", str(repo), "revert", "--abort"], cwd=repo)
+        runner(["git", "-C", str(tree), "revert", "--abort"], cwd=tree)
         print(
             f"the revert of {sha[:12]} does not apply cleanly; a person must "
             f"prepare it ({done.stderr.strip() or done.stdout.strip()})",
             file=sys.stderr,
         )
         return 2
-    pushed = runner(["git", "-C", str(repo), "push", "-u", remote, branch], cwd=repo)
+    pushed = runner(["git", "-C", str(tree), "push", "-u", remote, branch], cwd=tree)
     if pushed.returncode != 0:
         print(
             f"the branch {branch} could not be pushed: "
@@ -238,7 +288,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None, runner: Runner = _default_runner) -> int:
     args = parser().parse_args(argv)
     cards = [path for group in args.cards for path in group]
-    result = watch.run(args.cycle, cards, args.repo)
+    # The watch trusts the same tip the revert is cut from.
+    result = watch.run(args.cycle, cards, args.repo, f"{args.remote}/{args.base}")
     print(json.dumps(result, indent=2, sort_keys=True))
     if result["decision"] != watch.REGRESSED:
         print(f"the watch answered {result['decision']}: no revert pull request")

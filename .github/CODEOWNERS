@@ -80,6 +80,7 @@
 /scripts/bench/                                  @careb36
 /scripts/self_host/                              @careb36
 /scripts/rsi/                                    @careb36
+/rsi/cycles/                                     @careb36
 /backend/app/services/evidence/                  @careb36
 /backend/tests/test_verificador_benchmark.py     @careb36
 /backend/tests/test_bench_*.py                   @careb36

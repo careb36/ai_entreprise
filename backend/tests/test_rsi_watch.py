@@ -107,13 +107,22 @@ def test_a_drop_within_the_threshold_or_the_spread_is_no_regression(
 def test_a_relative_metric_regresses_on_growth_beyond_threshold_and_spread(
     tmp_path, shas, capsys
 ):
-    # tokens: B's median 100000, spread 20000 -> the bar is max(0.15, 0.2) = 0.2
-    over = card(shas["after"], NIGHT_1, tokens_reported=130000)
+    # tokens: B's median 100000, spread 20000 -> the bar is max(0.15, 0.2) = 0.2;
+    # the total is the specifications' reported sum, as decide.py reads it
+    over = with_tokens(card(shas["after"], NIGHT_1), 130000)
     _, out = run_watch(tmp_path, shas, record(shas), [over], capsys)
     assert out["nights"][0]["decision"] == "regressed"
-    within = card(shas["after"], NIGHT_1, tokens_reported=115000)
+    within = with_tokens(card(shas["after"], NIGHT_1), 115000)
     _, out = run_watch(tmp_path, shas, record(shas), [within], capsys)
     assert out["nights"][0]["decision"] == "ok"
+
+
+def with_tokens(found, total):
+    """*found* with its specifications reporting *total* tokens in all."""
+    first = found["specs"][0]["tokens"]
+    first["reported"] += total - sum(s["tokens"]["reported"] for s in found["specs"])
+    found["totals"]["tokens_reported"] = total
+    return found
 
 
 def test_a_specification_that_stopped_completing_is_a_regression(
@@ -338,3 +347,83 @@ def test_the_command_line_exits_by_the_decision(tmp_path, shas):
     assert done.returncode == 2, done.stderr  # one night: the watch continues
     assert json.loads(done.stdout)["decision"] == "unmeasured"
     assert json.loads((tmp_path / "watch.json").read_text())["nights_ok"] == 1
+
+
+# --- reachable from main, tokens as decide reads them, a closed window ------------
+
+
+def test_a_branch_commit_descended_from_the_merge_does_not_count(
+    tmp_path, shas, capsys
+):
+    # it contains the merged sha, but never reached main: a branch-only run
+    cards = [card(shas["branch"], NIGHT_1), card(shas["branch"], NIGHT_2)]
+    code, out = run_watch(tmp_path, shas, record(shas), cards, capsys)
+    assert (code, out["decision"], out["nights"]) == (2, "unmeasured", [])
+    assert all("not reachable from origin/main" in e["reason"] for e in out["excluded"])
+
+
+def test_a_merged_sha_main_does_not_hold_is_unmeasured(tmp_path, shas, capsys):
+    rec = record(shas, merged_sha=shas["branch"])
+    code, out = run_watch(tmp_path, shas, rec, [], capsys)
+    assert (code, out["decision"]) == (2, "unmeasured")
+    assert out["reasons"][0]["code"] == "merged_sha_unknown"
+
+
+def test_the_main_tip_that_is_not_there_counts_nothing(tmp_path, shas, capsys):
+    record_path = tmp_path / "cycle.json"
+    record_path.write_text(json.dumps(record(shas)), encoding="utf-8")
+    from watch_helpers import watch, write_card
+
+    paths = [str(write_card(tmp_path / "cards", c)) for c in two_ok_nights(shas)]
+    code = watch.main(
+        ["--cycle", str(record_path), "--repo", str(shas["repo"])]
+        + ["--main-ref", "refs/remotes/origin/nowhere", "--cards", *paths]
+    )
+    out = json.loads(capsys.readouterr().out)
+    assert (code, out["decision"]) == (2, "unmeasured")
+    assert out["reasons"][0]["code"] == "merged_sha_unknown"
+
+
+@pytest.mark.parametrize("unreported", ["one_turn", "every_turn"])
+def test_tokens_a_turn_did_not_report_are_not_measured(
+    tmp_path, shas, capsys, unreported
+):
+    # decide.py's rule: a turn without usage, or no turn with usage, leaves
+    # the tokens unmeasured, whatever the card's totals say
+    one = card(shas["after"], NIGHT_1)
+    if unreported == "one_turn":
+        one["specs"][0]["tokens"]["turns_unreported"] = 1
+    else:
+        for spec in one["specs"]:
+            spec["tokens"] = {"reported": 0, "turns_reported": 0, "turns_unreported": 0}
+    code, out = run_watch(tmp_path, shas, record(shas), [one], capsys)
+    assert code == 2
+    night = out["nights"][0]
+    assert night["decision"] == "unmeasured"
+    assert {
+        (m["scope"], m["metric"])
+        for m in night["cards"][0]["metrics"]
+        if m["value"] is None
+    } == {("total", "tokens_reported")}
+
+
+def test_a_card_naming_its_commit_by_a_symbolic_name_does_not_count(
+    tmp_path, shas, capsys
+):
+    # "HEAD" or "origin/main" always contains the merge; only a sha is checked
+    cards = [card("HEAD", NIGHT_1), card("origin/main", NIGHT_2)]
+    code, out = run_watch(tmp_path, shas, record(shas), cards, capsys)
+    assert (code, out["decision"], out["nights"]) == (2, "unmeasured", [])
+    assert all("not a full 40-character sha" in e["reason"] for e in out["excluded"])
+
+
+def test_a_regression_after_two_ok_nights_does_not_reopen_the_watch(
+    tmp_path, shas, capsys
+):
+    late = card(shas["after"], "20261118T021700Z", criteria_rate=0.5)
+    code, out = run_watch(
+        tmp_path, shas, record(shas), [*two_ok_nights(shas), late], capsys
+    )
+    assert (code, out["decision"], out["nights_ok"]) == (0, "ok", 2)
+    assert [n["night"] for n in out["nights"]] == ["20261116", "20261117"]
+    assert any("after the watch closed" in e["reason"] for e in out["excluded"])

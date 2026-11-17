@@ -361,35 +361,43 @@ is refused: the watch answers `unmeasured` (exit 2), never `ok`.
 
 **Which cards count.** A card counts only when its served model is real
 (`llm` is not `fake`), its stamp is strictly after the merge, its `commit`
-exists in `--repo` and has the merged sha as an ancestor — verified with
-`git merge-base --is-ancestor`, never on the card's word — and it carries no
+is a full sha that exists in `--repo`, has the merged sha as an ancestor and
+is reachable from the trusted tip of main (`--main-ref`, default
+`origin/main`) — verified with `git merge-base --is-ancestor`, never on the
+card's word, so a run on a feature branch descended from the merge does not
+count — and it carries no
 `graders` block or one whose `sha` is the record's `graders_sha` (a card
 graded by another commit's graders does not count). Everything else is
 excluded and named in the output. A counted card that measures nothing still
 makes its night `unmeasured`, never `ok`: a card served by different models
 than B's (a void pair, REQ-7), a card that names no served model at all, a
 run the token budget cut, or a metric B or the card did not measure are
-unmeasured; a specification B measured in full that did not complete is a
+unmeasured (the tokens are unmeasured when a turn did not report usage, or
+none did: `scripts/rsi/decide.py`'s rule, imported); a specification B measured in full that did not complete is a
 regression. The cards of one UTC day are one night.
 
 **The decision.** Per night: `ok`, `regressed` or `unmeasured`, with the
-reasons and the numbers. Overall: `regressed` when any night regressed,
-`ok` when two nights were watched with no regression — the cycle closes —
-and `unmeasured` otherwise. Exit status 0 ok, 1 regressed, 2 unmeasured or
+reasons and the numbers. The window closes on the second `ok` night: later
+nights are excluded and named, and do not reopen a closed watch. Overall:
+`regressed` when a night in the window regressed, `ok` when two nights were
+watched with no regression — the cycle closes — and `unmeasured` otherwise. Exit status 0 ok, 1 regressed, 2 unmeasured or
 bad input; the JSON also carries the sha256 of every file read, computed by
 the script.
 
 **The revert pull request.** On a regression, `scripts/rsi/revert.py`
 reverts the merged sha (with `-m 1` when it is a merge commit) on a branch
-`rsi/revert-<cycle id>`, pushes it and opens a pull request naming the
+`rsi/revert-<cycle id>` cut from `origin/main` in a worktree of its own, so
+one pull request reverts exactly one cycle however many regressed, pushes it and opens a pull request naming the
 cycle, with the nights, the numbers and the reasons, through the gh API with
 the workflow's token. **It never merges anything: a person reviews and
 merges the revert** (`docs/OPERATIONS.md`). A revert that does not apply
 cleanly is aborted and left to a person (exit 2, nothing pushed); a revert
-pull request already open for the cycle is not opened twice.
+pull request already open for the cycle is not opened twice, and when gh
+cannot say whether one is open nothing is opened.
 
 **The nightly.** The `watch` job of `.github/workflows/bench.yml` runs
-after `bench-real` whenever that job ran: it takes tonight's card from the
+after `bench-real` whenever that job ran on `main` (a `workflow_dispatch`
+from a branch runs neither the watch nor the revert): it takes tonight's card from the
 `bench-real` artifact plus the committed references in
 `bench/scorecards/real/`, watches every record under `rsi/cycles/`, and puts
 each night's decision in the job summary. A cycle that regressed goes to the

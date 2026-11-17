@@ -6,6 +6,7 @@
     "scripts/self_host/**",
     "scripts/e2e/**",
     "scripts/rsi/**",
+    "rsi/cycles/**",
     "backend/app/services/evidence/**",
     "backend/tests/test_verificador_benchmark.py",
     "backend/tests/test_bench_*.py",

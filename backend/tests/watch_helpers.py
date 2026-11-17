@@ -54,9 +54,11 @@ def git(repo: Path, *args: str) -> str:
 def make_repo(tmp_path: Path) -> dict:
     """A repository with the cycle merged: its shas by role.
 
-    ``merged`` is a real merge commit on ``main``, ``after`` a later one,
-    ``other`` an unrelated root (no ancestor but itself), ``root`` the first
-    commit (the graders' sha in the records the tests build).
+    ``merged`` is a real merge commit on ``main``, ``after`` a later one and
+    the tip ``origin/main`` names, ``branch`` a commit on a feature branch
+    descended from ``after`` that never reached main, ``other`` an unrelated
+    root (no ancestor but itself), ``root`` the first commit (the graders' sha
+    in the records the tests build).
     """
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -78,6 +80,13 @@ def make_repo(tmp_path: Path) -> dict:
     git(repo, "add", ".")
     git(repo, "commit", "-m", "after the merge")
     after = git(repo, "rev-parse", "HEAD")
+    # The trusted tip of main, as the workflow's full checkout holds it.
+    git(repo, "update-ref", "refs/remotes/origin/main", after)
+    git(repo, "checkout", "-b", "feature")
+    (repo / "i.txt").write_text("feature", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "a feature branch after the merge")
+    branch = git(repo, "rev-parse", "HEAD")
     git(repo, "checkout", "--orphan", "other")
     git(repo, "commit", "-m", "an unrelated root")
     other = git(repo, "rev-parse", "HEAD")
@@ -86,6 +95,7 @@ def make_repo(tmp_path: Path) -> dict:
         "root": root,
         "merged": merged,
         "after": after,
+        "branch": branch,
         "other": other,
     }
 

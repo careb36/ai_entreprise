@@ -42,6 +42,10 @@ PROTECTED: tuple[tuple[str, str], ...] = (
     ("scripts/e2e/**", "the end-to-end checks"),
     ("scripts/rsi/**", "the script that decides keep or revert"),
     (
+        "rsi/cycles/**",
+        "the cycle records the watch after a merge judges against: B's medians and spread",
+    ),
+    (
         "backend/app/services/evidence/**",
         "the Verifier, the risk tier, the standards check",
     ),

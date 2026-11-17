@@ -344,9 +344,12 @@ jobs:
     # real-model card made after the merge, on a commit that contains the
     # merged sha (verified with git) and graded by the cycle's graders.
     # Read-only: the decision per night goes to the job summary, and the
-    # cycles that regressed go to the `revert` job's output.
+    # cycles that regressed go to the `revert` job's output. Only on main: a
+    # workflow_dispatch from a branch neither counts a night toward closing a
+    # cycle nor opens a revert, and every counted card's commit must be
+    # reachable from origin/main (--main-ref), not just from the merge.
     needs: bench-real
-    if: always() && needs.bench-real.result != 'skipped'
+    if: always() && github.ref == 'refs/heads/main' && needs.bench-real.result != 'skipped'
     permissions:
       contents: read
       actions: read    # download-artifact for tonight's card
@@ -360,6 +363,7 @@ jobs:
           # The watch verifies with git that each card's commit contains the
           # cycle's merged sha; the card's own word is not enough.
           fetch-depth: 0
+          persist-credentials: false   # read-only: no token left in .git/config
 
       - name: Take tonight's real-model card
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -393,8 +397,8 @@ jobs:
             echo "### Watch: $cycle" >> "$GITHUB_STEP_SUMMARY"
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
             set +e
-            python3 scripts/rsi/watch.py --cycle "$cycle" --repo . "${card_args[@]}" \
-              --out "$out" >> "$GITHUB_STEP_SUMMARY" 2>&1
+            python3 scripts/rsi/watch.py --cycle "$cycle" --repo . --main-ref origin/main \
+              "${card_args[@]}" --out "$out" >> "$GITHUB_STEP_SUMMARY" 2>&1
             status=$?
             set -e
             echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -423,7 +427,7 @@ jobs:
     # branch and nothing else, `pull-requests: write` opens the pull request;
     # the token is never printed.
     needs: watch
-    if: always() && needs.watch.outputs.regressed != ''
+    if: always() && github.ref == 'refs/heads/main' && needs.watch.outputs.regressed != ''
     permissions:
       contents: write
       pull-requests: write
@@ -452,6 +456,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           failed=0
+          set -f   # the cycle paths are split on spaces, never globbed
           for cycle in $REGRESSED; do
             card_args=()
             while IFS= read -r card; do
@@ -459,7 +464,9 @@ jobs:
             done < <(find "$RUNNER_TEMP/bench-real-artifact" bench/scorecards/real \
                        -type f -regextype posix-extended \
                        -regex '.*/[0-9]{8}T[0-9]{6}Z\.json' 2>/dev/null | sort)
-            if ! python3 scripts/rsi/revert.py --cycle "$cycle" --repo . "${card_args[@]}"; then
+            # Each revert is cut from origin/main in a worktree of its own.
+            if ! python3 scripts/rsi/revert.py --cycle "$cycle" --repo . \
+                --base main --remote origin "${card_args[@]}"; then
               echo "::error::the revert pull request of $cycle could not be opened; a person must prepare it"
               failed=1
             fi

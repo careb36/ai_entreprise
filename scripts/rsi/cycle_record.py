@@ -43,7 +43,8 @@ which counts only for a cycle whose specification targets the prompt):
     }
 
 - ``cycle_id`` names the cycle in the watch's output and in the revert pull
-  request's branch, so it is restricted to branch-safe characters.
+  request's branch, so it is restricted to what makes a valid branch name:
+  branch-safe characters, no ``..``, no trailing ``.``, no ``.lock`` suffix.
 - ``merged_at`` is ISO 8601 with its timezone (a UTC ``Z`` or an offset); a
   card counts only when its stamp is strictly after it.
 - ``models`` is B's served model per role (the scorecard's ``models`` over
@@ -80,8 +81,8 @@ CYCLES_DIR = "rsi/cycles"  # where a person commits the records, by convention
 REQUIRED_METRICS = tuple(fitness.GUARDED)  # the six the decision guards
 OPTIONAL_METRICS = ("prompt_tokens_mean",)
 _SUMMARY_FIELDS = ("median", "spread", "runs")
-_SHA = re.compile(r"^[0-9a-f]{40}$")
-_CYCLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+_SHA = re.compile(r"[0-9a-f]{40}")  # used with fullmatch: no trailing newline
+_CYCLE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _OPTIONAL_TEXT = ("baseline_sha", "finding_id", "specification")
 
 
@@ -91,6 +92,26 @@ def _number(value: Any) -> bool:
         isinstance(value, (int, float))
         and not isinstance(value, bool)
         and math.isfinite(value)
+    )
+
+
+def _sha(value: Any) -> bool:
+    return isinstance(value, str) and _SHA.fullmatch(value) is not None
+
+
+def cycle_id_ok(value: Any) -> bool:
+    """Whether *value* is a cycle id that makes a valid branch name.
+
+    ``rsi/revert-<cycle id>`` must pass ``git check-ref-format``: besides the
+    characters, no ``..``, no trailing ``.`` and no ``.lock`` suffix; matched
+    whole (``fullmatch``), so a trailing newline is refused too.
+    """
+    return (
+        isinstance(value, str)
+        and _CYCLE_ID.fullmatch(value) is not None
+        and ".." not in value
+        and not value.endswith(".")
+        and not value.endswith(".lock")
     )
 
 
@@ -166,15 +187,14 @@ def validate(record: Any) -> list[str]:
     version = record.get("schema_version")
     if version != SCHEMA_VERSION:
         problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
-    if not isinstance(record.get("cycle_id"), str) or not _CYCLE_ID.match(
-        record["cycle_id"]
-    ):
+    if not cycle_id_ok(record.get("cycle_id")):
         problems.append(
             "cycle_id must be 1-100 branch-safe characters "
-            "(a letter or digit, then letters, digits, '.', '_' or '-')"
+            "(a letter or digit, then letters, digits, '.', '_' or '-'; "
+            "no '..', no trailing '.' and no '.lock' suffix)"
         )
     for key in ("merged_sha", "graders_sha"):
-        if not isinstance(record.get(key), str) or not _SHA.match(record[key]):
+        if not _sha(record.get(key)):
             problems.append(f"{key} must be a full 40-character commit sha")
     when = parse_when(record.get("merged_at"))
     if when is None:
@@ -185,7 +205,7 @@ def validate(record: Any) -> list[str]:
     for key in _OPTIONAL_TEXT:
         if key in record and (
             not isinstance(record[key], str)
-            or (key == "baseline_sha" and not _SHA.match(record[key]))
+            or (key == "baseline_sha" and not _sha(record[key]))
         ):
             problems.append(
                 f"{key} must be "

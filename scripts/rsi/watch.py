@@ -2,7 +2,7 @@
 """The watch after the merge of a self-improvement cycle (REQ-19).
 
     python3 scripts/rsi/watch.py --cycle rsi/cycles/<cycle id>.json \\
-        [--cards DIR_OR_FILE ...] [--repo DIR] [--out FILE]
+        [--cards DIR_OR_FILE ...] [--repo DIR] [--main-ref REF] [--out FILE]
 
 While the merged change has fewer than two nightly real-model runs on ``main``
 after it (``docs/design/rsi-loop.md`` §1.6, §7 step 8), each run's scorecard is
@@ -23,8 +23,12 @@ named, with the reason, in the output:
   check, not a fitness signal);
 - it does not name a producer other than the platform (``produced_by``);
 - its stamp is strictly after the record's ``merged_at``;
-- its ``commit`` exists in ``--repo`` and has the record's ``merged_sha`` as
-  an ancestor, verified with git — the card's word is not enough;
+- its ``commit`` is a full 40-character sha (a symbolic name such as
+  ``HEAD`` is the card's word, not a commit), exists in ``--repo``, has the
+  record's ``merged_sha`` as an ancestor and is reachable from the trusted
+  tip of main (``--main-ref``, default ``origin/main``), verified with git —
+  a run on a feature branch descended from the merge never reached main and
+  does not count;
 - it carries no ``graders`` block, or one whose ``sha`` is the record's
   ``graders_sha``: a card graded by another commit's graders does not count.
 
@@ -37,9 +41,12 @@ metric B or the card did not measure — and never ``ok``; ``ok`` otherwise.
 
 Prints JSON: the decision per night with its reasons and numbers, the excluded
 cards, the overall decision and the sha256 of every file read, computed here
-(never taken from a file). The overall decision is ``regressed`` when any
-night regressed, ``ok`` when two nights were watched with no regression (the
-cycle closes), and ``unmeasured`` otherwise. Exit status 0 ok, 1 regressed
+(never taken from a file). The window closes on the second ``ok`` night: the
+nights after it are excluded and named, and do not reopen a closed watch. The
+overall decision is ``regressed`` when a night in the window regressed, ``ok``
+when two nights were watched with no regression (the cycle closes), and
+``unmeasured`` otherwise; a merged sha the trusted tip of main does not hold
+is ``unmeasured``. Exit status 0 ok, 1 regressed
 (``scripts/rsi/revert.py`` opens the revert pull request), 2 unmeasured or bad
 input, including a record that does not validate.
 """
@@ -76,6 +83,7 @@ EXIT = {OK: 0, REGRESSED: 1, UNMEASURED: 2}
 # outweighs an unmeasured one (unknown is not absent, never a pass).
 _RANK = {REGRESSED: 2, OK: 1, UNMEASURED: 0}
 _STAMP = "%Y%m%dT%H%M%SZ"
+MAIN_REF = "origin/main"  # the trusted tip of main, as a full checkout holds it
 
 
 def _reason(outcome: str, code: str, detail: str) -> dict[str, str]:
@@ -148,7 +156,11 @@ def read_cards(
 
 
 def counts(
-    record: dict[str, Any], merged_at: datetime, repo: Path, card: dict[str, Any]
+    record: dict[str, Any],
+    merged_at: datetime,
+    repo: Path,
+    card: dict[str, Any],
+    main_ref: str = MAIN_REF,
 ) -> str | None:
     """Why *card* does not count against *record*; None when it does."""
     producer = card.get("produced_by", fitness.PLATFORM)
@@ -163,10 +175,17 @@ def counts(
     if isinstance(graders, dict) and graders.get("sha") != record["graders_sha"]:
         return f"graded by another commit's graders ({str(graders.get('sha'))[:12]})"
     commit = card["commit"]
+    if not cycle_record._sha(commit):
+        return f"commit {commit[:40]!r} is not a full 40-character sha; refused"
     if not commit_exists(repo, commit):
         return f"commit {commit[:12]} is not in the repository at --repo"
     if not has_ancestor(repo, record["merged_sha"], commit):
         return f"commit {commit[:12]} does not contain the merged sha"
+    if not has_ancestor(repo, commit, main_ref):
+        return (
+            f"commit {commit[:12]} is not reachable from {main_ref}: "
+            "a run that never reached main; refused"
+        )
     return None
 
 
@@ -199,13 +218,19 @@ def _scope_state(
                 {s["status"] for s in card["specs"] if s["status"] != "completed"}
             )
             return None, f"the run did not complete ({', '.join(bad)})", None
-        return repeated.numbers(card["totals"], is_spec=False), None, None
+        values = repeated.numbers(card["totals"], is_spec=False)
+        # decide.py's rule: a turn that did not report usage, or no turn that
+        # did, leaves the tokens unmeasured (never the card's partial sum).
+        values["tokens_reported"] = decide._tokens(card["specs"])
+        return values, None, None
     spec = next((s for s in card["specs"] if s["name"] == scope), None)
     if spec is None:
         return None, "the card does not hold the specification", None
     status = spec["status"]
     if status == repeated.COMPLETED:
-        return repeated.numbers(spec, is_spec=True), None, None
+        values = repeated.numbers(spec, is_spec=True)
+        values["tokens_reported"] = decide._tokens([spec])
+        return values, None, None
     if status == budget.BUDGET_EXCEEDED:
         return None, "the token budget stopped the specification", None
     return None, None, f"{scope}: completed on B, {status} now"
@@ -324,11 +349,34 @@ def _decide_night(cards: list[dict[str, Any]]) -> str:
     return UNMEASURED
 
 
+def _window(
+    night_list: list[dict[str, Any]], excluded: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """The nights up to the second ``ok`` one; the later ones are excluded."""
+    kept: list[dict[str, Any]] = []
+    ok = 0
+    for night in night_list:
+        if ok >= NIGHTS_REQUIRED:
+            excluded += [
+                {
+                    "path": card["path"],
+                    "reason": f"night {night['night']} came after the watch "
+                    f"closed on {NIGHTS_REQUIRED} ok nights",
+                }
+                for card in night["cards"]
+            ]
+            continue
+        kept.append(night)
+        ok += night["decision"] == OK
+    return kept
+
+
 def watch_cycle(
     record: dict[str, Any],
     card_paths: list[str],
     repo: Path,
     inputs: decide.Inputs,
+    main_ref: str = MAIN_REF,
 ) -> dict[str, Any]:
     """The watch of one validated record against the cards (module docstring)."""
     result: dict[str, Any] = {
@@ -337,7 +385,12 @@ def watch_cycle(
         "nights_required": NIGHTS_REQUIRED,
     }
     merged_at = cycle_record.merged_at_dt(record)
-    if merged_at is None or not commit_exists(repo, record["merged_sha"]):
+    if (
+        merged_at is None
+        or not commit_exists(repo, record["merged_sha"])
+        or not commit_exists(repo, main_ref)
+        or not has_ancestor(repo, record["merged_sha"], main_ref)
+    ):
         result.update(
             decision=UNMEASURED,
             nights=[],
@@ -348,7 +401,7 @@ def watch_cycle(
                     UNMEASURED,
                     "merged_sha_unknown",
                     f"the merged sha {record['merged_sha'][:12]} is not a commit "
-                    f"of the repository at {repo}",
+                    f"of the repository at {repo} reachable from {main_ref}",
                 )
             ],
         )
@@ -356,7 +409,7 @@ def watch_cycle(
     counted, excluded = read_cards(card_paths, inputs)
     nights: dict[str, dict[str, Any]] = {}
     for path, card in counted:
-        if why := counts(record, merged_at, repo, card):
+        if why := counts(record, merged_at, repo, card, main_ref):
             excluded.append({"path": str(path), "reason": why})
             continue
         judged = judge_card(record, card)
@@ -375,6 +428,7 @@ def watch_cycle(
         night_list.append(
             {"night": key, "decision": _decide_night(cards), "cards": cards}
         )
+    night_list = _window(night_list, excluded)
     ok = sum(1 for night in night_list if night["decision"] == OK)
     regressed = [n for n in night_list if n["decision"] == REGRESSED]
     reasons: list[dict[str, str]] = []
@@ -415,7 +469,12 @@ def watch_cycle(
     return result
 
 
-def run(cycle: str | Path, card_paths: list[str], repo: str | Path = ROOT) -> dict:
+def run(
+    cycle: str | Path,
+    card_paths: list[str],
+    repo: str | Path = ROOT,
+    main_ref: str = MAIN_REF,
+) -> dict:
     """Read the record and the cards, and return the watch's JSON answer."""
     inputs = decide.Inputs()
     record = inputs.load(cycle)
@@ -431,7 +490,7 @@ def run(cycle: str | Path, card_paths: list[str], repo: str | Path = ROOT) -> di
             ],
         )
     else:
-        result.update(watch_cycle(record, card_paths, Path(repo), inputs))
+        result.update(watch_cycle(record, card_paths, Path(repo), inputs, main_ref))
     result["inputs"] = inputs.read
     return result
 
@@ -453,6 +512,13 @@ def parser() -> argparse.ArgumentParser:
         default=ROOT,
         help="the repository the ancestry is verified in (default: this one)",
     )
+    p.add_argument(
+        "--main-ref",
+        default=MAIN_REF,
+        metavar="REF",
+        help="the trusted tip of main every counted commit must be reachable "
+        f"from (default: {MAIN_REF})",
+    )
     p.add_argument("--out", type=Path, metavar="FILE", help="also write the JSON here")
     return p
 
@@ -460,7 +526,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     cards = [path for group in args.cards for path in group]
-    result = run(args.cycle, cards, args.repo)
+    result = run(args.cycle, cards, args.repo, args.main_ref)
     text = json.dumps(result, indent=2, sort_keys=True)
     if args.out:
         args.out.write_text(text + "\n", encoding="utf-8")

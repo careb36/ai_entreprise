@@ -50,6 +50,11 @@ def test_a_record_with_a_spec_baseline_and_every_optional_field_validates(shas):
         ("cycle_id", ""),
         ("cycle_id", "a branch/unsafe id"),
         ("cycle_id", 7),
+        # valid characters, but not a valid git branch name (git check-ref-format)
+        ("cycle_id", "cycle..1"),
+        ("cycle_id", "cycle."),
+        ("cycle_id", "cycle.lock"),
+        ("cycle_id", "cycle-1\n"),
         ("merged_sha", "abc123"),
         ("merged_sha", "B" * 40),
         ("graders_sha", "not a sha"),
@@ -180,3 +185,14 @@ def test_the_schema_version_is_the_one_the_validator_names():
     assert any(
         "schema_version" in p for p in cycle_record.validate({"schema_version": 2})
     )
+
+
+def test_the_cycle_records_are_a_protected_path():
+    # B's medians and spread decide whether a revert opens: a sprint that
+    # widened a record's spread would silence the watch (rsi-loop §3)
+    from services.contracts import protected_paths
+
+    path = f"{cycle_record.CYCLES_DIR}/cycle-1-folder-lint.json"
+    assert protected_paths.matches([path])
+    owners = (watch.ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
+    assert any(line.split()[:1] == ["/rsi/cycles/"] for line in owners.splitlines())
