@@ -68,6 +68,44 @@ decides. The backend refuses only when every daemon it heard from within the
 offline window (§3) is incompatible; one compatible or older daemon among them
 keeps the work flowing.
 
+### 2.1 The abilities the daemon announces (additive, issue #315)
+
+The backend used to guess what a daemon can do from its replies: a subject
+nobody answered ("no responders") read as "an older daemon", a reply without
+`full_log` as "a daemon from before full logs". The daemon now announces it,
+in `workspace.status` and in every heartbeat (so from its first beat after it
+connects), under `abilities` (`vscode-daemon/abilities.py`):
+
+```json
+{ "abilities_version": 1,
+  "subjects": ["workspace.app.check", "workspace.execute", "..."],
+  "features": { "workspace.execute": ["full_log", "purpose_assistant", "sandbox_floor"],
+                "workspace.app.check": ["browser_probe", "cache", "full_log", "security_probe"] } }
+```
+
+| Field | Meaning |
+| --- | --- |
+| `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
+| `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.2). |
+
+**A claim, never an observation.** The backend (`daemon_liveness`, with
+`daemon_abilities`) keeps the announcement per daemon under
+`reported_by_daemon.abilities`, bounded, and asks `announces(subject,
+feature)`, which considers every daemon heard within the offline window (§3)
+and answers `true` (all announce it), `false` (none does) or `null` (none
+heard, one of them announced nothing, or they disagree). It is used only to
+choose whether to send a request and how to word a reply that lacks a field:
+
+| Where | `false` | `null` (no announcement: today's fallback) |
+| --- | --- | --- |
+| `workspace.signatures` (`services/tools/signature_lookup.py`) | Not asked; `signatures` recorded `observed: false`, "does not announce workspace.signatures". | Asked; nobody answering is "an older daemon". With `true`, nobody answering says the daemons announce it. |
+| `workspace.hash` (`services/loop/delivery_checks.guard_test_files`) | Not asked, logged, as a daemon without the subject was before. | Asked; a failure is logged as before. |
+| `full_log` (`services/workspace/run_logs.observe`) | A reply without it is "does not announce full_log on <subject>". | "a daemon from before full logs". With `true`, it says the daemon announced it but sent none. |
+
+What a run did is still read from that run's reply: an announced feature
+missing from a reply is never filled in from the announcement.
+
 ## 3. Liveness: the heartbeat
 
 The daemon publishes `workspace.heartbeat` every `FABRIQUE_HEARTBEAT_SECONDS`
@@ -80,6 +118,7 @@ The daemon publishes `workspace.heartbeat` every `FABRIQUE_HEARTBEAT_SECONDS`
 | `protocol_version`, `protocol_min`, `version`, `host` | As in `workspace.status`. |
 | `interval_seconds` | The interval the daemon beats at. |
 | `sent_at` | The daemon's clock. Never used to judge liveness. |
+| `abilities` | What the daemon announces it can do (§2.1). |
 
 The backend subscribes (a plain subscription, so every replica observes every
 beat) and records when it *observed* each one, on its own clock
@@ -92,7 +131,7 @@ the fallback; `GET /v1/workspace/status` names the source.
 
 **Claims and observations stay apart.** Everything the daemon says about
 itself (`version`, `protocol_version`, `protocol_min`, `host`, `daemon_id`,
-`sequence`, `sent_at`) is reported under `reported_by_daemon`. What the
+`sequence`, `sent_at`, `abilities`) is reported under `reported_by_daemon`. What the
 backend observed (`last_observed_at`, `seconds_since_last`, the heartbeat
 state, `missed` beats counted from sequence gaps) is under `heartbeat`, with
 `observed_by: backend`.
@@ -151,7 +190,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 
 | Subject | Kind | Module | Request | Reply |
 | --- | --- | --- | --- | --- |
-| `workspace.status` | request | `daemon_status.py` | `{}` | `host`, `version`, `protocol_version`, `protocol_min`, `daemon_id`, `heartbeat_seconds`, `jetstream`, `sandbox_cache` |
+| `workspace.status` | request | `daemon_status.py`, `abilities.py` | `{}` | `host`, `version`, `protocol_version`, `protocol_min`, `daemon_id`, `heartbeat_seconds`, `jetstream`, `sandbox_cache`, `abilities` (§2.1) |
 | `workspace.heartbeat` | published | `daemon_status.py` | — | §3 |
 | `workspace.capabilities` | request | `daemon.py` | `commands`? | `assistants` |
 | `workspace.generate` | request | `daemon.py`, `delivery.py` | `workspace_root`, `files` (`path` with `content` or `edits`), `git`?, `sprint_id`? | `ok`, `workspace_root`, `files` (per file `status`, `sha256` read back, the diff), `snapshot` or `git`, `project_files` |

@@ -9,8 +9,10 @@ workflow, else the project). The reply is recorded on the evidence as
 ``signatures``: an observation, with the daemon's sha256 per file.
 Re-verification reads that record and never asks the daemon again.
 
-The wait is bounded (``TIMEOUT_SECONDS``). A daemon without the subject (an
-older one), a timeout or an error is recorded as ``{"observed": false,
+The wait is bounded (``TIMEOUT_SECONDS``). Daemons that announce they do not
+serve the subject (``daemon_liveness.announces``, their claim) are not asked;
+without an announcement a daemon without the subject is read as an older one.
+Either, a timeout or an error is recorded as ``{"observed": false,
 "reason": …}`` and never fails or holds the delivery.
 """
 
@@ -21,6 +23,7 @@ from typing import Any
 from logging_config import setup_logger
 
 from services.evidence import signatures
+from services.workspace import daemon_liveness
 from services.workspace.workspace_daemon import (
     DaemonError,
     DaemonUnavailable,
@@ -52,6 +55,10 @@ async def observe(
         record.update(observed=True, files=[])
     elif not root:
         record.update(observed=False, reason="no project folder")
+    elif daemon_liveness.announces(SUBJECT) is False:
+        record.update(
+            observed=False, reason=daemon_liveness.not_announced_reason(SUBJECT)
+        )
     else:
         try:
             reply = await daemon_request(
@@ -69,7 +76,7 @@ async def observe(
             record.update(
                 observed=False,
                 reason=(
-                    f"no daemon answers {SUBJECT} (an older daemon)"
+                    _absent_reason()
                     if exc.absent
                     else f"the daemon did not answer {SUBJECT} ({exc})"
                 ),
@@ -80,3 +87,10 @@ async def observe(
             record.update(observed=False, reason=f"{type(exc).__name__}")
     evidence["signatures"] = record
     return record
+
+
+def _absent_reason() -> str:
+    """Why nobody answered: a guess only when the daemons announced nothing."""
+    if daemon_liveness.announces(SUBJECT):
+        return f"no daemon answers {SUBJECT}, although the daemons announce it"
+    return f"no daemon answers {SUBJECT} (an older daemon)"
