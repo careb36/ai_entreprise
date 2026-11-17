@@ -109,30 +109,35 @@ def test_a_definition_the_backend_refuses_says_why(servers, message):
         mcp_config.parse_mcp_servers(servers)
 
 
+# A dot never occurs in Fernet's URL-safe base64, so the value cannot turn up
+# in the ciphertext by chance (a three-letter value did, about once in 2000 runs).
+HEADER_VALUE = "not.a.real.value"
+
+
 def test_secrets_are_encrypted_at_rest_and_listed_by_name_only(with_key):
     fields = mcp_config.normalize_server(
         "docs",
         {
             "url": "https://docs.example/mcp",
-            "headers": {"Authorization": "Bearer abc"},
+            "headers": {"Authorization": "Bearer " + HEADER_VALUE},
             "env": {"K": "v"},
         },
     )
     row = mcp_config.apply(
         McpServer(company_id=1, name="docs", transport="http"), fields
     )
-    assert row.secrets.startswith("fernet:") and "abc" not in row.secrets
+    assert row.secrets.startswith("fernet:") and HEADER_VALUE not in row.secrets
     shown = mcp_config.serialize(row)
     assert shown["header_names"] == ["Authorization"] and shown["env_keys"] == ["K"]
     assert (
-        "abc" not in str(shown)
+        HEADER_VALUE not in str(shown)
         and "secrets" not in shown
         and shown["secrets_readable"] is True
     )
     spec = mcp_config.connection_spec(row)
-    assert spec["headers"] == {"Authorization": "Bearer abc"} and spec["env"] == {
-        "K": "v"
-    }
+    assert spec["headers"] == {"Authorization": "Bearer " + HEADER_VALUE} and spec[
+        "env"
+    ] == {"K": "v"}
 
 
 def test_a_server_without_secrets_stores_none_and_an_unreadable_one_still_lists(
