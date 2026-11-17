@@ -45,6 +45,7 @@ export function CollapsedCard({ item, sprintId }: { item: BacklogItem; sprintId:
       ref={setNodeRef}
       to={`/sprints/${sprintId}/tasks/${item.id}`}
       onPointerDown={onPointerDown}
+      data-task-chip={item.id}
       aria-label={label}
       title={label}
       style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none' }}

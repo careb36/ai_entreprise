@@ -631,6 +631,8 @@
       "risk": "Risk {{tier}}",
       "held": "Held: protected path",
       "heldTitle": "The delivery changes protected paths, so a person decides: {{paths}}",
+      "declared": "Declared: protected path",
+      "declaredTitle": "The producer says the delivery changes protected paths; the Verifier did not see them written: {{paths}}",
       "graderTitle": "The Verifier classed a changed path in the grader area: the graders, the evidence, CI or the rules",
       "needsPerson": "Needs a person",
       "needsPersonTitle": "Blocked, and nothing the task worker does on its own moves it",

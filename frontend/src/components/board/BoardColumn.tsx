@@ -66,7 +66,7 @@ export function BoardColumn(props: BoardColumnProps) {
     return (
       <section aria-labelledby={headingId}
         className={`flex max-h-full w-11 flex-shrink-0 flex-col items-center gap-2.5 rounded-xl border border-surface-700 bg-surface-900/80 py-2 transition-shadow motion-reduce:transition-none ${dropRing}`}>
-        <button type="button" onClick={() => onToggleCollapse(id)} aria-expanded={false}
+        <button type="button" data-column-toggle={id} onClick={() => onToggleCollapse(id)} aria-expanded={false}
           aria-label={t('kanbanBoard.column.expand', { column: title })} title={t('kanbanBoard.column.expand', { column: title })}
           className="btn-ghost h-7 w-7 rounded-md p-0">
           <ChevronsRight size={14} aria-hidden="true" />
@@ -93,7 +93,7 @@ export function BoardColumn(props: BoardColumnProps) {
     <section aria-labelledby={headingId}
       className={`flex w-[85vw] max-w-[20rem] flex-shrink-0 snap-start flex-col rounded-xl border border-surface-700 bg-surface-900/80 transition-shadow motion-reduce:transition-none sm:w-72 lg:w-auto lg:min-w-[15.5rem] lg:max-w-none lg:flex-1 ${dropRing}`}>
       <header className="sticky top-0 z-10 flex h-11 items-center gap-1.5 rounded-t-xl border-b border-surface-700 bg-surface-900/95 pl-1.5 pr-2.5 backdrop-blur">
-        <button type="button" onClick={() => onToggleCollapse(id)} aria-expanded={true}
+        <button type="button" data-column-toggle={id} onClick={() => onToggleCollapse(id)} aria-expanded={true}
           aria-label={t('kanbanBoard.column.collapse', { column: title })} title={t('kanbanBoard.column.collapse', { column: title })}
           className="btn-ghost h-7 w-7 flex-shrink-0 rounded-md p-0">
           <ChevronsLeft size={14} aria-hidden="true" />

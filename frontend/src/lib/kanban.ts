@@ -75,10 +75,13 @@ export function getQaMetrics(item: BacklogItem): { reworks: number; failures: nu
   return { reworks, failures }
 }
 
-/** Whether what was observed says a person must act: waiting for one, or a protected path held. */
+/**
+ * Whether the task's record says a person must act now. A protected path a
+ * person already accepted keeps its matches but no longer waits, so only
+ * `waits_for_person` counts.
+ */
 export function needsPerson(item: BacklogItem): boolean {
-  const observed = item.observed
-  return Boolean(observed && (observed.waits_for_person || observed.protected_paths.length > 0))
+  return item.observed?.waits_for_person === true
 }
 
 // ── Filters and presets ───────────────────────────────────────────────────────
@@ -157,9 +160,9 @@ export function latestMessages(columns: Record<string, BacklogItem[]>, limit = 4
       })
     }
   }
-  return entries
-    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-    .slice(0, limit)
+  // By time, not by text: the backend writes both "2026-10-02T08:00:00Z" and "2026-10-02 09:00:00".
+  const time = (entry: BoardMessage) => parseTimestamp(entry.createdAt) ?? -Infinity
+  return entries.sort((a, b) => time(b) - time(a)).slice(0, limit)
 }
 
 // ── Presentation ──────────────────────────────────────────────────────────────
@@ -194,13 +197,18 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['day', 24 * 3600], ['hour', 3600], ['minute', 60],
 ]
 
+/** Milliseconds since the epoch; a naive timestamp ("2026-10-01 00:00:00") is UTC, as the backend writes it. */
+export function parseTimestamp(iso: string | undefined | null): number | null {
+  if (!iso) return null
+  const text = iso.replace(' ', 'T')
+  const then = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`)
+  return Number.isNaN(then) ? null : then
+}
+
 /** "12 minutes ago" in *language*; "now" under a minute; null for a date that does not parse. */
 export function relativeTime(iso: string | undefined, language: string, now = Date.now()): string | null {
-  if (!iso) return null
-  // The backend writes naive UTC timestamps ("2026-10-01 00:00:00").
-  const text = /[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso.replace(' ', 'T')}Z`
-  const then = Date.parse(text)
-  if (Number.isNaN(then)) return null
+  const then = parseTimestamp(iso)
+  if (then === null) return null
   const seconds = Math.round((then - now) / 1000)
   const format = new Intl.RelativeTimeFormat(language, { numeric: 'auto', style: 'short' })
   for (const [unit, size] of UNITS) {

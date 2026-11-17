@@ -153,15 +153,19 @@ def latest_runs(
             "risk_tier": None,
             "risk_areas": [],
             "protected_paths": [],
+            "declared_protected_paths": [],
+            "run_id": None,
         }
         if run is not None:
             facts["producer"] = run[2]
+            facts["run_id"] = run[0]
             seen = verified.get(run[0])
             if seen is not None:
                 facts["verdict"] = seen[1]
                 facts["risk_tier"] = _tier(seen[2])
                 facts["risk_areas"] = _areas(seen[2])
-                facts["protected_paths"] = _protected(seen[2])
+                facts["protected_paths"] = _protected(seen[2], observed=True)
+                facts["declared_protected_paths"] = _protected(seen[2], observed=False)
         out[task_id] = facts
     return out
 
@@ -192,14 +196,23 @@ def _areas(checks: Any) -> list[str]:
     return found
 
 
-def _protected(checks: Any) -> list[str]:
-    """The protected paths the Verifier's ``protected_paths`` check matched."""
+def _protected(checks: Any, *, observed: bool) -> list[str]:
+    """The protected paths the Verifier's ``protected_paths`` check matched.
+
+    With *observed*, only the matches the daemon saw written (``observed:
+    true``); otherwise the rest, which only the producer declared: a claim. A
+    match recorded without the flag is never read as observed.
+    """
     paths: list[str] = []
     for check in checks or []:
         if not isinstance(check, dict) or check.get("name") != PROTECTED_CHECK:
             continue
         for match in check.get("matches") or []:
-            path = match.get("path") if isinstance(match, dict) else None
+            if not isinstance(match, dict):
+                continue
+            path = match.get("path")
+            if (match.get("observed") is True) != observed:
+                continue
             if isinstance(path, str) and path and path not in paths:
                 paths.append(path)
     return paths[:_QUOTED_PATHS]
@@ -208,12 +221,14 @@ def _protected(checks: Any) -> list[str]:
 def board_observations(
     session: Session, company_id: int, items: list[BacklogItem]
 ) -> dict[int, dict[str, Any]]:
-    """Per task, what the board shows as observed (``GET /v1/sprints/{id}/board``).
+    """Per task, what the board shows (``GET /v1/sprints/{id}/board``), in two
+    fields that never share a value.
 
-    The Verifier's verdict, risk tier, the areas it named and the protected
-    paths it matched for the task's latest run, and whether the task waits
-    for a person (its ``TaskRecord``). Never what an agent said of its own
-    work: the claims stay in the task's comments.
+    ``observed``: the latest run's id, the Verifier's verdict, risk tier, the
+    areas it named and the protected paths the daemon saw written, and
+    whether the task waits for a person (its ``TaskRecord``, which holds a
+    task for a declared protected path too). ``reported``: the protected
+    paths only the producer declared, a claim.
     """
     if not items:
         return {}
@@ -223,11 +238,15 @@ def board_observations(
     for item in items:
         facts = runs[item.id]
         out[item.id] = {
-            "verdict": facts["verdict"],
-            "risk_tier": facts["risk_tier"],
-            "risk_areas": facts["risk_areas"],
-            "protected_paths": facts["protected_paths"],
-            "waits_for_person": records[item.id].waits_for_a_person(item.status),
+            "observed": {
+                "run_id": facts["run_id"],
+                "verdict": facts["verdict"],
+                "risk_tier": facts["risk_tier"],
+                "risk_areas": facts["risk_areas"],
+                "protected_paths": facts["protected_paths"],
+                "waits_for_person": records[item.id].waits_for_a_person(item.status),
+            },
+            "reported": {"protected_paths": facts["declared_protected_paths"]},
         }
     return out
 

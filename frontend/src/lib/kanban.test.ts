@@ -5,7 +5,7 @@ import {
   relativeTime, roleInitials, roleTone, rolesOf,
 } from './kanban'
 
-const NOTHING: ObservedFacts = { verdict: null, risk_tier: null, risk_areas: [], protected_paths: [], waits_for_person: false }
+const NOTHING: ObservedFacts = { run_id: null, verdict: null, risk_tier: null, risk_areas: [], protected_paths: [], waits_for_person: false }
 
 function item(id: number, extra: Partial<BacklogItem> = {}): BacklogItem {
   return {
@@ -26,7 +26,9 @@ describe('the board helpers', () => {
     expect(needsPerson(item(1))).toBe(false)
     expect(needsPerson(item(1, { observed: NOTHING }))).toBe(false)
     expect(needsPerson(item(1, { observed: { ...NOTHING, waits_for_person: true } }))).toBe(true)
-    expect(needsPerson(item(1, { observed: { ...NOTHING, protected_paths: ['bench/x.json'] } }))).toBe(true)
+    // A protected path a person already accepted: the matches stay, the hold does not.
+    expect(needsPerson(item(1, { status: 'done', observed: { ...NOTHING, protected_paths: ['bench/x.json'] } }))).toBe(false)
+    expect(needsPerson(item(1, { observed: { ...NOTHING, protected_paths: ['bench/x.json'], waits_for_person: true } }))).toBe(true)
     // An agent saying a person must look is a message, not an observation.
     expect(needsPerson(item(1, { comments: [{ author: 'Developer', text: 'a person must review', created_at: '' }] }))).toBe(false)
   })
@@ -55,6 +57,15 @@ describe('the board helpers', () => {
     const b = item(2, { comments: [{ author: 'System', text: 'new', created_at: '2026-10-02T00:00:00Z' }] })
     expect(latestMessages({ todo: [a], blocked: [b] }).map(m => m.text)).toEqual(['new', 'old'])
     expect(latestMessages({ todo: [a], blocked: [b] }, 1)).toHaveLength(1)
+  })
+
+  it('orders ISO and naive UTC timestamps by time, not by their text', () => {
+    // Text order puts "2026-10-02T08..." after "2026-10-02 09..." (the space sorts first).
+    const agent = item(1, { comments: [{ author: 'QA', text: 'older', created_at: '2026-10-02T08:00:00Z' }] })
+    const person = item(2, { comments: [{ author: 'Owner', text: 'newer', created_at: '2026-10-02 09:00:00' }] })
+    const offset = item(3, { comments: [{ author: 'System', text: 'oldest', created_at: '2026-10-02T09:30:00+02:00' }] })
+    expect(latestMessages({ todo: [agent, offset], blocked: [person] }).map(m => m.text)).toEqual(['newer', 'older', 'oldest'])
+    expect(latestMessages({ todo: [agent, offset], blocked: [person] }, 1).map(m => m.text)).toEqual(['newer'])
   })
 
   it('gives a role two letters and always the same tone', () => {

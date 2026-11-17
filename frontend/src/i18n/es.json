@@ -631,6 +631,8 @@
       "risk": "Riesgo {{tier}}",
       "held": "Retenida: ruta protegida",
       "heldTitle": "La entrega cambia rutas protegidas, así que decide una persona: {{paths}}",
+      "declared": "Declarada: ruta protegida",
+      "declaredTitle": "El productor dice que la entrega cambia rutas protegidas; el Verificador no las vio escritas: {{paths}}",
       "graderTitle": "El Verificador clasificó una ruta cambiada en el área del evaluador: los evaluadores, la evidencia, la CI o las reglas",
       "needsPerson": "Necesita a una persona",
       "needsPersonTitle": "Bloqueada, y nada de lo que haga el ejecutor de tareas por su cuenta la mueve",

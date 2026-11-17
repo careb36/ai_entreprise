@@ -79,6 +79,9 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS)
   const [activityOpen, setActivityOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // The task a keyboard move sent to another column: focus follows it there.
+  const [focusTarget, setFocusTarget] = useState<{ id: number; status: BoardStatus } | null>(null)
   const prefs = useBoardPreferences(idNum)
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
@@ -121,6 +124,21 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
     BOARD_PRESETS.map(preset => [preset, allItems.filter(item => matchesPreset(item, preset)).length]),
   ) as Record<BoardPreset, number>, [allItems])
 
+  // Once the refreshed board shows the moved task in its new column (the move
+  // remounts its card there), focus its title, or its chip in a folded column,
+  // or, when a filter now hides it, that column's fold button.
+  useEffect(() => {
+    if (!focusTarget || !rootRef.current) return
+    const current = allItems.find(entry => entry.id === focusTarget.id)
+    if (current && current.status !== focusTarget.status) return
+    const root = rootRef.current
+    const target = root.querySelector<HTMLElement>(`#card-title-${focusTarget.id}`)
+      ?? root.querySelector<HTMLElement>(`[data-task-chip="${focusTarget.id}"]`)
+      ?? root.querySelector<HTMLElement>(`[data-column-toggle="${focusTarget.status}"]`)
+    target?.focus()
+    setFocusTarget(null)
+  }, [focusTarget, allItems, visible, prefs.collapsed])
+
   const handleStatusChange = (itemId: number, newStatus: BoardStatus, announce = false) => {
     setNotice(null)
     const item = allItems.find(entry => entry.id === itemId)
@@ -130,6 +148,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
         const text = describeMove(t, result as BoardMoveResult)
           ?? (announce && item && column ? t('kanbanBoard.card.moved', { title: item.title, column: t(column.titleKey) }) : null)
         setNotice(text ? { text } : null)
+        if (announce) setFocusTarget({ id: itemId, status: newStatus })
       },
       onError: error => setNotice({ text: errorDetail(error), error: true }),
     })
@@ -192,7 +211,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const allCollapsed = COLUMN_IDS.every(id => prefs.collapsed.includes(id))
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full flex-col">
       <BoardToolbar
         title={board.sprint.sprint_name || t('kanban.title')}
         total={board.total}

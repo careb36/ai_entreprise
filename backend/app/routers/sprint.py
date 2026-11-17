@@ -450,7 +450,8 @@ async def get_sprint_board(
             "waiting_for": dependencies.waiting_for(by_id, i),
             "created_at": str(i.created_at),
             "updated_at": str(i.updated_at),
-            "observed": observed[i.id],
+            "observed": observed[i.id]["observed"],
+            "reported": observed[i.id]["reported"],
         }
         for i in items_db
     ]

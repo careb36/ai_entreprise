@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Gauge, Lock, MessageSquareQuote, ShieldCheck, UserRoundCheck } from 'lucide-react'
-import type { AgentRunListItem, BacklogItem } from '../../services/api'
+import type { AgentRunListItem, AgentRunStatus, BacklogItem } from '../../services/api'
 import { QA_FAILURE_LIMIT, QA_REWORK_LIMIT, getQaMetrics } from '../../lib/kanban'
 import { Verdict } from '../Verdict'
 
@@ -40,20 +40,46 @@ function GroupLabel({ icon: Icon, text, hint, compact }: {
   )
 }
 
-/** A verdict on the card once the task's latest delivery has been checked. */
-function DeliveryBadge({ run }: { run: AgentRunListItem }) {
+/**
+ * The delivery's verdict on the card, linked to its evidence when *run* is the
+ * run the verdict belongs to. The accessible name contains the visible verdict
+ * word ("Delivery: Verified").
+ */
+function DeliveryBadge({ verdict, run }: { verdict: AgentRunStatus; run?: AgentRunListItem }) {
   const { t } = useTranslation()
-  // The accessible name contains the visible verdict word ("Delivery: Verified").
   const label = t('kanban.deliveryVerdict', {
-    verdict: t(`evidence.verdict.${run.status}`),
+    verdict: t(`evidence.verdict.${verdict}`),
     defaultValue: 'Delivery: {{verdict}}',
   })
+  if (!run) {
+    return (
+      <span title={label} className="inline-flex">
+        <Verdict status={verdict} compact />
+      </span>
+    )
+  }
   return (
     <Link to={`/evidence/${run.id}`} aria-label={label} title={label}
       className="inline-flex rounded-full hover:brightness-125">
-      <Verdict status={run.status} compact />
+      <Verdict status={verdict} compact />
     </Link>
   )
+}
+
+/**
+ * The verdict to show and the run to link. The board's snapshot decides: the
+ * runs query does not poll, so a cached run may be an older version, and it
+ * is linked only when it is the snapshot's own run. Without a snapshot (an
+ * older backend) the run's verdict is shown, as before.
+ */
+function deliveryOf(item: BacklogItem, evidenceRun?: AgentRunListItem): { verdict: AgentRunStatus | null; run?: AgentRunListItem } {
+  const snapshot = item.observed
+  if (snapshot) {
+    const linked = evidenceRun && snapshot.run_id !== null && evidenceRun.id === snapshot.run_id ? evidenceRun : undefined
+    return { verdict: snapshot.verdict, run: linked }
+  }
+  if (!evidenceRun || evidenceRun.status === 'ingested') return { verdict: null }
+  return { verdict: evidenceRun.status, run: evidenceRun }
 }
 
 export function ObservedSignals({ item, evidenceRun, compact }: {
@@ -61,14 +87,14 @@ export function ObservedSignals({ item, evidenceRun, compact }: {
 }) {
   const { t } = useTranslation()
   const observed = item.observed
-  const run = evidenceRun && evidenceRun.status !== 'ingested' ? evidenceRun : undefined
-  const verdict = run ? null : observed?.verdict ?? null
+  const { verdict, run } = deliveryOf(item, evidenceRun)
   const tier = observed?.risk_tier ?? null
   const areas = observed?.risk_areas ?? []
-  const held = observed?.protected_paths ?? []
-  const grader = areas.includes('grader')
   const waits = observed?.waits_for_person ?? false
-  if (!run && !verdict && !tier && held.length === 0 && !grader && !waits) return null
+  // Held only while the task waits: once a person accepted it, the matches are history.
+  const held = waits ? observed?.protected_paths ?? [] : []
+  const grader = areas.includes('grader')
+  if (!verdict && !tier && held.length === 0 && !grader && !waits) return null
 
   const areaNames = areas.map(area => t(`kanbanBoard.area.${area.replace(/\s+/g, '_')}`, { defaultValue: area }))
   const riskLabel = t('kanbanBoard.card.risk', { tier: t(`kanbanBoard.riskTier.${tier}`, { defaultValue: tier ?? '' }) })
@@ -78,12 +104,7 @@ export function ObservedSignals({ item, evidenceRun, compact }: {
   return (
     <div role="group" aria-label={t('kanbanBoard.card.observed')} className="flex flex-wrap items-center gap-1">
       <GroupLabel icon={ShieldCheck} text={t('kanbanBoard.card.observed')} hint={t('kanbanBoard.card.observedHint')} compact={compact} />
-      {run && <DeliveryBadge run={run} />}
-      {verdict && (
-        <span title={t('kanban.deliveryVerdict', { verdict: t(`evidence.verdict.${verdict}`) })} className="inline-flex">
-          <Verdict status={verdict} compact />
-        </span>
-      )}
+      {verdict && <DeliveryBadge verdict={verdict} run={run} />}
       {tier && (
         <span title={riskTitle} className={`${OBSERVED_CHIP} ${RISK_TONE[tier] ?? RISK_TONE.low}`}>
           <Gauge size={11} aria-hidden="true" />{riskLabel}
@@ -114,7 +135,9 @@ export function ObservedSignals({ item, evidenceRun, compact }: {
 export function ReportedSignals({ item, compact }: { item: BacklogItem; compact: boolean }) {
   const { t } = useTranslation()
   const { reworks, failures } = getQaMetrics(item)
-  if (reworks === 0 && failures === 0) return null
+  // Paths only the producer declared: its word, so reported here, never observed.
+  const declared = item.reported?.protected_paths ?? []
+  if (reworks === 0 && failures === 0 && declared.length === 0) return null
   return (
     <div role="group" aria-label={t('kanbanBoard.card.reported')} className="flex flex-wrap items-center gap-1">
       <GroupLabel icon={MessageSquareQuote} text={t('kanbanBoard.card.reported')} hint={t('kanbanBoard.card.reportedHint')} compact={compact} />
@@ -122,6 +145,13 @@ export function ReportedSignals({ item, compact }: { item: BacklogItem; compact:
         <span className={`${REPORTED_CHIP} ${reportedTone(reworks, QA_REWORK_LIMIT)}`}
           title={t('kanban.qaReworksTitle', { count: reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA reworks: {{count}}/{{limit}}' })}>
           {t('kanban.qaReworks', { count: reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA rework {{count}}/{{limit}}' })}
+        </span>
+      )}
+      {declared.length > 0 && (
+        <span className={`${REPORTED_CHIP} border-amber-600/70 text-amber-300`}
+          title={t('kanbanBoard.card.declaredTitle', { paths: declared.join(', ') })}>
+          <Lock size={11} aria-hidden="true" />{t('kanbanBoard.card.declared')}
+          <span className="sr-only">{`: ${declared.join(', ')}`}</span>
         </span>
       )}
       {failures > 0 && (
