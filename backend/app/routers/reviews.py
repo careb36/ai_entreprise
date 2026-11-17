@@ -276,7 +276,7 @@ async def merge_run(
         reply = await daemon_request(
             getattr(request.app.state, "nats_client", None),
             "workspace.git.merge",
-            run_merge_spec(session, run),
+            run_merge_spec(session, run, merger=user),
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
         return record_run_merge(

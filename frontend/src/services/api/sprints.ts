@@ -13,6 +13,30 @@ export interface BacklogItem {
   updated_at: string
   covers?: string[]; kind?: 'acceptance_tests' | null // Criteria ids the task covers; QA's test-writing task of a requirement.
   depends_on?: number[]; waiting_for?: number[] // Ids of sprint tasks to finish first, and those among them not done yet.
+  /** What was observed (the Verifier, the task's record), apart from what any agent claimed. */
+  observed?: ObservedFacts
+  /** What the producer declared that bears on a person's review: a claim, never an observation. */
+  reported?: ReportedFacts
+}
+
+/** The board's observed facts of a task: never read from a producer's claims. */
+export interface ObservedFacts {
+  /** The latest task-worker run the facts belong to. */
+  run_id: number | null
+  verdict: 'verified' | 'refuted' | 'unverifiable' | null
+  risk_tier: 'low' | 'medium' | 'high' | null
+  /** The areas the Verifier's risk tier named; `grader` is a protected path. */
+  risk_areas: string[]
+  /** The protected paths the daemon saw the delivery write. */
+  protected_paths: string[]
+  /** Blocked and only a person moves it: the pending hold, whatever its cause. */
+  waits_for_person: boolean
+}
+
+/** The board's reported facts of a task: what the producer declared. */
+export interface ReportedFacts {
+  /** The protected paths only the producer declared (the Verifier did not see them written). */
+  protected_paths: string[]
 }
 
 export interface SprintBoard {
