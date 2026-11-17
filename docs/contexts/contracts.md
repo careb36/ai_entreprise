@@ -6,7 +6,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue, the standards catalogue and the protected paths. It performs no I/O and imports no other context; it never decides anything.
 - **May import:** no other context (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `edit_blocks`, `intake_rules`, `manifest`, `protected_paths`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `edit_blocks`, `intake_rules`, `manifest`, `protected_paths`, `roles`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Components
 
@@ -20,6 +20,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 ### Other modules
 
+- `specification_text`: a specification's canonical text and its sha256 (REQ-20 of [`docs/design/rsi-loop.md`](../design/rsi-loop.md)), the key `learning/findings` stores a finding under and `scripts/rsi/cycle.py` compares a specification with the reverted ones by, with no database: a JSON specification re-serialised with sorted keys and no whitespace, any other text without its line endings and trailing spaces.
 - `sandbox_schemas`: the pydantic shapes of a sandbox run (`SandboxExecutionRequest`, `SandboxExecutionResponse`, `SandboxHealthResult`) that `workspace/sandbox_manager.py` exchanges with the sandbox.
 
 ## Described elsewhere

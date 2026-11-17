@@ -233,14 +233,14 @@ def test_the_workflow_refuses_a_tag_off_main(name, job):
 
 # The actions a tag workflow may use beside checkout: the cosign installer
 # and the artifact upload for the images' signatures and SBOMs (issue #522,
-# part C; backend/tests/test_supply_chain.py), and the QEMU and buildx setup
-# of the browser sandbox's multi-arch publish (issue #529), which stays
-# outside the five-image matrix below.
+# part C; backend/tests/test_supply_chain.py), and the buildx setup of the
+# browser sandbox's linux/amd64 publish (issue #529), which stays outside the
+# five-image matrix below. No QEMU: an arm64 variant is checked by hand in
+# browser-image-probe.yml before a tag ever publishes one.
 _TAG_ACTIONS = (
     "actions/checkout@",
     "actions/upload-artifact@",
     "sigstore/cosign-installer@",
-    "docker/setup-qemu-action@",
     "docker/setup-buildx-action@",
 )
 
@@ -281,7 +281,7 @@ def test_images_publish_what_docker_build_builds_and_release_lists_them():
     assert published == _matrix("docker-build.yml", "build")
     # The browser sandbox (issue #529) is published by a job of its own,
     # outside this matrix: docker-build.yml does not build it per pull
-    # request, and it is the only multi-arch image (test_supply_chain.py).
+    # request, and it is the only one built with buildx (test_supply_chain.py).
     assert "browser-sandbox" not in published
     release_text = _steps_text(_workflow("release.yml")["jobs"]["release"])
     for name in published:
