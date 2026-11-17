@@ -98,6 +98,7 @@
 /backend/tests/test_agent_tools_delivery.py      @careb36
 /backend/tests/test_app_check.py                 @careb36
 /backend/tests/test_board_moves_carry.py         @careb36
+/backend/tests/test_board_observed.py            @careb36
 /backend/tests/test_browser_image.py             @careb36
 /backend/tests/test_browser_smoke.py             @careb36
 /backend/tests/test_code_graph.py                @careb36
@@ -127,7 +128,9 @@
 /backend/tests/test_verification_checks.py       @careb36
 /backend/tests/test_wstg_plan.py                 @careb36
 /backend/tests/test_rsi_cycle.py                @careb36
+/backend/tests/test_rsi_backend_cycle_fitness.py @careb36
 /backend/tests/test_rsi_cycle_record.py         @careb36
+/backend/tests/test_rsi_cycle_record_parity.py  @careb36
 /backend/tests/test_rsi_cycle_run.py            @careb36
 /backend/tests/test_rsi_decide.py               @careb36
 /backend/tests/test_rsi_decide_inputs.py        @careb36

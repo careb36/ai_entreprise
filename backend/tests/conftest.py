@@ -110,6 +110,7 @@ from models.procedure import Procedure
 from models.progress import SprintProgressSnapshot
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
+from models.rsi_cycle import RsiCycle
 from models.run_secret import RunSecret
 from models.saved_view import SavedView, SavedViewPreference
 from models.security_review import WstgReview
@@ -379,6 +380,7 @@ SQLModel.metadata.create_all(
         AgentMessage.__table__,
         Procedure.__table__,
         Finding.__table__,
+        RsiCycle.__table__,
         McpServer.__table__,
         ProviderConnection.__table__,
         RunReview.__table__,

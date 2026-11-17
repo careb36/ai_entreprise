@@ -1,299 +1,67 @@
-import { useState, useCallback, useMemo, type ReactNode } from 'react'
+/**
+ * The sprint board: five status columns of task cards, moved by drag and
+ * drop, by the keyboard (Alt+←/→ on a card, or dnd-kit's Space and arrows on
+ * its handle) or with the status select on the card.
+ *
+ * The design follows the board of AixleHQ/flow (app/frontend/pages/Projects/
+ * Board/, Apache-2.0, Copyright 2026 Dualboot Partners, LLC): columns with a sticky header,
+ * a count and a fold into a narrow strip that keeps its tasks as draggable
+ * chips, horizontal scrolling, cards with the assignee's avatar and the time
+ * of the last change, built-in presets beside the filters, an activity side
+ * panel and the "/" shortcut to the search. Re-implemented here in React and
+ * TailwindCSS; no code was copied. The parts are in components/board/.
+ */
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { BacklogItem, type AgentRunListItem } from '../services/api'
+import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import {
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, rectIntersection,
+  useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { BacklogItem, errorDetail } from '../services/api'
+import type { BoardMoveResult } from '../services/boardMoves'
 import { useAgentRuns, useCurrentRole, useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
-import { errorDetail } from '../services/api'
-import type { BoardMoveResult, CarryResult } from '../services/boardMoves'
-import { MoveToSprint } from './MoveToSprint'
+import { useBoardPreferences } from '../hooks/useBoardPreferences'
 import { useAppStore } from '../store/useAppStore'
-import { Verdict } from './Verdict'
 import { TASK_WORKER_PRODUCER, latestRunsByTask } from '../lib/taskEvidence'
 import {
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
-  PointerSensor, useDroppable, useSensor, useSensors,
-  closestCenter, pointerWithin, rectIntersection,
-  type CollisionDetection,
-} from '@dnd-kit/core'
-import {
-  SortableContext, useSortable, verticalListSortingStrategy
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import {
-  Circle, ArrowRight, GitPullRequest,
-  CheckCircle2, AlertTriangle, AlertCircle, RefreshCw,
-  Loader2, GripVertical, Hourglass
-} from 'lucide-react'
+  BOARD_COLUMNS, BOARD_PRESETS, EMPTY_FILTERS, MOVABLE_STATUSES, describeCarry, describeMove, filterColumns,
+  filtersActive, findColumnIdByItemId, matchesPreset, rolesOf, type BoardFilters, type BoardPreset, type BoardStatus,
+} from '../lib/kanban'
+import { MoveToSprint } from './MoveToSprint'
+import { ActivityPanel } from './board/ActivityPanel'
+import { BoardColumn } from './board/BoardColumn'
+import { BoardToolbar } from './board/BoardToolbar'
+import { CardPreview } from './board/TaskCard'
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+const COLUMN_IDS = BOARD_COLUMNS.map(column => column.id)
 
-const COLUMNS = [
-  { id: 'todo',        titleKey: 'kanban.todo',       className: 'text-gray-400',   icon: Circle },
-  { id: 'in_progress', titleKey: 'kanban.inProgress',  className: 'text-blue-400',   icon: ArrowRight },
-  { id: 'in_review',   titleKey: 'kanban.review',      className: 'text-yellow-400', icon: GitPullRequest },
-  { id: 'done',        titleKey: 'kanban.done',        className: 'text-status-success', icon: CheckCircle2 },
-  { id: 'blocked',     titleKey: 'kanban.blocked',     className: 'text-status-error',   icon: AlertTriangle },
-]
-
-const VALID_STATUSES: BacklogItem['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
-
-// The cards a Manager may move to another sprint.
-const MOVABLE_STATUSES = ['blocked', 'todo']
-
-type Translate = ReturnType<typeof useTranslation>['t']
-
-/** What a move to To do did, in the person's language (the backend's reason is English). */
-function describeMove(t: Translate, result: BoardMoveResult): string | null {
-  if (result.queued === undefined) return null
-  if (result.queued) return t(result.reopened ? 'kanban.moveReopened' : 'kanban.moveQueued')
-  if (result.sprint_status === 'paused' || result.sprint_status === 'planned') {
-    return t(`kanban.moveWaits.${result.sprint_status}`)
-  }
-  return t(result.reopened ? 'kanban.moveReopenedWaiting' : 'kanban.moveWaits.dependencies')
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-function describeCarry(t: Translate, result: CarryResult): string {
-  const moved = t('kanban.movedToSprint', { name: result.sprint_name })
-  if (result.queued) return moved
-  const waits = result.sprint_status === 'paused' || result.sprint_status === 'planned'
-    ? t(`kanban.moveWaits.${result.sprint_status}`)
-    : t('kanban.moveWaits.dependencies')
-  return `${moved} ${waits}`
-}
-
-const QA_REWORK_LIMIT = 2
-const QA_FAILURE_LIMIT = 3
-
-function findColumnIdByItemId(columns: Record<string, BacklogItem[]>, itemId: number) {
-  return COLUMNS.find((column) => (columns[column.id] ?? []).some((item) => item.id === itemId))?.id
-}
-
-function getQaMetrics(item: BacklogItem): { reworks: number; failures: number } {
-  const comments = Array.isArray(item.comments) ? item.comments : []
-  let reworks = 0
-  let failures = 0
-
-  for (const comment of comments) {
-    const author = String(comment.author || '').toLowerCase()
-    const text = String(comment.text || '').toLowerCase()
-
-    const isQaSignal = author === 'qa' || author === 'system'
-    if (!isQaSignal) continue
-
-    if (text.startsWith('needs work:') || text.includes('requested rework')) {
-      reworks += 1
-    }
-
-    if (text.includes('qa review failed') || text.includes('cannot review')) {
-      failures += 1
-    }
-  }
-
-  return { reworks, failures }
-}
-
-function metricBadgeClass(value: number, limit: number): string {
-  if (value >= limit) return 'bg-red-900/40 text-red-300 border-red-700/40'
-  if (value >= Math.max(1, limit - 1)) return 'bg-yellow-900/40 text-yellow-300 border-yellow-700/40'
-  return 'bg-surface-800 text-gray-300 border-surface-700'
-}
-
-/** A verdict on the card once the task's latest delivery has been checked. */
-function DeliveryBadge({ run }: { run: AgentRunListItem }) {
-  const { t } = useTranslation()
-  if (run.status === 'ingested') return null
-  // The accessible name contains the visible verdict word ("Delivery: Verified").
-  const label = t('kanban.deliveryVerdict', {
-    verdict: t(`evidence.verdict.${run.status}`),
-    defaultValue: 'Delivery: {{verdict}}',
-  })
+function BoardSkeleton() {
   return (
-    <Link to={`/evidence/${run.id}`} aria-label={label} title={label} className="inline-flex rounded-full hover:brightness-125">
-      <Verdict status={run.status} compact />
-    </Link>
-  )
-}
-
-// ── SortableCard ───────────────────────────────────────────────────────────────
-
-function ItemCard({
-  item, sprintId, onStatusChange, updating, isDragging = false, evidenceRun, actions
-}: {
-  item: BacklogItem
-  sprintId: number
-  onStatusChange: (id: number, status: BacklogItem['status']) => void
-  updating: boolean
-  isDragging?: boolean
-  evidenceRun?: AgentRunListItem
-  actions?: ReactNode
-}) {
-  const { t } = useTranslation()
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  }
-
-  const qaMetrics = getQaMetrics(item)
-  // Tasks of the sprint this one must come after that are not done yet.
-  const waitingFor = item.waiting_for?.length ?? 0
-  const waitingLabel = t('kanban.waitsFor', { count: waitingFor, defaultValue: 'Waits for {{count}} tasks' })
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="card p-3 cursor-default select-none group"
-    >
-      <div className="flex items-start gap-2">
-        {/* Drag handle */}
-        <button
-          {...attributes} {...listeners}
-          className="mt-0.5 text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label={t('kanban.dragToReorder')}
-        >
-          <GripVertical size={14} />
-        </button>
-        <Link
-          to={`/sprints/${sprintId}/tasks/${item.id}`}
-          className="text-white text-sm font-medium leading-snug flex-1 min-w-0 break-words hover:text-brand-300 hover:underline"
-        >
-          {item.title}
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-1.5 flex-wrap mt-2 ml-5">
-        <span className={`badge badge-priority-${item.priority}`}>{item.priority}</span>
-        {evidenceRun && <DeliveryBadge run={evidenceRun} />}
-        {waitingFor > 0 && (
-          <span className="badge border bg-amber-900/40 text-amber-300 border-amber-700/40 inline-flex items-center gap-0.5"
-            role="img" aria-label={waitingLabel} title={waitingLabel}>
-            <Hourglass size={10} aria-hidden="true" />{waitingFor}
-          </span>
-        )}
-        {item.assignee && (
-          <span className="badge bg-brand-900/50 text-brand-300 border-brand-700/40">{item.assignee}</span>
-        )}
-        {item.kind === 'acceptance_tests' && (
-          <span className="badge border bg-violet-900/40 text-violet-300 border-violet-700/40">{t('kanban.acceptanceTests')}</span>
-        )}
-        {qaMetrics.reworks > 0 && (
-          <span
-            className={`badge border ${metricBadgeClass(qaMetrics.reworks, QA_REWORK_LIMIT)}`}
-            title={t('kanban.qaReworksTitle', { count: qaMetrics.reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA reworks: {{count}}/{{limit}}' })}
-          >
-            {t('kanban.qaReworks', { count: qaMetrics.reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA rework {{count}}/{{limit}}' })}
-          </span>
-        )}
-        {qaMetrics.failures > 0 && (
-          <span
-            className={`badge border ${metricBadgeClass(qaMetrics.failures, QA_FAILURE_LIMIT)}`}
-            title={t('kanban.qaFailuresTitle', { count: qaMetrics.failures, limit: QA_FAILURE_LIMIT, defaultValue: 'QA failures: {{count}}/{{limit}}' })}
-          >
-            {t('kanban.qaFailures', { count: qaMetrics.failures, limit: QA_FAILURE_LIMIT, defaultValue: 'QA fail {{count}}/{{limit}}' })}
-          </span>
-        )}
-        {item.comments?.length > 0 && (
-          <span className="text-xs text-gray-500">💬 {item.comments.length}</span>
-        )}
-      </div>
-
-      <select
-        value={item.status}
-        disabled={updating}
-        onChange={e => onStatusChange(item.id, e.target.value as BacklogItem['status'])}
-        className="select w-full mt-2 text-xs py-1 disabled:opacity-50"
-        aria-label={t('kanban.changeStatus')}
-      >
-        {VALID_STATUSES.map(s => (
-          <option key={s} value={s}>{t(`kanban.status.${s}`, s)}</option>
-        ))}
-      </select>
-      {actions}
-    </div>
-  )
-}
-
-function ColumnDropZone({
-  columnId,
-  sprintId,
-  items,
-  titleKey,
-  className,
-  Icon,
-  t,
-  onStatusChange,
-  updating,
-  activeItemId,
-  evidenceRuns,
-  cardActions,
-}: {
-  columnId: string
-  sprintId: number
-  items: BacklogItem[]
-  titleKey: string
-  className: string
-  Icon: typeof Circle
-  t: ReturnType<typeof useTranslation>['t']
-  onStatusChange: (id: number, status: BacklogItem['status']) => void
-  updating: ReturnType<typeof useUpdateBacklogItem>
-  activeItemId: number | null
-  evidenceRuns: Map<number, AgentRunListItem>
-  cardActions: (item: BacklogItem) => ReactNode
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: columnId })
-
-  return (
-    <div className="w-56 lg:w-64 flex-shrink-0 flex flex-col">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Icon className={className} size={13} />
-        <h3 className={`font-semibold text-xs uppercase tracking-wide ${className}`}>
-          {t(titleKey)}
-        </h3>
-        <span className="ml-auto badge text-xs">{items.length}</span>
-      </div>
-
-      <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setNodeRef}
-          className={`flex-1 space-y-2 min-h-[80px] rounded-lg border border-dashed p-2 transition-colors ${
-            isOver
-              ? 'border-brand-500 bg-brand-950/40'
-              : 'border-surface-700 bg-surface-950/40'
-          }`}
-        >
-          {items.length === 0 ? (
-            <div className="flex items-center justify-center h-16 text-gray-600 text-xs">
-              {t('kanban.empty')}
-            </div>
-          ) : (
-            items.map(item => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                sprintId={sprintId}
-                onStatusChange={onStatusChange}
-                updating={updating.isPending && updating.variables?.itemId === item.id}
-                isDragging={activeItemId === item.id}
-                evidenceRun={evidenceRuns.get(item.id)}
-                actions={cardActions(item)}
-              />
-            ))
-          )}
+    <div className="flex min-w-0 gap-3 overflow-x-auto p-4" aria-hidden="true">
+      {BOARD_COLUMNS.map(c => (
+        <div key={c.id} className="w-64 flex-shrink-0 space-y-2 rounded-xl border border-surface-700 bg-surface-900/80 p-2">
+          <div className="skeleton mb-3 h-5 w-28 rounded" />
+          {[1, 2].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
         </div>
-      </SortableContext>
+      ))}
     </div>
   )
 }
-
-// ── KanbanBoard ────────────────────────────────────────────────────────────────
 
 export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const { t } = useTranslation()
   const idNum = sprintId ? parseInt(sprintId, 10) : null
-  
+  const uid = useId()
+  const hintId = `${uid}-keys`
+  const activityPanelId = `${uid}-activity`
+
   const { data: board, isLoading, isError, refetch } = useSprintBoard(idNum)
   const updateMutation = useUpdateBacklogItem()
   const companyId = useAppStore(state => state.companyId)
@@ -308,10 +76,21 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const [activeItem, setActiveItem] = useState<BacklogItem | null>(null)
   // What the last move did: queued, reopened, or why the task waits.
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
+  const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // The task a keyboard move sent to another column: focus follows it there.
+  const [focusTarget, setFocusTarget] = useState<{ id: number; status: BoardStatus } | null>(null)
+  const prefs = useBoardPreferences(idNum)
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Space or Enter on a card's handle picks it up, the arrows move it, Space drops it.
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   // pointerWithin gives priority to whatever the pointer is directly over (including
   // empty columns). Falls back to rectIntersection then closestCenter for overlapping cases.
@@ -323,12 +102,53 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
     return closestCenter(args)
   }, [])
 
-  const handleStatusChange = (itemId: number, newStatus: BacklogItem['status']) => {
+  // "/" anywhere on the page but a field puts the cursor in the board's search.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return
+      if (!searchRef.current) return
+      event.preventDefault()
+      searchRef.current.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  const columns = useMemo(() => board?.columns ?? {}, [board])
+  const allItems = useMemo(() => Object.values(columns).flat(), [columns])
+  const visible = useMemo(() => filterColumns(columns, filters), [columns, filters])
+  const roles = useMemo(() => rolesOf(columns), [columns])
+  const presetCounts = useMemo(() => Object.fromEntries(
+    BOARD_PRESETS.map(preset => [preset, allItems.filter(item => matchesPreset(item, preset)).length]),
+  ) as Record<BoardPreset, number>, [allItems])
+
+  // Once the refreshed board shows the moved task in its new column (the move
+  // remounts its card there), focus its title, or its chip in a folded column,
+  // or, when a filter now hides it, that column's fold button.
+  useEffect(() => {
+    if (!focusTarget || !rootRef.current) return
+    const current = allItems.find(entry => entry.id === focusTarget.id)
+    if (current && current.status !== focusTarget.status) return
+    const root = rootRef.current
+    const target = root.querySelector<HTMLElement>(`#card-title-${focusTarget.id}`)
+      ?? root.querySelector<HTMLElement>(`[data-task-chip="${focusTarget.id}"]`)
+      ?? root.querySelector<HTMLElement>(`[data-column-toggle="${focusTarget.status}"]`)
+    target?.focus()
+    setFocusTarget(null)
+  }, [focusTarget, allItems, visible, prefs.collapsed])
+
+  const handleStatusChange = (itemId: number, newStatus: BoardStatus, announce = false) => {
     setNotice(null)
+    const item = allItems.find(entry => entry.id === itemId)
+    const column = BOARD_COLUMNS.find(c => c.id === newStatus)
     updateMutation.mutate({ itemId, data: { status: newStatus } }, {
       onSuccess: result => {
         const text = describeMove(t, result as BoardMoveResult)
+          ?? (announce && item && column ? t('kanbanBoard.card.moved', { title: item.title, column: t(column.titleKey) }) : null)
         setNotice(text ? { text } : null)
+        if (announce) setFocusTarget({ id: itemId, status: newStatus })
       },
       onError: error => setNotice({ text: errorDetail(error), error: true }),
     })
@@ -340,141 +160,131 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   ) : null)
 
   const handleDragStart = (event: DragStartEvent) => {
-    const id = event.active.id as number
-    const allItems = (Object.values(board?.columns ?? {}) as BacklogItem[][]).flat()
-    const item = allItems.find((entry) => entry.id === id)
-    setActiveItem(item ?? null)
+    setActiveItem(allItems.find(entry => entry.id === event.active.id) ?? null)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveItem(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
-
-    const columns = board?.columns ?? {}
     const overId = String(over.id)
-    const targetColumnId = COLUMNS.find((column) => column.id === overId)?.id
+    const targetColumnId = BOARD_COLUMNS.find(column => column.id === overId)?.id
       ?? findColumnIdByItemId(columns, Number(over.id))
-
-    if (targetColumnId) {
-      handleStatusChange(active.id as number, targetColumnId as BacklogItem['status'])
-    }
+    if (targetColumnId) handleStatusChange(active.id as number, targetColumnId)
   }
 
   if (!idNum) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
-        <AlertCircle size={28} className="text-gray-500" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-gray-500">
+        <AlertCircle size={28} className="text-gray-500" aria-hidden="true" />
         <p className="text-sm text-gray-300">{t('kanban.noActiveSprint')}</p>
       </div>
     )
   }
 
-  // ── Skeleton ──────────────────────────────────────────────────────────────────
-
-  if (isLoading && !board) {
-    return (
-      <div className="flex gap-4 p-4 overflow-x-auto min-w-0">
-        {COLUMNS.map(c => (
-          <div key={c.id} className="w-56 flex-shrink-0 space-y-2">
-            <div className="skeleton h-4 w-24 rounded mb-3" />
-            {[1, 2].map(i => <div key={i} className="skeleton h-20 rounded-lg" />)}
-          </div>
-        ))}
-      </div>
-    )
-  }
+  if (isLoading && !board) return <BoardSkeleton />
 
   if (isError && !board) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
-        <AlertCircle size={28} className="text-red-400" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-gray-500">
+        <AlertCircle size={28} className="text-red-400" aria-hidden="true" />
         <p className="text-sm text-red-400">{t('kanban.error')}</p>
-        <button onClick={() => refetch()} className="btn-ghost btn-sm flex items-center gap-1.5 mt-1">
-          <RefreshCw size={12} />
+        <button onClick={() => refetch()} className="btn-ghost btn-sm mt-1 flex items-center gap-1.5">
+          <RefreshCw size={12} aria-hidden="true" />
           <span>{t('kanban.refresh')}</span>
         </button>
       </div>
     )
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header with sprint name and refresh */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-surface-700 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-200 text-sm">
-            {board ? board.sprint.sprint_name : t('kanban.title')}
-          </span>
-          {board && (
-            <span className="text-xs text-gray-500">· {board.total} {t('kanban.items')}</span>
-          )}
-        </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isLoading}
-          className="btn-ghost btn-sm flex items-center gap-1"
-        >
-          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
-          <span className="hidden sm:inline">{t('kanban.refresh')}</span>
-        </button>
+  if (!board) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 py-12 text-gray-500">
+        <Loader2 className="animate-spin motion-reduce:animate-none" size={20} aria-hidden="true" />
+        <span className="text-sm">{t('kanban.loading')}</span>
       </div>
+    )
+  }
+
+  const filtering = filtersActive(filters)
+  const shown = Object.values(visible).reduce((sum, items) => sum + items.length, 0)
+  const allCollapsed = COLUMN_IDS.every(id => prefs.collapsed.includes(id))
+
+  return (
+    <div ref={rootRef} className="flex h-full flex-col">
+      <BoardToolbar
+        title={board.sprint.sprint_name || t('kanban.title')}
+        total={board.total}
+        shown={shown}
+        filters={filters}
+        onFiltersChange={setFilters}
+        roles={roles}
+        presetCounts={presetCounts}
+        density={prefs.density}
+        onDensityChange={prefs.setDensity}
+        allCollapsed={allCollapsed}
+        onToggleAll={() => prefs.setAllCollapsed(allCollapsed ? [] : [...COLUMN_IDS])}
+        activityOpen={activityOpen}
+        onToggleActivity={() => setActivityOpen(open => !open)}
+        activityPanelId={activityPanelId}
+        onRefresh={() => refetch()}
+        refreshing={isLoading}
+        searchRef={searchRef}
+      />
+      <p id={hintId} className="sr-only">{t('kanbanBoard.keyboardHint')}</p>
 
       {notice && (
         <p role={notice.error ? 'alert' : 'status'}
-          className={`mx-4 mt-2 rounded border px-3 py-1.5 text-xs ${notice.error ? 'border-red-700/40 text-red-300' : 'border-brand-700/40 text-brand-200'}`}>
+          className={`mx-4 mt-3 rounded-lg border px-3 py-2 text-xs ${notice.error ? 'border-red-700/50 bg-red-950/30 text-red-300' : 'border-brand-700/50 bg-brand-950/30 text-brand-200'}`}>
           {notice.text}
         </p>
       )}
 
-      {/* Board */}
-      {board ? (
+      <div className="flex min-h-0 flex-1">
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveItem(null)}
         >
-          <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
-            <div className="flex gap-3 min-w-max h-full md:h-auto md:min-w-0 md:flex-nowrap">
-              {COLUMNS.map(({ id: colId, titleKey, className, icon: Icon }) => {
-                const items = board.columns[colId] || []
-                return (
-                  <ColumnDropZone
-                    key={colId}
-                    columnId={colId}
-                    sprintId={idNum}
-                    items={items}
-                    titleKey={titleKey}
-                    className={className}
-                    Icon={Icon}
-                    t={t}
-                    onStatusChange={handleStatusChange}
-                    updating={updateMutation}
-                    activeItemId={activeItem?.id ?? null}
-                    evidenceRuns={evidenceRuns}
-                    cardActions={cardActions}
-                  />
-                )
-              })}
+          <div
+            role="region"
+            aria-label={t('kanbanBoard.columnsRegion')}
+            tabIndex={0}
+            className="min-h-[26rem] min-w-0 flex-1 snap-x snap-mandatory overflow-auto overscroll-x-contain focus-visible:outline-offset-[-2px] sm:snap-none lg:max-h-[calc(100dvh-14rem)]"
+          >
+            <div className="flex min-w-max items-start gap-3 p-3 sm:p-4 lg:min-w-0">
+              {BOARD_COLUMNS.map(({ id, titleKey }) => (
+                <BoardColumn
+                  key={id}
+                  id={id}
+                  title={t(titleKey)}
+                  items={visible[id] ?? []}
+                  total={(columns[id] ?? []).length}
+                  filtered={filtering}
+                  sprintId={idNum}
+                  density={prefs.density}
+                  collapsed={prefs.collapsed.includes(id)}
+                  onToggleCollapse={prefs.toggleColumn}
+                  onStatusChange={handleStatusChange}
+                  updatingId={updateMutation.isPending ? updateMutation.variables?.itemId ?? null : null}
+                  activeItemId={activeItem?.id ?? null}
+                  evidenceRuns={evidenceRuns}
+                  cardActions={cardActions}
+                  keyboardHintId={hintId}
+                />
+              ))}
             </div>
           </div>
 
-          <DragOverlay>
-            {activeItem && (
-              <div className="card p-3 shadow-glow rotate-1 w-56">
-                <p className="text-white text-sm font-medium">{activeItem.title}</p>
-              </div>
-            )}
+          <DragOverlay dropAnimation={prefersReducedMotion() ? null : undefined}>
+            {activeItem && <CardPreview item={activeItem} />}
           </DragOverlay>
         </DndContext>
-      ) : (
-        <div className="flex-1 flex items-center justify-center gap-2 text-gray-500">
-          <Loader2 className="animate-spin" size={20} />
-          <span className="text-sm">{t('kanban.loading')}</span>
-        </div>
-      )}
+        <ActivityPanel open={activityOpen} onClose={() => setActivityOpen(false)}
+          columns={columns} sprintId={idNum} panelId={activityPanelId} />
+      </div>
     </div>
   )
 }
-

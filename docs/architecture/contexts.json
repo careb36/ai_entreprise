@@ -64,7 +64,8 @@
         "company_models",
         "effort",
         "model_factory",
-        "model_routing"
+        "model_routing",
+        "run_cost"
       ],
       "modules": []
     },
@@ -240,7 +241,9 @@
         "git_publish",
         "integration",
         "integration_review",
-        "local_merge"
+        "local_merge",
+        "protected_merge",
+        "self_change"
       ],
       "modules": []
     },
@@ -504,6 +507,10 @@
         "loop"
       ],
       "test_board_moves_carry.py": [
+        "evidence",
+        "loop"
+      ],
+      "test_board_observed.py": [
         "evidence",
         "loop"
       ],
@@ -978,12 +985,30 @@
       "test_routing_record.py": [
         "models"
       ],
+      "test_rsi_backend_cycle.py": [
+        "management"
+      ],
+      "test_rsi_backend_cycle_fitness.py": [
+        "evidence",
+        "management"
+      ],
+      "test_rsi_backend_cycle_review.py": [
+        "management"
+      ],
       "test_rsi_cycle.py": [
         "evidence",
         "repo"
       ],
+      "test_rsi_cycle_import.py": [
+        "management"
+      ],
       "test_rsi_cycle_record.py": [
         "evidence",
+        "repo"
+      ],
+      "test_rsi_cycle_record_parity.py": [
+        "evidence",
+        "management",
         "repo"
       ],
       "test_rsi_cycle_run.py": [

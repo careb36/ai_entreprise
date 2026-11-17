@@ -44,6 +44,7 @@ from .procedure import Procedure
 from .progress import SprintProgressSnapshot
 from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
+from .rsi_cycle import RsiCycle
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
 from .saved_view import SavedView, SavedViewPreference
@@ -98,6 +99,7 @@ __all__ = [
     "ProviderConnection",
     "RefreshToken",
     "ReviewComment",
+    "RsiCycle",
     "RunPublication",
     "RunReview",
     "RunSecret",
