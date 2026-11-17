@@ -6,6 +6,15 @@ the backend's process space, ``http`` speaks streamable HTTP, ``sse`` the
 older SSE transport; ``inproc`` connects to a server object in the same
 process and exists for tests.
 
+Before anything starts, ``connect`` asks ``mcp_policy``: a stdio command must
+be on the operator's allowlist (checked again here, since the allowlist may
+have shrunk since the server was saved), and an HTTP or SSE URL is resolved
+once and refused unless every address is public. The HTTP client then sends
+every request to that pinned address, with the host in ``Host`` and TLS SNI
+(``PinnedTransport``), and refuses a request for any other host, so neither a
+DNS answer that changes after the check nor a redirect can reach the
+backend's own network. Environment proxies are not used for these requests.
+
 ``list_tools`` and ``call_tool`` open a connection for the one exchange. The
 task worker calls tools from a thread without an event loop, so ``Loop``
 runs a private loop in a daemon thread and hands results back with a
@@ -16,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -25,19 +34,92 @@ from mcp import Client
 from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
-from mcp.shared._httpx_utils import create_mcp_http_client
+from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
+
+from services.platform.egress import Target
+from services.tools import mcp_policy
 
 CONNECT_TIMEOUT_SECONDS = 20.0
+# The transport the pinned client wraps; the tests put an httpx2 mock here.
+INNER_TRANSPORT: Callable[[], httpx2.AsyncBaseTransport] | None = None
 
 
 class McpConnectionError(RuntimeError):
     """The server could not be reached or refused the handshake."""
 
 
+McpPolicyError = mcp_policy.McpPolicyError
+
+
+class PinnedTransport(httpx2.AsyncBaseTransport):
+    """Sends each request for the target's host to the address that was checked."""
+
+    def __init__(self, target: Target, inner: httpx2.AsyncBaseTransport) -> None:
+        self._target = target
+        self._inner = inner
+        original = httpx2.URL(target.url)
+        self._origin = (original.scheme, original.host, original.port)
+        self._connect = httpx2.URL(target.connect_url)
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        url = request.url
+        if (url.scheme, url.host, url.port) != self._origin:
+            raise httpx2.ConnectError(
+                "refused: a request for a host other than the checked one",
+                request=request,
+            )
+        if self._target.host_header:
+            request.url = url.copy_with(host=self._connect.host)
+            request.headers["Host"] = self._target.host_header
+        if self._target.sni_hostname:
+            request.extensions = {
+                **request.extensions,
+                "sni_hostname": self._target.sni_hostname,
+            }
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+def _pinned_client_factory(target: Target):
+    """An ``McpHttpClientFactory`` whose clients reach only *target*."""
+
+    def factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx2.Timeout | None = None,
+        auth: httpx2.Auth | None = None,
+    ) -> httpx2.AsyncClient:
+        inner = INNER_TRANSPORT() if INNER_TRANSPORT else httpx2.AsyncHTTPTransport()
+        kwargs: dict[str, Any] = {
+            "timeout": timeout
+            or httpx2.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT),
+            "transport": PinnedTransport(target, inner),
+            "follow_redirects": False,
+            "trust_env": False,
+        }
+        if headers:
+            kwargs["headers"] = headers
+        if auth is not None:
+            kwargs["auth"] = auth
+        return httpx2.AsyncClient(**kwargs)
+
+    return factory
+
+
 @asynccontextmanager
 async def connect(spec: dict[str, Any]):
-    """An initialized ``mcp.Client`` for *spec*, closed on exit."""
+    """An initialized ``mcp.Client`` for *spec*, closed on exit.
+
+    Raises ``McpPolicyError`` before starting anything the operator does not
+    allow, and ``McpConnectionError`` when the server cannot be reached.
+    """
     transport = spec.get("transport")
+    target: Target | None = None
+    if transport == "stdio":
+        mcp_policy.check_stdio_spec(spec)
+    elif transport in ("http", "sse"):
+        target = await asyncio.to_thread(mcp_policy.pin_url, spec.get("url"))
     try:
         if transport == "inproc":
             async with Client(spec["server"]) as client:
@@ -51,21 +133,23 @@ async def connect(spec: dict[str, Any]):
             )
             async with Client(params) as client:
                 yield client
-        elif transport == "sse":
-            async with (
-                sse_client(
-                    spec["url"], headers=dict(spec.get("headers") or {})
-                ) as streams,
-                Client(streams) as client,  # type: ignore[arg-type]
-            ):
+        elif transport == "sse" and target is not None:
+            # ``Client`` enters the transport itself (it takes the context
+            # manager, not the streams it yields).
+            streams = sse_client(
+                target.url,
+                headers=dict(spec.get("headers") or {}),
+                httpx_client_factory=_pinned_client_factory(target),
+            )
+            async with Client(streams) as client:
                 yield client
-        elif transport == "http":
-            http = create_mcp_http_client(
+        elif transport == "http" and target is not None:
+            http = _pinned_client_factory(target)(
                 headers=dict(spec.get("headers") or {}) or None
             )
             async with (
-                streamable_http_client(spec["url"], http_client=http) as streams,
-                Client(streams) as client,  # type: ignore[arg-type]
+                http,
+                Client(streamable_http_client(target.url, http_client=http)) as client,
             ):
                 yield client
         else:

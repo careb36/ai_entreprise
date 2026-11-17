@@ -6,14 +6,21 @@ Endpoints:
 - ``POST   /v1/mcp/servers``             — add or replace servers from an ``mcpServers`` map (Manager).
 - ``PATCH  /v1/mcp/servers/{id}``        — enable or disable one, change its roles or description (Manager).
 - ``DELETE /v1/mcp/servers/{id}``        — remove one (Manager).
-- ``GET    /v1/mcp/servers/{id}/tools``  — connect now and list what it advertises (Viewer).
+- ``GET    /v1/mcp/servers/{id}/tools``  — connect now and list what it advertises (Manager).
 
 A server's secrets (environment, headers) go in with the definition and are
 never returned: the list shows their names. Only a Manager changes what the
-agents can reach, as with the agents themselves.
+agents can reach, as with the agents themselves, and only a Manager lists a
+server's tools, since that starts it (a stdio server is a process on the
+backend). What may be saved or started at all is the operator's
+(``services/tools/mcp_policy.py``): a stdio command on
+``MCP_STDIO_ALLOWED_COMMANDS``, a URL on a public address. Each start asked
+for here is audited before it happens; a refused one too. Listing the
+servers starts none of them.
 """
 
 import asyncio
+import logging
 from typing import Any
 
 from auth_policy import current_user_if_required, require_company_role
@@ -26,6 +33,7 @@ from services.tools import mcp_client, mcp_config
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])
+logger = logging.getLogger(__name__)
 
 DISCOVERY_TIMEOUT_SECONDS = 30.0
 
@@ -45,6 +53,12 @@ class McpServerPatch(RequestModel):
 
 def _actor(user: User | None) -> str:
     return user.email if user is not None else "local demo"
+
+
+def _audit_actor(user: User | None) -> str:
+    """``human:<email>``, or an API token's own ``api-token:<id>``."""
+    actor = _actor(user)
+    return actor if actor.startswith("api-token:") else f"human:{actor}"
 
 
 def _load(
@@ -81,7 +95,11 @@ async def put_servers(
     """Add the servers in the map; one with a name already taken replaces it."""
     require_company_role(session, user, req.company_id, "Manager")
     try:
-        definitions = mcp_config.parse_mcp_servers(req.mcpServers)
+        # Normalizing resolves each URL's host (``socket.getaddrinfo``), which
+        # blocks: off the event loop.
+        definitions = await asyncio.to_thread(
+            mcp_config.parse_mcp_servers, req.mcpServers
+        )
     except mcp_config.McpConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     rows = mcp_config.upsert_servers(session, req.company_id, definitions, _actor(user))
@@ -96,6 +114,10 @@ async def patch_server(
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     server = _load(session, server_id, user, "Manager")
+    if req.enabled and not server.enabled:
+        refused = mcp_config.start_refusal(server)
+        if refused:
+            raise HTTPException(status_code=409, detail=f"{server.name}: {refused}")
     if req.enabled is not None:
         server.enabled = req.enabled
     if req.roles is not None:
@@ -125,8 +147,20 @@ async def server_tools(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """What the server advertises right now: an observation, not its configuration."""
-    server = _load(session, server_id, user, "Viewer")
+    """What the server advertises right now: an observation, not its configuration.
+
+    It starts the server, so it takes a Manager, and the start is audited
+    before it happens. The answer to a failure names no exception text: the
+    reason is in the backend's log.
+    """
+    server = _load(session, server_id, user, "Manager")
+    actor = _audit_actor(user)
+    refused = mcp_config.start_refusal(server)
+    if refused:
+        mcp_config.audit_start(
+            session, server, server.company_id, actor, "discovery", refused=refused
+        )
+        raise HTTPException(status_code=409, detail=f"{server.name}: {refused}")
     try:
         spec = mcp_config.connection_spec(server)
     except Exception as exc:  # A secret this key cannot read is a 409, not a crash.
@@ -134,6 +168,8 @@ async def server_tools(
             status_code=409,
             detail=f"the server's secrets cannot be read: {type(exc).__name__}",
         ) from exc
+    name, company_id = server.name, server.company_id
+    mcp_config.audit_start(session, server, company_id, actor, "discovery")
     try:
         tools = await asyncio.wait_for(
             mcp_client.list_tools(spec), timeout=DISCOVERY_TIMEOUT_SECONDS
@@ -141,10 +177,24 @@ async def server_tools(
     except TimeoutError as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"{server.name} did not answer within {DISCOVERY_TIMEOUT_SECONDS:g}s",
+            detail=f"{name} did not answer within {DISCOVERY_TIMEOUT_SECONDS:g}s",
         ) from exc
-    except Exception as exc:  # The reason is the answer.
+    except mcp_client.McpPolicyError as exc:  # Refused at connect time (rebinding).
+        logger.warning("MCP server %s refused when connecting: %s", name, exc)
+        # Beside the start attempt above, the refusal it ended in.
+        mcp_config.audit_start(
+            session, spec, company_id, actor, "discovery", refused=str(exc)
+        )
+        raise HTTPException(status_code=409, detail=f"{name}: {exc}") from exc
+    except Exception as exc:  # Logged here; the client gets no exception text.
+        logger.warning(
+            "MCP server %s could not be reached: %s: %s",
+            name,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
-            status_code=502, detail=f"{server.name} could not be reached: {exc}"[:500]
+            status_code=502,
+            detail=f"{name} could not be reached; the reason is in the backend's log",
         ) from exc
-    return {"server": server.name, "tools": tools}
+    return {"server": name, "tools": tools}

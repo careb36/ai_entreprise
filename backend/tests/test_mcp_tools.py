@@ -300,7 +300,13 @@ def test_the_verifier_records_the_calls_and_a_writing_tool_raises_the_tier():
     assert high["tier"] == "high" and len(high["reasons"]) == 2
 
 
-def test_the_loader_takes_the_company_s_enabled_servers_for_the_role(sqlite_session):
+def test_the_loader_takes_the_company_s_enabled_servers_for_the_role(
+    sqlite_session, monkeypatch
+):
+    from egress_fakes import FakeResolver
+    from services.platform import egress
+
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
     company = Company(company_name="MCP Co")
     sqlite_session.add(company)
     sqlite_session.commit()
