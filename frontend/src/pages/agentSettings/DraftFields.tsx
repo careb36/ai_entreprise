@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Wand2 } from 'lucide-react'
 import { useGenerateAgentPrompt } from '../../hooks/useQueries'
@@ -17,6 +18,7 @@ export function DraftFields({
   models: ModelCatalogEntry[]
 }) {
   const { t } = useTranslation()
+  const id = useId()
   const generatePrompt = useGenerateAgentPrompt()
   const roleOptions = COMMON_ROLES.includes(draft.role) ? COMMON_ROLES : [draft.role, ...COMMON_ROLES]
 
@@ -57,8 +59,9 @@ export function DraftFields({
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="input-label">{t('agentsConfig.name')}</label>
+          <label htmlFor={`${id}-name`} className="input-label">{t('agentsConfig.name')}</label>
           <input
+            id={`${id}-name`}
             className="input w-full"
             value={draft.name}
             onChange={e => setDraft(prev => ({ ...prev, name: e.target.value }))}
@@ -66,8 +69,9 @@ export function DraftFields({
           />
         </div>
         <div>
-          <label className="input-label">{t('agentsConfig.role')}</label>
+          <label htmlFor={`${id}-role`} className="input-label">{t('agentsConfig.role')}</label>
           <select
+            id={`${id}-role`}
             className="select w-full"
             value={draft.role}
             onChange={e => handleRoleChange(e.target.value)}
@@ -76,8 +80,9 @@ export function DraftFields({
           </select>
         </div>
         <div>
-          <label className="input-label">{t('agentsConfig.seniority')}</label>
+          <label htmlFor={`${id}-seniority`} className="input-label">{t('agentsConfig.seniority')}</label>
           <select
+            id={`${id}-seniority`}
             className="select w-full"
             value={draft.seniority}
             onChange={e => handleSeniorityChange(e.target.value)}
@@ -86,8 +91,9 @@ export function DraftFields({
           </select>
         </div>
         <div>
-          <label className="input-label">{t('agentsConfig.specialty')}</label>
+          <label htmlFor={`${id}-specialty`} className="input-label">{t('agentsConfig.specialty')}</label>
           <input
+            id={`${id}-specialty`}
             className="input w-full"
             value={draft.specialty}
             onChange={e => setDraft(prev => ({ ...prev, specialty: e.target.value }))}
@@ -99,8 +105,9 @@ export function DraftFields({
       <ModelSelector draft={draft} setDraft={setDraft} models={models} />
 
       <div>
-        <label className="input-label">{t('agentsConfig.persona')}</label>
+        <label htmlFor={`${id}-persona`} className="input-label">{t('agentsConfig.persona')}</label>
         <textarea
+          id={`${id}-persona`}
           className="textarea w-full"
           rows={2}
           value={draft.persona}
@@ -110,7 +117,7 @@ export function DraftFields({
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="input-label mb-0">{t('agentsConfig.systemPrompt')}</label>
+          <label htmlFor={`${id}-prompt`} className="input-label mb-0">{t('agentsConfig.systemPrompt')}</label>
           <button
             type="button"
             onClick={handleGeneratePrompt}
@@ -124,6 +131,7 @@ export function DraftFields({
           </button>
         </div>
         <textarea
+          id={`${id}-prompt`}
           className="textarea w-full font-mono text-xs"
           rows={4}
           value={draft.system_prompt}
@@ -136,9 +144,10 @@ export function DraftFields({
       </div>
 
       <div>
-        <label className="input-label">{t('agentsConfig.tokenBudget')}</label>
+        <label htmlFor={`${id}-budget`} className="input-label">{t('agentsConfig.tokenBudget')}</label>
         <div className="flex items-center gap-3">
           <input
+            id={`${id}-budget`}
             type="range"
             min={100000}
             max={5000000}

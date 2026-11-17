@@ -177,9 +177,14 @@ The browser sandbox is pinned the same way: the publish run's summary prints
 the line to paste into the backend's environment,
 `DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
 (`docs/CONFIGURATION.md`), so the application check runs its browser e2e
-commands in the published multi-arch image, by digest. The verification
-commands above apply to it unchanged (same workflow, same certificate
-identity; its digest names the manifest list).
+commands in the published linux/amd64 image, by digest, never by
+`:latest`. The verification commands above apply to it unchanged (same
+workflow, same certificate identity). No release has published it yet, so no
+digest is recorded here; the first `v*` tag after #529 prints it. An arm64
+host builds the image locally from the same Dockerfile (both downloads are
+pinned by sha256, re-checked in #529 against the origin's own object hash)
+and sets `DELIVERY_BROWSER_IMAGE` to the local image ID (`sha256:…`), until
+an arm64 variant has been run with its probe on arm64 hardware.
 
 Check a release's component SBOMs against their checksums:
 
