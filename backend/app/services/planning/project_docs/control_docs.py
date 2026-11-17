@@ -16,12 +16,11 @@ from __future__ import annotations
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import specs, texts
+from services.planning.project_docs import specs, statements, texts
 from services.planning.project_docs.layout import (
     PMBOK,
     build,
     missing_line,
-    person_section,
     tr_of,
 )
 from services.planning.project_docs.refs import Sources, digest, ref
@@ -277,7 +276,7 @@ def raci(snapshot: dict[str, Any]) -> dict[str, Any]:
     return build("raci", PMBOK, body, src, snapshot, RACI_INPUTS, missing)
 
 
-RISK_INPUTS = ("sprints", "events", "verifications")
+RISK_INPUTS = ("sprints", "events", "verifications", statements.key_of("risks"))
 
 
 def risks(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -344,9 +343,22 @@ def risks(snapshot: dict[str, Any]) -> dict[str, Any]:
         body.append(missing_line(lang, tr("risks.none")))
         missing.append(tr("section.observed_risks"))
     heading = tr("person.risk")
-    body += ["", f"## {heading}", "", *person_section(lang, tr("person.risk_what"))]
+    body += [
+        "",
+        f"## {heading}",
+        "",
+        *statements.lines(snapshot, "risks.appetite", src),
+    ]
     return build(
-        "risks", PMBOK, body, src, snapshot, RISK_INPUTS, missing, persons=[heading]
+        "risks",
+        PMBOK,
+        body,
+        src,
+        snapshot,
+        RISK_INPUTS,
+        missing,
+        persons=[heading],
+        statements=statements.filled(snapshot, "risks"),
     )
 
 

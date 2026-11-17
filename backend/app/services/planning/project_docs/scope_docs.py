@@ -14,13 +14,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.planning.project_docs import specs, texts
+from services.planning.project_docs import specs, statements, texts
 from services.planning.project_docs.layout import (
     PMBOK,
     build,
     claim_block,
     missing_line,
-    person_section,
     tr_of,
 )
 from services.planning.project_docs.refs import Sources, digest, ref
@@ -95,7 +94,7 @@ def _no_spec(key: str, snapshot: dict, inputs: tuple) -> dict[str, Any]:
     return build(key, PMBOK, body, Sources(lang), snapshot, inputs, [tr("section.all")])
 
 
-CHARTER_INPUTS = ("project", "specification")
+CHARTER_INPUTS = ("project", "specification", statements.key_of("charter"))
 
 
 def charter(snapshot: dict[str, Any], prose: str | None = None) -> dict[str, Any]:
@@ -173,7 +172,7 @@ def charter(snapshot: dict[str, Any], prose: str | None = None) -> dict[str, Any
             "",
             f"## {heading}",
             "",
-            *person_section(lang, tr(f"person.{name}_what")),
+            *statements.lines(snapshot, f"charter.{name}", src),
         ]
     return build(
         "charter",
@@ -185,6 +184,7 @@ def charter(snapshot: dict[str, Any], prose: str | None = None) -> dict[str, Any
         missing,
         claims,
         persons=persons,
+        statements=statements.filled(snapshot, "charter"),
     )
 
 

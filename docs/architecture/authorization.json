@@ -44,6 +44,9 @@
     "DELETE /v1/companies/{company_id}/chat/{provider}": {
       "access": "Owner"
     },
+    "DELETE /v1/companies/{company_id}/documentation/person-sections/{section}": {
+      "access": "Manager"
+    },
     "DELETE /v1/companies/{company_id}/invitations/{invitation_id}": {
       "access": "Manager"
     },
@@ -224,6 +227,12 @@
     "GET /v1/companies/{company_id}/documentation": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/documentation/person-sections": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/documentation/person-sections/{section}/history": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/git": {
       "access": "Viewer"
     },
@@ -270,9 +279,6 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
-      "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/protected_paths": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/rsi/cycles": {
@@ -925,6 +931,9 @@
       "access": "Manager"
     },
     "PUT /v1/companies/{company_id}/doc_language": {
+      "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/documentation/person-sections/{section}": {
       "access": "Manager"
     },
     "PUT /v1/companies/{company_id}/git": {
