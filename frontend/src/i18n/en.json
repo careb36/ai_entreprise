@@ -34,7 +34,8 @@
     "wiki": "Wiki",
     "documentation": "Documentation",
     "duties": "Duties and access",
-    "auditAnchors": "Audit anchors"
+    "auditAnchors": "Audit anchors",
+    "findings": "Findings"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -173,7 +174,8 @@
     "manageAgents": "Manage agents",
     "manageQuotas": "Manage quotas",
     "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits.",
-    "tokenUsage": "{{used}} / {{limit}} tokens"
+    "tokenUsage": "{{used}} / {{limit}} tokens",
+    "goalLabel": "Sprint goal"
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -794,7 +796,11 @@
     "searchPlaceholder": "Search…",
     "clearFilters": "Clear filters",
     "newMessages": "New messages",
-    "agentsWorkingCount": "{{count}} working"
+    "agentsWorkingCount": "{{count}} working",
+    "searchLabel": "Search the activity",
+    "clearSearch": "Clear the search",
+    "filterAgentLabel": "Filter by agent",
+    "filterTypeLabel": "Filter by event type"
   },
   "governance": {
     "title": "Governance",
@@ -852,7 +858,9 @@
     "reviewerVerifier": "; the Verifier's verdict alone {{verifier}} of the {{called}} it called.",
     "reviewerVerifierNone": "; the Verifier's verdict called none of them.",
     "suggestion": "Reviewer agent suggests: {{decision}}",
-    "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people."
+    "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people.",
+    "historyPeriod": "Usage history period",
+    "dayTokens": "{{date}}: {{tokens}} tokens"
   },
   "evidence": {
     "title": "Evidence",
@@ -1025,7 +1033,8 @@
     "copied": "Copied!",
     "error": "Generation failed",
     "started": "Generation started!",
-    "sprintLink": "Sprint #{{id}}"
+    "sprintLink": "Sprint #{{id}}",
+    "companyFallback": "ID {{id}}"
   },
   "support": {
     "title": "La Fabrique Assistant",
@@ -1076,7 +1085,10 @@
     },
     "emailPlaceholder": "you@company.com",
     "ownTicketsOnly": "You can only see the tickets reported with your account email ({{email}}).",
-    "agentReply": "Reply from the Support agent"
+    "agentReply": "Reply from the Support agent",
+    "inputLabel": "Message to the Support agent",
+    "send": "Send",
+    "searchTickets": "Look up my tickets"
   },
   "sprintCalendar": {
     "title": "Sprint Calendar",
@@ -1214,7 +1226,8 @@
     },
     "readOnly": "You can read the agents. Only a Manager or the Owner changes them.",
     "connectionGroup": "Company connection: {{connection}}",
-    "connectionModelHint": "Runs through the company's connection {{connection}}; the key stays with the company."
+    "connectionModelHint": "Runs through the company's connection {{connection}}; the key stays with the company.",
+    "clearSearch": "Clear the search"
   },
   "common": {
     "loading": "Loading...",
@@ -3312,6 +3325,58 @@
       "completed_tasks": "Completed tasks",
       "console_assistant_notes": "Console notes",
       "wiki": "Wiki"
+    }
+  },
+  "findings": {
+    "title": "Findings",
+    "subtitle": "What the platform observed and wants fixed, the check that should pass once it is, and what each self-improvement cycle decided. Read-only: the platform records the outcomes.",
+    "loading": "Loading findings…",
+    "loadError": "Could not load the findings: {{message}}",
+    "empty": "No findings yet. They appear here once a retrospective or a cycle records one.",
+    "noCompany": "Choose a company to see its findings.",
+    "source": "Source",
+    "noSource": "Not recorded",
+    "targetMeasure": "Target measure",
+    "noTargetMeasure": "None yet: no cycle starts until a person writes one.",
+    "status": {
+      "open": "Open",
+      "in_cycle": "In a cycle",
+      "kept": "Kept",
+      "reverted": "Reverted",
+      "unmeasured": "Unmeasured",
+      "closed_by_person": "Closed by a person"
+    },
+    "decision": {
+      "keep": "Keep",
+      "revert": "Revert",
+      "unmeasured": "Unmeasured"
+    },
+    "outcomes": {
+      "caption": "Cycles for {{title}}",
+      "none": "No cycle has run for this finding yet.",
+      "cycle": "Cycle",
+      "decision": "Decision",
+      "reasons": "Reasons",
+      "noReasons": "No reasons recorded",
+      "baseline": "Baseline (B)",
+      "candidate": "Candidate (C)",
+      "date": "Date"
+    },
+    "detail": {
+      "crumb": "Finding {{id}}",
+      "loading": "Loading the finding…",
+      "loadError": "Could not load the finding: {{message}}",
+      "notFound": "This finding does not exist, or it belongs to another company.",
+      "record": "Record",
+      "specificationPath": "Specification file",
+      "specificationSha": "Specification sha256",
+      "created": "Recorded",
+      "updated": "Last change",
+      "closedBy": "Closed by",
+      "outcomes": "Cycles",
+      "outcomesHint": "Each cycle measures the baseline (B) and the candidate (C) with the same graders; the fitness function decides and names every guard it judged.",
+      "specification": "Specification",
+      "noSpecificationText": "The specification's text was not stored; its sha256 is above."
     }
   }
 }

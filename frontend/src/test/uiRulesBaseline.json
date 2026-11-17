@@ -1,0 +1,6 @@
+{
+  "description": "What src/uiRules.test.ts allows that breaks a rule of src/test/uiRules.ts, counted by 'file: rule'. It may only shrink: a count above what the check finds fails until it is lowered (UPDATE_UI_RULES_BASELINE=1 lowers it), and an entry is never added or raised. NavBar's mobile menu closes on a click that bubbles up from its links, which a keyboard activates too; it is not a control of its own.",
+  "allowlist": {
+    "components/shell/NavBar.tsx: a11y/click-keyboard": 1
+  }
+}

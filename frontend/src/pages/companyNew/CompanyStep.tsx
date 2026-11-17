@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TIMEZONES } from './constants'
 
@@ -15,6 +16,7 @@ export function CompanyStep({
   setTimezone: (value: string) => void
 }) {
   const { t } = useTranslation()
+  const id = useId()
   return (
   <div className="space-y-5">
     <div>
@@ -23,8 +25,8 @@ export function CompanyStep({
     </div>
 
     <div>
-      <label className="input-label">{t('companyNew.factoryName')} *</label>
-      <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)}
+      <label htmlFor={`${id}-name`} className="input-label">{t('companyNew.factoryName')} *</label>
+      <input id={`${id}-name`} type="text" value={companyName} onChange={e => setCompanyName(e.target.value)}
         placeholder={t('companyNew.companyNamePlaceholder')} required className="input w-full text-base" autoFocus />
       {companyName.length > 0 && companyName.length < 2 && (
         <p className="text-xs text-red-400 mt-1">{t('companyNew.nameTooShort')}</p>
@@ -32,16 +34,17 @@ export function CompanyStep({
     </div>
 
     <div>
-      <label className="input-label">{t('companyNew.description')} <span className="text-gray-600 normal-case font-normal">{t('companyNew.optional')}</span></label>
-      <textarea value={companyDesc} onChange={e => setCompanyDesc(e.target.value)}
+      <label htmlFor={`${id}-description`} className="input-label">{t('companyNew.description')} <span className="text-gray-600 normal-case font-normal">{t('companyNew.optional')}</span></label>
+      <textarea id={`${id}-description`} value={companyDesc} onChange={e => setCompanyDesc(e.target.value)}
         placeholder={t('companyNew.descriptionPlaceholder')}
         rows={3} className="textarea w-full" />
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <label className="input-label">{t('companyNew.sprintLength')}</label>
+        <label htmlFor={`${id}-scope`} className="input-label">{t('companyNew.sprintLength')}</label>
         <select
+          id={`${id}-scope`}
           value={scopeSize}
           onChange={e => setScopeSize(e.target.value as 'S' | 'M' | 'L')}
           className="select w-full"
@@ -55,8 +58,8 @@ export function CompanyStep({
         </p>
       </div>
       <div>
-        <label className="input-label">{t('companyNew.timezone')}</label>
-        <select value={timezone} onChange={e => setTimezone(e.target.value)} className="select w-full">
+        <label htmlFor={`${id}-timezone`} className="input-label">{t('companyNew.timezone')}</label>
+        <select id={`${id}-timezone`} value={timezone} onChange={e => setTimezone(e.target.value)} className="select w-full">
           {TIMEZONES.map(tz => (
             <option key={tz} value={tz}>{t(`companyNew.timezones.${tz}`, { defaultValue: tz })}</option>
           ))}
