@@ -963,7 +963,10 @@
     "suggestion": "El Reviewer agent sugiere: {{decision}}",
     "suggestionUnusable": "El Reviewer agent no pudo sugerir una decisión; queda para las personas.",
     "historyPeriod": "Período del historial de uso",
-    "dayTokens": "{{date}}: {{tokens}} tokens"
+    "dayTokens": "{{date}}: {{tokens}} tokens",
+    "quotaUnits": "Unidades de negocio",
+    "quotaUnitCount_one": "{{count}} unidad de negocio",
+    "quotaUnitCount_other": "{{count}} unidades de negocio"
   },
   "evidence": {
     "title": "Evidencia",
@@ -1247,7 +1250,8 @@
     "noCompanies": "Todavía no eres miembro de ninguna empresa.",
     "yourCompanies": "Tus empresas",
     "companyCount_one": "{{count}} empresa",
-    "companyCount_other": "{{count}} empresas"
+    "companyCount_other": "{{count}} empresas",
+    "productName": "La Fabrique"
   },
   "agentsConfig": {
     "title": "Registro de Agentes",
@@ -1628,7 +1632,11 @@
       "unusable": " ({{n}} sin una respuesta utilizable)",
       "reporters": "; quienes reportaron, con {{reporter}} de {{chose}}.",
       "noReporters": "; nadie que reportó eligió una."
-    }
+    },
+    "adminOnlyTitle": "Para administradores de soporte",
+    "filters": "Filtrar los tickets",
+    "ticketCount_one": "{{count}} ticket",
+    "ticketCount_other": "{{count}} tickets"
   },
   "health": {
     "title": "Estado de los servicios",
