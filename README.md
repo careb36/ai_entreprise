@@ -430,15 +430,16 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
     "company_id": 1,
     "mcpServers": {
       "docs":   {"url": "https://docs.example.com/mcp", "headers": {"Authorization": "Bearer ..."}},
-      "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
+      "github": {"command": "/opt/mcp/bin/github-server",
                  "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "..."}, "roles": ["Developer"]}
     }
   }'
 ```
 
-- `url` is a streamable HTTP server (`"type": "sse"` for the older transport); `command` is a stdio server, started inside the backend container, so its runtime (`npx`, `uvx`, …) must be in that image.
+- `url` is a streamable HTTP server (`"type": "sse"` for the older transport); `command` is a stdio server, started inside the backend container without a shell, so the program must be in that image and its absolute path on the operator's `MCP_STDIO_ALLOWED_COMMANDS`.
 - `env` and `headers` are secrets: stored Fernet-encrypted (`FERNET_SECRET_KEY`), listed by name only (`GET /v1/mcp/servers`), masked out of the results the model sees.
-- `roles` limits a server to some agent roles; without it every role that executes tasks may use it. `PATCH /v1/mcp/servers/{id}` disables a server or changes its roles; `GET /v1/mcp/servers/{id}/tools` connects now and lists what it advertises.
+- `roles` limits a server to some agent roles; without it every role that executes tasks may use it. `PATCH /v1/mcp/servers/{id}` disables a server or changes its roles; `GET /v1/mcp/servers/{id}/tools` (a Manager: it starts the server, and the start is audited) connects now and lists what it advertises.
+- **stdio servers are off by default.** The operator allows a command by its absolute path in `MCP_STDIO_ALLOWED_COMMANDS`, and `command` must be exactly that path (`docs/OPERATIONS.md`, MCP servers). A URL must be https on a public address (`MCP_HTTP_ALLOWED_HOSTS` allows plain http for a named host). See SECURITY.md §8.7.
 
 When a task runs, the model sees the tools as `<server>__<tool>` and may call them for at most `MCP_MAX_TOOL_ROUNDS` rounds before it must deliver. Every call is **an observation the backend made** — server, tool, arguments, whether it erred, duration, sha256 of the result — recorded on the run's evidence and shown by the Verifier as `tools_used`, apart from what the model claims it learned. A tool its server does not mark read-only raises the delivery's risk tier, so an approved task that used one waits for a person at the same points a sensitive file would.
 

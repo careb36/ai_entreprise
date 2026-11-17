@@ -166,6 +166,12 @@ class Settings(BaseSettings):
     MCP_TOOL_TIMEOUT_SECONDS: float = 60.0
     MCP_CONNECT_TIMEOUT_SECONDS: float = 20.0
     MCP_RESULT_MAX_CHARS: int = 4000
+    # Who may run what (``services/tools/mcp_policy.py``), set by the operator
+    # in the environment and never through the API: the absolute paths of the
+    # commands a stdio server may spawn (comma-separated; empty disables stdio
+    # servers), and the hosts an HTTP server may reach over plain http.
+    MCP_STDIO_ALLOWED_COMMANDS: str = ""
+    MCP_HTTP_ALLOWED_HOSTS: str = ""
     # The Developer's workspace tools (``services/developer_tools.py``): read
     # the project through the daemon (list, read, search) and run its tests
     # before delivering, for at most this many rounds. ``run_tests`` is offered

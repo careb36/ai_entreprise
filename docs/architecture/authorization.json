@@ -368,7 +368,7 @@
       "access": "Viewer"
     },
     "GET /v1/mcp/servers/{server_id}/tools": {
-      "access": "Viewer"
+      "access": "Manager"
     },
     "GET /v1/memory/search": {
       "access": "Viewer"

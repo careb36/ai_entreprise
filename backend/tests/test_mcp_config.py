@@ -11,8 +11,20 @@ from cryptography.fernet import Fernet
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 import crypto
+from config import settings
+from egress_fakes import FakeResolver
 from models.mcp import McpServer
+from services.platform import egress
 from services.tools import mcp_config
+
+GITHUB_SERVER = "/opt/mcp/bin/server-github"
+
+
+@pytest.fixture(autouse=True)
+def operator(monkeypatch):
+    """A deployment that allows the one stdio command named here; DNS answers public."""
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
+    monkeypatch.setattr(settings, "MCP_STDIO_ALLOWED_COMMANDS", GITHUB_SERVER)
 
 
 @pytest.fixture()
@@ -27,8 +39,8 @@ def test_a_standard_map_is_read_stdio_by_command_http_by_url():
         {
             "mcpServers": {
                 "github": {
-                    "command": "npx",
-                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "command": GITHUB_SERVER,
+                    "args": ["--toolsets", "@model-repos"],
                     "env": {"GITHUB_TOKEN": "t"},
                 },
                 "docs": {
@@ -138,3 +150,23 @@ def test_a_server_without_secrets_stores_none_and_an_unreadable_one_still_lists(
     )
     shown = mcp_config.serialize(row)
     assert shown["secrets_readable"] is False and shown["env_keys"] == []
+
+
+def test_the_operator_s_mcp_settings_are_named_at_startup(monkeypatch):
+    from services.tools import mcp_policy
+
+    monkeypatch.setattr(settings, "MCP_STDIO_ALLOWED_COMMANDS", "")
+    monkeypatch.setattr(settings, "MCP_HTTP_ALLOWED_HOSTS", "")
+    assert mcp_policy.startup_warnings() == []
+    monkeypatch.setattr(
+        settings,
+        "MCP_STDIO_ALLOWED_COMMANDS",
+        f"npx, /usr/bin/python3.11, {GITHUB_SERVER}, /bin/bash",
+    )
+    monkeypatch.setattr(settings, "MCP_HTTP_ALLOWED_HOSTS", "legacy.example")
+    warnings = "\n".join(mcp_policy.startup_warnings())
+    assert "'npx' is not an absolute" in warnings
+    assert "/bin/bash, /opt/mcp/bin/server-github, /usr/bin/python3.11" in warnings
+    assert "shell (/bin/bash, /usr/bin/python3.11)" in warnings
+    assert GITHUB_SERVER not in warnings.split("shell (")[1]
+    assert "plain http for: legacy.example" in warnings

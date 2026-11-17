@@ -413,6 +413,42 @@ both.
 `docs/CONFIGURATION.md` (Required Environment Variables) has the command that generates
 each key.
 
+## MCP servers
+
+A company's Manager adds MCP servers in the app (`POST /v1/mcp/servers`).
+HTTP servers need nothing from the operator as long as their URL is https on
+a public address. **stdio servers are off** until the operator allows their
+command (SECURITY.md §8.7); a server saved before this was enforced and not
+on the list keeps its row, lists with `start_refused`, and is never started.
+
+To enable a stdio server:
+
+1. Install the server in the backend's image, as a fixed program: a binary,
+   or a wrapper script that execs one with its arguments fixed, for example
+   `/opt/mcp/bin/github-server` containing
+   `exec /usr/local/lib/node_modules/.bin/github-mcp-server stdio`. Put it in
+   a directory the backend's user cannot write. Do not allow `npx`, `uvx`,
+   `node`, `python` or a shell: their arguments, which a Manager chooses, can
+   run anything as the backend.
+2. Name it in the backend's environment (`.env`, forwarded by
+   `docker-compose.yml`): `MCP_STDIO_ALLOWED_COMMANDS=/opt/mcp/bin/github-server`
+   (comma-separated for several). Restart the backend.
+3. The Manager saves the server with exactly that path as `command`
+   (`{"github": {"command": "/opt/mcp/bin/github-server", "env": {"GITHUB_TOKEN": "…"}}}`)
+   and lists its tools (`GET /v1/mcp/servers/{id}/tools`, Manager) to check it
+   starts. A refusal names the reason (400 when saved, 409 when enabled or
+   started).
+4. Each start is in the company's audit trail: `mcp_server_start` (the
+   command, the number of arguments, who or which role) and
+   `mcp_server_start_refused`.
+
+To withdraw one, remove its path from `MCP_STDIO_ALLOWED_COMMANDS` and
+restart: the servers that used it stop being started at once, and their rows
+stay for the Manager to delete. Plain http to an MCP server is allowed only
+for a host in `MCP_HTTP_ALLOWED_HOSTS`, and never to a private, loopback or
+link-local address: an MCP server on the LAN must be reached through a public
+https address, or run as a stdio wrapper.
+
 ## Read `/health` and `/metrics`
 
 - `GET /health` is the cheap, public liveness check. It returns `status`,

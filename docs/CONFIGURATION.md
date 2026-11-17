@@ -549,6 +549,26 @@ Copy `.env.example` to `.env` and fill in:
   task may make before the model must answer, how long one call and one
   connection may take, and how much of a result the model is shown. Nothing
   to enable: a company with no MCP server configured runs as before.
+- `MCP_STDIO_ALLOWED_COMMANDS` — optional, default empty, which **disables
+  stdio MCP servers**. Comma-separated absolute, normalized paths of the
+  commands a company's stdio server may spawn (`/opt/mcp/bin/github-server`);
+  an entry that is not one is ignored. A server's `command` must equal an
+  entry exactly (no bare name, relative path, `..`, other case or symlink
+  under another name); it is spawned without a shell, as the backend's user.
+  Checked when a server is saved or enabled and again before every start, so
+  removing an entry stops the servers that used it (they list with
+  `start_refused`). Set it in the environment only: no API changes it.
+  Allowing an interpreter or a package runner (`npx`, `uvx`, `python`) allows
+  any code (SECURITY.md §8.7; how to enable one: `docs/OPERATIONS.md`, MCP
+  servers).
+- `MCP_HTTP_ALLOWED_HOSTS` — optional, default empty. Comma-separated host
+  names whose MCP server may be reached over plain http; every other URL must
+  be https. It does not relax the address check: an HTTP or SSE server's host
+  must resolve only to public addresses, checked when it is saved and before
+  each connection, which goes to the checked address, without an environment
+  proxy (`services/tools/mcp_policy.py`, `services/platform/egress.py`). The
+  backend logs both settings at startup, and warns when a stdio entry is an
+  interpreter, a package runner or a shell.
 - `DB_AUTO_UPGRADE` — optional, default `false`. Runs the Alembic migrations
   to head when the backend starts, for a local database run by hand. The
   container's entrypoint and the e2e run `alembic upgrade head` themselves,

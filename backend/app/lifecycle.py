@@ -327,6 +327,10 @@ async def startup(app):
     insecure = warn_if_insecure()
     if insecure:
         logger.warning(insecure)
+    from services.tools.mcp_policy import startup_warnings
+
+    for warning in startup_warnings():
+        logger.warning(warning)
 
 
 async def shutdown(app):
