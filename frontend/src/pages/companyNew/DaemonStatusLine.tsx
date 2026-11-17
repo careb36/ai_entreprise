@@ -47,7 +47,7 @@ export function DaemonStatusLine({ host, connected, state, reason, isPending, er
   if (connected === false) return <WorkspaceDaemonHelp role="status" platform={fallbackPlatform} />
   if (error) {
     return (
-      <p role="status" className="text-xs text-gray-500">
+      <p role="status" className="text-xs text-gray-400">
         {t('workspaceDaemon.statusError', { message: errorDetail(error) })}
       </p>
     )

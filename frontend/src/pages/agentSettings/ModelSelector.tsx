@@ -38,7 +38,7 @@ function ModelRecommendationPanel({
           </p>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
             <span className="font-mono text-sm text-white">{primary.id}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] ${tierClass(primary.tier)}`}>
+            <span className={`rounded-md px-1.5 text-[11px] leading-5 ${tierClass(primary.tier)}`}>
               {primary.provider} · {primary.tier}
             </span>
           </div>
@@ -61,13 +61,13 @@ function ModelRecommendationPanel({
 
       {recommendation.alternatives.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="text-gray-500">{t('agentsConfig.alternatives')}</span>
+          <span className="text-gray-400">{t('agentsConfig.alternatives')}</span>
           {recommendation.alternatives.map(model => (
             <button
               key={model.id}
               type="button"
               onClick={() => onApply(model.id)}
-              className="rounded-full border border-surface-700 bg-surface-800 px-2 py-0.5 text-gray-300 hover:border-surface-600"
+              className="rounded-md border border-surface-700 bg-surface-800 px-1.5 leading-5 text-gray-300 hover:border-surface-600"
             >
               {model.id}
             </button>
@@ -132,18 +132,18 @@ export function ModelSelector({
           <ConnectionModelOptgroups options={connectionOptions} />
         </select>
         {connectionChoice ? (
-          <p className="mt-2 text-[11px] text-gray-500">{t('agentsConfig.connectionModelHint', { connection: connectionChoice.connection })}</p>
+          <p className="mt-2 text-[11px] text-gray-400">{t('agentsConfig.connectionModelHint', { connection: connectionChoice.connection })}</p>
         ) : modelInfo ? (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] ${tierClass(modelInfo.tier)}`}>
+            <span className={`rounded-md px-1.5 text-[11px] leading-5 ${tierClass(modelInfo.tier)}`}>
               {modelInfo.provider} · {modelInfo.tier}
             </span>
-            <span className="text-[11px] text-gray-500">{modelInfo.description}</span>
+            <span className="text-[11px] text-gray-400">{modelInfo.description}</span>
           </div>
         ) : draft.model ? (
           <p className="mt-2 text-[11px] text-amber-300">{t('agentsConfig.customModelHint')}</p>
         ) : (
-          <p className="mt-2 text-[11px] text-gray-500">
+          <p className="mt-2 text-[11px] text-gray-400">
             {t('agentsConfig.defaultForRoleHint', { defaultValue: "Uses the server's default model for this role." })}
           </p>
         )}

@@ -49,10 +49,10 @@ export const ROLES = [
 ]
 
 export const SENIORITIES = [
-  { value: 'Junior', label: 'Junior',  color: 'text-gray-400',   desc: '0–2 yrs' },
-  { value: 'Mid',    label: 'Mid',     color: 'text-blue-400',   desc: '2–5 yrs' },
-  { value: 'Senior', label: 'Senior',  color: 'text-brand-400',  desc: '5–10 yrs' },
-  { value: 'Staff',  label: 'Staff',   color: 'text-purple-400', desc: '10+ yrs' },
+  { value: 'Junior', label: 'Junior',  color: 'text-gray-300',   desc: '0–2 yrs' },
+  { value: 'Mid',    label: 'Mid',     color: 'text-blue-300',   desc: '2–5 yrs' },
+  { value: 'Senior', label: 'Senior',  color: 'text-brand-300',  desc: '5–10 yrs' },
+  { value: 'Staff',  label: 'Staff',   color: 'text-purple-300', desc: '10+ yrs' },
 ]
 
 export const AUTONOMY_LEVELS = [
@@ -86,10 +86,10 @@ export const AUTONOMY_LEVELS = [
 ]
 
 export const PERM_LEVELS = {
-  none:      { label: 'None',       color: 'text-gray-500' },
-  read_only: { label: 'Read Only',  color: 'text-blue-400' },
-  write:     { label: 'Write',      color: 'text-yellow-400' },
-  admin:     { label: 'Admin',      color: 'text-red-400' },
+  none:      { label: 'None',       color: 'text-gray-400' },
+  read_only: { label: 'Read Only',  color: 'text-blue-300' },
+  write:     { label: 'Write',      color: 'text-amber-300' },
+  admin:     { label: 'Admin',      color: 'text-red-300' },
 }
 
 export const DEFAULT_PERMISSIONS: Permissions = {

@@ -45,12 +45,12 @@ export const GraphCanvasSkeleton: React.FC<{ variant?: GraphSkeletonProps['varia
   const { t } = useTranslation();
   return (
     <div
-      className={`relative w-full h-[520px] bg-slate-900/60 rounded-xl border border-slate-800/80 overflow-hidden flex items-center justify-center ${className}`}
+      className={`relative w-full h-[520px] bg-surface-900/80 rounded-xl border border-surface-700 overflow-hidden flex items-center justify-center ${className}`}
       data-testid="graph-canvas-skeleton"
     >
       {/* Background Grid Pattern Skeleton */}
       <svg
-        className="absolute inset-0 w-full h-full stroke-slate-800/30"
+        className="absolute inset-0 w-full h-full stroke-surface-700/40"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
       >
@@ -63,17 +63,17 @@ export const GraphCanvasSkeleton: React.FC<{ variant?: GraphSkeletonProps['varia
       </svg>
 
       {/* Shimmer overlay gradient */}
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-slate-700/10 to-transparent pointer-events-none" />
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] motion-reduce:hidden bg-gradient-to-r from-transparent via-surface-700/10 to-transparent pointer-events-none" />
 
       {/* Graph Node & Edge Simulation */}
       <svg
-        className="w-full h-full max-w-4xl max-h-[480px] p-6 animate-pulse"
+        className="w-full h-full max-w-4xl max-h-[480px] p-6 animate-pulse motion-reduce:animate-none"
         viewBox="0 0 800 480"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
         {/* Graph Edges / Connectors */}
-        <g className="stroke-slate-700/60 stroke-2" strokeDasharray="4 4">
+        <g className="stroke-surface-700 stroke-2" strokeDasharray="4 4">
           {variant === 'langgraph-trace' ? (
             <>
               {/* Linear / Conditional LangGraph pipeline edges */}
@@ -101,34 +101,34 @@ export const GraphCanvasSkeleton: React.FC<{ variant?: GraphSkeletonProps['varia
           <>
             {/* LangGraph Node 1: Start / Router */}
             <g transform="translate(100, 210)" data-testid="skeleton-node">
-              <rect width="60" height="60" rx="30" className="fill-slate-800 stroke-slate-700 stroke-2" />
+              <rect width="60" height="60" rx="30" className="fill-surface-800 stroke-surface-700 stroke-2" />
               <circle cx="30" cy="30" r="16" className="fill-cyan-900/40" />
             </g>
 
             {/* LangGraph Node 2: Agent Dispatch */}
             <g transform="translate(280, 210)" data-testid="skeleton-node">
-              <rect width="80" height="60" rx="12" className="fill-slate-800 stroke-slate-700 stroke-2" />
-              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-slate-700" />
-              <rect x="18" y="36" width="44" height="6" rx="3" className="fill-slate-700/60" />
+              <rect width="80" height="60" rx="12" className="fill-surface-800 stroke-surface-700 stroke-2" />
+              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-surface-700" />
+              <rect x="18" y="36" width="44" height="6" rx="3" className="fill-surface-700/60" />
             </g>
 
             {/* LangGraph Node 3a: Verification Node */}
             <g transform="translate(460, 130)" data-testid="skeleton-node">
-              <rect width="80" height="60" rx="12" className="fill-slate-800 stroke-slate-700 stroke-2" />
-              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-slate-700" />
-              <rect x="20" y="36" width="40" height="6" rx="3" className="fill-slate-700/60" />
+              <rect width="80" height="60" rx="12" className="fill-surface-800 stroke-surface-700 stroke-2" />
+              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-surface-700" />
+              <rect x="20" y="36" width="40" height="6" rx="3" className="fill-surface-700/60" />
             </g>
 
             {/* LangGraph Node 3b: Tool Execution Node */}
             <g transform="translate(460, 290)" data-testid="skeleton-node">
-              <rect width="80" height="60" rx="12" className="fill-slate-800 stroke-slate-700 stroke-2" />
-              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-slate-700" />
-              <rect x="24" y="36" width="32" height="6" rx="3" className="fill-slate-700/60" />
+              <rect width="80" height="60" rx="12" className="fill-surface-800 stroke-surface-700 stroke-2" />
+              <rect x="12" y="22" width="56" height="8" rx="4" className="fill-surface-700" />
+              <rect x="24" y="36" width="32" height="6" rx="3" className="fill-surface-700/60" />
             </g>
 
             {/* LangGraph Node 4: Evidence Output / End */}
             <g transform="translate(640, 210)" data-testid="skeleton-node">
-              <rect width="60" height="60" rx="30" className="fill-slate-800 stroke-slate-700 stroke-2" />
+              <rect width="60" height="60" rx="30" className="fill-surface-800 stroke-surface-700 stroke-2" />
               <circle cx="30" cy="30" r="16" className="fill-emerald-900/40" />
             </g>
           </>
@@ -136,47 +136,47 @@ export const GraphCanvasSkeleton: React.FC<{ variant?: GraphSkeletonProps['varia
           <>
             {/* Neo4j Node 1: Code Artifact */}
             <g transform="translate(160, 130)" data-testid="skeleton-node">
-              <circle cx="40" cy="30" r="28" className="fill-slate-800 stroke-cyan-500/30 stroke-2" />
-              <rect x="15" y="66" width="50" height="8" rx="4" className="fill-slate-700" />
+              <circle cx="40" cy="30" r="28" className="fill-surface-800 stroke-cyan-500/30 stroke-2" />
+              <rect x="15" y="66" width="50" height="8" rx="4" className="fill-surface-700" />
             </g>
 
             {/* Neo4j Node 2: Test Suite Evidence */}
             <g transform="translate(160, 290)" data-testid="skeleton-node">
-              <circle cx="40" cy="30" r="28" className="fill-slate-800 stroke-indigo-500/30 stroke-2" />
-              <rect x="15" y="66" width="50" height="8" rx="4" className="fill-slate-700" />
+              <circle cx="40" cy="30" r="28" className="fill-surface-800 stroke-indigo-500/30 stroke-2" />
+              <rect x="15" y="66" width="50" height="8" rx="4" className="fill-surface-700" />
             </g>
 
             {/* Neo4j Node 3: Core Hub Node (Central entity) */}
             <g transform="translate(340, 200)" data-testid="skeleton-node">
-              <circle cx="40" cy="40" r="38" className="fill-slate-800 stroke-violet-500/40 stroke-2" />
+              <circle cx="40" cy="40" r="38" className="fill-surface-800 stroke-violet-500/40 stroke-2" />
               <circle cx="40" cy="40" r="20" className="fill-violet-950/50" />
-              <rect x="10" y="86" width="60" height="10" rx="4" className="fill-slate-700" />
+              <rect x="10" y="86" width="60" height="10" rx="4" className="fill-surface-700" />
             </g>
 
             {/* Neo4j Node 4: Policy / Gate Node */}
             <g transform="translate(520, 140)" data-testid="skeleton-node">
-              <circle cx="40" cy="40" r="28" className="fill-slate-800 stroke-amber-500/30 stroke-2" />
-              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-slate-700" />
+              <circle cx="40" cy="40" r="28" className="fill-surface-800 stroke-amber-500/30 stroke-2" />
+              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-surface-700" />
             </g>
 
             {/* Neo4j Node 5: Verification Node */}
             <g transform="translate(520, 260)" data-testid="skeleton-node">
-              <circle cx="40" cy="40" r="28" className="fill-slate-800 stroke-emerald-500/30 stroke-2" />
-              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-slate-700" />
+              <circle cx="40" cy="40" r="28" className="fill-surface-800 stroke-emerald-500/30 stroke-2" />
+              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-surface-700" />
             </g>
 
             {/* Neo4j Node 6: Release Observation Target */}
             <g transform="translate(640, 185)" data-testid="skeleton-node">
-              <circle cx="40" cy="35" r="32" className="fill-slate-800 stroke-cyan-500/30 stroke-2" />
-              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-slate-700" />
+              <circle cx="40" cy="35" r="32" className="fill-surface-800 stroke-cyan-500/30 stroke-2" />
+              <rect x="15" y="74" width="50" height="8" rx="4" className="fill-surface-700" />
             </g>
           </>
         )}
       </svg>
 
       {/* Doherty Status Badge */}
-      <div className="absolute bottom-3 left-4 flex items-center space-x-2 text-xs text-slate-400 font-mono select-none">
-        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+      <div className="absolute bottom-3 left-4 flex items-center space-x-2 text-xs text-gray-400 font-mono select-none">
+        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping motion-reduce:animate-none" aria-hidden="true" />
         <span>{t('graphSkeleton.loadingTopology')}</span>
       </div>
     </div>
@@ -187,17 +187,17 @@ export const GraphCanvasSkeleton: React.FC<{ variant?: GraphSkeletonProps['varia
  * Top Toolbar Skeleton for Graph views (Zoom, Reset, Layout selector)
  */
 export const GraphToolbarSkeleton: React.FC = () => (
-  <div className="h-12 w-full flex items-center justify-between px-4 bg-slate-900/70 border border-slate-800 rounded-lg mb-3">
+  <div className="h-12 w-full flex items-center justify-between px-4 bg-surface-900/80 border border-surface-700 rounded-lg mb-3">
     <div className="flex items-center space-x-2">
-      <div className="w-24 h-6 bg-slate-800 rounded animate-pulse" />
-      <div className="w-16 h-6 bg-slate-800/60 rounded animate-pulse" />
+      <div className="w-24 h-6 bg-surface-800 rounded animate-pulse motion-reduce:animate-none" />
+      <div className="w-16 h-6 bg-surface-800/60 rounded animate-pulse motion-reduce:animate-none" />
     </div>
     <div className="flex items-center space-x-2">
-      <div className="w-8 h-8 bg-slate-800 rounded-lg animate-pulse" />
-      <div className="w-8 h-8 bg-slate-800 rounded-lg animate-pulse" />
-      <div className="w-8 h-8 bg-slate-800 rounded-lg animate-pulse" />
-      <div className="h-6 w-px bg-slate-800 mx-1" />
-      <div className="w-28 h-8 bg-slate-800 rounded-lg animate-pulse" />
+      <div className="w-8 h-8 bg-surface-800 rounded-lg animate-pulse motion-reduce:animate-none" />
+      <div className="w-8 h-8 bg-surface-800 rounded-lg animate-pulse motion-reduce:animate-none" />
+      <div className="w-8 h-8 bg-surface-800 rounded-lg animate-pulse motion-reduce:animate-none" />
+      <div className="h-6 w-px bg-surface-800 mx-1" />
+      <div className="w-28 h-8 bg-surface-800 rounded-lg animate-pulse motion-reduce:animate-none" />
     </div>
   </div>
 );
@@ -207,36 +207,36 @@ export const GraphToolbarSkeleton: React.FC = () => (
  */
 export const GraphSidePanelSkeleton: React.FC = () => (
   <div
-    className="w-80 h-[520px] bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col space-y-4 animate-pulse"
+    className="w-80 h-[520px] bg-surface-900/80 border border-surface-700 rounded-xl p-4 flex flex-col space-y-4 animate-pulse motion-reduce:animate-none"
     data-testid="graph-side-panel-skeleton"
   >
-    <div className="flex items-center space-x-3 pb-3 border-b border-slate-800">
-      <div className="w-10 h-10 rounded-full bg-slate-800" />
+    <div className="flex items-center space-x-3 pb-3 border-b border-surface-700">
+      <div className="w-10 h-10 rounded-full bg-surface-800" />
       <div className="space-y-1.5 flex-1">
-        <div className="h-4 w-3/4 bg-slate-800 rounded" />
-        <div className="h-3 w-1/2 bg-slate-800/60 rounded" />
+        <div className="h-4 w-3/4 bg-surface-800 rounded" />
+        <div className="h-3 w-1/2 bg-surface-800/60 rounded" />
       </div>
     </div>
 
     <div className="space-y-3 flex-1">
-      <div className="h-3 w-1/3 bg-slate-800/80 rounded" />
-      <div className="h-8 w-full bg-slate-800/40 rounded-lg" />
-      <div className="h-8 w-full bg-slate-800/40 rounded-lg" />
-      <div className="h-8 w-full bg-slate-800/40 rounded-lg" />
+      <div className="h-3 w-1/3 bg-surface-800 rounded" />
+      <div className="h-8 w-full bg-surface-800/60 rounded-lg" />
+      <div className="h-8 w-full bg-surface-800/60 rounded-lg" />
+      <div className="h-8 w-full bg-surface-800/60 rounded-lg" />
 
       <div className="pt-2">
-        <div className="h-3 w-1/4 bg-slate-800/80 rounded mb-2" />
+        <div className="h-3 w-1/4 bg-surface-800 rounded mb-2" />
         <div className="space-y-1.5">
-          <div className="h-3 w-full bg-slate-800/40 rounded" />
-          <div className="h-3 w-5/6 bg-slate-800/40 rounded" />
-          <div className="h-3 w-2/3 bg-slate-800/40 rounded" />
+          <div className="h-3 w-full bg-surface-800/60 rounded" />
+          <div className="h-3 w-5/6 bg-surface-800/60 rounded" />
+          <div className="h-3 w-2/3 bg-surface-800/60 rounded" />
         </div>
       </div>
     </div>
 
-    <div className="pt-3 border-t border-slate-800 flex justify-end space-x-2">
-      <div className="h-8 w-20 bg-slate-800 rounded-lg" />
-      <div className="h-8 w-24 bg-slate-800 rounded-lg" />
+    <div className="pt-3 border-t border-surface-700 flex justify-end space-x-2">
+      <div className="h-8 w-20 bg-surface-800 rounded-lg" />
+      <div className="h-8 w-24 bg-surface-800 rounded-lg" />
     </div>
   </div>
 );

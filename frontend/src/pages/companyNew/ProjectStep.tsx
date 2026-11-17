@@ -1,10 +1,15 @@
 import { useTranslation } from 'react-i18next'
+import { CircleCheck, Code2, Database, FolderOpen, FolderSearch, Gauge, ListChecks, Puzzle, Search, Server, Sparkles } from 'lucide-react'
 import type { DetectedStack } from '../../services/api'
+import { EmptyState, StatusBadge, type StatusTone } from '../../components/ui'
+import { ButtonSpinner } from '../admin/AdminParts'
 import { FolderPicker } from '../../components/FolderPicker'
 import { WorkspaceDaemonHelp } from '../../components/WorkspaceDaemonHelp'
 import { DaemonStatusLine } from './DaemonStatusLine'
 import { ProjectCard } from './ProjectCard'
 import type { ProjectFolder } from './useProjectFolder'
+
+const COMPLEXITY_TONE: Record<string, StatusTone> = { High: 'danger', Medium: 'warning', Low: 'success' }
 
 /** Step 0: the project folder, the daemon's view of it, and the stack the scan detected. */
 export function ProjectStep({ folder, discoveryResult, discoverPending, handleDiscover, mutationError }: {
@@ -23,8 +28,8 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
   return (
   <div className="space-y-5">
     <div>
-      <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.scanTitle')}</h2>
-      <p className="text-sm text-gray-400">
+      <h2 className="mb-1 text-base font-semibold text-gray-50">{t('companyNew.scanTitle')}</h2>
+      <p className="text-[13px] text-gray-400">
         {t('companyNew.scanDescription')}
       </p>
     </div>
@@ -43,13 +48,13 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
           spellCheck={false} autoComplete="off"
           className="input flex-1 min-w-0 font-mono text-sm" />
         <button ref={browseButtonRef} type="button" onClick={handleBrowse}
-          className="btn btn-secondary flex-shrink-0">
-          📂 {t('companyNew.browse')}
+          className="btn-secondary flex-shrink-0">
+          <FolderOpen size={14} aria-hidden="true" />{t('companyNew.browse')}
         </button>
       </div>
       {selectDirectory && (
         <button type="button" onClick={() => setPickerOpen(true)}
-          className="text-xs text-brand-400 hover:text-brand-300 hover:underline">
+          className="rounded-sm text-xs text-brand-300 hover:text-brand-200 hover:underline">
           {t('projectFolder.browseDaemon')}
         </button>
       )}
@@ -73,7 +78,7 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
 
     {inspecting && (
       <p role="status" className="flex items-center gap-2 text-xs text-gray-400">
-        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        <ButtonSpinner />
         {t('projectFolder.checking')}
       </p>
     )}
@@ -92,61 +97,51 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
     <div className="flex justify-end">
       <button type="button" onClick={handleDiscover}
         disabled={discoverPending || !projectPath.trim() || folderMissing}
-        className="btn btn-primary flex-shrink-0 min-w-28">
-        {discoverPending ? (
-          <span className="flex items-center gap-2">
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            {t('companyNew.scanning')}
-          </span>
-        ) : `🔍 ${t('companyNew.scan')}`}
+        className="btn-primary min-w-28 flex-shrink-0">
+        {discoverPending ? <ButtonSpinner /> : <Search size={14} aria-hidden="true" />}
+        {discoverPending ? t('companyNew.scanning') : t('companyNew.scan')}
       </button>
     </div>
 
     {mutationError && <div className="alert-error text-sm">{t('companyNew.discoveryError', { message: mutationError })}</div>}
 
     {discoveryResult && (
-      <div className="rounded-xl border border-brand-700/40 bg-brand-950/20 overflow-hidden">
-        <div className="px-4 py-3 border-b border-brand-700/20 flex items-center gap-2">
-          <span className="text-green-400 text-lg">✓</span>
-          <span className="text-sm font-semibold text-brand-200">{t('companyNew.stackDetected')} — <span className="font-mono">{discoveryResult.name}</span></span>
+      <section aria-label={t('companyNew.stackDetected')} className="overflow-hidden rounded-lg border border-surface-700 bg-surface-950/40">
+        <div className="flex items-center gap-2 border-b border-surface-700 px-3 py-2">
+          <CircleCheck size={15} aria-hidden="true" className="flex-shrink-0 text-emerald-300" />
+          <span className="text-[13px] font-semibold text-gray-100">{t('companyNew.stackDetected')} — <span className="font-mono">{discoveryResult.name}</span></span>
         </div>
-        <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <dl className="grid grid-cols-2 gap-px bg-surface-700 text-xs lg:grid-cols-4">
           {[
-            { label: t('companyNew.primaryLanguage'), value: discoveryResult.language, icon: '🔷' },
-            { label: t('companyNew.frameworks'), value: discoveryResult.frameworks?.join(', ') || '—', icon: '🧩' },
-            { label: t('companyNew.databases'), value: discoveryResult.databases?.join(', ') || '—', icon: '🗄️' },
-            { label: t('companyNew.infrastructure'), value: discoveryResult.infra?.join(', ') || '—', icon: '⚙️' },
-          ].map(({ label, value, icon }) => (
-            <div key={label} className="bg-surface-800/70 rounded-lg p-3">
-              <span className="text-base">{icon}</span>
-              <p className="text-gray-500 mt-1">{label}</p>
-              <p className="text-gray-200 font-medium mt-0.5 break-words leading-snug" title={value}>{value}</p>
+            { label: t('companyNew.primaryLanguage'), value: discoveryResult.language, icon: Code2 },
+            { label: t('companyNew.frameworks'), value: discoveryResult.frameworks?.join(', ') || '—', icon: Puzzle },
+            { label: t('companyNew.databases'), value: discoveryResult.databases?.join(', ') || '—', icon: Database },
+            { label: t('companyNew.infrastructure'), value: discoveryResult.infra?.join(', ') || '—', icon: Server },
+          ].map(({ label, value, icon: Icon }) => (
+            <div key={label} className="bg-surface-900 px-3 py-2">
+              <dt className="text-meta flex items-center gap-1"><Icon size={11} aria-hidden="true" />{label}</dt>
+              <dd className="mt-0.5 break-words font-medium leading-snug text-gray-100" title={value}>{value}</dd>
             </div>
           ))}
-        </div>
-        <div className="px-4 py-2 border-t border-brand-700/20 flex items-center justify-between text-xs">
-          <span className="text-gray-500">{t('companyNew.filesScanned', { count: discoveryResult.file_count })}</span>
-          <div className="flex items-center gap-2">
+        </dl>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-700 px-3 py-2 text-xs">
+          <span className="text-meta tabular-nums">{t('companyNew.filesScanned', { count: discoveryResult.file_count })}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
             {discoveryResult.team_source === 'ai' && (
-              <span className="badge bg-purple-900/40 text-purple-300">✨ {t('companyNew.aiSuggestion')}</span>
+              <StatusBadge icon={Sparkles} tone="brand" label={t('companyNew.aiSuggestion')} />
             )}
             {discoveryResult.team_source === 'rules' && (
-              <span className="badge bg-surface-700 text-gray-400">{t('companyNew.rulesSuggestion')}</span>
+              <StatusBadge icon={ListChecks} label={t('companyNew.rulesSuggestion')} />
             )}
-            <span className={`badge ${discoveryResult.complexity === 'High' ? 'bg-red-900/40 text-red-300' : discoveryResult.complexity === 'Medium' ? 'bg-yellow-900/40 text-yellow-300' : 'bg-green-900/40 text-green-300'}`}>
-              {t('companyNew.complexity', { level: t(`companyNew.complexityLevels.${discoveryResult.complexity}`, { defaultValue: discoveryResult.complexity }) })}
-            </span>
+            <StatusBadge icon={Gauge} tone={COMPLEXITY_TONE[discoveryResult.complexity] ?? 'neutral'}
+              label={t('companyNew.complexity', { level: t(`companyNew.complexityLevels.${discoveryResult.complexity}`, { defaultValue: discoveryResult.complexity }) })} />
           </div>
         </div>
-      </div>
+      </section>
     )}
 
     {!discoveryResult && (
-      <div className="rounded-xl border border-surface-700 bg-surface-800/30 p-5 text-center">
-        <p className="text-3xl mb-2">🏗️</p>
-        <p className="text-sm text-gray-400">{t('companyNew.noProject')}</p>
-        <p className="text-xs text-gray-600 mt-1">{t('companyNew.manualTeamHint')}</p>
-      </div>
+      <EmptyState icon={FolderSearch} dashed title={t('companyNew.noProject')} description={t('companyNew.manualTeamHint')} />
     )}
   </div>
   )

@@ -2,7 +2,7 @@
 // draft fields, the model recommendation and the state hooks live in ./agentSettings/.
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Cpu, Users } from 'lucide-react'
+import { Bot, Building2, Cpu, Eye, Info, SearchX } from 'lucide-react'
 import { useAgents, useCreateAgent, useCurrentRole, useDeleteAgent, useModels, useUpdateAgentConfig } from '../hooks/useQueries'
 import type { ManagedAgent } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
@@ -14,6 +14,8 @@ import { useConfirmDelete } from './agentSettings/useConfirmDelete'
 import { Toolbar } from './agentSettings/Toolbar'
 import { AgentCreator } from './agentSettings/AgentCreator'
 import { RoleGroups } from './agentSettings/RoleGroups'
+import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
+import { LoadError } from './admin/AdminParts'
 
 export default function AgentSettings() {
   const { t } = useTranslation()
@@ -74,127 +76,121 @@ export default function AgentSettings() {
     requestCreatorScroll()
   }
 
+  const filtered = Boolean(activeRoleFilter || searchQuery)
+
   return (
-    <div className="min-h-full bg-surface-950 p-4 lg:p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold text-white">{t('agentsConfig.title')}</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {companyName ? t('agentsConfig.subtitleWithCompany', { company: companyName }) : t('agentsConfig.subtitle')}
+    <div className="page-container max-w-6xl space-y-4">
+      <PageHeader
+        title={t('agentsConfig.title')}
+        subtitle={companyName ? t('agentsConfig.subtitleWithCompany', { company: companyName }) : t('agentsConfig.subtitle')}
+        actions={
+          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <div className="flex items-center gap-1.5">
+              <dt className="text-meta flex items-center gap-1"><Building2 size={11} aria-hidden="true" />{t('agentsConfig.factory')}</dt>
+              <dd className="text-gray-200">{companyName || '—'}</dd>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <dt className="text-meta flex items-center gap-1"><Cpu size={11} aria-hidden="true" />{t('agentsConfig.orchestrator')}</dt>
+              <dd className="font-mono text-gray-200">{orchestrator || '—'}</dd>
+            </div>
+          </dl>
+        }
+      />
+
+      {companyId === null ? (
+        <EmptyState icon={Building2} title={t('agentsConfig.noCompany')} dashed />
+      ) : (
+        <>
+          <Panel>
+            <div className="flex items-start gap-2.5 p-3 text-xs text-gray-300">
+              <Info size={14} aria-hidden="true" className="mt-0.5 flex-shrink-0 text-brand-300" />
+              <div>
+                <p className="text-[13px] font-medium text-gray-100">{t('agentsConfig.runtimeNoteTitle')}</p>
+                <p className="mt-1">{t('agentsConfig.runtimeNote')}</p>
+                <p className="mt-1.5 text-gray-400">{t('agentsConfig.shardingNote')}</p>
+              </div>
+            </div>
+          </Panel>
+
+          {readOnly && (
+            <p role="status" className="flex items-center gap-1.5 text-xs text-gray-300">
+              <Eye size={13} aria-hidden="true" className="flex-shrink-0 text-gray-400" />
+              {t('agentsConfig.readOnly', { defaultValue: 'You can read the agents. Only a Manager or the Owner changes them.' })}
             </p>
-          </div>
-          <div className="flex items-stretch gap-3 flex-wrap">
-            <div className="rounded-xl border border-surface-700 bg-surface-900 px-4 py-3 text-xs text-gray-400 min-w-[14rem]">
-              <div className="flex items-center gap-2"><Users size={14} className="text-brand-400" /> {t('agentsConfig.factory')}</div>
-              <div className="mt-2 text-sm text-gray-200">{companyName || '—'}</div>
-            </div>
-            <div className="rounded-xl border border-surface-700 bg-surface-900 px-4 py-3 text-xs text-gray-400">
-              <div className="flex items-center gap-2"><Cpu size={14} className="text-brand-400" /> {t('agentsConfig.orchestrator')}</div>
-              <div className="mt-1 font-mono text-gray-200">{orchestrator || '—'}</div>
-            </div>
-          </div>
-        </div>
+          )}
 
-        {companyId === null ? (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
-            {t('agentsConfig.noCompany')}
-          </div>
-        ) : (
-          <>
-            <div className="rounded-xl border border-brand-700/20 bg-brand-950/10 p-4 text-sm text-gray-300">
-              <p className="font-medium text-brand-200">{t('agentsConfig.runtimeNoteTitle')}</p>
-              <p className="mt-1">{t('agentsConfig.runtimeNote')}</p>
-              <p className="mt-2 text-xs text-gray-500">{t('agentsConfig.shardingNote')}</p>
-            </div>
+          <Toolbar
+            searchQuery={searchQuery}
+            setSearchQuery={list.setSearchQuery}
+            refetch={() => refetch()}
+            readOnly={readOnly}
+            creatorOpen={creatorOpen}
+            onToggleCreator={() => {
+              setNewAgent(defaultDraft())
+              setCreatorOpen(o => !o)
+              if (!creatorOpen) requestCreatorScroll()
+            }}
+            filterChips={list.filterChips}
+            activeRoleFilter={activeRoleFilter}
+            setActiveRoleFilter={list.setActiveRoleFilter}
+            allAgentsCount={allAgents.length}
+            roleCounts={list.roleCounts}
+          />
 
-            {readOnly && (
-              <p role="status" className="rounded-xl border border-surface-700 bg-surface-900 p-3 text-xs text-gray-400">
-                {t('agentsConfig.readOnly', { defaultValue: 'You can read the agents. Only a Manager or the Owner changes them.' })}
-              </p>
-            )}
-
-            {/* Toolbar: search + filter chips + new-agent button */}
-            <Toolbar
-              searchQuery={searchQuery}
-              setSearchQuery={list.setSearchQuery}
-              refetch={() => refetch()}
-              readOnly={readOnly}
-              creatorOpen={creatorOpen}
-              onToggleCreator={() => {
+          {creatorOpen && !readOnly && (
+            <AgentCreator
+              newAgent={newAgent}
+              setNewAgent={setNewAgent}
+              models={models}
+              creating={createAgent.isPending}
+              onClose={() => setCreatorOpen(false)}
+              onCancel={() => {
                 setNewAgent(defaultDraft())
-                setCreatorOpen(o => !o)
-                if (!creatorOpen) requestCreatorScroll()
+                setCreatorOpen(false)
               }}
-              filterChips={list.filterChips}
-              activeRoleFilter={activeRoleFilter}
-              setActiveRoleFilter={list.setActiveRoleFilter}
-              allAgentsCount={allAgents.length}
-              roleCounts={list.roleCounts}
+              onCreate={handleCreate}
             />
+          )}
 
-            {/* New-agent creator */}
-            {creatorOpen && !readOnly && (
-              <AgentCreator
-                newAgent={newAgent}
-                setNewAgent={setNewAgent}
-                models={models}
-                creating={createAgent.isPending}
-                onClose={() => setCreatorOpen(false)}
-                onCancel={() => {
-                  setNewAgent(defaultDraft())
-                  setCreatorOpen(false)
-                }}
-                onCreate={handleCreate}
-              />
-            )}
+          <div className="flex items-center gap-2">
+            <h2 className="text-[13px] font-semibold text-gray-100">{t('agentsConfig.currentAgents')}</h2>
+            <CountPill count={visibleAgents.length} total={filtered ? allAgents.length : undefined}
+              label={filtered && allAgents.length !== visibleAgents.length
+                ? t('agentsConfig.shownCount', { shown: visibleAgents.length, total: allAgents.length })
+                : t('agentsConfig.agentCount', { count: visibleAgents.length })} />
+          </div>
 
-            {/* List header with count */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <Users size={16} className="text-brand-400" />
-                <span>{t('agentsConfig.currentAgents')}</span>
-                <span className="rounded-full bg-surface-800 px-2 py-0.5 text-xs text-gray-400">
-                  {visibleAgents.length}
-                  {(activeRoleFilter || searchQuery) && allAgents.length !== visibleAgents.length && (
-                    <span className="text-gray-600"> / {allAgents.length}</span>
-                  )}
-                </span>
-              </div>
+          {isLoading ? (
+            <div aria-busy="true" className="space-y-2">
+              <p className="sr-only">{t('agentsConfig.loading')}</p>
+              {[0, 1, 2].map(index => <div key={index} className="skeleton h-14 rounded-xl" />)}
             </div>
-
-            {isLoading ? (
-              <div className="text-sm text-gray-500">{t('agentsConfig.loading')}</div>
-            ) : isError ? (
-              <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-200">{t('agentsConfig.loadError')}</div>
-            ) : visibleAgents.length === 0 ? (
-              <div className="rounded-xl border border-surface-700 bg-surface-900 p-8 text-center text-sm text-gray-500">
-                {(searchQuery || activeRoleFilter)
-                  ? t('agentsConfig.emptyFiltered')
-                  : t('agentsConfig.emptyNoAgents')}
-              </div>
-            ) : (
-              <RoleGroups
-                orderedRoles={list.orderedRoles}
-                groupedByRole={list.groupedByRole}
-                collapsedRoles={list.collapsedRoles}
-                toggleRoleCollapse={list.toggleRoleCollapse}
-                models={models}
-                expandedAgents={list.expandedAgents}
-                confirmingDeleteId={confirmingDeleteId}
-                readOnly={readOnly}
-                isSaving={agentId => updateAgent.isPending && updateAgent.variables?.agentId === agentId}
-                isDeleting={agentId => deleteAgent.isPending && deleteAgent.variables === agentId}
-                toggleAgentExpand={list.toggleAgentExpand}
-                handleSave={handleSave}
-                handleDeleteRequest={handleDeleteRequest}
-                handleDuplicate={handleDuplicate}
-              />
-            )}
-          </>
-        )}
-      </div>
+          ) : isError ? (
+            <LoadError message={t('agentsConfig.loadError')} onRetry={() => refetch()} />
+          ) : visibleAgents.length === 0 ? (
+            filtered
+              ? <EmptyState icon={SearchX} title={t('agentsConfig.emptyFiltered')} dashed />
+              : <EmptyState icon={Bot} title={t('agentsConfig.emptyNoAgents')} dashed />
+          ) : (
+            <RoleGroups
+              orderedRoles={list.orderedRoles}
+              groupedByRole={list.groupedByRole}
+              collapsedRoles={list.collapsedRoles}
+              toggleRoleCollapse={list.toggleRoleCollapse}
+              models={models}
+              expandedAgents={list.expandedAgents}
+              confirmingDeleteId={confirmingDeleteId}
+              readOnly={readOnly}
+              isSaving={agentId => updateAgent.isPending && updateAgent.variables?.agentId === agentId}
+              isDeleting={agentId => deleteAgent.isPending && deleteAgent.variables === agentId}
+              toggleAgentExpand={list.toggleAgentExpand}
+              handleSave={handleSave}
+              handleDeleteRequest={handleDeleteRequest}
+              handleDuplicate={handleDuplicate}
+            />
+          )}
+        </>
+      )}
     </div>
   )
 }

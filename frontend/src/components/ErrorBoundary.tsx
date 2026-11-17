@@ -15,20 +15,20 @@ interface State {
 function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-8 text-center">
-      <div className="w-12 h-12 rounded-xl bg-red-900/30 border border-red-800/50 flex items-center justify-center">
-        <AlertTriangle size={24} className="text-red-400" />
-      </div>
-      <div>
-        <p className="font-semibold text-gray-200 mb-1">{t('errorBoundary.title')}</p>
-        <p className="text-xs text-gray-500 max-w-xs">
+    <div className="p-4 sm:p-6">
+      <div role="alert" className="empty-state mx-auto max-w-lg rounded-xl border border-dashed border-surface-700 px-6">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-800/50 bg-red-950/40">
+          <AlertTriangle size={20} aria-hidden="true" className="text-red-300" />
+        </span>
+        <p className="empty-state-title">{t('errorBoundary.title')}</p>
+        <p className="empty-state-desc break-words">
           {error?.message ?? t('errorBoundary.description')}
         </p>
+        <button type="button" onClick={onReset} className="btn-secondary btn-sm mt-1">
+          <RefreshCw size={13} aria-hidden="true" />
+          {t('errorBoundary.retry')}
+        </button>
       </div>
-      <button onClick={onReset} className="btn btn-secondary btn-sm flex items-center gap-1.5">
-        <RefreshCw size={13} />
-        {t('errorBoundary.retry')}
-      </button>
     </div>
   )
 }

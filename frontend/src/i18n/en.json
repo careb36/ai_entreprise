@@ -11,6 +11,7 @@
     "quotas": "Quotas",
     "online": "Online",
     "mainNavigation": "Main navigation",
+    "skipToContent": "Skip to content",
     "mobileNavigation": "Mobile navigation",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
@@ -484,7 +485,9 @@
         "label": "Staff",
         "experience": "10+ yrs"
       }
-    }
+    },
+    "stepsLabel": "Wizard steps",
+    "stepDone": "(done)"
   },
   "sprintBoard": {
     "title": "Start New Sprint",
@@ -960,7 +963,10 @@
     "suggestion": "Reviewer agent suggests: {{decision}}",
     "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people.",
     "historyPeriod": "Usage history period",
-    "dayTokens": "{{date}}: {{tokens}} tokens"
+    "dayTokens": "{{date}}: {{tokens}} tokens",
+    "quotaUnits": "Business units",
+    "quotaUnitCount_one": "{{count}} business unit",
+    "quotaUnitCount_other": "{{count}} business units"
   },
   "evidence": {
     "title": "Evidence",
@@ -985,6 +991,7 @@
     "ingestedAt": "Ingested",
     "latestApproval": "Latest decision",
     "viewDetails": "View evidence",
+    "runsTitle": "Agent runs",
     "detailTitle": "Run evidence",
     "backToRuns": "Back to evidence",
     "claimVsObservation": "Claim vs. observation",
@@ -1238,7 +1245,13 @@
     "companyPlaceholder": "Company {{id}}",
     "retry": "Try again",
     "loading": "Loading your account…",
-    "selectCompany": "Select a company"
+    "selectCompany": "Select a company",
+    "selectCompanySubtitle": "Choose the company to work in. You can switch from the company menu at any time.",
+    "noCompanies": "You are not a member of any company yet.",
+    "yourCompanies": "Your companies",
+    "companyCount_one": "{{count}} company",
+    "companyCount_other": "{{count}} companies",
+    "productName": "La Fabrique"
   },
   "agentsConfig": {
     "title": "Agent Registry",
@@ -1327,7 +1340,12 @@
     "readOnly": "You can read the agents. Only a Manager or the Owner changes them.",
     "connectionGroup": "Company connection: {{connection}}",
     "connectionModelHint": "Runs through the company's connection {{connection}}; the key stays with the company.",
-    "clearSearch": "Clear the search"
+    "clearSearch": "Clear the search",
+    "agentCount_one": "{{count}} agent",
+    "agentCount_other": "{{count}} agents",
+    "shownCount": "{{shown}} of {{total}} agents shown",
+    "toolbarLabel": "Search and filter agents",
+    "roleFilterLabel": "Filter by role"
   },
   "common": {
     "loading": "Loading...",
@@ -1379,6 +1397,9 @@
     "loadError": "Failed to load sprints.",
     "emptyTitle": "No sprints yet",
     "emptyDescription": "Plan a sprint below, or create a new company with a foundation sprint.",
+    "listTitle": "All sprints",
+    "count_one": "{{count}} sprint",
+    "count_other": "{{count}} sprints",
     "planSprint": "Plan a sprint",
     "progress": "{{done}} / {{total}} done",
     "noStartDate": "Not started",
@@ -1492,7 +1513,9 @@
     "pendingRow": "{{email}} as {{role}}",
     "revoke": "Revoke",
     "revokeLabel": "Revoke the invitation of {{email}}",
-    "revokeError": "Could not revoke: {{message}}"
+    "revokeError": "Could not revoke: {{message}}",
+    "pendingCount_one": "{{count}} pending invitation",
+    "pendingCount_other": "{{count}} pending invitations"
   },
   "github": {
     "title": "GitHub integration",
@@ -1609,7 +1632,11 @@
       "unusable": " ({{n}} without a usable answer)",
       "reporters": "; the reporters {{reporter}} of {{chose}}.",
       "noReporters": "; no reporter chose one."
-    }
+    },
+    "adminOnlyTitle": "For support admins",
+    "filters": "Filter the tickets",
+    "ticketCount_one": "{{count}} ticket",
+    "ticketCount_other": "{{count}} tickets"
   },
   "health": {
     "title": "Service status",
@@ -2277,7 +2304,9 @@
       "baseUrlPlaceholder": "required for an OpenAI-compatible endpoint",
       "apiKey": "API key",
       "keyNote": "The key is encrypted at rest and never shown again. Local servers (Ollama, LM Studio, vLLM) need no key.",
-      "connect": "Connect"
+      "connect": "Connect",
+      "count_one": "{{count}} connection",
+      "count_other": "{{count}} connections"
     },
     "choices": {
       "title": "Models per role",
@@ -2671,7 +2700,9 @@
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
-    }
+    },
+    "connectionTitle": "Identity provider",
+    "accessTitle": "Members and sign-in"
   },
   "documentation": {
     "title": "Documentation",
@@ -2799,7 +2830,8 @@
       "postCredential": "Incoming webhook URL",
       "signingSecret": "Outgoing webhook security token",
       "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
-    }
+    },
+    "selectCompany": "Select a company to link your chat accounts."
   },
   "taskRelations": {
     "title": "Related tasks",
@@ -2932,7 +2964,9 @@
       "seq": "Row",
       "state": "State",
       "anchoredAt": "Anchored at"
-    }
+    },
+    "anchorCount_one": "{{count}} anchor",
+    "anchorCount_other": "{{count}} anchors"
   },
   "sprintProgress": {
     "title": "Claimed done versus verified",
@@ -2994,7 +3028,9 @@
     "member": "Member",
     "ownRole": "Own role",
     "effectiveRole": "Effective role",
-    "inTeams": "Teams"
+    "inTeams": "Teams",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members"
   },
   "usage": {
     "title": "Usage",
@@ -3445,7 +3481,10 @@
     "loadError": "Could not load your invitations: {{message}}",
     "respondError": "Could not answer the invitation: {{message}}",
     "tokenNotFound": "This invitation link does not match a pending invitation for the address you are signed in with.",
-    "tokenExpired": "This invitation has expired. Ask for a new one."
+    "tokenExpired": "This invitation has expired. Ask for a new one.",
+    "subtitle": "Invitations to join a company, waiting for your answer.",
+    "count_one": "{{count}} invitation",
+    "count_other": "{{count}} invitations"
   },
   "findings": {
     "title": "Findings",
