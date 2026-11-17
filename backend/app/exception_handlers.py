@@ -13,6 +13,10 @@ the message, a file path or a request body (issue #541):
 A report holds the error id, the exception's class, the route template
 (``/v1/sprints/{sprint_id}``, never the concrete path or query) and the
 method, plus ``ERROR_REPORT_SOURCE`` when set.
+
+A request that fails validation answers 422 with each error's ``type``,
+``loc`` and ``msg``, without FastAPI's ``input`` and ``ctx``: the value sent
+can be a password or a key, and the answer does not repeat it.
 """
 
 import json
@@ -21,6 +25,7 @@ import traceback
 
 from config import settings
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from logging_config import logger
 from security import apply_security_headers
@@ -91,8 +96,33 @@ async def _publish_ticket(request: Request, report: dict) -> None:
         pass
 
 
+VALIDATION_ERROR_KEYS = ("type", "loc", "msg")
+
+
+def validation_errors(exc: RequestValidationError) -> list[dict]:
+    """Each validation error as its type, location and message only.
+
+    FastAPI's default 422 also returns ``input`` (the value sent, which can be
+    a password, a provider key or a webhook secret) and ``ctx``; neither is
+    needed to correct the request (WSTG-v42-ERRH-01, issue #541).
+    """
+    errors = []
+    for error in exc.errors():
+        kept = {k: error[k] for k in VALIDATION_ERROR_KEYS if k in error}
+        kept["loc"] = list(kept.get("loc", ()))
+        errors.append(kept)
+    return errors
+
+
 def register_exception_handlers(app):
     """Register global exception handlers on the FastAPI app."""
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ):
+        """422 with what is wrong and where, never the value that was sent."""
+        return JSONResponse(status_code=422, content={"detail": validation_errors(exc)})
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

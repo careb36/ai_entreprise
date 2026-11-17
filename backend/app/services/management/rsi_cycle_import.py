@@ -8,19 +8,27 @@ record is checked by the same rules the script applies
 ``services/evidence/fitness.GUARDED``), and a record that does not validate is
 refused, every problem named and audited (``rsi_cycle_import_refused``).
 
-The record is the runner's; the backend observes what it can. Each kept file
-the backend can read under ``RSI_FILES_ROOT`` is hashed here, and a record
-whose claimed sha256 differs is refused: no hash is accepted from the party
-being recorded when it can be computed (rule 6). A file the backend cannot
-read keeps its hash as a claim (``sha256_claimed``), never as an observation
-(``sha256_observed`` stays empty).
+The record is the one ``cycle.py record`` writes once a person merged: the
+run's record (``candidate_sha``, ``decision``, ``steps``, ``kept_files``...)
+with ``merged_sha`` and ``merged_at`` added. Beside the schema, a
+``candidate_sha`` must be a full sha and a ``decision`` must be ``keep``.
+
+The record is the runner's; the backend observes what it can. ``kept_files``
+names each file relative to the cycle's work folder (absolute for one kept
+outside it). The backend reads them under ``RSI_FILES_ROOT/<cycle_id>/`` when
+that folder exists, else under ``RSI_FILES_ROOT``, hashes each one it can
+read, and refuses a record whose claimed sha256 differs: no hash is accepted
+from the party being recorded when it can be computed (rule 6). An absolute
+path is never read, and a file the backend cannot read keeps its hash as a
+claim (``sha256_claimed``), never as an observation (``sha256_observed``
+stays empty).
 
 A record names its cycle by ``cycle_id``. When the backend ran that cycle, the
-record must be of the same B and its merged sha must be C (a moved head voids
-the decision, REQ-17); the record and the kept files are attached and the
-status is left to the person's recorded merge. Otherwise an ``imported``
-cycle is created, merged as the record says, with no person named as its
-merger.
+record must be of the same B and the same C (a moved head voids the
+decision, REQ-17; ``merged_sha`` may be the merge commit that holds C); the
+record and the kept files are attached and the status is left to the
+person's recorded merge. Otherwise an ``imported`` cycle is created, merged
+as the record says, with no person named as its merger.
 """
 
 from __future__ import annotations
@@ -49,6 +57,12 @@ def validate(record: Any) -> list[str]:
     problems = rsi_cycle_record.validate(record, fitness.GUARDED)
     if isinstance(record, dict):
         problems += rsi_cycle_record.kept_files_problems(record.get("kept_files"))
+        if "candidate_sha" in record and not rsi_cycle_record.sha(
+            record["candidate_sha"]
+        ):
+            problems.append("candidate_sha must be a full 40-character commit sha")
+        if record.get("decision", "keep") != "keep":
+            problems.append(f"the cycle decided {record['decision']!r}, not keep")
     return problems
 
 
@@ -85,7 +99,8 @@ def observe_kept_files(
     for index, entry in enumerate(entries or []):
         path = rsi_cycle_record.relative_path(entry["path"])
         claimed = entry["sha256"]
-        file = _readable(root, path)
+        file = _readable(root, path) if path else None  # absolute: never read
+        path = path or entry["path"]
         observed = _sha256(file) if file else None
         if observed is not None and observed != claimed:
             problems.append(
@@ -98,9 +113,13 @@ def observe_kept_files(
     return kept, problems
 
 
-def _root(files_root: str | Path | None) -> Path | None:
+def _root(files_root: str | Path | None, cycle_id: str) -> Path | None:
+    """Where the cycle's work folder is: ``<root>/<cycle_id>`` when it exists."""
     value = files_root if files_root is not None else settings.RSI_FILES_ROOT
-    return Path(value) if value else None
+    if not value:
+        return None
+    own = Path(value) / cycle_id
+    return own if own.is_dir() else Path(value)
 
 
 def import_record(
@@ -117,7 +136,9 @@ def import_record(
     problems = validate(record)
     kept: list[dict[str, Any]] = []
     if not problems:
-        kept, problems = observe_kept_files(record.get("kept_files"), _root(files_root))
+        kept, problems = observe_kept_files(
+            record.get("kept_files"), _root(files_root, record["cycle_id"])
+        )
     existing = None
     if not problems:
         existing = session.exec(
@@ -167,11 +188,16 @@ def _against(existing: RsiCycle | None, record: dict[str, Any]) -> list[str]:
     problems = []
     if existing.status not in KEPT_STATUSES:
         problems.append(f"the cycle is {existing.status}: it kept nothing")
-    if record["merged_sha"] != existing.candidate_sha:
-        problems.append("merged_sha is not the cycle's C: the decision is void")
+    if _candidate(record) != existing.candidate_sha:
+        problems.append("the record's C is not the cycle's C: the decision is void")
     if record.get("baseline_sha", existing.baseline_sha) != existing.baseline_sha:
         problems.append("baseline_sha is not the cycle's B")
     return problems
+
+
+def _candidate(record: dict[str, Any]) -> str:
+    """C as the record names it; a record without one names the merged sha."""
+    return record.get("candidate_sha") or record["merged_sha"]
 
 
 def _new(session: Session, company_id: int, record: dict[str, Any]) -> RsiCycle:
@@ -192,7 +218,7 @@ def _new(session: Session, company_id: int, record: dict[str, Any]) -> RsiCycle:
         status=MERGED,
         decision="keep",
         baseline_sha=record.get("baseline_sha"),
-        candidate_sha=record["merged_sha"],
+        candidate_sha=_candidate(record),
         merged_sha=record["merged_sha"],
         merged_at=merged_at.astimezone(UTC).replace(tzinfo=None),
         pull_request=record.get("pull_request"),

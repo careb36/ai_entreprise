@@ -121,8 +121,10 @@
 /backend/tests/test_task_view_filter.py          @careb36
 /backend/tests/test_verification_checks.py       @careb36
 /backend/tests/test_wstg_plan.py                 @careb36
+/backend/tests/test_rsi_cycle.py                @careb36
 /backend/tests/test_rsi_cycle_record.py         @careb36
 /backend/tests/test_rsi_cycle_record_parity.py  @careb36
+/backend/tests/test_rsi_cycle_run.py            @careb36
 /backend/tests/test_rsi_decide.py               @careb36
 /backend/tests/test_rsi_decide_inputs.py        @careb36
 /backend/tests/test_rsi_fitness.py              @careb36

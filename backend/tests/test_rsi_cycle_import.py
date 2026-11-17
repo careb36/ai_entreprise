@@ -107,6 +107,9 @@ def _refused(session, company, rec, person, root=None) -> str:
         ({"kept_files": [{"path": "../etc/passwd", "sha256": "0" * 64}]}, "path"),
         ({"kept_files": [{"path": SCORE, "sha256": "short"}]}, "sha256"),
         ({"kept_files": "all"}, "kept_files"),
+        ({"kept_files": [{"path": "a\nb", "sha256": "0" * 64}]}, "path"),
+        ({"candidate_sha": "short"}, "candidate_sha"),
+        ({"decision": "revert"}, "not keep"),
     ],
 )
 def test_a_record_that_does_not_validate_is_refused(sqlite_session, change, problem):
@@ -140,13 +143,25 @@ def test_a_file_outside_the_root_keeps_its_hash_as_a_claim(
         kept_files=[
             {"path": "link.json", "sha256": "1" * 64},
             {"path": "not/there.json", "sha256": "2" * 64},
+            {"path": str(outside), "sha256": "3" * 64},  # absolute: never read
         ]
     )
     cycle = _import(sqlite_session, company, rec, owner, root)
     assert cycle.kept_files == [
         {"path": "link.json", "sha256_observed": None, "sha256_claimed": "1" * 64},
         {"path": "not/there.json", "sha256_observed": None, "sha256_claimed": "2" * 64},
+        {"path": str(outside), "sha256_observed": None, "sha256_claimed": "3" * 64},
     ]
+
+
+def test_the_cycle_s_own_work_folder_under_the_root_is_read(sqlite_session, root):
+    own = root / "cycle-1-folder-lint" / "bench/scorecards/real"
+    own.mkdir(parents=True)
+    (own / "B-1.json").write_bytes(b"tampered")
+    company = hosting(sqlite_session)
+    owner, _ = _person(sqlite_session, company.id, "Owner")
+    detail = _refused(sqlite_session, company, record(), owner, root)
+    assert hashlib.sha256(b"tampered").hexdigest() in detail
 
 
 def test_a_record_whose_merge_is_not_c_is_refused(sqlite_session):
@@ -221,3 +236,15 @@ def test_a_record_of_the_backend_s_own_cycle_is_attached(sqlite_session, root):
     assert same.kept_files[0]["sha256_observed"] == rec["kept_files"][0]["sha256"]
     [row] = audits(sqlite_session, company.id, "rsi_cycle_imported")
     assert row.result["created"] is False
+
+
+def test_a_merge_commit_holding_c_is_the_record_of_c(sqlite_session):
+    """``cycle.py record`` accepts a merge commit that contains C."""
+    company = hosting(sqlite_session)
+    cycle = kept(sqlite_session, company)
+    owner, _ = _person(sqlite_session, company.id, "Owner")
+    rec = record(cycle_id=cycle.cycle_key, candidate_sha=C, merged_sha="9" * 40)
+    assert _import(sqlite_session, company, rec, owner).id == cycle.id
+    fresh = record(cycle_id="cycle-2", candidate_sha="8" * 40, merged_sha="9" * 40)
+    new = _import(sqlite_session, company, fresh, owner)
+    assert (new.candidate_sha, new.merged_sha) == ("8" * 40, "9" * 40)

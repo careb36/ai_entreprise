@@ -41,6 +41,8 @@ Copy `.env.example` to `.env` and fill in:
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+  A key shorter than the algorithm's hash (32 bytes for `HS256`, 48 for
+  `HS384`, 64 for `HS512`) counts as unset (issue #541, WSTG-SESS-10).
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
 - `JWT_ALGORITHM` — default `HS256`; only `HS256`, `HS384` or `HS512` is
   accepted, anything else (`none`, an asymmetric name) refuses to sign or
@@ -193,7 +195,7 @@ Copy `.env.example` to `.env` and fill in:
   `RSI_CYCLE_TOKEN_BUDGET` (0: the cap), a cycle's budget in reported tokens,
   capped at twice `RSI_FIRST_SPRINT_TOKENS`; passing it ends the cycle
   `budget_exceeded` and stops its sprint. `RSI_FILES_ROOT` (empty) is the
-  checkout under which the backend reads a cycle record's kept files to hash
+  folder holding the cycles' work folders (`<root>/<cycle_id>/`, or the root itself), under which the backend reads a cycle record's kept files to hash
   them itself when an Owner imports the record
   (`POST /v1/companies/{id}/rsi/cycles/import`); empty, every hash stays the
   runner's claim. A kept cycle is merged by a person (`merge_self_change` is

@@ -12,10 +12,13 @@ test_rsi_cycle_record_parity.py`` runs both validators over the same records
 and fails when they disagree.
 
 Beside schema version 1 the backend reads one optional field the runner adds
-for REQ-26, ``kept_files``: the files the cycle kept, each ``{"path":
-"<repository-relative path>", "sha256": "<64 hex>"}``. The hash is the
+for REQ-26, ``kept_files``, as ``scripts/rsi/cycle.py`` writes it
+(``cycle_steps.kept_files``): the files the cycle kept, each ``{"path":
+"<path>", "sha256": "<64 hex>"}``, the path relative to the cycle's work
+folder, or absolute for a file the runner kept outside it. The hash is the
 runner's claim; ``kept_files_problems`` checks only its shape, and the
-backend recomputes every hash it can read (rule 6 of ``docs/POSITIONING.md``).
+backend recomputes every hash it can read (rule 6 of ``docs/POSITIONING.md``);
+an absolute path is never read, so its hash stays a claim.
 """
 
 from __future__ import annotations
@@ -34,7 +37,8 @@ _SHA = re.compile(r"[0-9a-f]{40}")  # used with fullmatch: no trailing newline
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _CYCLE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _OPTIONAL_TEXT = ("baseline_sha", "finding_id", "specification")
-MAX_KEPT_FILES = 500
+MAX_KEPT_FILES = 5000
+MAX_PATH = 4096
 
 
 def number(value: Any) -> bool:
@@ -215,10 +219,20 @@ def relative_path(value: Any) -> str | None:
     return posixpath.normpath(value)
 
 
+def absolute_path(value: Any) -> str | None:
+    """*value* when it is an absolute POSIX path without control characters."""
+    if not isinstance(value, str) or not value.startswith("/"):
+        return None
+    if len(value) > MAX_PATH or any(ord(c) < 32 for c in value):
+        return None
+    return value
+
+
 def kept_files_problems(value: Any) -> list[str]:
     """What is wrong with a record's ``kept_files``; empty when sound or absent.
 
-    Shape only: a list of ``{"path", "sha256"}`` with distinct clean paths.
+    Shape only: a list of ``{"path", "sha256"}`` with distinct paths, each
+    clean and relative (to the cycle's work folder) or absolute.
     Whether a hash is right is for the reader to observe, never to accept.
     """
     if value is None:
@@ -234,9 +248,11 @@ def kept_files_problems(value: Any) -> list[str]:
         if not isinstance(entry, dict) or set(entry) - {"path", "sha256"}:
             problems.append(f"{where} must be an object with only path and sha256")
             continue
-        path = relative_path(entry.get("path"))
+        path = relative_path(entry.get("path")) or absolute_path(entry.get("path"))
         if path is None:
-            problems.append(f"{where}.path must be a repository-relative path")
+            problems.append(
+                f"{where}.path must be a clean relative path or an absolute one"
+            )
         elif path in seen:
             problems.append(f"{where}.path {path} is listed twice")
         else:
