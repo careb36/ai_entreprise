@@ -203,6 +203,5 @@ after-the-fact approver being the requester (the same `sod.enforce`), and the
 reason as untrusted text in chat (escaped as chat text already is).
 
 Also next: intake requesters (#532) as requesters when intake lands; hold
-the Manager agent to the author of its policy (S13); refuse at use an API
-token whose creator has left or was demoted (TEAMS T5); a reminder in the
+the Manager agent to the author of its policy (S13); a reminder in the
 Owner's inbox and the brief when a review is due or missed.

@@ -10,6 +10,7 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 - `GlassRoom` — real-time agent activity monitor via SSE
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
+- Feedback views every page uses, in the empty state's and the panel's look: `ErrorState` (an alert) and `ErrorBoundary`'s fallback, `LoadingSkeleton` (a status) with `CardSkeleton` and `TableSkeleton`, `GraphSkeleton`; their animations stop under reduced motion
 - `Wiki` — the company's project wiki (`/company/wiki`, issue #445): its pages by kind with their status, a page's statements each with the sources its citations resolved to beside it, the lint's reasons, the proposal waiting, the history; a Manager edits, creates, accepts or rejects proposals, runs the lint and turns the write to `docs/wiki/` on or off (`pages/Wiki.tsx`, `components/WikiPageView.tsx`, `hooks/useWiki.ts`, `services/api/wiki.ts`). Page text may be agent output: `components/WikiMarkdown.tsx` renders it without raw HTML or images and keeps only http(s), mailto and anchor links
 - `IntakeQueue` — the Review page's incoming requests (issue #532; `components/IntakeQueue.tsx`, `services/intake.ts`): the requests by status with their source and sender, the Support agent's suggestion beside each as a claim (never filled into the form), a person's decision, the task or specification it became and the request or task it duplicates; for a Manager the decision form (accept as a task in an open sprint or into a specification revision, decline with a reason, mark a duplicate as `intake:ID` or `task:ID`, snooze until a date, back to pending); for everyone a form to send a request; and the queue's numbers (`GET /v1/companies/{id}/intake-record`)
 - `ArchitectureDetail` — one version of the company's architecture (`pages/ArchitectureDetail.tsx`, `/company/specifications/:specId/architectures/:id`; `services/architectures.ts`): its check, questions, modules (with what each covers in the version's own specification and, under "Covers in", in the earlier specifications it keeps), interfaces, decisions and conventions; `components/ArchitectureHistory.tsx` (issue #329, F3) names the company's version number, whether it is the current one and the earlier specifications it also covers, and lists every version of the company's architecture from `GET /v1/companies/{id}/architecture` (status, the specification it was drafted for, how many it covers, its approval date), each linked; its loading and error lines are plain text, not a status or an alert, since the page's own actions own those roles
@@ -25,7 +26,7 @@ For support: from the address a person reports to the file to read. The routes a
 
 | Route | Page |
 |---|---|
-| `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete` |
+| `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete`, each one centred card in `pages/auth/AuthCard` (the product name, the page's `<h1>`, the line under the card) |
 | `/` | redirects to `/evidence` |
 | `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
 | `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
@@ -42,7 +43,7 @@ For support: from the address a person reports to the file to read. The routes a
 | `/company/specifications/:specId/architecture[s/:id]` | `ArchitectureDetail` |
 | `/company/documentation` | `Documentation` |
 | `/agents`, `/governance` | `AgentSettings`, `components/GovernancePanel` |
-| `/support` | `HelpDesk` (bug reports and the Support chat) |
+| `/support` | `HelpDesk` (bug reports and the Support chat; a ticket's status is `components/TicketStatusBadge`, shared with `SupportBot`) |
 | `/lineage`, `/memory`, `/generate` | `Lineage`, `MemorySearch`, `Generate` |
 | anything else | `NotFound` |
 
