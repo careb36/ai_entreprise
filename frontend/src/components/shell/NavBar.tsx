@@ -148,7 +148,8 @@ export function NavBar() {
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
-                  {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
+                  {canManage && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
+                  <Link role="menuitem" to="/invitations" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.invitations')}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.teams')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.duties')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/usage" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.usage')}</Link>}

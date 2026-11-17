@@ -74,8 +74,13 @@ def test_requests_are_labelled_by_route_not_by_path(test_client):
     assert "987654" not in labels
 
 
-def test_fixed_routes_and_preflights_are_not_unmatched(test_client):
+def test_fixed_routes_and_preflights_are_not_unmatched(test_client, monkeypatch):
     """``unmatched`` counts only the paths no route answered."""
+    from config import settings
+
+    # The documentation is off by default (WSTG-v42-CONF-05); on, as in
+    # development, /docs is a fixed route.
+    monkeypatch.setattr(settings, "API_DOCS_ENABLED", True)
     test_client.get("/docs")
     test_client.options(
         "/v1/sprints",

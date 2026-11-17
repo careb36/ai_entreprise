@@ -174,8 +174,8 @@ def test_registration_hashes_the_password_even_for_an_existing_email(
     monkeypatch.setattr(
         auth_router, "hash_password", lambda value: hashed.append(value) or "x"
     )
-    assert _register(test_client, email, "chosen-now").status_code == 200
-    assert hashed == ["chosen-now"]
+    assert _register(test_client, email, "chosen-now-passphrase").status_code == 200
+    assert hashed == ["chosen-now-passphrase"]
 
 
 def test_login_answers_alike_for_unknown_email_no_password_and_wrong_password(

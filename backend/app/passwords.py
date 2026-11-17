@@ -36,6 +36,37 @@ class PasswordTooLong(ValueError):
     """A password exceeded bcrypt's 72-byte limit."""
 
 
+class PasswordTooShort(ValueError):
+    """A password chosen now is shorter than ``PASSWORD_MIN_LENGTH``."""
+
+
+def check_new_password(plain: str) -> str:
+    """The rule for a password a person chooses (registration, and any route
+    that sets one): at least ``PASSWORD_MIN_LENGTH`` characters (12 by
+    default, WSTG-v42-ATHN-07) and at most bcrypt's 72 bytes in UTF-8.
+
+    Never applied at sign-in: an account whose password predates the rule
+    keeps signing in with it. Raises ``PasswordTooShort`` or
+    ``PasswordTooLong``; returns *plain* unchanged.
+    """
+    from config import settings
+
+    minimum = int(settings.PASSWORD_MIN_LENGTH)
+    if len(plain) < minimum:
+        raise PasswordTooShort(
+            f"password must be at least {minimum} characters (got {len(plain)})"
+        )
+    # bcrypt ignores everything past 72 bytes. Counting bytes, not
+    # characters: "ñ" is two. Refused so a long password is rejected outright
+    # instead of being silently shortened to a different one.
+    length = len(_encode(plain))
+    if length > BCRYPT_MAX_BYTES:
+        raise PasswordTooLong(
+            f"password must be at most {BCRYPT_MAX_BYTES} bytes in UTF-8 (got {length})"
+        )
+    return plain
+
+
 def _encode(plain: str) -> bytes:
     return plain.encode("utf-8")
 

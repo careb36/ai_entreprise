@@ -60,6 +60,29 @@ Copy `.env.example` to `.env` and fill in:
     account's password sign-in for twice as long as the last (2 s, 4 s, …),
     at most the maximum; a locked account answers 429 with `Retry-After`. Per
     process.
+  - `TRUSTED_PROXY_IPS` — default empty (trust no proxy). The reverse proxies
+    whose `X-Forwarded-For` is believed: comma-separated addresses or CIDR
+    networks (`10.0.0.5`, `172.18.0.0/16`, `2001:db8::1`). A request whose
+    connection comes from one of them is treated as coming from the
+    right-most address in the header that is not itself listed; from anyone
+    else the header is ignored. Every per-address limit above keys on that
+    address, so behind nginx or Traefik leave it empty and they key on the
+    proxy (one bucket for everybody); set it and they key on each client. A
+    malformed entry stops the backend at startup. The image runs uvicorn with
+    `--no-proxy-headers` so this is the only rule; how to set it:
+    `docs/OPERATIONS.md`, Behind a reverse proxy.
+  - `PASSWORD_MIN_LENGTH` — default `12`. The shortest password a person may
+    choose, in characters (WSTG-v42-ATHN-07), checked at registration (and
+    by any route that sets a password); the bcrypt limit of 72 bytes in
+    UTF-8 stays the maximum. Never checked at sign-in: an account whose
+    password predates the rule keeps signing in with it.
+  - Email addresses are stripped and lower-cased wherever they are compared
+    (registration, sign-in, invitations, lookups; `services/contracts/emails.py`),
+    so `Ana@x` and `ana@x` are one account. Nothing to configure.
+- Invitations (WSTG-v42-IDNT-04; `docs/contexts/platform.md`):
+  - `INVITATION_TTL_HOURS` — default `168` (7 days). How long an invitation
+    to a company stays acceptable; after that the invitee gets 410 and the
+    inviter sends a new one.
 - Browser sessions (issue #524; `docs/design/SESSIONS.md`). Login and the SSO
   exchange set HttpOnly cookies instead of returning a token:
   - `ACCESS_TOKEN_EXPIRE_MINUTES` — default `15`. The access token's life, in
@@ -591,10 +614,12 @@ Copy `.env.example` to `.env` and fill in:
   role defaults apply), a band that cannot be read is dropped with a warning;
   an agent's, a role's or the company's chosen model is never re-routed.
   Unset: every task runs on its role's model, as before.
-- `API_DOCS_ENABLED` — default `true`. The interactive documentation
-  (`/docs`, `/redoc`, `/openapi.json`); `false` answers 404 on all three.
-  Leave it on for development; turn it off where the API faces the internet
-  (issue #541, WSTG-v42-CONF-05).
+- `API_DOCS_ENABLED` — default `false`. The interactive documentation
+  (`/docs`, `/redoc`, `/openapi.json`); off, all three answer 404
+  (WSTG-v42-CONF-05). `docker-compose.yml` sets it to `true` for local
+  development (`${API_DOCS_ENABLED:-true}`); set `API_DOCS_ENABLED=false` in
+  `.env` where the compose stack faces users, and turn it on only where
+  publishing the schema is meant (a DAST scan reads `/openapi.json`).
 - `SECURITY_HEADERS_ENABLED` — default `true`. The header baseline of
   SECURITY.md §3.3 on every answer (`backend/app/security.py`); `false` only
   behind a proxy that sets the same headers.

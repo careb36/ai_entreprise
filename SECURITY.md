@@ -83,10 +83,18 @@ La Fabrique authenticates people itself, by password, or through a company's
 OpenID Connect provider (single sign-on, below).
 
 - **Passwords** are hashed with `bcrypt` directly, cost 12
-  (`backend/app/passwords.py`). The schema rejects a password over bcrypt's
-  72-byte limit instead of truncating it (`backend/app/schemas.py`), and a
-  successful login re-hashes a stored hash whose cost is below the current one
-  (`backend/app/routers/auth.py`).
+  (`backend/app/passwords.py`). A password chosen now has at least
+  `PASSWORD_MIN_LENGTH` characters (12; WSTG-v42-ATHN-07) and at most
+  bcrypt's 72 bytes, refused rather than truncated
+  (`passwords.check_new_password`, called from `backend/app/schemas.py`); the
+  rule is not applied at sign-in, so an account with an older, shorter
+  password is not locked out. A successful login re-hashes a stored hash
+  whose cost is below the current one (`backend/app/routers/auth.py`).
+- **One account per address.** Emails are stripped and lower-cased wherever
+  they are compared (`services/contracts/emails.py`: registration, sign-in,
+  invitations, lookups); migration 0044 normalised the stored rows (stopping,
+  never merging, on a collision) and a unique index on `lower(email)` keeps
+  it.
 - **Guessing and enumeration** (issue #541; WSTG-v42-ATHN-03, IDNT-04).
   `POST /v1/auth/login` is limited per client address (`LOGIN_RATE_LIMIT`,
   10/minute) and per account: after `LOGIN_FAILURES_BEFORE_BACKOFF` (5)
@@ -97,10 +105,24 @@ OpenID Connect provider (single sign-on, below).
   record (`services/platform/login_throttle.py`, keyed by the sha256 of the
   email whether or not an account exists). `POST /v1/auth/register` is limited
   per address (`REGISTER_RATE_LIMIT`, 5/minute) and answers the same body for
-  a new and an existing email, after a bcrypt hash either way, leaving the
-  existing account untouched. Login answers an unknown email, an account
+  a new and an existing email, after a bcrypt hash and an insert either way
+  (the unique index refuses the taken one), leaving the existing account
+  untouched. Login answers an unknown email, an account
   without a password and a wrong password alike, after a bcrypt check against
-  a throwaway hash for the first two (`passwords.burn_verify`).
+  a throwaway hash for the first two (`passwords.burn_verify`). Behind a
+  reverse proxy the per-address limits key on the client only when the proxy
+  is listed in `TRUSTED_PROXY_IPS` (empty by default: `X-Forwarded-For` is
+  ignored); then on the right-most address of that header that is not a
+  listed proxy (`security.TrustedProxyMiddleware`, `docs/OPERATIONS.md`).
+- **Invitations** (WSTG-v42-IDNT-04). `POST /v1/company/invite` answers 202
+  with the same body whether or not the address has an account (it used to
+  answer 404 "User not found", so anyone who created a company could test
+  addresses) and adds nobody: it records a pending invitation with an expiry
+  (`INVITATION_TTL_HOURS`) and a single-use token kept only as its sha256.
+  Only the invitee, signed in with that address, accepts or declines it;
+  acceptance alone creates the membership. A Manager invites Viewers and
+  Managers, only an Owner invites an Owner, never with an API token; invite,
+  accept, decline and revoke are audited (`services/platform/invitations.py`).
 - **Access tokens.** A JWT signed with **HS256** and the shared secret
   `JWT_SECRET_KEY` (`backend/app/auth_tokens.py`, `backend/app/config.py`).
   Claims: `sub`, `email`, `iat`, `exp`, `typ: access`, `iss` (`JWT_ISSUER`,
@@ -329,9 +351,9 @@ documentation gets a policy that lets Swagger UI and ReDoc load, with
 turns off geolocation, microphone and camera; and `Cache-Control: no-store`
 on every answer but the documentation, unless the route set its own (the
 Glassroom stream's `no-cache`), so no authenticated answer stays in a cache.
-`API_DOCS_ENABLED=false` answers 404 on `/docs`, `/redoc` and
-`/openapi.json` (WSTG-v42-CONF-05); it is on by default for development and
-should be off where the API faces the internet. The repository ships no
+`/docs`, `/redoc` and `/openapi.json` answer 404 unless
+`API_DOCS_ENABLED=true` (WSTG-v42-CONF-05): off by default, turned on by
+`docker-compose.yml` for local development only. The repository ships no
 production server for the frontend (the compose service runs the Vite dev
 server; the built `dist/` is served by whatever the operator puts in front),
 so the frontend's headers are the ingress's job, with the list below; a CI
@@ -1005,8 +1027,10 @@ Before the stack serves anyone but the person running it:
       frontend's origins (never `*`), and `ACCESS_TOKEN_EXPIRE_MINUTES` and
       `REFRESH_TOKEN_ABSOLUTE_DAYS` no longer than the defaults (15 minutes,
       7 days) unless the owner accepts more (§3.1, `docs/design/SESSIONS.md`).
-- [ ] **Exposure.** `API_DOCS_ENABLED=false` where the API faces the
-      internet; `/metrics` and `/health/deep` reachable only from the
+- [ ] **Exposure.** `API_DOCS_ENABLED` false (the default; the compose
+      file turns it on) where the API faces the internet;
+      `TRUSTED_PROXY_IPS` listing exactly the reverse proxies in front of
+      the backend, nothing wider; `/metrics` and `/health/deep` reachable only from the
       internal network; `ERROR_REPORT_URL` unset or an https endpoint the
       operator controls; the frontend's ingress sends the headers of §3.3;
       `JWT_ISSUER`/`JWT_AUDIENCE` distinct from any other deployment sharing

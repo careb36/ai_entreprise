@@ -696,7 +696,7 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `GET`  | `/health` | Service health check; `/health/deep` probes each dependency |
 | `GET`  | `/v1/capabilities` | Feature flags (graph, memory, GitHub, support agent); public |
 | `POST` | `/v1/auth/register` · `/v1/auth/login` · `/v1/auth/refresh` · `/v1/auth/logout` · `GET /v1/auth/me` | Accounts and sessions (cookies, rotated refresh tokens; `docs/design/SESSIONS.md`) |
-| `POST` | `/v1/company/invite` · `DELETE /v1/company/{id}/members/{user_id}` | Invite or remove a member (Owner); removal ends their sessions |
+| `POST` | `/v1/company/invite` · `DELETE /v1/company/{id}/members/{user_id}` | Invite (Manager, up to their role: a pending invitation the person accepts at `/v1/invitations`) or remove a member (Owner); removal ends their sessions |
 | `POST` | `/v1/init_company` | Create a company and its agents; the foundation sprint is planned unless the daemon observes a repository with code at `project_path` (`foundation_sprint: true/false` asks or declines; the response says what happened and why) |
 | `POST` | `/v1/discover_team` | Inspect a project folder through the daemon and suggest a team |
 | `GET` · `POST` · `PATCH` · `DELETE` | `/v1/agents` | The company's agents and their models (Viewer reads; Manager creates, changes, deletes) |

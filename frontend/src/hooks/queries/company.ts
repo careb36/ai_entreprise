@@ -75,10 +75,6 @@ export function useInitCompany() {
   })
 }
 
-export function useInviteMember() {
-  return useMutation({ mutationFn: api.inviteMember })
-}
-
 export function useCreateGitHubBinding() {
   return useMutation({ mutationFn: api.createGitHubBinding })
 }

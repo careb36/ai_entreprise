@@ -104,6 +104,7 @@ from models.github import GitHubRepoBinding
 from models.intake import IntakeItem
 from models.integration import SprintIntegration
 from models.integration_review import IntegrationReview, IntegrationReviewComment
+from models.invitation import CompanyInvitation
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
@@ -361,6 +362,7 @@ SQLModel.metadata.create_all(
         Company.__table__,
         User.__table__,
         CompanyMember.__table__,
+        CompanyInvitation.__table__,
         BusinessUnit.__table__,
         Agent.__table__,
         ProjectCredential.__table__,

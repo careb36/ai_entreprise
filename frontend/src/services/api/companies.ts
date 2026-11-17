@@ -98,9 +98,5 @@ export const companyEndpoints = (api: Http) => ({
 
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
-
-  // Company members. Owners invite users who already have an account.
-  // 404 when the email has no account, 409 when it is already a member.
-  inviteMember: (data: { company_id: number; email: string; human_role: CompanyRole }) =>
-    api.post<{ status: string; message: string }>('/v1/company/invite', data),
+  // Inviting members: ./invitations.ts.
 })

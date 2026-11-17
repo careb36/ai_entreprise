@@ -10,6 +10,7 @@ import {
   type InitCompanyResponse,
 } from '../services/api'
 import { gitChoiceFor, useFolderGitChoice } from '../components/GitWorkflowPanel'
+import { PendingInvitations } from '../components/PendingInvitations'
 import {
   useModels,
   useDiscoverTeam,
@@ -215,6 +216,9 @@ export default function CompanyNew() {
         <h1 className="page-title">🏭 {t('companyNew.newFactory')}</h1>
         <p className="text-gray-400 text-sm mt-1">{t('companyNew.wizardDescription')}</p>
       </div>
+
+      {/* Invited to a company already? Join it instead of creating one. */}
+      <div className="mb-6"><PendingInvitations /></div>
 
       <StepIndicator current={step} steps={steps} />
 

@@ -14,8 +14,9 @@ Naming convention:
 from datetime import datetime
 from typing import Any, Literal
 
-from passwords import BCRYPT_MAX_BYTES
+from passwords import check_new_password
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from services.contracts.emails import normalize_email
 
 # Fields that decide who may do what or whose data it is. A request body may
 # carry one only where its model declares it (``company_id`` on a route that
@@ -343,19 +344,17 @@ class UserCreateRequest(RequestModel):
     full_name: str
     password: str  # Plain-text; hashed with bcrypt before storage
 
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, value: str) -> str:
+        return normalize_email(value)
+
     @field_validator("password")
     @classmethod
-    def _reject_password_beyond_bcrypt_limit(cls, value: str) -> str:
-        # bcrypt ignores everything past 72 bytes. Counting bytes, not
-        # characters: "ñ" is two. Refused here so a long password is rejected
-        # outright instead of being silently shortened to a different one.
-        length = len(value.encode("utf-8"))
-        if length > BCRYPT_MAX_BYTES:
-            raise ValueError(
-                f"password must be at most {BCRYPT_MAX_BYTES} bytes in UTF-8 "
-                f"(got {length})"
-            )
-        return value
+    def _check_password_rule(cls, value: str) -> str:
+        # PASSWORD_MIN_LENGTH characters at least, bcrypt's 72 bytes at most
+        # (passwords.check_new_password).
+        return check_new_password(value)
 
 
 class LoginRequest(RequestModel):
@@ -370,15 +369,36 @@ class LoginRequest(RequestModel):
     # refresh; docs/design/SESSIONS.md). Automation should prefer API tokens.
     token_delivery: Literal["cookie", "bearer"] = "cookie"
 
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class InviteMemberRequest(RequestModel):
-    """Payload for ``POST /v1/company/invite`` — adds a user to a company."""
+    """Payload for ``POST /v1/company/invite`` — a pending invitation."""
 
     model_config = STRICT
 
     company_id: int
-    email: str
-    human_role: str  # "Owner" | "Manager" | "Viewer"
+    email: str = Field(min_length=3, max_length=320)
+    human_role: Literal["Owner", "Manager", "Viewer"]
+
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, value: str) -> str:
+        value = normalize_email(value)
+        if "@" not in value:
+            raise ValueError("email must be an address")
+        return value
+
+
+class InvitationTokenRequest(RequestModel):
+    """Payload for ``POST /v1/invitations/accept`` — the token of an invitation."""
+
+    model_config = STRICT
+
+    token: str = Field(min_length=16, max_length=128)
 
 
 class BacklogItemUpdate(RequestModel):

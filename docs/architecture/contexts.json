@@ -663,6 +663,9 @@
       "test_edit_plan.py": [
         "loop"
       ],
+      "test_email_normalisation.py": [
+        "platform"
+      ],
       "test_error_bodies.py": [
         "integrations",
         "loop"
@@ -756,6 +759,9 @@
       ],
       "test_integration_review.py": [
         "release"
+      ],
+      "test_invitations.py": [
+        "platform"
       ],
       "test_jetstream_durability.py": [
         "loop"
@@ -866,6 +872,9 @@
       ],
       "test_orchestration_metrics.py": [
         "release"
+      ],
+      "test_password_rule.py": [
+        "platform"
       ],
       "test_passwords.py": [
         "platform"
@@ -1191,6 +1200,9 @@
       ],
       "test_tool_history.py": [
         "tools"
+      ],
+      "test_trusted_proxies.py": [
+        "platform"
       ],
       "test_usage_report.py": [
         "loop"

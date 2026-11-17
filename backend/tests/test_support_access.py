@@ -6,6 +6,7 @@ import auth_tokens
 import pytest
 from config import settings
 from models import BugReport, Company, CompanyMember, User
+from sqlmodel import select
 
 
 @pytest.fixture(autouse=True)
@@ -349,7 +350,11 @@ def test_demo_without_auth_keeps_the_desk_open(test_client, people, monkeypatch)
     assert {people["mine"], people["theirs"]} <= _nums(response)
 
 
-def test_reinviting_a_member_is_a_conflict(test_client, sqlite_session):
+def test_inviting_a_member_again_answers_alike_and_changes_nothing(
+    test_client, sqlite_session
+):
+    """The answer does not say who is already a member (WSTG-v42-IDNT-04),
+    and their membership keeps its role."""
     owner, owner_headers = _user(sqlite_session, "owner")
     guest, _ = _user(sqlite_session, "guest")
     company = Company(company_name="Invite conflict")
@@ -358,19 +363,23 @@ def test_reinviting_a_member_is_a_conflict(test_client, sqlite_session):
     sqlite_session.add(
         CompanyMember(company_id=company.id, user_id=owner.id, human_role="Owner")
     )
-    sqlite_session.commit()
-    body = {"company_id": company.id, "email": guest.email, "human_role": "Manager"}
-
-    assert (
-        test_client.post(
-            "/v1/company/invite", json=body, headers=owner_headers
-        ).status_code
-        == 200
+    sqlite_session.add(
+        CompanyMember(company_id=company.id, user_id=guest.id, human_role="Manager")
     )
-    again = test_client.post(
+    sqlite_session.commit()
+    body = {"company_id": company.id, "email": guest.email, "human_role": "Viewer"}
+    again = test_client.post("/v1/company/invite", json=body, headers=owner_headers)
+    stranger = test_client.post(
         "/v1/company/invite",
-        json={**body, "human_role": "Viewer"},
+        json={**body, "email": f"nobody-{secrets.token_hex(4)}@example.com"},
         headers=owner_headers,
     )
-    assert again.status_code == 409
-    assert again.json() == {"detail": f"{guest.email} is already a member as Manager"}
+    assert again.status_code == stranger.status_code == 202
+    assert again.json()["detail"] == stranger.json()["detail"]
+    roles = sqlite_session.exec(
+        select(CompanyMember.human_role).where(
+            CompanyMember.company_id == company.id,
+            CompanyMember.user_id == guest.id,
+        )
+    ).all()
+    assert roles == ["Manager"]

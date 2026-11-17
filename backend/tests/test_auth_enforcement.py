@@ -88,8 +88,12 @@ def test_manager_approval_preserves_payload_audit_identity(
     assert audit.action == "agent_run_approved"
 
 
-@pytest.mark.parametrize("role, expected", [("Manager", 403), ("Owner", 200)])
-def test_only_owner_can_invite(test_client, sqlite_session, identity, role, expected):
+@pytest.mark.parametrize("role, expected", [("Manager", 403), ("Owner", 202)])
+def test_only_an_owner_invites_an_owner(
+    test_client, sqlite_session, identity, role, expected
+):
+    """Inviting adds nobody (a pending invitation, ``test_invitations.py``),
+    and a Manager cannot invite above their own role."""
     _member(sqlite_session, identity, role)
     invitee = User(
         email=f"invite-{secrets.token_hex(8)}@example.com",
@@ -111,13 +115,11 @@ def test_only_owner_can_invite(test_client, sqlite_session, identity, role, expe
     memberships = sqlite_session.exec(
         select(CompanyMember).where(CompanyMember.user_id == invitee.id)
     ).all()
+    assert memberships == []
     if expected == 403:
-        assert response.json() == {"detail": "Requires Owner role"}
-        assert memberships == []
+        assert "cannot invite" in response.json()["detail"]
     else:
-        assert len(memberships) == 1
-        assert memberships[0].human_role == "Owner"
-        assert memberships[0].company_id == identity[1].id
+        assert response.json()["status"] == "pending"
 
 
 @pytest.fixture

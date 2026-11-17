@@ -272,6 +272,17 @@ class Settings(BaseSettings):
     LOGIN_FAILURES_BEFORE_BACKOFF: int = 5
     LOGIN_FAILURE_WINDOW_SECONDS: int = 900
     LOGIN_BACKOFF_MAX_SECONDS: int = 900
+    # The shortest password a person may choose, in characters (WSTG-v42-
+    # ATHN-07). Checked when a password is set, never at sign-in, so an
+    # account made before the rule is not locked out.
+    PASSWORD_MIN_LENGTH: int = 12
+    # How long an invitation to a company stays acceptable.
+    INVITATION_TTL_HOURS: int = 168
+    # The reverse proxies whose X-Forwarded-For is believed: comma-separated
+    # addresses or networks (10.0.0.5, 172.18.0.0/16). Empty trusts none, and
+    # the client is the address the connection comes from
+    # (security.TrustedProxyMiddleware; docs/OPERATIONS.md).
+    TRUSTED_PROXY_IPS: str = ""
     # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
     # family lives at most this many days from sign-in, however often it is
     # rotated; a reuse within the grace (two tabs refreshing at once) is
@@ -337,10 +348,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     SECURITY_HEADERS_ENABLED: bool = True
-    # The interactive API documentation (/docs, /redoc, /openapi.json). On for
-    # development; turn it off where the API faces the internet (issue #541,
-    # WSTG-v42-CONF-05).
-    API_DOCS_ENABLED: bool = True
+    # The interactive API documentation (/docs, /redoc, /openapi.json). Off
+    # unless turned on (WSTG-v42-CONF-05); docker-compose turns it on for
+    # local development.
+    API_DOCS_ENABLED: bool = False
     # An optional notice of each unhandled error (issue #541): the error id,
     # the exception class and the route template, never a traceback, message,
     # path or body. Off unless set; https only. ERROR_REPORT_SOURCE names this

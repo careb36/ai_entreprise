@@ -15,7 +15,7 @@ Tables defined here represent the multi-tenancy core of Fabrique:
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, Index, func
 from sqlmodel import Field, SQLModel
 
 
@@ -148,9 +148,15 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
 
     id: int | None = Field(default=None, primary_key=True)
-    email: str = Field(unique=True)  # Used as the login identifier
+    email: str = Field(unique=True)  # The login identifier, normalised
     full_name: str
     password_hash: str  # bcrypt-hashed; raw password is never stored
+
+
+# One account per address whatever its case (migration 0044): the app stores
+# the normalised address (services/contracts/emails.py), and this index
+# refuses a second row that differs from it only in case.
+Index("ux_users_email_lower", func.lower(User.email), unique=True)
 
 
 class CompanyMember(SQLModel, table=True):

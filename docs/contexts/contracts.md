@@ -6,7 +6,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue, the standards catalogue and the protected paths. It performs no I/O and imports no other context; it never decides anything.
 - **May import:** no other context (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `edit_blocks`, `intake_rules`, `manifest`, `protected_paths`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `edit_blocks`, `emails`, `intake_rules`, `manifest`, `protected_paths`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Components
 
@@ -20,6 +20,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 ### Other modules
 
+- `emails`: `normalize_email`, the one rule for comparing email addresses (strip the spaces around it, lower-case the whole address; no dot or `+tag` folding), used by registration, sign-in, invitations and every lookup by address; migration 0044 applied it to the stored rows ([platform](platform.md), Auth and multi-tenancy).
 - `sandbox_schemas`: the pydantic shapes of a sandbox run (`SandboxExecutionRequest`, `SandboxExecutionResponse`, `SandboxHealthResult`) that `workspace/sandbox_manager.py` exchanges with the sandbox.
 
 ## Described elsewhere

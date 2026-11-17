@@ -44,6 +44,7 @@ from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
 from routers.integration import router as integration_router
 from routers.integration_reviews import router as integration_reviews_router
+from routers.invitations import router as invitations_router
 from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
@@ -185,6 +186,7 @@ app.include_router(sod_router)
 app.include_router(protected_paths_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)
+app.include_router(invitations_router)
 app.include_router(usage_router)
 
 # Register exception handlers

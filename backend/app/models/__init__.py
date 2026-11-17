@@ -38,6 +38,7 @@ from .github import GitHubRepoBinding
 from .intake import IntakeItem
 from .integration import SprintIntegration
 from .integration_review import IntegrationReview, IntegrationReviewComment
+from .invitation import CompanyInvitation
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
@@ -80,6 +81,7 @@ __all__ = [
     "ChatInteraction",
     "ChatLinkCode",
     "Company",
+    "CompanyInvitation",
     "CompanyMember",
     "CompanyWebhook",
     "DocumentationPack",

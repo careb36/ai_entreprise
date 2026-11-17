@@ -17,6 +17,7 @@ import Generate from '../pages/Generate'
 import NotFound from '../pages/NotFound'
 import TaskDetails from '../pages/TaskDetails'
 import CompanyMembers from '../pages/CompanyMembers'
+import Invitations from '../pages/Invitations'
 import CompanySso from '../pages/CompanySso'
 import ChatApprovals from '../pages/ChatApprovals'
 import CompanyTeams from '../pages/CompanyTeams'
@@ -78,6 +79,7 @@ export function AppRoutes() {
         <Route path="/companies/select" element={<CompanySelect />} />
         <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
         <Route path="/company/members" element={<CompanyMembers />} />
+        <Route path="/invitations" element={<Invitations />} />
         <Route path="/company/sso" element={<CompanySso />} />
         <Route path="/company/chat" element={<ChatApprovals />} />
         <Route path="/company/teams" element={<CompanyTeams />} />
