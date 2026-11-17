@@ -34,7 +34,10 @@ The files:
 - **Tests collected**: ``{"sha", "suites": {"<suite>": <count>}}`` per side,
   an observation of its own: refused without the side's sha.
 - **Target**: ``{"measure", "baseline": {"sha", "result"}, "candidate":
-  {"sha", "result"}}`` with results ``pass``, ``fail`` or ``error``; or
+  {"sha", "result"}}`` with results ``pass``, ``fail`` or ``error``
+  (``unmeasured`` from the sandbox reads as not run) and, copied from
+  ``run_measure``'s report, ``isolation``: a side graded ``in_process`` is
+  refused (``not_sandboxed``); or
   ``{"metric": "<bench metric>"}`` for a change aimed at a bench number.
 - **Verifier bench**: ``{"sha", "cases": {"<case>": "pass"|"fail"}}``.
 - **Fake card**: the circuit check's scorecard on C; only a card with
@@ -63,6 +66,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend" / "app"))
 sys.path.insert(0, str(ROOT / "scripts" / "bench"))
+import repeated  # scripts/bench/repeated.py, by path: an unavailable grade
 import schema  # scripts/bench/schema.py, by path
 from services.evidence import fitness
 
@@ -125,8 +129,12 @@ def _prompt_mean(prompt: Any) -> float | None:
 
 def _spec_metrics(spec: dict) -> dict[str, Any]:
     total = spec["criteria"]["total"]
+    # A grade the sandbox could not give is not measured, never a rate of 0.
+    unavailable = repeated.grade_unavailable(spec)
     return {
-        "criteria_rate": spec["criteria"]["passed"] / total if total else None,
+        "criteria_rate": spec["criteria"]["passed"] / total
+        if total and not unavailable
+        else None,
         "first_attempt_rate": spec["first_attempt_rate"],
         "blocked_share": spec["blocked_share"],
         "rework_per_task": spec["rework_per_task"],
@@ -155,7 +163,9 @@ def card_run(card: dict, pair: int) -> dict[str, Any]:
         else (min(statuses) if statuses else fitness.COMPLETE),
         "models": {role: sorted(names) for role, names in models.items()},
         "totals": {
-            "criteria_rate": totals["criteria_rate"],
+            "criteria_rate": None
+            if repeated.card_grade_unavailable(card)
+            else totals["criteria_rate"],
             "first_attempt_rate": totals["first_attempt_rate"],
             "blocked_share": totals["blocked_share"],
             "rework_per_task": totals["rework_per_task"],

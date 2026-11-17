@@ -427,3 +427,23 @@ def test_a_regression_after_two_ok_nights_does_not_reopen_the_watch(
     assert (code, out["decision"], out["nights_ok"]) == (0, "ok", 2)
     assert [n["night"] for n in out["nights"]] == ["20261116", "20261117"]
     assert any("after the watch closed" in e["reason"] for e in out["excluded"])
+
+
+# --- a grade the sandbox could not give (review of PR #634) ---------------------------
+
+
+def test_a_night_whose_grade_the_sandbox_could_not_give_is_unmeasured(
+    tmp_path, shas, capsys
+):
+    nights = two_ok_nights(shas)
+    for spec in nights[0]["specs"]:
+        spec["criteria"]["unmeasured"] = "no grading image named"
+        spec["criteria"]["passed"] = 0
+        spec["criteria"]["results"] = dict.fromkeys(
+            spec["criteria"]["results"], "missing"
+        )
+    nights[0]["totals"].update(criteria_passed=0, criteria_rate=0.0)
+    code, out = run_watch(tmp_path, shas, record(shas), nights, capsys)
+    assert code != 1 and out["decision"] != "regressed", out
+    first = next(n for n in out["nights"] if n["night"] == NIGHT_1[:8])
+    assert first["decision"] == "unmeasured", first

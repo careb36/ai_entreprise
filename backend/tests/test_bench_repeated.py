@@ -273,3 +273,14 @@ def test_the_same_card_twice_on_a_side_is_refused(tmp_path, capsys):
     dup = ["--previous", before[0]] * 3
     assert compare.main([*others, *dup]) == 2
     assert "20260101T000000Z" in capsys.readouterr().err
+
+
+# --- a grade the sandbox could not give (review of PR #634) ---------------------------
+
+
+def test_a_grade_the_sandbox_could_not_give_has_no_criteria_rate():
+    card = _card(_entry("01-cli-wordcount", results={"REQ-1.1": "missing"}))
+    card["specs"][0]["criteria"]["unmeasured"] = "no grading image named"
+    assert repeated.numbers(card["specs"][0], is_spec=True)["criteria_rate"] is None
+    assert repeated._values([card], "total")[0]["criteria_rate"] is None
+    assert repeated._values([card], "01-cli-wordcount")[0]["criteria_rate"] is None

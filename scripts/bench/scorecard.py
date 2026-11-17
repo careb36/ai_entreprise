@@ -40,11 +40,8 @@ wrote rather than by the model under test.
 import argparse
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -54,7 +51,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget
 import graders
 import prompt_weight
-from junit_xml import JUnitError, testcases
+from bench_grade import (  # noqa: F401 - the grade, re-exported
+    GRADER_CONFTEST,
+    criteria_from_junit,
+    criteria_of,
+    criterion_of_test,
+    grade,
+)
 from readers import difficulty_estimates, prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
 
@@ -68,131 +71,6 @@ __all__ = [
     "reported_tokens",
     "validate",
 ]
-_TEST_NAME = re.compile(r"^test_req_(\d+)_(\d+)(?:_|\[|$)")
-
-
-# ---------------------------------------------------------------------------
-# Grading: the person-written acceptance tests on the produced project
-# ---------------------------------------------------------------------------
-
-
-def criteria_of(spec: dict[str, Any]) -> list[str]:
-    """The criterion ids of *spec* in the order the backend numbers them
-    (``services/planning/spec_check.normalize``: REQ-<n>.<m>, from 1, in order)."""
-    return [
-        f"REQ-{i}.{j}"
-        for i, requirement in enumerate(spec.get("requirements") or [], start=1)
-        for j, _criterion in enumerate(requirement.get("criteria") or [], start=1)
-    ]
-
-
-def criterion_of_test(name: str) -> str | None:
-    """``test_req_1_2_reads`` (or ``test_req_1_2[case]``) → ``REQ-1.2``."""
-    match = _TEST_NAME.match(name or "")
-    return f"REQ-{match.group(1)}.{match.group(2)}" if match else None
-
-
-def criteria_from_junit(xml_text: str, criteria: list[str]) -> dict[str, str]:
-    """Per criterion: ``pass`` when it has tests and all passed, ``fail`` when
-    one failed, errored or was skipped, ``missing`` when no test named it ran.
-    A report that cannot be read, or that declares a DTD or an entity
-    (``junit_xml``), leaves every criterion missing."""
-    seen: dict[str, list[bool]] = {}
-    try:
-        cases = testcases(xml_text) if xml_text.strip() else []
-    except JUnitError:
-        cases = []
-    for name, passed in cases:
-        criterion = criterion_of_test(name)
-        if criterion is not None:
-            seen.setdefault(criterion, []).append(passed)
-    return {
-        c: (MISSING if c not in seen else PASS if all(seen[c]) else FAIL)
-        for c in criteria
-    }
-
-
-# Written next to the copied tests by the grader. The project goes at the END
-# of sys.path, after the standard library and pytest, so nothing in it (a
-# pytest.py, a conftest.py, a json.py) can stand in for either; the grader
-# itself starts isolated (python -I), so PYTHONPATH and the working directory
-# put nothing first, and no sitecustomize of the project's runs in it.
-GRADER_CONFTEST = """import sys
-
-sys.path.append({project!r})
-"""
-
-
-def grade(
-    spec_dir: Path, project: Path, python: str, timeout: int = 300
-) -> dict[str, Any]:
-    """Run ``<spec_dir>/acceptance`` against *project* and read the criteria back.
-
-    The tests are copied out of the repository so no configuration found
-    above them applies. pytest starts isolated (``-I``) from a folder the
-    grader made, and reaches the project only through ``GRADER_CONFTEST``,
-    after everything else on ``sys.path``. ``PYTHONPATH`` still names the
-    project, for the commands a test runs (``python -m <package>``); the
-    isolated grader ignores it. The JUnit report goes to another folder the
-    grader made with a random name, read once pytest has exited; a report
-    pytest did not finish (exit status other than 0 or 1) is not read.
-
-    What this does not stop: the tests import the project, so its code runs
-    inside the grader. Until the sandbox runs the grade (#323), the bench
-    trusts the producer not to tamper with pytest from within."""
-    spec = json.loads((spec_dir / "spec.json").read_text(encoding="utf-8"))
-    criteria = criteria_of(spec)
-    project_path = str(project.resolve())
-    with (
-        tempfile.TemporaryDirectory(prefix="bench-grade-") as tmp,
-        tempfile.TemporaryDirectory(prefix="bench-report-") as report_dir,
-    ):
-        tests = Path(tmp) / "acceptance"
-        shutil.copytree(spec_dir / "acceptance", tests)
-        (Path(tmp) / "conftest.py").write_text(
-            GRADER_CONFTEST.format(project=project_path), encoding="utf-8"
-        )
-        report = Path(report_dir) / f"{os.urandom(8).hex()}.xml"
-        env = {**os.environ, "PYTHONPATH": project_path, "PYTHONDONTWRITEBYTECODE": "1"}
-        command = [
-            python,
-            "-I",
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            "-c",
-            os.devnull,
-            "--rootdir",
-            tmp,
-            "--import-mode=importlib",
-            f"--junitxml={report}",
-            str(tests),
-        ]
-        try:
-            run = subprocess.run(
-                command,
-                cwd=tmp,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
-            output, exit_code = run.stdout[-4000:], run.returncode
-        except subprocess.TimeoutExpired:
-            output, exit_code = "acceptance tests timed out", None
-        finished = exit_code in (0, 1) and report.exists()
-        xml_text = report.read_text(encoding="utf-8") if finished else ""
-    results = criteria_from_junit(xml_text, criteria)
-    return {
-        "passed": sum(1 for r in results.values() if r == PASS),
-        "total": len(criteria),
-        "results": results,
-        "exit_code": exit_code,
-        "output_tail": output,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +187,8 @@ def summarize_spec(
             "passed": int(graded.get("passed", 0)),
             "total": int(graded.get("total", 0)),
             "results": dict(graded.get("results") or {}),
+            "isolation": graded.get("isolation"),
+            "unmeasured": graded.get("unmeasured"),
         },
         "factory_criteria_verified": factory_verified,
         "tasks": {
@@ -535,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--project", required=True, type=Path)
     g.add_argument("--python", default=sys.executable)
     g.add_argument("--out", required=True, type=Path)
+    g.add_argument("--image", help="the sandbox's grading image (default: FABRIQUE_GRADING_IMAGE)")
+    g.add_argument("--in-process", action="store_true", help="local development only: the project's code runs in this Python")
     c = sub.add_parser("collect")
     c.add_argument("--api", required=True)
     c.add_argument("--name", required=True)
@@ -561,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "grade":
         args.out.write_text(
-            json.dumps(grade(args.spec, args.project, args.python), indent=2)
+            json.dumps(grade(args.spec, args.project, args.python, in_process=args.in_process, image=args.image), indent=2)
         )
         return 0
     if args.command == "collect":

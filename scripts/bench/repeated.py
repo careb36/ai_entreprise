@@ -63,6 +63,21 @@ def _spec_rate(spec: dict[str, Any]) -> float:
     return round(spec["criteria"]["passed"] / total, 4) if total else 0.0
 
 
+def grade_unavailable(spec: dict[str, Any]) -> str | None:
+    """Why the sandbox could not grade *spec* (``criteria.unmeasured``), else
+    None. Its criteria are then all missing: not measured, never a rate of 0
+    (review of PR #634)."""
+    criteria = spec.get("criteria") if isinstance(spec, dict) else None
+    reason = criteria.get("unmeasured") if isinstance(criteria, dict) else None
+    return str(reason) if reason else None
+
+
+def card_grade_unavailable(card: dict[str, Any]) -> bool:
+    """Whether the sandbox could not grade one of *card*'s specifications:
+    the card's criteria rate is then not measured either."""
+    return any(grade_unavailable(s) for s in card.get("specs") or [])
+
+
 def numbers(row: dict[str, Any], *, is_spec: bool) -> dict[str, float | None]:
     """The metrics of a spec entry or of a card's totals. The prompt mean is
     None when no prompt was measured (a card before schema v3, or none sent)."""
@@ -72,7 +87,7 @@ def numbers(row: dict[str, Any], *, is_spec: bool) -> dict[str, float | None]:
     }
     if is_spec:
         return {
-            "criteria_rate": _spec_rate(row),
+            "criteria_rate": None if grade_unavailable(row) else _spec_rate(row),
             "first_attempt_rate": row["first_attempt_rate"],
             "blocked_share": row["blocked_share"],
             "rework_per_task": row["rework_per_task"],
@@ -121,7 +136,13 @@ def _complete_card(card: dict[str, Any]) -> bool:
 def _values(cards: list[dict[str, Any]], where: str) -> list[dict[str, Any]]:
     """The metrics of *where* (``total`` or a spec's name) from the complete runs."""
     if where == "total":
-        return [numbers(c["totals"], is_spec=False) for c in cards if _complete_card(c)]
+        found = []
+        for card in (c for c in cards if _complete_card(c)):
+            values = numbers(card["totals"], is_spec=False)
+            if card_grade_unavailable(card):
+                values["criteria_rate"] = None
+            found.append(values)
+        return found
     found = []
     for card in cards:
         spec = next((s for s in card["specs"] if s["name"] == where), None)

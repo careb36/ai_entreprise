@@ -145,10 +145,14 @@ def container_runtime() -> str:
 
 
 def container_command(
-    runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None
+    runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None, scratch_mb: int | None = None
 ) -> list[str]:
     """The ``docker run`` (or ``podman run``) for one sandboxed command;
-    *extra* (the cache volume's mount and variables) goes before the image."""
+    *extra* (the cache volume's mount and variables) goes before the image.
+    With *scratch_mb* the working directory is a tmpfs of that size (charged
+    to the memory limit) instead of *cwd* mounted read-write, so nothing on
+    the host's disk is writable (the bench's and the measure's grade,
+    ``scripts/bench/sandbox_grading.py``)."""
     args = [
         runtime, "run", "--rm", "--name", name,
         "--network", "bridge" if box["network"] else "none",
@@ -159,7 +163,11 @@ def container_command(
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
         "--tmpfs", "/tmp:rw,exec,size=512m",
-        "-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw",
+        *(
+            ["--tmpfs", f"{CONTAINER_WORKDIR}:rw,exec,size={int(scratch_mb)}m"]
+            if scratch_mb
+            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw"]
+        ),
         "-w", CONTAINER_WORKDIR,
     ]
     if hasattr(os, "getuid"):

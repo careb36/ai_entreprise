@@ -533,11 +533,15 @@ def test_the_measure_runs_on_the_builds_backend_and_is_hashed_here(
     (tmp_path / "build" / "backend").mkdir(parents=True)
     monkeypatch.setattr(spec_source, "REPO", graders)
     python = self_host.sys.executable
-    passed = spec_source.run_measure("m/test_ok.py", tmp_path / "build", python)
+    passed = spec_source.run_measure(
+        "m/test_ok.py", tmp_path / "build", python, in_process=True
+    )
     assert (passed["exit_code"], passed["passed"]) == (0, True)
     assert len(passed["output_sha256"]) == 64
     assert passed["target_measure"] == "m/test_ok.py"
-    failed = spec_source.run_measure("m/test_fails.py", tmp_path / "build", python)
+    failed = spec_source.run_measure(
+        "m/test_fails.py", tmp_path / "build", python, in_process=True
+    )
     assert (failed["exit_code"], failed["passed"]) == (1, False)
     assert any("1 failed" in line for line in failed["tail"])
 
@@ -557,7 +561,7 @@ def test_a_build_cannot_stand_in_for_the_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(spec_source, "REPO", graders)
     monkeypatch.setenv("PYTHONPATH", str(backend))
     result = spec_source.run_measure(
-        "m/test_fails.py", tmp_path / "build", self_host.sys.executable
+        "m/test_fails.py", tmp_path / "build", self_host.sys.executable, in_process=True
     )
     assert (result["exit_code"], result["passed"]) == (1, False)
     assert any("1 failed" in line for line in result["tail"])

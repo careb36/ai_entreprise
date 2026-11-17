@@ -15,7 +15,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
  CI on the self-hosted runner is B7; a company's identity provider is B8;
  Slack and Microsoft Teams (approvals in chat) are B9; the desktop app's
  local server on 127.0.0.1, which other local software can reach, is B10; an
- RFC 3161 timestamping authority (audit anchors) is B11.
+ RFC 3161 timestamping authority (audit anchors) is B11; the
+ self-improvement runner and the container that grades candidate code is B13.
 ```
 
 ## B1 — Browser ↔ backend
@@ -232,6 +233,31 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
 - **Known gaps:** the in-product coverage report trusts the certificate stored
   in the factory's database; an auditor verifies with the authority's
   published certificate instead.
+
+## B13 — The self-improvement runner and the grading container
+
+(B12, the runner and the factory build under test, is defined in
+`docs/design/rsi-loop.md` §6.)
+
+- **Crosses:** candidate code the factory produced, imported by
+  person-written checks from a pinned commit (the target measure, the bench's
+  acceptance tests); the verdict coming back (exit status, output, pytest's
+  report).
+- **Threats:** a candidate `conftest.py`, ini file, `sitecustomize.py` or
+  `pytest.py` shadow taking over pytest; a forged result file or output
+  frame; imported code forging the result in-process; the network, the
+  runner's files and credentials; resource exhaustion; a silent fallback to
+  the host.
+- **Controls:** the daemon's container sandbox reused by
+  `scripts/bench/sandbox_grading.py` (network off, `--read-only`, the
+  candidate and the graders mounted read-only, limits, `--pull=never`, a clean
+  environment); the verdict read from the runtime's exit status and the
+  runner's own output frame, never a file; every failure `unmeasured`;
+  `isolation` on each result and `fitness.decide` refusing `in_process`;
+  `docs/design/SANDBOX_GRADING_THREAT_MODEL.md`,
+  `backend/tests/test_sandbox_grading.py`.
+- **Known gaps:** code written to forge pytest's result from inside the
+  grading process is caught only by the consistency checks; a shared kernel.
 
 ## Data stores (inside the backend's zone)
 

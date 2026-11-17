@@ -15,7 +15,13 @@ from this repository, the baseline's copy, never the snapshot's: a blocking
 finding or a missing target measure refuses it, and the warnings are
 reported. The measure runs from this repository too, against the backend of
 the build under test, and its output is hashed here (REQ-27: never a digest
-from the build under test).
+from the build under test). It runs in the daemon's container sandbox
+(``scripts/bench/sandbox_grading.py``, PR 12 of docs/design/rsi-loop.md):
+the build read-only, the measure read-only from this repository, no network,
+limits, the verdict read from outside; a sandbox that cannot run it leaves
+the measure ``unmeasured``, never passed. ``--in-process-measure`` keeps the
+earlier run on the runner's own Python for local development, and the report
+says so.
 """
 
 from __future__ import annotations
@@ -29,6 +35,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.append(str(REPO / "scripts" / "bench"))  # the sandbox, with the graders
+import sandbox_grading
+
 BACKEND_APP = REPO / "backend" / "app"
 DEFAULT_SPEC = HERE / "fixtures" / "issue-535-specification.json"
 DEFAULT_REVISION = HERE / "fixtures" / "issue-535-architecture.json"
@@ -150,44 +159,103 @@ def revised_architecture(base: dict, change: dict) -> dict:
     }
 
 
+def add_measure_arguments(parser) -> None:
+    """The ``measure`` step's options of ``self_host.py``."""
+    parser.add_argument("--python", default=sys.executable, help="measure, --in-process-measure only: a Python with the backend's dependencies")
+    parser.add_argument("--grading-image", default=os.environ.get(sandbox_grading.IMAGE_ENV), help=f"measure: the sandbox's image, on this machine, with the backend's dependencies and pytest (default: {sandbox_grading.IMAGE_ENV})")
+    parser.add_argument("--in-process-measure", action="store_true", help="measure: local development only, the build's code runs in --python; never a cycle's measurement")
+
+
 def step_measure(api, args, state, report):
     """The harness's ``measure`` step: the ``--spec`` file's target measure
-    (this repository's copy) on ``--build``'s backend, else the snapshot's."""
+    (this repository's copy) on ``--build``'s backend, else the snapshot's,
+    in the sandbox unless ``--in-process-measure``."""
     build = Path(args.build or args.checkout).resolve()
-    report["measure"] = run_measure(args.source["target_measure"], build, args.python)
+    in_process = getattr(args, "in_process_measure", False)
+    if in_process:
+        print(f"warning: {sandbox_grading.IN_PROCESS_WARNING}", file=sys.stderr)
+    report["measure"] = run_measure(
+        args.source["target_measure"],
+        build,
+        args.python,
+        in_process=in_process,
+        image=getattr(args, "grading_image", None),
+    )
+
+
+def exit_status(report: dict) -> int:
+    """The harness's exit status for a measure: 3 failed, 4 unmeasured."""
+    measured = report.get("measure")
+    if not measured or measured.get("passed"):
+        return 0
+    return 4 if measured.get("result") == sandbox_grading.UNMEASURED else 3
 
 
 def run_measure(
-    measure: str, build: Path, python: str, timeout: int = MEASURE_TIMEOUT_SECONDS
+    measure: str,
+    build: Path,
+    python: str,
+    timeout: int = MEASURE_TIMEOUT_SECONDS,
+    *,
+    in_process: bool = False,
+    image: str | None = None,
+    image_python: str = "python",
 ) -> dict:
-    """Run the target measure (this repository's file) with pytest in
-    *build*'s ``backend/``: ``passed`` is its exit status 0, and the sha256
-    of its output is computed here."""
+    """Run the target measure (this repository's file) with pytest on
+    *build*'s ``backend/``. ``result`` is ``pass``, ``fail`` or
+    ``unmeasured`` (``reason`` says why), ``passed`` is ``result == "pass"``,
+    and the sha256 of the output is computed here. In the sandbox (the
+    default) the image's ``image_python`` runs it; *python* only with
+    *in_process*."""
+    if in_process:
+        return _run_in_process(measure, build, python, timeout)
+    target = REPO / measure
+    graders = sandbox_grading.GRADERS
+    argv = [
+        image_python,
+        *_pytest_args(graders, f"{graders}/{target.name}"),
+    ]
+    run = sandbox_grading.run_pytest(
+        argv,
+        image=image or os.environ.get(sandbox_grading.IMAGE_ENV),
+        mounts={sandbox_grading.CANDIDATE: build, graders: target.parent},
+        cwd=f"{sandbox_grading.CANDIDATE}/backend",
+        timeout=timeout,
+    )
+    result, reason = sandbox_grading.measure_verdict(run)
+    return {
+        "target_measure": measure,
+        "build": str(build),
+        "isolation": sandbox_grading.SANDBOX,
+        "command": " ".join(["pytest", *argv[5:]]),
+        "exit_code": run["exit_code"],
+        "result": result,
+        "passed": result == sandbox_grading.PASS,
+        "reason": reason,
+        "sandbox": run["sandbox"],
+        "cleanup": run.get("cleanup"),
+        **sandbox_grading.output_record(run),
+    }
+
+
+def _pytest_args(rootdir: str, target: str) -> list[str]:
+    """``-I -B -c RUNNER`` and pytest's options: no conftest, no ini file,
+    no cache, no plugin auto-loaded, the measure's folder as rootdir."""
+    return ["-I", "-B", "-c", RUNNER, "-q", "-p", "no:cacheprovider", "--noconftest", "-c", os.devnull, "--rootdir", rootdir, target]
+
+
+def _run_in_process(measure: str, build: Path, python: str, timeout: int) -> dict:
+    """The earlier run, on the runner's own *python*: local development only."""
     # The runner is loaded before any path of the build: ``-I`` keeps the
     # build's directory, PYTHONPATH and user site out of ``sys.path``, so a
     # ``backend/pytest.py`` in the build cannot stand in for pytest. The
     # build's ``.`` and ``app`` are appended after pytest is imported, its
     # ini files and conftests are not read (``-c`` an empty file, rootdir the
     # measure's folder, ``--noconftest``) and plugins are not auto-loaded.
-    # A measure still imports the build's code in-process; grading in a
-    # sandbox is PR 12 of docs/design/rsi-loop.md.
+    # The measure imports the build's code in this process's Python, with the
+    # runner's files and network: run_measure's sandbox is the default.
     target = REPO / measure
-    command = [
-        python,
-        "-I",
-        "-B",
-        "-c",
-        RUNNER,
-        "-q",
-        "-p",
-        "no:cacheprovider",
-        "--noconftest",
-        "-c",
-        os.devnull,
-        "--rootdir",
-        str(target.parent),
-        str(target),
-    ]
+    command = [python, *_pytest_args(str(target.parent), str(target))]
     env = {
         **{k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")},
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
@@ -214,8 +282,11 @@ def run_measure(
     return {
         "target_measure": measure,
         "build": str(build),
+        "isolation": sandbox_grading.IN_PROCESS,
+        "warning": sandbox_grading.IN_PROCESS_WARNING,
         "command": " ".join(["pytest", *command[5:]]),
         "exit_code": exit_code,
+        "result": sandbox_grading.PASS if exit_code == 0 else sandbox_grading.FAIL,
         "passed": exit_code == 0,
         "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
         "tail": output.strip().splitlines()[-MEASURE_TAIL_LINES:],
