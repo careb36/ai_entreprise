@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Boxes, Cpu, Plug } from 'lucide-react'
+import { Boxes, CircleCheck, Cpu, Plug } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { CalibrationReport } from '../components/CalibrationReport'
 import ConsoleProducers from '../components/ConsoleProducers'
@@ -10,6 +10,7 @@ import RoutingPolicy from '../components/RoutingPolicy'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { modelsApi } from '../services/models'
+import { EmptyState, PageHeader } from '../components/ui'
 
 /**
  * The company's Models screen (issue #356): the providers its agents can
@@ -31,37 +32,24 @@ export default function Models() {
   const validated = connections.filter(c => c.validation_ok === true).length
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <div className="page-header">
-        <div>
-          <div className="flex items-center gap-2">
-            <Boxes className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('models.title')}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">{t('models.subtitle')}</p>
-        </div>
-      </div>
+    <div className="page-container max-w-5xl space-y-4">
+      <PageHeader title={t('models.title')} subtitle={t('models.subtitle')} />
       {companyId === null ? (
-        <p className="text-sm text-gray-400">{t('models.noCompany')}</p>
+        <EmptyState icon={Boxes} title={t('models.noCompany')} dashed />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="card p-3 text-center">
-              <Plug size={16} className="mx-auto mb-1 text-brand-400" />
-              <div className="text-2xl font-bold text-white">{connections.length}</div>
-              <div className="text-xs text-gray-400">{t('models.statConnections', { defaultValue: 'Connections' })}</div>
-            </div>
-            <div className="card p-3 text-center">
-              <Cpu size={16} className="mx-auto mb-1 text-brand-400" />
-              <div className="text-2xl font-bold text-white">{modelCount}</div>
-              <div className="text-xs text-gray-400">{t('models.statModels', { defaultValue: 'Models' })}</div>
-            </div>
-            <div className="card p-3 text-center">
-              <Boxes size={16} className="mx-auto mb-1 text-emerald-400" />
-              <div className="text-2xl font-bold text-white">{validated}</div>
-              <div className="text-xs text-gray-400">{t('models.statValidated', { defaultValue: 'Validated' })}</div>
-            </div>
-          </div>
+          <dl className="panel grid grid-cols-3 divide-x divide-surface-700">
+            {[
+              { icon: Plug, value: connections.length, label: t('models.statConnections', { defaultValue: 'Connections' }) },
+              { icon: Cpu, value: modelCount, label: t('models.statModels', { defaultValue: 'Models' }) },
+              { icon: CircleCheck, value: validated, label: t('models.statValidated', { defaultValue: 'Validated' }) },
+            ].map(({ icon: Icon, value, label }) => (
+              <div key={label} className="px-3 py-2.5">
+                <dt className="text-meta flex items-center gap-1"><Icon size={11} aria-hidden="true" />{label}</dt>
+                <dd className="mt-0.5 text-xl font-semibold tabular-nums text-gray-100">{value}</dd>
+              </div>
+            ))}
+          </dl>
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
           <RoutingPolicy companyId={companyId} canManage={canManage} />

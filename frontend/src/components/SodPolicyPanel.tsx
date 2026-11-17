@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSodPolicy, useSodPolicyChange } from '../hooks/useDuties'
+import { ShieldAlert } from 'lucide-react'
 import { errorDetail, type SodMode, type SodPolicy } from '../services/api'
+import { Panel } from './ui'
 
 const MODES: SodMode[] = ['off', 'high_risk', 'all']
 
@@ -18,12 +20,15 @@ export default function SodPolicyPanel({ companyId }: { companyId: number | null
   if (policy.isError) return <div role="alert" className="alert-error text-sm">{errorDetail(policy.error)}</div>
   if (!policy.data) return null
   return (
-    <section className="card p-4 space-y-4" aria-label={t('duties.policy.title')}>
-      <h2 className="text-base font-semibold text-gray-100">{t('duties.policy.title')}</h2>
-      {change.isError && <div role="alert" className="alert-error text-sm">{errorDetail(change.error)}</div>}
-      <PolicyForm key={policy.data.updated_at ?? 'new'} policy={policy.data} change={change} />
-      <SoloException policy={policy.data} change={change} />
-    </section>
+    <Panel title={t('duties.policy.title')}>
+      <div className="space-y-4 p-3">
+        {change.isError && <div role="alert" className="alert-error text-sm">{errorDetail(change.error)}</div>}
+        <PolicyForm key={policy.data.updated_at ?? 'new'} policy={policy.data} change={change} />
+        <div className="border-t border-surface-700 pt-3">
+          <SoloException policy={policy.data} change={change} />
+        </div>
+      </div>
+    </Panel>
   )
 }
 
@@ -73,12 +78,13 @@ function SoloException({ policy, change }: { policy: SodPolicy; change: Change }
 
   if (policy.solo_exception) {
     return (
-      <div className="space-y-2 rounded-lg border border-amber-500/40 p-3 text-sm">
-        <p className="font-medium text-amber-300">
+      <div className="space-y-2 rounded-md border border-amber-700/50 bg-amber-950/30 p-3 text-sm">
+        <p className="flex items-center gap-1.5 font-medium text-amber-300">
+          <ShieldAlert size={14} aria-hidden="true" className="flex-shrink-0" />
           {policy.solo_in_force ? t('duties.solo.inForce') : t('duties.solo.notInForce', { count: policy.approvers })}
         </p>
         <p className="text-gray-300">{t('duties.solo.reason', { reason: policy.solo_reason ?? '', by: policy.solo_granted_by ?? '—' })}</p>
-        <button type="button" className="btn-secondary btn-sm" disabled={change.isPending}
+        <button type="button" className="btn-tool border border-surface-700" disabled={change.isPending}
           onClick={() => change.mutate({ kind: 'withdraw' })}>{t('duties.solo.withdraw')}</button>
       </div>
     )
@@ -95,13 +101,13 @@ function SoloException({ policy, change }: { policy: SodPolicy; change: Change }
         if (reason.trim().length >= 10) change.mutate({ kind: 'grant', reason: reason.trim() }, { onSuccess: () => setReason('') })
       }}
     >
-      <h3 className="text-sm font-semibold text-gray-200">{t('duties.solo.title')}</h3>
+      <h3 className="text-[13px] font-semibold text-gray-100">{t('duties.solo.title')}</h3>
       <p className="text-xs text-gray-400">{t('duties.solo.hint')}</p>
       <label className="block">
         <span className="input-label">{t('duties.solo.reasonLabel')}</span>
         <textarea className="input w-full" rows={2} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />
       </label>
-      <button type="submit" className="btn-secondary btn-sm" disabled={reason.trim().length < 10 || change.isPending}>
+      <button type="submit" className="btn-tool border border-surface-700" disabled={reason.trim().length < 10 || change.isPending}>
         {t('duties.solo.grant')}
       </button>
     </form>

@@ -12,9 +12,10 @@
  */
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GitBranch, Loader2 } from 'lucide-react'
+import { CircleCheck, Loader2 } from 'lucide-react'
 import { errorDetail, type WorkspaceInspection } from '../services/api'
 import { type GitBaseStatus, type GitWorkflowChoice, useGitWorkflow, useSetGitWorkflow } from '../services/workControl'
+import { Panel } from './ui'
 
 /** What the wizard sends: the person's choice, else what the inspection observed. */
 export function gitChoiceFor(inspection: WorkspaceInspection | null | undefined, choice: GitWorkflowChoice | null): GitWorkflowChoice {
@@ -77,12 +78,12 @@ function ChoiceFields({ value, disabled, repo, onChange }: {
   const { t } = useTranslation()
   return (
     <div className="space-y-2">
-      <label className="flex items-start gap-2 text-sm text-gray-300">
-        <input type="checkbox" className="mt-0.5" checked={value.git_workflow} disabled={disabled || !repo}
+      <label className="flex items-start gap-2 text-[13px] text-gray-200">
+        <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0 rounded accent-brand-500" checked={value.git_workflow} disabled={disabled || !repo}
           onChange={event => onChange({ ...value, git_workflow: event.target.checked })} />
         <span>
           {t('workControl.git')}
-          <span className="block text-xs text-gray-500">{t('workControl.gitHint')}</span>
+          <span className="block text-xs text-gray-400">{t('workControl.gitHint')}</span>
         </span>
       </label>
       <label className="block text-xs text-gray-400">
@@ -115,8 +116,8 @@ export default function GitWorkflowPanel({ companyId, canManage }: { companyId: 
     return git.isError ? (
       <div role="alert" className="alert-error text-sm">{errorDetail(git.error)}</div>
     ) : (
-      <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-        <Loader2 size={15} className="animate-spin" /> {t('common.loading')}
+      <div role="status" className="panel flex items-center gap-2 px-3 py-3 text-xs text-gray-400">
+        <Loader2 size={13} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> {t('common.loading')}
       </div>
     )
   }
@@ -124,27 +125,31 @@ export default function GitWorkflowPanel({ companyId, canManage }: { companyId: 
   // Turning it on is offered unless the daemon observed a folder that is not a repository.
   const repo = !(status?.state === 'observed' && status.is_repo === false) || draft.git_workflow
   return (
-    <section aria-labelledby="git-workflow" className="card space-y-4">
-      <div className="flex items-center gap-2">
-        <GitBranch size={18} className="text-brand-400" />
-        <h2 id="git-workflow" className="text-lg font-semibold">{t('gitSettings.title')}</h2>
-      </div>
-      <BaseStatusNotes status={status} />
-      <ChoiceFields value={draft} disabled={!canManage || save.isPending} repo={repo}
-        onChange={value => { setSaved(false); setDraft(value) }} />
-      {canManage && (
-        <div className="flex items-center gap-3">
-          <button type="button" className="btn-primary btn-sm" disabled={save.isPending}
-            onClick={() => save.mutate({ git_workflow: draft.git_workflow, git_base_branch: draft.git_base_branch?.trim() || null }, { onSuccess: () => setSaved(true) })}>
-            {save.isPending
-              ? <><Loader2 size={13} className="animate-spin" aria-hidden="true" /><span className="sr-only">{t('gitSettings.save')}</span></>
-              : t('gitSettings.save')}
-          </button>
-          {saved && <span role="status" className="text-xs text-emerald-300">{t('gitSettings.saved')}</span>}
-          {save.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(save.error)}</span>}
+    <Panel title={t('gitSettings.title')}>
+      <div className="space-y-3 p-3">
+        <BaseStatusNotes status={status} />
+        <div className="max-w-md">
+          <ChoiceFields value={draft} disabled={!canManage || save.isPending} repo={repo}
+            onChange={value => { setSaved(false); setDraft(value) }} />
         </div>
-      )}
-    </section>
+        {canManage && (
+          <div className="flex items-center gap-2 border-t border-surface-700 pt-3">
+            <button type="button" className="btn-primary btn-sm" disabled={save.isPending}
+              onClick={() => save.mutate({ git_workflow: draft.git_workflow, git_base_branch: draft.git_base_branch?.trim() || null }, { onSuccess: () => setSaved(true) })}>
+              {save.isPending
+                ? <><Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /><span className="sr-only">{t('gitSettings.save')}</span></>
+                : t('gitSettings.save')}
+            </button>
+            {saved && (
+              <span role="status" className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                <CircleCheck size={13} aria-hidden="true" />{t('gitSettings.saved')}
+              </span>
+            )}
+            {save.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(save.error)}</span>}
+          </div>
+        )}
+      </div>
+    </Panel>
   )
 }
 

@@ -1,23 +1,36 @@
+import { useTranslation } from 'react-i18next'
+import { Check } from 'lucide-react'
+
+/**
+ * Where the wizard is: each step as its number (a check once done) and its
+ * name, the current one marked with `aria-current="step"`. Done, current and
+ * to come differ by the mark and the weight, not by colour alone.
+ */
 export function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
+  const { t } = useTranslation()
   return (
-    <div className="flex items-center justify-between mb-8">
-      {steps.map((label, i) => (
-        <div key={i} className="flex items-center flex-1 last:flex-none">
-          <div className="flex flex-col items-center gap-1 flex-shrink-0">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
-              ${i < current ? 'bg-brand-600 text-white' : i === current ? 'bg-brand-500 text-white ring-2 ring-brand-400/40' : 'bg-surface-700 text-gray-500'}`}>
-              {i < current ? '✓' : i + 1}
-            </div>
-            <span className={`text-xs whitespace-nowrap
-              ${i === current ? 'text-brand-300 font-medium' : i < current ? 'text-gray-400' : 'text-gray-600'}`}>
-              {label}
+    <ol aria-label={t('companyNew.stepsLabel')} className="flex items-center gap-1.5 overflow-x-auto">
+      {steps.map((label, i) => {
+        const done = i < current
+        const now = i === current
+        return (
+          <li key={i} aria-current={now ? 'step' : undefined} className="flex min-w-0 flex-1 items-center gap-1.5 last:flex-none">
+            <span className="flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap">
+              <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums
+                ${done ? 'bg-brand-600 text-white' : now ? 'bg-brand-500 text-white ring-2 ring-brand-400/40' : 'border border-surface-600 text-gray-400'}`}>
+                {done ? <Check size={12} aria-hidden="true" /> : i + 1}
+              </span>
+              <span className={`text-xs ${now ? 'font-semibold text-gray-50' : done ? 'text-gray-300' : 'text-gray-400'}`}>
+                {label}
+              </span>
+              {done && <span className="sr-only">{t('companyNew.stepDone')}</span>}
             </span>
-          </div>
-          {i < steps.length - 1 && (
-            <div className={`h-px flex-1 mx-2 mb-5 transition-all ${i < current ? 'bg-brand-600' : 'bg-surface-700'}`} />
-          )}
-        </div>
-      ))}
-    </div>
+            {i < steps.length - 1 && (
+              <span aria-hidden="true" className={`h-px min-w-[0.75rem] flex-1 ${done ? 'bg-brand-600' : 'bg-surface-700'}`} />
+            )}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
