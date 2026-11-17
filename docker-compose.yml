@@ -149,6 +149,11 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      # Local development keeps /docs, /redoc and /openapi.json; the backend's
+      # own default is off (WSTG-v42-CONF-05). Set false where it faces users.
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+      # Reverse proxies whose X-Forwarded-For is believed (docs/OPERATIONS.md).
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
       FERNET_SECRET_KEY: ${FERNET_SECRET_KEY:-}
       AUDIT_SIGNING_KEY: ${AUDIT_SIGNING_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

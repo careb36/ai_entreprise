@@ -35,6 +35,7 @@
     "documentation": "Documentation",
     "duties": "Duties and access",
     "auditAnchors": "Audit anchors",
+    "invitations": "Invitations",
     "findings": "Findings"
   },
   "dashboard": {
@@ -1465,9 +1466,8 @@
   "members": {
     "title": "Members",
     "subtitle": "People who can work in {{company}}.",
-    "ownerOnly": "Only owners can invite members. Your role here is {{role}}.",
     "inviteTitle": "Invite a member",
-    "email": "Email of their account",
+    "email": "Email address",
     "emailPlaceholder": "name@company.com",
     "role": "Role",
     "roles": {
@@ -1477,15 +1477,22 @@
     },
     "roleHints": {
       "Viewer": "Sees sprints, evidence and memory; cannot change anything.",
-      "Manager": "Also runs sprints, reviews evidence, manages agents and integrations.",
-      "Owner": "Also invites members."
+      "Manager": "Also runs sprints, reviews evidence, manages agents and integrations, and invites viewers and managers.",
+      "Owner": "Also invites owners, manages teams and single sign-on."
     },
     "invite": "Invite",
     "inviting": "Inviting…",
-    "invited": "{{email}} can now work here as {{role}}.",
-    "noAccount": "There is no account with that email. Ask them to register first, then invite them.",
+    "invited": "An invitation is waiting for {{email}} as {{role}}. They join once they accept it after signing in with that address.",
     "inviteError": "Could not invite: {{message}}",
-    "alreadyMember": "They are already a member of this company. Roles cannot be changed from here yet."
+    "managersOnly": "Only managers and owners can invite members. Your role here is {{role}}.",
+    "inviteLink": "Link you can send them (it works only for that address)",
+    "roleTooHigh": "Your role cannot invite with this role: a manager invites viewers and managers; only an owner invites an owner.",
+    "pendingTitle": "Pending invitations",
+    "pendingNone": "No pending invitations.",
+    "pendingRow": "{{email}} as {{role}}",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke the invitation of {{email}}",
+    "revokeError": "Could not revoke: {{message}}"
   },
   "github": {
     "title": "GitHub integration",
@@ -3425,6 +3432,20 @@
       "console_assistant_notes": "Console notes",
       "wiki": "Wiki"
     }
+  },
+  "invitations": {
+    "title": "Invitations",
+    "pendingTitle": "You are invited",
+    "none": "You have no pending invitations.",
+    "summary": "{{company}} invites you as {{role}} (from {{inviter}}).",
+    "expires": "Valid until {{date}}",
+    "accept": "Accept",
+    "decline": "Decline",
+    "accepted": "You are now a member. Choose the company from the company menu.",
+    "loadError": "Could not load your invitations: {{message}}",
+    "respondError": "Could not answer the invitation: {{message}}",
+    "tokenNotFound": "This invitation link does not match a pending invitation for the address you are signed in with.",
+    "tokenExpired": "This invitation has expired. Ask for a new one."
   },
   "findings": {
     "title": "Findings",

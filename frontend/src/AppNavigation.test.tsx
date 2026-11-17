@@ -151,18 +151,18 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Findings', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'Chat approvals', 'Audit anchors', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Findings', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Invitations', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'Chat approvals', 'Audit anchors', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
 
-    // Members, Teams, Duties and access, Usage and GitHub follow the company's effective role (a
+    // Members (invitations: Manager and up), Teams, Duties and access, Usage and GitHub follow the company's effective role (a
     // team can raise a Viewer to Manager, never to Owner); the help desk
     // follows the platform's support admin flag, whatever the role.
     it.each([
       ['Owner', undefined, false, ['Members', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'GitHub']],
-      ['Manager', undefined, false, ['Usage', 'GitHub']],
-      ['Viewer', 'Manager', false, ['Usage', 'GitHub']],
+      ['Manager', undefined, false, ['Members', 'Usage', 'GitHub']],
+      ['Viewer', 'Manager', false, ['Members', 'Usage', 'GitHub']],
       ['Viewer', undefined, false, []],
       ['Viewer', undefined, true, ['Help desk']],
     ] as const)('offers the admin pages a %s (effective %s, support admin: %s) can use', (role, effective, supportAdmin, expected) => {

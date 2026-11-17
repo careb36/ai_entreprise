@@ -65,6 +65,12 @@ export default function ProtectedRoute() {
     return <Outlet />
   }
 
+  // A person's invitations are not company data: they are how someone with no
+  // company yet joins one, so the page is open without a membership.
+  if (location.pathname === '/invitations') {
+    return <Outlet />
+  }
+
   const isCompanyRoute = location.pathname === '/companies/new'
   if (memberships.length === 0 && !isCompanyRoute) {
     return <Navigate to="/companies/new" replace />

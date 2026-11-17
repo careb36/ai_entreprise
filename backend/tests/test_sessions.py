@@ -123,7 +123,7 @@ def test_unsafe_cookie_requests_need_the_csrf_header(sqlite_session, browser):
     )
     assert wrong.status_code == 403
     ok = browser.post("/v1/company/invite", json=invite, headers=_csrf(browser))
-    assert ok.status_code == 200, ok.text
+    assert ok.status_code == 202, ok.text
 
 
 def test_a_planted_csrf_cookie_does_not_pass(sqlite_session, browser):
@@ -154,7 +154,7 @@ def test_bearer_requests_skip_csrf_and_win_over_the_cookie(sqlite_session, brows
         json={"company_id": acme.id, "email": first.email, "human_role": "Viewer"},
         headers=bearer,
     )
-    assert alone.status_code == 200, alone.text
+    assert alone.status_code == 202, alone.text
     # Both: treated as Bearer, so the missing CSRF header does not matter...
     _login(browser, owner.email)
     both = browser.post(
@@ -162,7 +162,7 @@ def test_bearer_requests_skip_csrf_and_win_over_the_cookie(sqlite_session, brows
         json={"company_id": acme.id, "email": second.email, "human_role": "Viewer"},
         headers=bearer,
     )
-    assert both.status_code == 200, both.text
+    assert both.status_code == 202, both.text
     # ...and a bad Bearer is refused even beside a good cookie.
     bad = browser.get(
         "/v1/auth/me", headers={"Authorization": "Bearer " + secrets.token_urlsafe(16)}

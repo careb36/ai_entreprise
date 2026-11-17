@@ -109,8 +109,16 @@ def test_an_unhandled_error_gets_the_baseline_and_no_detail(test_client, monkeyp
     assert "secret" not in response.text and "SELECT" not in response.text
 
 
+@pytest.fixture
+def docs_on(monkeypatch):
+    """The documentation as a development setup turns it on."""
+    monkeypatch.setattr(settings, "API_DOCS_ENABLED", True)
+
+
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
-def test_the_documentation_keeps_its_own_csp_and_cannot_be_framed(test_client, path):
+def test_the_documentation_keeps_its_own_csp_and_cannot_be_framed(
+    test_client, docs_on, path
+):
     response = test_client.get(path)
     assert response.status_code == 200
     _baseline(response)
@@ -121,7 +129,7 @@ def test_the_documentation_keeps_its_own_csp_and_cannot_be_framed(test_client, p
     assert "cache-control" not in response.headers
 
 
-def test_redoc_allows_external_scripts_and_google_fonts(test_client):
+def test_redoc_allows_external_scripts_and_google_fonts(test_client, docs_on):
     csp = test_client.get("/redoc").headers["Content-Security-Policy"]
     assert (
         "style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com "
@@ -142,10 +150,35 @@ def test_the_documentation_can_be_turned_off(test_client, monkeypatch, path):
     _api(response)
 
 
-def test_the_documentation_is_on_by_default():
+def test_the_documentation_is_off_by_default(monkeypatch):
+    """WSTG-v42-CONF-05: an API that faces the internet does not publish its
+    schema unless the operator turns it on."""
     from config import Settings
 
-    assert Settings().API_DOCS_ENABLED is True
+    monkeypatch.delenv("API_DOCS_ENABLED", raising=False)
+    assert Settings().API_DOCS_ENABLED is False
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_the_documentation_answers_404_with_the_default_setting(
+    test_client, monkeypatch, path
+):
+    from config import Settings
+
+    monkeypatch.delenv("API_DOCS_ENABLED", raising=False)
+    monkeypatch.setattr(settings, "API_DOCS_ENABLED", Settings().API_DOCS_ENABLED)
+    assert test_client.get(path).status_code == 404
+
+
+def test_the_compose_development_setup_turns_the_documentation_on():
+    """Local development keeps /docs: docker-compose sets it explicitly."""
+    from pathlib import Path
+
+    import yaml
+
+    compose = Path(__file__).resolve().parents[2] / "docker-compose.yml"
+    backend = yaml.safe_load(compose.read_text())["services"]["backend"]
+    assert backend["environment"]["API_DOCS_ENABLED"] == "${API_DOCS_ENABLED:-true}"
 
 
 def test_a_stream_keeps_its_own_cache_control():

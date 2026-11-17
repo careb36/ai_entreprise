@@ -238,7 +238,7 @@ def test_a_legacy_account_with_a_long_password_can_still_log_in(
 
 
 def test_the_new_hash_uses_the_configured_cost(test_client, sqlite_session):
-    _register(test_client, "cost@example.com", "a-password")
+    _register(test_client, "cost@example.com", "a-password-long-enough")
     stored = sqlite_session.exec(
         select(User).where(User.email == "cost@example.com")
     ).one()

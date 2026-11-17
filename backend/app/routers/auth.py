@@ -11,7 +11,8 @@ Endpoints:
 - ``GET /v1/auth/csrf``       — the session's CSRF value, for a page that
   cannot read the API host's cookie.
 - ``GET /v1/auth/me``         — return the authenticated user's profile.
-- ``POST /v1/company/invite`` — invite an existing user to collaborate on a company.
+- ``POST /v1/company/invite`` lives in ``routers/invitations.py``: a pending
+  invitation the invitee accepts or declines.
 - ``DELETE /v1/company/{id}/members/{user_id}`` — remove a member (Owner);
   ends that person's sessions.
 
@@ -40,7 +41,7 @@ from passwords import (
     rehash_password,
     verify_password,
 )
-from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
+from schemas import LoginRequest, UserCreateRequest
 from security import limiter
 from services.platform import login_throttle, sessions, sso_flow, teams
 from services.platform.agent_service import AgentService
@@ -78,21 +79,26 @@ async def register_user(
     The answer is the same whether or not the email was already registered,
     and costs the same (a bcrypt hash either way), so this route does not
     tell anyone which addresses have accounts (issue #541,
-    WSTG-v42-IDNT-04). An existing account is left untouched. The plain-text
-    password is hashed with bcrypt and the raw value is never stored.
+    WSTG-v42-IDNT-04); a taken address costs the same refused insert. An
+    existing account is left untouched. The password must have at least
+    ``PASSWORD_MIN_LENGTH`` characters; it is hashed with bcrypt and the raw
+    value is never stored.
     Rate-limited per client address (``REGISTER_RATE_LIMIT``).
     """
     password_hash = hash_password(req.password)
-    existing = session.exec(select(User).where(User.email == req.email)).first()
-    if existing is None:
-        session.add(
-            User(email=req.email, full_name=req.full_name, password_hash=password_hash)
-        )
-        try:
-            session.commit()
-        except IntegrityError:
-            # Registered by a concurrent request a moment ago: the same answer.
-            session.rollback()
+    # The insert is attempted for a taken address too, and the unique index
+    # refuses it: both paths do the same work (one bcrypt hash, one INSERT,
+    # one transaction), so neither the answer nor its timing says which
+    # addresses have accounts. The email is already normalised (schemas).
+    session.add(
+        User(email=req.email, full_name=req.full_name, password_hash=password_hash)
+    )
+    try:
+        session.commit()
+    except IntegrityError:
+        # Taken (or registered by a concurrent request a moment ago): the same
+        # answer, and the existing account is left untouched.
+        session.rollback()
     return {**REGISTERED, "email": req.email}
 
 
@@ -289,44 +295,6 @@ async def get_me(
             for membership in memberships
         ],
     }
-
-
-@router.post("/company/invite")
-async def invite_member(
-    req: InviteMemberRequest,
-    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    caller: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
-):
-    """
-    Invite a registered user to collaborate on a company.
-
-    The user must already have an account (identified by email).  The
-    ``human_role`` determines which governance capabilities the user has:
-    ``"Owner"`` > ``"Manager"`` > ``"Viewer"``.
-    """
-    require_company_role(session, caller, req.company_id, "Owner")
-    user = session.exec(select(User).where(User.email == req.email)).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    existing = session.exec(
-        select(CompanyMember).where(
-            CompanyMember.company_id == req.company_id,
-            CompanyMember.user_id == user.id,
-        )
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{req.email} is already a member as {existing.human_role}",
-        )
-    member = CompanyMember(
-        company_id=req.company_id,
-        user_id=user.id,
-        human_role=req.human_role,
-    )
-    session.add(member)
-    session.commit()
-    return {"status": "success", "message": f"{req.email} invited as {req.human_role}"}
 
 
 @router.delete("/company/{company_id}/members/{user_id}", status_code=204)

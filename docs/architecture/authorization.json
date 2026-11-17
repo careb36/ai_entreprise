@@ -44,6 +44,9 @@
     "DELETE /v1/companies/{company_id}/chat/{provider}": {
       "access": "Owner"
     },
+    "DELETE /v1/companies/{company_id}/invitations/{invitation_id}": {
+      "access": "Manager"
+    },
     "DELETE /v1/companies/{company_id}/providers/{provider_id}": {
       "access": "Manager"
     },
@@ -185,6 +188,9 @@
       "access": "public",
       "why": "What this deployment offers; no company data."
     },
+    "GET /v1/companies/{company_id}/access-review": {
+      "access": "Owner"
+    },
     "GET /v1/companies/{company_id}/architecture": {
       "access": "Viewer"
     },
@@ -193,9 +199,6 @@
     },
     "GET /v1/companies/{company_id}/architecture/versions/{version}": {
       "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/access-review": {
-      "access": "Owner"
     },
     "GET /v1/companies/{company_id}/autonomy": {
       "access": "Viewer"
@@ -233,6 +236,9 @@
     "GET /v1/companies/{company_id}/integration_review": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/invitations": {
+      "access": "Manager"
+    },
     "GET /v1/companies/{company_id}/manager_policy": {
       "access": "Viewer"
     },
@@ -243,6 +249,9 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/models": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/protected_paths": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/providers": {
@@ -344,6 +353,10 @@
     },
     "GET /v1/intake/{intake_id}": {
       "access": "Viewer"
+    },
+    "GET /v1/invitations": {
+      "access": "authenticated",
+      "why": "The caller's own pending invitations, by their email."
     },
     "GET /v1/manager_decisions": {
       "access": "Viewer"
@@ -618,11 +631,11 @@
     "POST /v1/board_notes/{note_id}/mark_wrong": {
       "access": "Manager"
     },
-    "POST /v1/companies/{company_id}/architecture/revisions": {
-      "access": "Manager"
-    },
     "POST /v1/companies/{company_id}/access-review": {
       "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/architecture/revisions": {
+      "access": "Manager"
     },
     "POST /v1/companies/{company_id}/chat/links/{provider}/code": {
       "access": "Viewer"
@@ -689,7 +702,11 @@
       "access": "Manager"
     },
     "POST /v1/company/invite": {
-      "access": "Owner"
+      "access": "Manager",
+      "body": {
+        "human_role": "Viewer"
+      },
+      "why": "A pending invitation, up to the inviter's own role (only an Owner invites an Owner); the answer is the same whether or not the address has an account."
     },
     "POST /v1/discover_team": {
       "access": "Manager"
@@ -745,6 +762,18 @@
     "POST /v1/integrations/teams/{public_id}/messages": {
       "access": "signed",
       "why": "Teams outgoing-webhook HMAC."
+    },
+    "POST /v1/invitations/accept": {
+      "access": "authenticated",
+      "why": "Accepts only an invitation addressed to the caller's email; anyone else gets 404."
+    },
+    "POST /v1/invitations/{invitation_id}/accept": {
+      "access": "authenticated",
+      "why": "Accepts only an invitation addressed to the caller's email; anyone else gets 404."
+    },
+    "POST /v1/invitations/{invitation_id}/decline": {
+      "access": "authenticated",
+      "why": "Declines only an invitation addressed to the caller's email; anyone else gets 404."
     },
     "POST /v1/manager_decisions/{decision_id}/override": {
       "access": "Manager"

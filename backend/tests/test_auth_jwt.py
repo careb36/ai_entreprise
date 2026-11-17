@@ -7,7 +7,7 @@ import auth_tokens
 import jwt
 import pytest
 from conftest import _engine
-from models.company import Company, User
+from models.company import Company, CompanyMember, User
 from sqlmodel import Session, select
 
 
@@ -119,15 +119,13 @@ def test_me_returns_user_and_company_membership_without_password_hash(
     sqlite_session.commit()
     sqlite_session.refresh(company)
 
-    invited = test_client.post(
-        "/v1/company/invite",
-        json={
-            "company_id": company.id,
-            "email": registered["email"],
-            "human_role": "Manager",
-        },
+    # A membership as an accepted invitation leaves it (test_invitations.py).
+    sqlite_session.add(
+        CompanyMember(
+            company_id=company.id, user_id=registered["user_id"], human_role="Manager"
+        )
     )
-    assert invited.status_code == 200
+    sqlite_session.commit()
     token = auth_tokens.create_access_token(
         user_id=registered["user_id"],
         email=registered["email"],

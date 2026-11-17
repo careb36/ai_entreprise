@@ -36,5 +36,7 @@ EXPOSE 8000
 ENV PYTHONPATH="/app:/app/app"
 
 # The schema first: the migrations to head (backend/alembic/), then the app,
-# which refuses a database behind head.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# which refuses a database behind head. uvicorn's own X-Forwarded-For handling
+# is off: the app decides which proxies to believe (TRUSTED_PROXY_IPS,
+# security.TrustedProxyMiddleware), so there is one rule, not two.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers"]

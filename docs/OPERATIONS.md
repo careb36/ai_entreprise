@@ -52,6 +52,66 @@ run the backend by hand, run the migrations yourself (`cd backend && alembic
 upgrade head`) or set `DB_AUTO_UPGRADE=true`. The backend refuses to start on
 a database behind head and names both versions.
 
+The interactive API documentation (`/docs`, `/redoc`, `/openapi.json`) is off
+unless `API_DOCS_ENABLED=true`. `docker-compose.yml` turns it on for local
+development; set `API_DOCS_ENABLED=false` in `.env` on a stack that faces
+users (WSTG-v42-CONF-05).
+
+### Behind a reverse proxy
+
+Every per-address limit (`LOGIN_RATE_LIMIT`, `REGISTER_RATE_LIMIT`,
+`REFRESH_RATE_LIMIT`, `SSO_RATE_LIMIT`, `RATE_LIMIT_DEFAULT`) keys on the
+address the request comes from. Behind nginx or Traefik that is the proxy,
+for every client, so ten failed sign-ins anywhere lock everyone out for a
+minute. List the proxy in `TRUSTED_PROXY_IPS` and the backend takes the
+client from `X-Forwarded-For` instead, only for connections from that proxy:
+the right-most address in the header that is not itself a listed proxy. Any
+other caller's `X-Forwarded-For` is ignored, so a client cannot choose its
+own bucket.
+
+1. Find the address the backend sees the proxy connect from: on the compose
+   network, `docker network inspect <project>_default` (the proxy
+   container's `IPv4Address`), or the subnet of that network to cover a
+   proxy that is recreated with a new address (`172.18.0.0/16`). Never list
+   `0.0.0.0/0` or a network the internet reaches the backend from.
+2. Make the proxy append, not pass through, the header:
+   - nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`
+     (nginx appends `$remote_addr`). In front of another proxy, also set
+     `set_real_ip_from` there, or list both in `TRUSTED_PROXY_IPS`.
+   - Traefik: the entry point's `forwardedHeaders.trustedIPs` lists only the
+     hops in front of Traefik (a load balancer), or nothing when clients
+     connect to it directly; Traefik then appends the client address.
+3. Set `TRUSTED_PROXY_IPS=<the address or network>` in `.env` and
+   `docker compose up -d backend`. A malformed entry stops the backend at
+   startup with a message naming it.
+4. Check: from two machines, ten wrong passwords from one get `429`; the
+   other still signs in.
+
+The image runs uvicorn with `--no-proxy-headers`, so its own header handling
+(which trusts `127.0.0.1` by default) does not run beside this one. When you
+run uvicorn by hand behind a proxy, pass `--no-proxy-headers` too.
+
+### The email migration stops on duplicates
+
+Migration `0045` lower-cases and strips every stored email address and adds a
+unique index on `lower(email)`, so `Ana@x` and `ana@x` are one account. If two
+existing accounts would become the same address, it changes nothing and
+stops, and `alembic upgrade head` (the backend container's entrypoint) fails
+with:
+
+```
+migration 0045 stopped: these accounts share an email address once it is
+lower-cased and stripped (ana@example.com: user ids 12, 31). Nothing was
+changed. ...
+```
+
+It never merges or deletes an account: an operator decides. For each address
+listed, look at the accounts (`SELECT id, email, full_name FROM users WHERE
+id IN (12, 31)` and their `company_members` rows), keep one, and either give
+the others a different address (`UPDATE users SET email = 'ana+old@example.com'
+WHERE id = 31`) or move their memberships to the kept account and delete them.
+Back up first (`scripts/backup.sh`), then run `alembic upgrade head` again.
+
 ## Upgrade
 
 1. Back up with `scripts/backup.sh` (below). The baseline migration is

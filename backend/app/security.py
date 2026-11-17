@@ -3,9 +3,13 @@ Security middleware and utilities for the Fabrique Enterprise API.
 
 Provides:
 - Rate limiting via slowapi
+- The client's address behind a trusted reverse proxy
 - Security headers middleware
 - CORS configuration
 """
+
+import ipaddress
+from functools import lru_cache
 
 from config import settings
 from fastapi import Request
@@ -96,6 +100,92 @@ def apply_security_headers(response, *, docs: bool = False):
     return response
 
 
+# -- the client's address behind a reverse proxy ---------------------------
+
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+@lru_cache(maxsize=8)
+def parse_trusted_proxies(value: str) -> tuple[IPNetwork, ...]:
+    """The networks of ``TRUSTED_PROXY_IPS`` (addresses or CIDR networks,
+    comma-separated); empty trusts nobody. A malformed entry raises
+    ``ValueError`` naming the setting: a typo must not quietly trust less, or
+    more, than meant."""
+    networks = []
+    for entry in (part.strip() for part in value.split(",")):
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError as exc:
+            raise ValueError(
+                f"TRUSTED_PROXY_IPS has {entry!r}, which is not an IP address "
+                "or network"
+            ) from exc
+    return tuple(networks)
+
+
+def _address(value: str):
+    try:
+        return ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+
+
+def _trusted(value: str, networks: tuple[IPNetwork, ...]) -> bool:
+    address = _address(value)
+    return address is not None and any(address in n for n in networks)
+
+
+def forwarded_client(
+    peer: str, forwarded_for: str | None, networks: tuple[IPNetwork, ...]
+) -> str:
+    """The client's address: *peer* (the connection's), unless *peer* is a
+    trusted proxy; then the right-most address of *forwarded_for* that is not
+    itself a trusted proxy. Each proxy appends the address it was reached
+    from, so everything left of that is the client's own claim and is never
+    believed. A malformed entry stops the walk at the last trusted hop (a
+    shared bucket, never one the client can choose)."""
+    if not networks or not _trusted(peer, networks) or not forwarded_for:
+        return peer
+    client = peer
+    for hop in reversed(forwarded_for.split(",")):
+        address = _address(hop)
+        if address is None:
+            return client
+        client = str(address)
+        if not any(address in n for n in networks):
+            return client
+    return client
+
+
+class TrustedProxyMiddleware:
+    """Puts the real client's address in ``scope["client"]`` when the request
+    came through a proxy listed in ``TRUSTED_PROXY_IPS``, so the rate limits
+    (``get_remote_address``) and the logs see the client, not the proxy. The
+    header is ignored otherwise. Pure ASGI, so it runs before the routes and
+    their limiter decorators."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket") and scope.get("client"):
+            networks = parse_trusted_proxies(settings.TRUSTED_PROXY_IPS)
+            if networks:
+                host, port = scope["client"]
+                header = None
+                for name, value in scope.get("headers") or ():
+                    if name == b"x-forwarded-for":
+                        decoded = value.decode("latin-1")
+                        # Several headers are one list, in order (RFC 9110 §5.3).
+                        header = decoded if header is None else f"{header},{decoded}"
+                client = forwarded_client(host, header, networks)
+                if client != host:
+                    scope = {**scope, "client": (client, port)}
+        await self.app(scope, receive, send)
+
+
 def setup_security(app):
     """Configure security middleware and rate limiting on the app."""
     from slowapi import _rate_limit_exceeded_handler
@@ -108,6 +198,9 @@ def setup_security(app):
 
     # Add security headers middleware
     app.add_middleware(SecurityHeadersMiddleware)
+    # Added last, so it runs first: every later layer sees the real client.
+    parse_trusted_proxies(settings.TRUSTED_PROXY_IPS)  # refuse a malformed one
+    app.add_middleware(TrustedProxyMiddleware)
 
     logger.info("Security middleware configured (rate limiting + security headers)")
 

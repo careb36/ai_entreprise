@@ -35,6 +35,7 @@
     "documentation": "Documentación",
     "duties": "Funciones y accesos",
     "auditAnchors": "Anclajes de auditoría",
+    "invitations": "Invitaciones",
     "findings": "Hallazgos"
   },
   "dashboard": {
@@ -1465,9 +1466,8 @@
   "members": {
     "title": "Miembros",
     "subtitle": "Personas que pueden trabajar en {{company}}.",
-    "ownerOnly": "Solo los propietarios pueden invitar miembros. Tu rol aquí es {{role}}.",
     "inviteTitle": "Invitar a un miembro",
-    "email": "Email de su cuenta",
+    "email": "Dirección de email",
     "emailPlaceholder": "nombre@empresa.com",
     "role": "Rol",
     "roles": {
@@ -1477,15 +1477,22 @@
     },
     "roleHints": {
       "Viewer": "Ve sprints, evidencia y memoria; no puede cambiar nada.",
-      "Manager": "Además ejecuta sprints, revisa evidencia, gestiona agentes e integraciones.",
-      "Owner": "Además invita miembros."
+      "Manager": "Además ejecuta sprints, revisa evidencia, gestiona agentes e integraciones, e invita lectores y gestores.",
+      "Owner": "Además invita propietarios y gestiona equipos y el inicio de sesión único."
     },
     "invite": "Invitar",
     "inviting": "Invitando…",
-    "invited": "{{email}} ya puede trabajar aquí como {{role}}.",
-    "noAccount": "No hay ninguna cuenta con ese email. Pídele que se registre primero y después invítala.",
+    "invited": "Hay una invitación esperando a {{email}} como {{role}}. Se une cuando la acepta tras iniciar sesión con esa dirección.",
     "inviteError": "No se pudo invitar: {{message}}",
-    "alreadyMember": "Ya es miembro de esta empresa. Todavía no se pueden cambiar roles desde aquí."
+    "managersOnly": "Solo los gestores y los propietarios pueden invitar miembros. Tu rol aquí es {{role}}.",
+    "inviteLink": "Enlace que puedes enviarle (solo sirve para esa dirección)",
+    "roleTooHigh": "Tu rol no puede invitar con este rol: un gestor invita lectores y gestores; solo un propietario invita a un propietario.",
+    "pendingTitle": "Invitaciones pendientes",
+    "pendingNone": "No hay invitaciones pendientes.",
+    "pendingRow": "{{email}} como {{role}}",
+    "revoke": "Revocar",
+    "revokeLabel": "Revocar la invitación de {{email}}",
+    "revokeError": "No se pudo revocar: {{message}}"
   },
   "github": {
     "title": "Integración con GitHub",
@@ -3425,6 +3432,20 @@
       "console_assistant_notes": "Notas de consola",
       "wiki": "Wiki"
     }
+  },
+  "invitations": {
+    "title": "Invitaciones",
+    "pendingTitle": "Te han invitado",
+    "none": "No tienes invitaciones pendientes.",
+    "summary": "{{company}} te invita como {{role}} (de {{inviter}}).",
+    "expires": "Válida hasta el {{date}}",
+    "accept": "Aceptar",
+    "decline": "Rechazar",
+    "accepted": "Ya eres miembro. Elige la empresa en el menú de empresa.",
+    "loadError": "No se pudieron cargar tus invitaciones: {{message}}",
+    "respondError": "No se pudo responder a la invitación: {{message}}",
+    "tokenNotFound": "Este enlace no corresponde a una invitación pendiente para la dirección con la que has iniciado sesión.",
+    "tokenExpired": "Esta invitación ha caducado. Pide una nueva."
   },
   "findings": {
     "title": "Hallazgos",
