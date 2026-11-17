@@ -390,6 +390,46 @@ exercises the same harness with the fake model (step 9d). The snapshot has no
 remote: what is kept comes back to this repository as an ordinary pull
 request.
 
+### Run a self-improvement cycle
+
+Once the sprint's change is back as a pull request (`docs/design/rsi-loop.md`
+§7 step 5), `scripts/rsi/cycle.py` measures it against `main` and says
+whether it may be kept. It never merges, pushes or approves; a person does
+(details in [`scripts/rsi/README.md`](../scripts/rsi/README.md)).
+
+1. Save the company's findings as the platform reports them:
+   `GET /v1/findings?company_id=<id>` with an Owner's token, to
+   `findings.json`. A specification whose cycle was reverted does not start
+   again unless you name the person who asks (`--retry-by "<name>"`, REQ-20).
+2. Fetch the pull request's head locally (`git fetch origin
+   pull/<n>/head`), export `GITHUB_TOKEN` (read access to checks and pull
+   requests), the bench's settings (`BENCH_LLM_URL`, the Postgres variables,
+   `BENCH_TOKEN_BUDGET`; `bench/README.md`) and run a dry run first:
+
+   ```bash
+   python3 scripts/rsi/cycle.py run --dry-run --pr <n> --repository <owner>/<repo> \
+     --spec scripts/self_host/specs/<name>-specification.json --findings findings.json \
+     --cycle-id cycle-<n>-<name> --work /tmp/rsi/cycle-<n> --out /tmp/rsi/cycle-<n>.json \
+     --python "$(cd backend && poetry env info -p)/bin/python"
+   ```
+
+   It checks the inputs from git and the files (the specification at B and
+   its measure, the findings, the graders' trees) and prints every step.
+3. Run it again without `--dry-run`. It takes hours (K = 3 real bench runs
+   per side, alternating). Exit status: 0 keep, 1 revert, 2 unmeasured, 3
+   refused (the target already passes on B, a reverted specification, a card
+   not graded by B, a step that failed). The record names every command, its
+   exit status and its output's sha256, and every kept file with its hash.
+4. **Keep**: merge the pull request yourself, pinned to the head the record
+   names (`candidate_sha`; GitHub's "expected head sha"). Then
+   `python3 scripts/rsi/cycle.py record --record /tmp/rsi/cycle-<n>.json
+   --merged-sha <merge commit> --out rsi/cycles/<cycle id>.json` and commit
+   that file in a pull request (`rsi/cycles/` is protected): the nightly watch
+   reads it (REQ-19). **Revert / unmeasured**: close the pull request unmerged
+   (or pass `--close-pr` to the run) and record the decision on the finding.
+5. `python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-<n>.json`
+   hashes the kept files again before anyone relies on them.
+
 ## When something is wrong
 
 **The daemon is absent.** `GET /v1/workspace/status` says `absent` (NATS
