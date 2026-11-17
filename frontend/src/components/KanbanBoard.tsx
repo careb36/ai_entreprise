@@ -46,7 +46,7 @@ function BoardSkeleton() {
   return (
     <div className="flex min-w-0 gap-3 overflow-x-auto p-4" aria-hidden="true">
       {BOARD_COLUMNS.map(c => (
-        <div key={c.id} className="w-64 flex-shrink-0 space-y-2 rounded-xl border border-surface-700 bg-surface-900/80 p-2">
+        <div key={c.id} className="panel w-64 flex-shrink-0 space-y-2 p-2">
           <div className="skeleton mb-3 h-5 w-28 rounded" />
           {[1, 2].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
         </div>

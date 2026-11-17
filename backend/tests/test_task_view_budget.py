@@ -140,10 +140,19 @@ def test_a_filter_over_five_thousand_tasks_answers_within_the_page_budget(
     # specification's 300 ms with PERF_STRICT=1 (.github/workflows/bench.yml).
     # The self-hosted runners that check a pull request share one machine, so
     # there an absolute budget measures the other jobs; the query is held
-    # instead to five times the reference read (about 1.5 times on an idle
-    # machine), which a large regression crosses and the load does not.
+    # instead to ten times the reference read taken right after it (1 to 2.3
+    # times on an idle machine), which a large regression crosses and the
+    # load does not. Each query is compared with its own read, the pair that
+    # shared a moment's load, and the best pair counts: comparing the fastest
+    # query with the fastest read compared two different moments, and one
+    # quiet read among loaded queries failed the test (6.1 times, PR #642).
+    # Load also weighs more on the query (Python work) than on the read
+    # (mostly SQLite's C code): with eight pull requests' suites on the
+    # runners' machine every pair was 5.1 to 5.5 times (PR #645), so five was
+    # too close; a per-task query at this size is a hundred times or more.
     # Per-task queries are caught exactly by the statement count above.
     if os.environ.get("PERF_STRICT") == "1":
         assert min(timings) < 0.3, timings
     else:
-        assert min(timings) < 5 * min(reads), (timings, reads)
+        ratios = [query / read for query, read in zip(timings, reads)]
+        assert min(ratios) < 10, (ratios, timings, reads)
