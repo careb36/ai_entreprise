@@ -34,7 +34,8 @@
     "wiki": "Wiki",
     "documentation": "Documentation",
     "duties": "Duties and access",
-    "auditAnchors": "Audit anchors"
+    "auditAnchors": "Audit anchors",
+    "findings": "Findings"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3312,6 +3313,58 @@
       "completed_tasks": "Completed tasks",
       "console_assistant_notes": "Console notes",
       "wiki": "Wiki"
+    }
+  },
+  "findings": {
+    "title": "Findings",
+    "subtitle": "What the platform observed and wants fixed, the check that should pass once it is, and what each self-improvement cycle decided. Read-only: the platform records the outcomes.",
+    "loading": "Loading findings…",
+    "loadError": "Could not load the findings: {{message}}",
+    "empty": "No findings yet. They appear here once a retrospective or a cycle records one.",
+    "noCompany": "Choose a company to see its findings.",
+    "source": "Source",
+    "noSource": "Not recorded",
+    "targetMeasure": "Target measure",
+    "noTargetMeasure": "None yet: no cycle starts until a person writes one.",
+    "status": {
+      "open": "Open",
+      "in_cycle": "In a cycle",
+      "kept": "Kept",
+      "reverted": "Reverted",
+      "unmeasured": "Unmeasured",
+      "closed_by_person": "Closed by a person"
+    },
+    "decision": {
+      "keep": "Keep",
+      "revert": "Revert",
+      "unmeasured": "Unmeasured"
+    },
+    "outcomes": {
+      "caption": "Cycles for {{title}}",
+      "none": "No cycle has run for this finding yet.",
+      "cycle": "Cycle",
+      "decision": "Decision",
+      "reasons": "Reasons",
+      "noReasons": "No reasons recorded",
+      "baseline": "Baseline (B)",
+      "candidate": "Candidate (C)",
+      "date": "Date"
+    },
+    "detail": {
+      "crumb": "Finding {{id}}",
+      "loading": "Loading the finding…",
+      "loadError": "Could not load the finding: {{message}}",
+      "notFound": "This finding does not exist, or it belongs to another company.",
+      "record": "Record",
+      "specificationPath": "Specification file",
+      "specificationSha": "Specification sha256",
+      "created": "Recorded",
+      "updated": "Last change",
+      "closedBy": "Closed by",
+      "outcomes": "Cycles",
+      "outcomesHint": "Each cycle measures the baseline (B) and the candidate (C) with the same graders; the fitness function decides and names every guard it judged.",
+      "specification": "Specification",
+      "noSpecificationText": "The specification's text was not stored; its sha256 is above."
     }
   }
 }
