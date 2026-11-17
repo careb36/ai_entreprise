@@ -961,7 +961,10 @@
     "suggestion": "Reviewer agent suggests: {{decision}}",
     "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people.",
     "historyPeriod": "Usage history period",
-    "dayTokens": "{{date}}: {{tokens}} tokens"
+    "dayTokens": "{{date}}: {{tokens}} tokens",
+    "quotaUnits": "Business units",
+    "quotaUnitCount_one": "{{count}} business unit",
+    "quotaUnitCount_other": "{{count}} business units"
   },
   "evidence": {
     "title": "Evidence",
@@ -1242,7 +1245,8 @@
     "companyPlaceholder": "Company {{id}}",
     "retry": "Try again",
     "loading": "Loading your account…",
-    "selectCompany": "Select a company"
+    "selectCompany": "Select a company",
+    "productName": "La Fabrique"
   },
   "agentsConfig": {
     "title": "Agent Registry",
@@ -1616,7 +1620,11 @@
       "unusable": " ({{n}} without a usable answer)",
       "reporters": "; the reporters {{reporter}} of {{chose}}.",
       "noReporters": "; no reporter chose one."
-    }
+    },
+    "adminOnlyTitle": "For support admins",
+    "filters": "Filter the tickets",
+    "ticketCount_one": "{{count}} ticket",
+    "ticketCount_other": "{{count}} tickets"
   },
   "health": {
     "title": "Service status",
