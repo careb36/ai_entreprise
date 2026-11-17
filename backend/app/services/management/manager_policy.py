@@ -113,6 +113,9 @@ RULE_DECISIONS = {
 # Decisions that always go to the client, whatever a policy says.
 # ``change_protected_paths``: turning a company's protected paths on or off
 # (``services/platform/protected_paths_setting.py``) is a signed-in Owner's.
+# ``merge_self_change``: merging a kept self-improvement cycle into the
+# factory's own ``main`` is a person's (``services/management/rsi_cycle.py``,
+# decision 1 of ``docs/design/rsi-loop.md``).
 ALWAYS_ESCALATE = frozenset(
     {
         "cancel_sprint",
@@ -120,6 +123,7 @@ ALWAYS_ESCALATE = frozenset(
         "change_autonomy",
         "spend_above_budget",
         "change_protected_paths",
+        "merge_self_change",
     }
 )
 LOW_TIERS = ("low", "medium")

@@ -47,6 +47,7 @@ from models.mcp import McpServer
 from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication
+from models.rsi_cycle import RsiCycle
 from models.run_secret import RunSecret
 from models.specification import Specification
 from models.wiki import WikiPage, WikiPageVersion
@@ -235,6 +236,15 @@ def build_world(session) -> World:
             target_measure="scripts/self_host/measures/test_authz.py",
         ),
     )
+    rsi = _add(
+        session,
+        RsiCycle(
+            company_id=cid,
+            cycle_key="cycle-authz",
+            finding_id=finding.id,
+            baseline_sha="b" * 40,
+        ),
+    )
     comment = _add(
         session,
         ReviewComment(
@@ -321,6 +331,7 @@ def build_world(session) -> World:
         "note_id": note.id,
         "procedure_id": procedure.id,
         "finding_id": finding.id,
+        "rsi_cycle_id": rsi.id,
         "comment_id": comment.id,
         "integration_id": integrated.id,
         "integration_comment_id": integration_comment.id,
