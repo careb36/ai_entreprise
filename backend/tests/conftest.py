@@ -99,6 +99,7 @@ from models.company import (
 )
 from models.documentation import DocumentationPack
 from models.event import TaskEvent
+from models.finding import Finding
 from models.github import GitHubRepoBinding
 from models.intake import IntakeItem
 from models.integration import SprintIntegration
@@ -377,6 +378,7 @@ SQLModel.metadata.create_all(
         BugReport.__table__,
         AgentMessage.__table__,
         Procedure.__table__,
+        Finding.__table__,
         McpServer.__table__,
         ProviderConnection.__table__,
         RunReview.__table__,
