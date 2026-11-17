@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Bot, ChevronDown, ChevronRight, Lightbulb, X } from 'lucide-react'
 import { TIER_META, localizedRoles, localizedSeniorities } from './constants'
 import type { Agent, ModelInfo } from './types'
 
@@ -22,35 +23,37 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
   const id = useId()
 
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-xl p-5 space-y-4">
+    <div className="panel space-y-3 p-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{roleInfo.icon}</span>
-          <div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-surface-700 text-gray-300">
+            <Bot size={15} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
             {agent.name ? (
               <>
-                <p className="text-sm font-medium text-white">{agent.name}</p>
-                <p className="text-xs text-gray-500">{roleInfo.label} · {roleInfo.desc}</p>
+                <p className="text-[13px] font-semibold text-gray-100">{agent.name}</p>
+                <p className="text-xs text-gray-400">{roleInfo.label} · {roleInfo.desc}</p>
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-white">{roleInfo.label}</p>
-                <p className="text-xs text-gray-500">{roleInfo.desc}</p>
+                <p className="text-[13px] font-semibold text-gray-100">{roleInfo.label}</p>
+                <p className="text-xs text-gray-400">{roleInfo.desc}</p>
               </>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1">
           {modelInfo && (
-            <span className={`badge text-[10px] font-mono ${tierMeta.color}`}>
+            <span className={`max-w-[10rem] truncate rounded-md px-1.5 font-mono text-[11px] leading-5 ${tierMeta.color}`} title={agent.model}>
               {tierMeta.icon} {agent.model}
             </span>
           )}
           {canRemove && (
             <button onClick={() => onRemove(index)}
-              className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none p-1 ml-1"
-              type="button" aria-label={t('companyNew.removeAgent')} title={t('companyNew.removeAgent')}><span aria-hidden="true">×</span></button>
+              className="btn-tool px-2 hover:text-red-300"
+              type="button" aria-label={t('companyNew.removeAgent')} title={t('companyNew.removeAgent')}><X size={13} aria-hidden="true" /></button>
           )}
         </div>
       </div>
@@ -110,7 +113,7 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
           )}
         </select>
         {modelInfo && (
-          <p className="text-[10px] text-gray-600 mt-1">{modelInfo.description}</p>
+          <p className="mt-1 text-[11px] text-gray-400">{modelInfo.description}</p>
         )}
       </div>
 
@@ -129,8 +132,9 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
           <button type="button"
             onClick={() => setShowPrompt(v => !v)}
             aria-expanded={showPrompt}
-            className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors">
-            {showPrompt ? '▾' : '▸'} {t('companyNew.systemPrompt')}
+            className="flex items-center gap-1 rounded-sm text-xs text-gray-400 hover:text-gray-200">
+            {showPrompt ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+            {t('companyNew.systemPrompt')}
           </button>
           {showPrompt && (
             <textarea
@@ -152,21 +156,21 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
             value={agent.token_budget ?? 500000}
             onChange={e => onUpdate(index, 'token_budget', parseInt(e.target.value))}
             className="flex-1 accent-brand-500" />
-          <span className="text-xs text-brand-300 w-20 text-right font-mono">
+          <span className="w-20 text-right font-mono text-xs tabular-nums text-brand-300">
             {t('companyNew.thousandTokens', { count: (agent.token_budget ?? 500000) / 1000 })}
           </span>
         </div>
       </div>
 
       {/* Badges + reasoning */}
-      <div className="flex gap-2 flex-wrap pt-1">
-        <span className={`badge bg-surface-700 ${senInfo.color}`}>{senInfo.label}</span>
-        <span className="badge bg-surface-700 text-gray-400">{roleInfo.label}</span>
-        {agent.specialty && <span className="badge bg-brand-900/30 text-brand-300">{agent.specialty}</span>}
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        <span className={`chip ${senInfo.color}`}>{senInfo.label}</span>
+        <span className="chip">{roleInfo.label}</span>
+        {agent.specialty && <span className="chip border-brand-700/50 text-brand-300">{agent.specialty}</span>}
       </div>
       {agent.reasoning && (
-        <p className="text-xs text-gray-500 italic border-t border-surface-700/50 pt-2 mt-1">
-          💡 {agent.reasoning}
+        <p className="flex items-start gap-1.5 border-t border-surface-700 pt-2 text-xs italic text-gray-400">
+          <Lightbulb size={13} aria-hidden="true" className="mt-px flex-shrink-0 not-italic" />{agent.reasoning}
         </p>
       )}
     </div>

@@ -5,6 +5,18 @@ A Manager creates a token for one company, with a role (``Viewer`` or
 stored; the raw token is shown once. A revoked or expired token is refused.
 A caller holding a token acts as ``api-token:<id>``, so the audit rows its
 requests write name the token.
+
+A token never outranks its creator's **current** effective role in its company
+(issue #512, ``docs/design/TEAMS_AND_USAGE.md`` T5). On every use, a token
+whose creator was demoted below it, left the company or no longer has an
+account is refused, not quietly lowered: the role on the token is what its
+holder was promised, and a request that would act below it fails loudly
+rather than half-working. The refusal is an ``api_token_refused`` audit row
+with the reason (at most one per token, reason and hour, so a script retrying
+cannot flood the chain). The token is not revoked: promoted back, its creator
+carries it again. A token with no recorded creator (minted while
+authentication was off) is not capped; the access review lists it with no
+owner (``docs/design/SEGREGATION_OF_DUTIES.md``, residual risks).
 """
 
 from __future__ import annotations
@@ -13,13 +25,21 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from models import ApiToken
+from models import ApiToken, AuditLog, User
 from sqlmodel import Session, select
+
+from services.contracts.emails import normalize_email
+from services.platform import teams
+from services.platform.agent_service import AgentService
 
 TOKEN_ROLES = ("Viewer", "Manager")
 DEFAULT_ROLE = "Viewer"
 DEFAULT_DAYS = 90
 MAX_DAYS = 365
+REFUSED_ACTION = "api_token_refused"
+NOT_A_MEMBER = "creator_not_a_member"
+BELOW_TOKEN = "creator_role_below_token"
+REFUSAL_AUDIT_EVERY = timedelta(hours=1)
 
 
 def _hash(token: str) -> str:
@@ -88,6 +108,64 @@ def expired(token: ApiToken, now: datetime | None = None) -> bool:
     return _aware(token.expires_at) <= (now or datetime.now(UTC))
 
 
+def refusal(token_role: str | None, creator_role: str | None) -> str | None:
+    """Pure: why a token of *token_role* is refused for a creator now holding
+    *creator_role* (``None``: not a member), or ``None`` when it may act."""
+    if creator_role not in teams.ROLE_RANK:
+        return NOT_A_MEMBER
+    # A token from before roles acts as a Manager (auth_deps), so it is held
+    # to a Manager's rank.
+    rank = teams.ROLE_RANK.get(token_role or "Manager", teams.ROLE_RANK["Manager"])
+    if rank > teams.ROLE_RANK[creator_role]:
+        return BELOW_TOKEN
+    return None
+
+
+def creator_role(session: Session, token: ApiToken) -> str | None:
+    """The effective role, teams included, the token's creator holds now in
+    the token's company; ``None`` when the account is gone or not a member."""
+    creator = session.exec(
+        select(User).where(User.email == normalize_email(token.created_by or ""))
+    ).first()
+    if creator is None or creator.id is None:
+        return None
+    return teams.member_role(session, token.company_id, creator.id)
+
+
+def _audit_refusal(
+    session: Session, token: ApiToken, reason: str, role: str | None
+) -> None:
+    actor = f"api-token:{token.id}"
+    since = (datetime.now(UTC) - REFUSAL_AUDIT_EVERY).replace(tzinfo=None)
+    recent = session.exec(
+        select(AuditLog).where(
+            AuditLog.company_id == token.company_id,
+            AuditLog.action == REFUSED_ACTION,
+            AuditLog.interaction_id == actor,
+            AuditLog.created_at >= since,
+        )
+    ).all()
+    if any((row.result or {}).get("reason") == reason for row in recent):
+        return
+    AgentService().audit_interaction(
+        session=session,
+        company_id=token.company_id,
+        interaction_id=actor,
+        agent_id=actor,
+        action=REFUSED_ACTION,
+        details={
+            "token_id": token.id,
+            "token_name": token.name,
+            "token_role": token.role,
+            "creator": token.created_by,
+            "creator_role": role,
+        },
+        result={"outcome": "refused", "reason": reason},
+        decision_signature=None,
+        cost_tokens=0,
+    )
+
+
 def verify(session: Session, raw: str) -> ApiToken | None:
     token = session.exec(
         select(ApiToken).where(ApiToken.token_hash == _hash(raw))
@@ -96,6 +174,12 @@ def verify(session: Session, raw: str) -> ApiToken | None:
         return None
     if expired(token):
         return None
+    if token.created_by:
+        role = creator_role(session, token)
+        reason = refusal(token.role, role)
+        if reason is not None:
+            _audit_refusal(session, token, reason, role)
+            return None
     token.last_used_at = datetime.now(UTC)
     session.add(token)
     session.commit()

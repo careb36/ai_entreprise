@@ -125,7 +125,7 @@ export function DraftFields({
             className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500/30 bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-200 disabled:opacity-50 hover:bg-brand-500/20 transition-colors"
           >
             {generatePrompt.isPending
-              ? <><Loader2 size={11} className="animate-spin" />{t('agentsConfig.generatingPrompt')}</>
+              ? <><Loader2 size={11} className="animate-spin motion-reduce:animate-none" />{t('agentsConfig.generatingPrompt')}</>
               : <><Wand2 size={11} />{t('agentsConfig.generatePrompt')}</>
             }
           </button>

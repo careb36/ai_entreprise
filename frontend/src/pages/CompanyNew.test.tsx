@@ -107,7 +107,7 @@ describe('company creation profile refresh', () => {
         nextSpanishStep()
         expect(screen.getByText('· Product Management & Backlog')).toBeInTheDocument()
         expect(screen.getByText('· Pruebas automatizadas')).toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Inicializar Fábrica' }))
         await waitFor(() => expect(init).toHaveBeenCalledOnce())
         const payload = init.mock.calls[0][0]
         const agents = payload.agents ?? []
@@ -135,7 +135,7 @@ describe('company creation profile refresh', () => {
         const init = vi.spyOn(api, 'initCompany').mockImplementation(() => new Promise(() => {}))
         const i18n = await renderSpanishWizard('en')
         fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: '/projects/demo' } })
-        fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Scan' }))
         await screen.findByText(/Stack detected/)
         for (let step = 0; step < 4; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
         await act(async () => { await i18n.changeLanguage('es') })
@@ -143,7 +143,7 @@ describe('company creation profile refresh', () => {
         expect(screen.getByDisplayValue('Automated Testing')).toBeInTheDocument()
         expect(screen.queryByDisplayValue('Pruebas automatizadas')).not.toBeInTheDocument()
         nextSpanishStep()
-        fireEvent.click(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Inicializar Fábrica' }))
         await waitFor(() => expect(init).toHaveBeenCalledOnce())
         expect(init.mock.calls[0][0].agents).toEqual([
           expect.objectContaining({ role: 'PO', specialty: 'Product Management & Backlog', persona: 'External persona' }),
@@ -153,7 +153,7 @@ describe('company creation profile refresh', () => {
 
       it('localizes all six steps, validation, generated team defaults, options, and review', async () => {
         await renderSpanishWizard()
-        expect(screen.getByRole('heading', { name: '🏭 Nueva Fábrica' })).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'Nueva Fábrica' })).toBeInTheDocument()
         for (const step of ['Proyecto', 'Empresa', 'Autonomía', 'Permisos', 'Equipo', 'Revisión']) {
           expect(screen.getByText(step)).toBeInTheDocument()
         }
@@ -187,7 +187,7 @@ describe('company creation profile refresh', () => {
         expect(screen.getAllByText('Cargando modelos…')).toHaveLength(4)
         expect(screen.getAllByTitle('Eliminar')).toHaveLength(4)
         expect(screen.getByText('4.5 M de tokens')).toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: '+ Añadir agente' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Añadir agente' }))
         expect(screen.getAllByTitle('Eliminar')).toHaveLength(5)
         nextSpanishStep()
         expect(screen.getByRole('heading', { name: 'Revisar e inicializar' })).toBeInTheDocument()
@@ -196,7 +196,7 @@ describe('company creation profile refresh', () => {
         expect(screen.getByText('Nivel 1')).toBeInTheDocument()
         expect(screen.getByText('5.5 M de tokens/mes')).toBeInTheDocument()
         expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(4)
-        expect(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Inicializar Fábrica' })).toBeInTheDocument()
         expect(document.body.textContent).not.toMatch(/companyNew\./)
       })
 
@@ -204,7 +204,7 @@ describe('company creation profile refresh', () => {
         vi.spyOn(api, 'browseWorkspace').mockRejectedValue(
           new ApiError(503, 'Service is starting up.', 'Workspace daemon not connected'))
         await renderSpanishWizard()
-        fireEvent.click(screen.getByRole('button', { name: '📂 Examinar' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Examinar' }))
         const dialog = await screen.findByRole('dialog', { name: 'Elige la carpeta del proyecto' })
         expect(await within(dialog).findByText('El daemon del espacio de trabajo no está conectado.')).toBeInTheDocument()
         expect(within(dialog).getByText('./scripts/start-daemon.sh')).toBeInTheDocument()
@@ -219,7 +219,7 @@ describe('company creation profile refresh', () => {
         vi.spyOn(api, 'discoverTeam').mockImplementation(() => new Promise((_, reject) => { rejectDiscovery = reject }))
         await renderSpanishWizard()
         fireEvent.change(screen.getByLabelText('Carpeta del proyecto'), { target: { value: '/projects/demo' } })
-        fireEvent.click(screen.getByRole('button', { name: '🔍 Analizar' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
         expect(await screen.findByText('Analizando…')).toBeInTheDocument()
         await act(async () => { rejectDiscovery(new Error('Repositorio inaccesible')) })
         expect(await screen.findByText('Error al analizar el proyecto: Repositorio inaccesible')).toBeInTheDocument()
@@ -239,7 +239,7 @@ describe('company creation profile refresh', () => {
         })
         await renderSpanishWizard()
         fireEvent.change(screen.getByLabelText('Carpeta del proyecto'), { target: { value: '/projects/demo' } })
-        fireEvent.click(screen.getByRole('button', { name: '🔍 Analizar' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
         expect(await screen.findByText(/Tecnologías detectadas/)).toBeInTheDocument()
         expect(screen.getByText('Lenguaje principal')).toBeInTheDocument()
         expect(screen.getByText('1 archivo analizado')).toBeInTheDocument()
@@ -277,7 +277,7 @@ describe('company creation profile refresh', () => {
         nextSpanishStep()
         fireEvent.change(screen.getByPlaceholderText('Acme Corp'), { target: { value: 'Mi Fábrica' } })
         for (let step = 1; step < 5; step++) nextSpanishStep()
-        fireEvent.click(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Inicializar Fábrica' }))
         await waitFor(() => expect(alert).toHaveBeenCalledWith(`Error al inicializar la fábrica: ${expected}`))
         if (message) expect(await screen.findByText(`Error al inicializar la fábrica: ${message}`)).toBeInTheDocument()
         expect(init.mock.calls[0][0]).toEqual(expect.objectContaining({
