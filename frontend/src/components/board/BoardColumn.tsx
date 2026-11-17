@@ -10,6 +10,7 @@ import { needsPerson, type BoardStatus } from '../../lib/kanban'
 import type { BoardDensity } from '../../hooks/useBoardPreferences'
 import { CollapsedCard } from './CollapsedCard'
 import { TaskCard } from './TaskCard'
+import { CountPill } from '../ui/CountPill'
 
 /** Each status's icon and tone: the column's name always says it in words too. */
 const COLUMN_LOOK: Record<BoardStatus, { Icon: typeof Circle; tone: string }> = {
@@ -39,17 +40,14 @@ export interface BoardColumnProps {
   keyboardHintId: string
 }
 
-function CountPill({ shown, total, filtered }: { shown: number; total: number; filtered: boolean }) {
+/** The column's count: `shown/total` while the board's filters hide some of its cards. */
+function ColumnCount({ shown, total, filtered }: { shown: number; total: number; filtered: boolean }) {
   const { t } = useTranslation()
-  const label = filtered && shown !== total
+  const partial = filtered && shown !== total
+  const label = partial
     ? t('kanbanBoard.column.countFiltered', { shown, count: total })
     : t('kanbanBoard.column.count', { count: total })
-  return (
-    <span role="img" aria-label={label} title={label}
-      className="rounded-md border border-surface-700 bg-surface-950/60 px-1.5 text-[11px] font-medium leading-5 tabular-nums text-gray-400">
-      {filtered && shown !== total ? `${shown}/${total}` : total}
-    </span>
-  )
+  return <CountPill count={partial ? shown : total} total={partial ? total : undefined} label={label} />
 }
 
 export function BoardColumn(props: BoardColumnProps) {
@@ -65,7 +63,7 @@ export function BoardColumn(props: BoardColumnProps) {
   if (collapsed) {
     return (
       <section aria-labelledby={headingId}
-        className={`flex max-h-full w-11 flex-shrink-0 flex-col items-center gap-2.5 rounded-xl border border-surface-700 bg-surface-900/80 py-2 transition-shadow motion-reduce:transition-none ${dropRing}`}>
+        className={`flex max-h-full w-11 flex-shrink-0 flex-col items-center gap-2.5 panel py-2 transition-shadow motion-reduce:transition-none ${dropRing}`}>
         <button type="button" data-column-toggle={id} onClick={() => onToggleCollapse(id)} aria-expanded={false}
           aria-label={t('kanbanBoard.column.expand', { column: title })} title={t('kanbanBoard.column.expand', { column: title })}
           className="btn-ghost h-7 w-7 rounded-md p-0">
@@ -73,7 +71,7 @@ export function BoardColumn(props: BoardColumnProps) {
         </button>
         <Icon size={13} className={tone} aria-hidden="true" />
         <h3 id={headingId} className="select-none text-[13px] font-semibold text-gray-100 [writing-mode:vertical-rl]">{title}</h3>
-        <CountPill shown={items.length} total={total} filtered={filtered} />
+        <ColumnCount shown={items.length} total={total} filtered={filtered} />
         {attention > 0 && (
           <span role="img" aria-label={attentionLabel} title={attentionLabel}
             className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-300">
@@ -91,7 +89,7 @@ export function BoardColumn(props: BoardColumnProps) {
 
   return (
     <section aria-labelledby={headingId}
-      className={`flex w-[85vw] max-w-[20rem] flex-shrink-0 snap-start flex-col rounded-xl border border-surface-700 bg-surface-900/80 transition-shadow motion-reduce:transition-none sm:w-72 lg:w-auto lg:min-w-[15.5rem] lg:max-w-none lg:flex-1 ${dropRing}`}>
+      className={`flex w-[85vw] max-w-[20rem] flex-shrink-0 snap-start flex-col panel transition-shadow motion-reduce:transition-none sm:w-72 lg:w-auto lg:min-w-[15.5rem] lg:max-w-none lg:flex-1 ${dropRing}`}>
       <header className="sticky top-0 z-10 flex h-11 items-center gap-1.5 rounded-t-xl border-b border-surface-700 bg-surface-900/95 pl-1.5 pr-2.5 backdrop-blur">
         <button type="button" data-column-toggle={id} onClick={() => onToggleCollapse(id)} aria-expanded={true}
           aria-label={t('kanbanBoard.column.collapse', { column: title })} title={t('kanbanBoard.column.collapse', { column: title })}
@@ -100,7 +98,7 @@ export function BoardColumn(props: BoardColumnProps) {
         </button>
         <Icon size={13} className={`flex-shrink-0 ${tone}`} aria-hidden="true" />
         <h3 id={headingId} className="truncate text-[13px] font-semibold text-gray-100">{title}</h3>
-        <CountPill shown={items.length} total={total} filtered={filtered} />
+        <ColumnCount shown={items.length} total={total} filtered={filtered} />
         {attention > 0 && (
           <span role="img" aria-label={attentionLabel} title={attentionLabel}
             className="ml-auto inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-amber-900/40 px-1.5 text-[11px] font-semibold leading-5 text-amber-200 ring-1 ring-inset ring-amber-700/50">
