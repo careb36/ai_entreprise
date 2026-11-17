@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Download, GitPullRequest, KeyRound, Loader2, Plug } from 'lucide-react'
+import { CircleCheck, Copy, Download, KeyRound, Plug, TriangleAlert } from 'lucide-react'
 import { useBackfillGitHub, useCapabilities, useCreateGitHubBinding, useCurrentRole } from '../hooks/useQueries'
 import {
   API_BASE,
@@ -10,6 +10,8 @@ import {
   type GitHubInclusionRule,
 } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
+import { PageHeader, Panel } from '../components/ui'
+import { AccessNotice, ButtonSpinner } from './admin/AdminParts'
 
 const INCLUSION_RULES: GitHubInclusionRule[] = ['all', 'bots_only', 'non_bots']
 const WEBHOOK_PATH = '/v1/integrations/github/webhook'
@@ -33,22 +35,15 @@ export default function GitHubIntegration() {
   const canManage = role === 'Owner' || role === 'Manager'
 
   return (
-    <div className="page-container max-w-3xl space-y-6">
-      <div className="page-header">
-        <div>
-          <div className="flex items-center gap-2">
-            <GitPullRequest className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('github.title', { defaultValue: 'GitHub integration' })}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">
-            {t('github.subtitle', { defaultValue: "Record each pull request of a repository as an agent run, verified like any other evidence." })}
-          </p>
-        </div>
-      </div>
+    <div className="page-container max-w-3xl space-y-4">
+      <PageHeader
+        title={t('github.title', { defaultValue: 'GitHub integration' })}
+        subtitle={t('github.subtitle', { defaultValue: "Record each pull request of a repository as an agent run, verified like any other evidence." })}
+      />
       {!canManage || companyId === null ? (
-        <div role="status" className="card p-4 text-sm text-gray-300">
+        <AccessNotice>
           {t('github.managerOnly', { role: role ?? '—', defaultValue: 'Connecting repositories requires the Manager or Owner role. Your role here is {{role}}.' })}
-        </div>
+        </AccessNotice>
       ) : (
         <>
           <BindingForm companyId={companyId} />
@@ -90,43 +85,44 @@ function BindingForm({ companyId }: { companyId: number }) {
     : t('github.bindError', { message: errorDetail(bind.error), defaultValue: 'Could not connect the repository: {{message}}' })
 
   return (
-    <section className="card p-4 space-y-4" aria-labelledby="bind-title">
-      <h2 id="bind-title" className="flex items-center gap-2 text-sm font-semibold text-white">
-        <Plug size={15} /> {t('github.bindTitle', { defaultValue: 'Connect a repository' })}
-      </h2>
-      <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3">
-        <RepoFields owner={owner} repo={repo} onOwner={setOwner} onRepo={setRepo} />
-        <label className="block">
-          <span className="input-label">{t('github.secret', { defaultValue: 'Webhook secret' })}</span>
-          <div className="flex gap-2">
-            <input value={secret} onChange={e => setSecret(e.target.value)} required className="input flex-1 font-mono text-xs" />
-            <button type="button" onClick={() => setSecret(generateWebhookSecret())} className="btn btn-secondary btn-sm"
-              title={t('github.newSecret', { defaultValue: 'Generate another secret' })}>
-              <KeyRound size={14} />
+    <Panel title={t('github.bindTitle', { defaultValue: 'Connect a repository' })}>
+      <div className="space-y-3 p-3">
+        <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3">
+          <RepoFields owner={owner} repo={repo} onOwner={setOwner} onRepo={setRepo} />
+          <label className="block">
+            <span className="input-label">{t('github.secret', { defaultValue: 'Webhook secret' })}</span>
+            <div className="flex gap-2">
+              <input value={secret} onChange={e => setSecret(e.target.value)} required className="input flex-1 font-mono text-xs" />
+              <button type="button" onClick={() => setSecret(generateWebhookSecret())} className="btn-tool border border-surface-700"
+                title={t('github.newSecret', { defaultValue: 'Generate another secret' })}>
+                <KeyRound size={13} aria-hidden="true" />
+              </button>
+            </div>
+          </label>
+          <label className="block">
+            <span className="input-label">{t('github.rule', { defaultValue: 'Pull requests to record' })}</span>
+            <select value={rule} onChange={e => setRule(e.target.value as GitHubInclusionRule)} className="select w-full sm:max-w-xs">
+              {INCLUSION_RULES.map(value => (
+                <option key={value} value={value}>{t(`github.rules.${value}`, { defaultValue: value })}</option>
+              ))}
+            </select>
+          </label>
+          {bind.isError && (
+            <div role="alert" className="alert-error items-center text-sm">
+              <span className="min-w-0 flex-1">{errorMessage}</span>
+              <button type="button" onClick={submit} className="btn-tool">{t('common.retry')}</button>
+            </div>
+          )}
+          <div className="border-t border-surface-700 pt-3">
+            <button type="submit" disabled={bind.isPending || !owner.trim() || !repo.trim() || !secret.trim()} className="btn-primary btn-sm">
+              {bind.isPending ? <ButtonSpinner /> : <Plug size={13} aria-hidden="true" />}
+              {bind.isPending ? t('github.binding', { defaultValue: 'Connecting…' }) : t('github.bind', { defaultValue: 'Connect' })}
             </button>
           </div>
-        </label>
-        <label className="block">
-          <span className="input-label">{t('github.rule', { defaultValue: 'Pull requests to record' })}</span>
-          <select value={rule} onChange={e => setRule(e.target.value as GitHubInclusionRule)} className="select w-full">
-            {INCLUSION_RULES.map(value => (
-              <option key={value} value={value}>{t(`github.rules.${value}`, { defaultValue: value })}</option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" disabled={bind.isPending || !owner.trim() || !repo.trim() || !secret.trim()} className="btn btn-primary">
-          {bind.isPending ? <Loader2 size={15} className="animate-spin" /> : <Plug size={15} />}
-          {bind.isPending ? t('github.binding', { defaultValue: 'Connecting…' }) : t('github.bind', { defaultValue: 'Connect' })}
-        </button>
-        {bind.isError && (
-          <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-            <span>{errorMessage}</span>
-            <button type="button" onClick={submit} className="underline">{t('common.retry')}</button>
-          </div>
-        )}
-      </form>
-      {bound && <WebhookInstructions binding={bound.binding} secret={bound.secret} />}
-    </section>
+        </form>
+        {bound && <WebhookInstructions binding={bound.binding} secret={bound.secret} />}
+      </div>
+    </Panel>
   )
 }
 
@@ -139,8 +135,9 @@ function WebhookInstructions({ binding, secret }: { binding: GitHubBinding; secr
   const payloadUrl = `${publicUrl || API_BASE}${WEBHOOK_PATH}`
   const settingsUrl = `https://github.com/${encodeURIComponent(binding.owner)}/${encodeURIComponent(binding.repo)}/settings/hooks/new`
   return (
-    <div role="status" className="rounded-lg border border-emerald-700/50 bg-emerald-950/30 p-4 text-sm space-y-2">
-      <p className="font-medium text-emerald-300">
+    <div role="status" className="space-y-2 rounded-md border border-emerald-700/50 bg-emerald-950/30 p-3 text-sm">
+      <p className="flex items-center gap-1.5 font-medium text-emerald-300">
+        <CircleCheck size={14} aria-hidden="true" className="flex-shrink-0" />
         {t('github.bound', { repo: `${binding.owner}/${binding.repo}`, defaultValue: '{{repo}} is connected. Now add the webhook in GitHub:' })}
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-gray-300">
@@ -155,7 +152,7 @@ function WebhookInstructions({ binding, secret }: { binding: GitHubBinding; secr
         <li>{t('github.stepEvents', { defaultValue: 'Events: "Pull requests".' })}</li>
       </ol>
       {!publicUrl && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-400">
           {t('github.publicUrlHint', { defaultValue: 'GitHub must be able to reach this URL. Set PUBLIC_API_URL in the backend to the public address (or a tunnel) and it will be used here.' })}
         </p>
       )}
@@ -168,12 +165,12 @@ function CopyValue({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <span className="inline-flex max-w-full items-center gap-1 align-middle">
-      <code className="break-all rounded bg-surface-900 px-1.5 py-0.5 font-mono text-xs text-gray-200">{value}</code>
-      <button type="button" className="btn-ghost btn-icon"
+      <code className="break-all rounded bg-surface-950/60 px-1.5 py-0.5 font-mono text-xs text-gray-200">{value}</code>
+      <button type="button" className="btn-ghost btn-icon p-1.5"
         title={copied ? t('glassroom.copied') : t('glassroom.copy')}
         aria-label={copied ? t('glassroom.copied') : t('glassroom.copy')}
         onClick={() => { void navigator.clipboard?.writeText(value).then(() => setCopied(true)) }}>
-        <Copy size={12} />
+        <Copy size={12} aria-hidden="true" />
       </button>
     </span>
   )
@@ -203,47 +200,49 @@ function BackfillForm({ companyId }: { companyId: number }) {
     : t('github.backfillError', { message: errorDetail(backfill.error), defaultValue: 'The import failed: {{message}}' })
 
   return (
-    <section className="card p-4 space-y-4" aria-labelledby="backfill-title">
-      <h2 id="backfill-title" className="flex items-center gap-2 text-sm font-semibold text-white">
-        <Download size={15} /> {t('github.backfillTitle', { defaultValue: 'Import past pull requests' })}
-      </h2>
-      {capabilities && !capabilities.github && (
-        <p className="text-xs text-amber-300">
-          {t('github.noToken', { defaultValue: 'The backend has no GITHUB_TOKEN: only public repositories can be imported, with a low rate limit.' })}
-        </p>
-      )}
-      <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3">
-        <RepoFields owner={owner} repo={repo} onOwner={setOwner} onRepo={setRepo} />
-        <label className="block">
-          <span className="input-label">{t('github.since', { defaultValue: 'Updated since (optional)' })}</span>
-          <input type="date" value={since} onChange={e => setSince(e.target.value)} className="input" />
-        </label>
-        <button type="submit" disabled={backfill.isPending || !owner.trim() || !repo.trim()} className="btn btn-secondary">
-          {backfill.isPending ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-          {backfill.isPending ? t('github.importing', { defaultValue: 'Importing…' }) : t('github.import', { defaultValue: 'Import' })}
-        </button>
-        {backfill.isError && (
-          <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-            <span>{errorMessage}</span>
-            <button type="button" onClick={submit} className="underline">{t('common.retry')}</button>
+    <Panel title={t('github.backfillTitle', { defaultValue: 'Import past pull requests' })}>
+      <div className="space-y-3 p-3">
+        {capabilities && !capabilities.github && (
+          <p className="flex items-start gap-1.5 text-xs text-amber-300">
+            <TriangleAlert size={13} aria-hidden="true" className="mt-px flex-shrink-0" />
+            {t('github.noToken', { defaultValue: 'The backend has no GITHUB_TOKEN: only public repositories can be imported, with a low rate limit.' })}
+          </p>
+        )}
+        <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3">
+          <RepoFields owner={owner} repo={repo} onOwner={setOwner} onRepo={setRepo} />
+          <label className="block">
+            <span className="input-label">{t('github.since', { defaultValue: 'Updated since (optional)' })}</span>
+            <input type="date" value={since} onChange={e => setSince(e.target.value)} className="input w-auto tabular-nums" />
+          </label>
+          {backfill.isError && (
+            <div role="alert" className="alert-error items-center text-sm">
+              <span className="min-w-0 flex-1">{errorMessage}</span>
+              <button type="button" onClick={submit} className="btn-tool">{t('common.retry')}</button>
+            </div>
+          )}
+          <div className="border-t border-surface-700 pt-3">
+            <button type="submit" disabled={backfill.isPending || !owner.trim() || !repo.trim()} className="btn-tool border border-surface-700">
+              {backfill.isPending ? <ButtonSpinner /> : <Download size={13} aria-hidden="true" />}
+              {backfill.isPending ? t('github.importing', { defaultValue: 'Importing…' }) : t('github.import', { defaultValue: 'Import' })}
+            </button>
+          </div>
+        </form>
+        {result && (
+          <div role="status" className="space-y-1 rounded-md border border-surface-700 bg-surface-950/40 p-3 text-sm text-gray-200">
+            <p>{t('github.imported', { ingested: result.ingested, skipped: result.skipped, defaultValue: '{{ingested}} recorded, {{skipped}} already recorded or excluded.' })}</p>
+            {result.errors.length > 0 && (
+              <ul className="list-disc pl-5 text-xs text-red-300">
+                {result.errors.map(error => (
+                  <li key={`${error.number}-${error.error}`}>
+                    {t('github.importErrorItem', { number: error.number ?? '?', error: error.error, defaultValue: '#{{number}}: {{error}}' })}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
-      </form>
-      {result && (
-        <div role="status" className="text-sm text-gray-300 space-y-1">
-          <p>{t('github.imported', { ingested: result.ingested, skipped: result.skipped, defaultValue: '{{ingested}} recorded, {{skipped}} already recorded or excluded.' })}</p>
-          {result.errors.length > 0 && (
-            <ul className="list-disc pl-5 text-xs text-red-300">
-              {result.errors.map(error => (
-                <li key={`${error.number}-${error.error}`}>
-                  {t('github.importErrorItem', { number: error.number ?? '?', error: error.error, defaultValue: '#{{number}}: {{error}}' })}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </section>
+      </div>
+    </Panel>
   )
 }
 

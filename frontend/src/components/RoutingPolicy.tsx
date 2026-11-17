@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Gauge, Loader2 } from 'lucide-react'
+import { CircleCheck, Loader2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { modelsApi, type ModelPolicy, type ModelSettings } from '../services/models'
+import { Panel } from './ui'
 
 const BANDS = ['low', 'medium', 'high'] as const
 type Draft = { bands: Record<string, string>; label: string }
@@ -41,8 +42,8 @@ export default function RoutingPolicy({ companyId, canManage }: { companyId: num
 
   if (!settings.data || !draft) {
     return settings.isError ? null : (
-      <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-        <Loader2 size={15} className="animate-spin" /> {t('common.loading')}
+      <div role="status" className="panel flex items-center gap-2 px-3 py-3 text-xs text-gray-400">
+        <Loader2 size={13} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> {t('common.loading')}
       </div>
     )
   }
@@ -59,50 +60,52 @@ export default function RoutingPolicy({ companyId, canManage }: { companyId: num
   }
 
   return (
-    <section aria-labelledby="routing-policy" className="card space-y-3">
-      <div className="flex items-center gap-2">
-        <Gauge size={18} className="text-brand-400" />
-        <h2 id="routing-policy" className="text-lg font-semibold">{t('models.policy.title')}</h2>
-      </div>
-      <p className="text-sm text-gray-400">{t('models.policy.subtitle')}</p>
-      <p className="text-xs text-gray-500">
-        {data.policy_source === 'company'
-          ? t('models.policy.sourceCompany')
-          : data.policy_source === 'deployment'
-            ? t('models.policy.sourceDeployment')
-            : t('models.policy.sourceNone')}
-      </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {BANDS.map(band => (
-          <label key={band} htmlFor={`policy-${band}`} className="block">
-            <span className="input-label">{t(`models.policy.band.${band}`)}</span>
-            <input id={`policy-${band}`} className="input w-full" value={draft.bands[band] ?? ''} disabled={locked}
-              placeholder={deployed[band] ?? t('models.policy.roleDefault')}
-              onChange={e => edit({ bands: { ...draft.bands, [band]: e.target.value } })} />
-          </label>
-        ))}
-      </div>
-      <label htmlFor="policy-label" className="block max-w-xs">
-        <span className="input-label">{t('models.policy.label')}</span>
-        <input id="policy-label" className="input w-full" value={draft.label} disabled={locked}
-          onChange={e => edit({ label: e.target.value })} />
-      </label>
-      <p className="text-xs text-gray-500">{t('models.policy.tiers')}</p>
-      {canManage && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-primary btn-sm" disabled={save.isPending} onClick={() => save.mutate(policy)}>
-            {t('models.policy.save')}
-          </button>
-          {data.model_policy && (
-            <button type="button" className="btn-ghost btn-sm" disabled={save.isPending}
-              onClick={() => { setDraft(draftOf(null)); save.mutate(null) }}>
-              {t('models.policy.clear')}
-            </button>
-          )}
-          {saved && <span role="status" className="text-sm text-emerald-300">{t('models.policy.saved')}</span>}
-          {save.isError && <span role="alert" className="text-sm text-red-300">{errorDetail(save.error)}</span>}
+    <Panel title={t('models.policy.title')}>
+      <div className="space-y-3 p-3">
+        <p className="text-xs text-gray-400">{t('models.policy.subtitle')}</p>
+        <p className="text-xs text-gray-300">
+          {data.policy_source === 'company'
+            ? t('models.policy.sourceCompany')
+            : data.policy_source === 'deployment'
+              ? t('models.policy.sourceDeployment')
+              : t('models.policy.sourceNone')}
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {BANDS.map(band => (
+            <label key={band} htmlFor={`policy-${band}`} className="block">
+              <span className="input-label">{t(`models.policy.band.${band}`)}</span>
+              <input id={`policy-${band}`} className="input w-full" value={draft.bands[band] ?? ''} disabled={locked}
+                placeholder={deployed[band] ?? t('models.policy.roleDefault')}
+                onChange={e => edit({ bands: { ...draft.bands, [band]: e.target.value } })} />
+            </label>
+          ))}
         </div>
-      )}
-    </section>
+        <label htmlFor="policy-label" className="block max-w-xs">
+          <span className="input-label">{t('models.policy.label')}</span>
+          <input id="policy-label" className="input w-full" value={draft.label} disabled={locked}
+            onChange={e => edit({ label: e.target.value })} />
+        </label>
+        <p className="text-xs text-gray-400">{t('models.policy.tiers')}</p>
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-surface-700 pt-3">
+            <button type="button" className="btn-primary btn-sm" disabled={save.isPending} onClick={() => save.mutate(policy)}>
+              {t('models.policy.save')}
+            </button>
+            {data.model_policy && (
+              <button type="button" className="btn-tool" disabled={save.isPending}
+                onClick={() => { setDraft(draftOf(null)); save.mutate(null) }}>
+                {t('models.policy.clear')}
+              </button>
+            )}
+            {saved && (
+              <span role="status" className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                <CircleCheck size={13} aria-hidden="true" />{t('models.policy.saved')}
+              </span>
+            )}
+            {save.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(save.error)}</span>}
+          </div>
+        )}
+      </div>
+    </Panel>
   )
 }

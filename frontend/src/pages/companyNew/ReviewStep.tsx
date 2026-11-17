@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next'
+import type { ReactNode } from 'react'
+import { Bot, Factory, Globe, Pencil, RefreshCw } from 'lucide-react'
 import type { WorkspaceInspection } from '../../services/api'
 import type { GitWorkflowChoice } from '../../services/workControl'
 import { StartChoice } from '../../components/SprintControls'
@@ -8,6 +10,23 @@ import {
   resourceSummary,
 } from './constants'
 import type { Agent, ModelInfo, Permissions } from './types'
+import { ButtonSpinner } from '../admin/AdminParts'
+import { AUTONOMY_ICONS, RESOURCE_ICONS } from './icons'
+
+/** One summary group: its title, the way back to its step, and what was chosen there. */
+function Summary({ title, onEdit, editLabel, children }: { title: ReactNode; onEdit: () => void; editLabel: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-surface-700 bg-surface-950/30">
+      <div className="flex items-center justify-between gap-3 border-b border-surface-700 px-3 py-1.5">
+        <h3 className="text-[13px] font-semibold text-gray-100">{title}</h3>
+        <button type="button" onClick={onEdit} className="btn-tool h-7 px-2 text-brand-300 hover:text-brand-200">
+          <Pencil size={12} aria-hidden="true" />{editLabel}
+        </button>
+      </div>
+      <div className="p-3">{children}</div>
+    </section>
+  )
+}
 
 /** Step 5: everything chosen, with a way back to each step, and the button that creates the company. */
 export function ReviewStep({
@@ -36,114 +55,89 @@ export function ReviewStep({
   const autonomyLevels = localizedAutonomy(t)
   const roles = localizedRoles(t)
   const selectedAutonomy = autonomyLevels.find(l => l.value === autonomyLevel)!
+  const AutonomyIcon = AUTONOMY_ICONS[autonomyLevel]
   const totalBudget = agents.reduce((s, a) => s + (a.token_budget ?? 500000), 0)
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.reviewTitle')}</h2>
-        <p className="text-sm text-gray-400">{t('companyNew.reviewDescription')}</p>
+        <h2 className="mb-1 text-base font-semibold text-gray-50">{t('companyNew.reviewTitle')}</h2>
+        <p className="text-[13px] text-gray-400">{t('companyNew.reviewDescription')}</p>
       </div>
 
       <div className="space-y-3">
-        {/* Company */}
-        <div className="card p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('companyNew.steps.Company')}</p>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="font-semibold text-white">{companyName}</p>
-              {companyDesc && <p className="text-sm text-gray-400 mt-0.5">{companyDesc}</p>}
-            </div>
-            <button type="button" onClick={() => setStep(1)} className="text-xs text-brand-400 hover:underline flex-shrink-0">{t('companyNew.edit')}</button>
+        <Summary title={t('companyNew.steps.Company')} onEdit={() => setStep(1)} editLabel={t('companyNew.edit')}>
+          <p className="text-[13px] font-semibold text-gray-100">{companyName}</p>
+          {companyDesc && <p className="mt-0.5 text-xs text-gray-300">{companyDesc}</p>}
+          <div className="text-meta mt-2 flex flex-wrap gap-3">
+            <span className="inline-flex items-center gap-1"><RefreshCw size={11} aria-hidden="true" />{t('companyNew.scopeSummary', { scope: scopeSize })}</span>
+            <span className="inline-flex items-center gap-1"><Globe size={11} aria-hidden="true" />{timezone}</span>
           </div>
-          <div className="mt-2 flex gap-3 text-xs text-gray-500">
-            <span>🔄 {t('companyNew.scopeSummary', { scope: scopeSize })}</span>
-            <span>🌍 {timezone}</span>
-          </div>
-        </div>
+        </Summary>
 
-        {/* Autonomy */}
-        <div className="card p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('companyNew.steps.Autonomy')}</p>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{selectedAutonomy.icon}</span>
-              <span className="text-sm font-medium text-white">{selectedAutonomy.label}</span>
-              <span className={`badge text-xs ${selectedAutonomy.badge}`}>{t('companyNew.level', { level: autonomyLevel })}</span>
-            </div>
-            <button type="button" onClick={() => setStep(2)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
+        <Summary title={t('companyNew.steps.Autonomy')} onEdit={() => setStep(2)} editLabel={t('companyNew.edit')}>
+          <div className="flex flex-wrap items-center gap-2">
+            {AutonomyIcon && <AutonomyIcon size={15} aria-hidden="true" className="text-gray-300" />}
+            <span className="text-[13px] font-medium text-gray-100">{selectedAutonomy.label}</span>
+            <span className={`rounded-md px-1.5 text-[11px] font-medium leading-5 ${selectedAutonomy.badge}`}>{t('companyNew.level', { level: autonomyLevel })}</span>
           </div>
           <StartChoice checked={startNow} humanLed={autonomyLevel === 1} onChange={setStartNow} />
           <GitSetupChoice inspection={inspected} choice={gitChoice} onChange={setGitChoice} />
-        </div>
+        </Summary>
 
-        {/* Permissions */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('companyNew.permissions')}</p>
-            <button type="button" onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
-          </div>
-          <div className="grid grid-cols-5 gap-2">
-            {resourceSummary(t).map(({ label, key, icon }) => {
+        <Summary title={t('companyNew.permissions')} onEdit={() => setStep(3)} editLabel={t('companyNew.edit')}>
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-surface-700 bg-surface-700 sm:grid-cols-5">
+            {resourceSummary(t).map(({ label, key }) => {
               const val = permissions[key as keyof Permissions] as string
               const perm = PERM_LEVELS[val as keyof typeof PERM_LEVELS]
+              const Icon = RESOURCE_ICONS[key]
               return (
-                <div key={key} className="bg-surface-800/60 rounded-lg p-2 text-center">
-                  <span className="text-base">{icon}</span>
-                  <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-                  <p className={`text-xs font-medium mt-0.5 ${perm?.color ?? 'text-gray-400'}`}>{localizedPermission(t, val)}</p>
+                <div key={key} className="bg-surface-900 px-2 py-2 text-center">
+                  <dt className="text-meta flex items-center justify-center gap-1">{Icon && <Icon size={11} aria-hidden="true" />}{label}</dt>
+                  <dd className={`mt-0.5 text-xs font-medium ${perm?.color ?? 'text-gray-400'}`}>{localizedPermission(t, val)}</dd>
                 </div>
               )
             })}
-          </div>
-        </div>
+          </dl>
+        </Summary>
 
-        {/* Team */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('companyNew.teamSummary', { count: agents.length })}</p>
-            <button type="button" onClick={() => setStep(4)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
-          </div>
-          <div className="space-y-1.5">
+        <Summary title={t('companyNew.teamSummary', { count: agents.length })} onEdit={() => setStep(4)} editLabel={t('companyNew.edit')}>
+          <ul className="space-y-1.5">
             {agents.map((a, i) => {
               const roleInfo = roles.find(r => r.value === a.role)
               return (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <span>{roleInfo?.icon ?? '🤖'}</span>
-                  <span className="text-gray-300 font-medium">
+                <li key={i} className="flex flex-wrap items-center gap-2 text-xs">
+                  <Bot size={13} aria-hidden="true" className="flex-shrink-0 text-gray-400" />
+                  <span className="text-[13px] font-medium text-gray-200">
                     {a.name ? `${a.name} — ${roleInfo?.label ?? a.role}` : (roleInfo?.label ?? a.role)}
                   </span>
-                  <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{t(`companyNew.seniorities.${a.seniority}.label`, { defaultValue: a.seniority })}</span>
+                  <span className={SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}>{t(`companyNew.seniorities.${a.seniority}.label`, { defaultValue: a.seniority })}</span>
                   {a.model && (() => {
                     const mi = availableModels.find(m => m.id === a.model)
                     const tm = TIER_META[mi?.tier ?? DEFAULT_TIER]
                     return (
-                      <span className={`badge text-[10px] font-mono ${tm.color}`}>
+                      <span className={`rounded-md px-1.5 font-mono text-[11px] leading-5 ${tm.color}`}>
                         {tm.icon} {a.model}
                       </span>
                     )
                   })()}
-                  {a.specialty && <span className="text-xs text-gray-600 truncate">· {a.specialty}</span>}
-                </div>
+                  {a.specialty && <span className="truncate text-gray-400">· {a.specialty}</span>}
+                </li>
               )
             })}
-          </div>
-          <p className="text-xs text-gray-600 mt-2">
-            {t('companyNew.totalBudget')} <span className="text-brand-300 font-mono">{t('companyNew.millionTokensMonthly', { amount: (totalBudget / 1000000).toFixed(1) })}</span>
+          </ul>
+          <p className="mt-2 text-xs text-gray-400">
+            {t('companyNew.totalBudget')} <span className="font-mono tabular-nums text-brand-300">{t('companyNew.millionTokensMonthly', { amount: (totalBudget / 1000000).toFixed(1) })}</span>
           </p>
-        </div>
+        </Summary>
       </div>
 
       {mutationError && <div className="alert-error text-sm">{t('companyNew.initializationError', { message: mutationError })}</div>}
 
       <button type="button" onClick={handleSubmit}
         disabled={loading}
-        className="btn btn-primary w-full text-base py-3">
-        {loading ? (
-          <span className="flex items-center gap-2 justify-center">
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            {t('companyNew.submitting')}
-          </span>
-        ) : `🏭 ${t('companyNew.submit')}`}
+        className="btn-primary w-full">
+        {loading ? <ButtonSpinner /> : <Factory size={15} aria-hidden="true" />}
+        {loading ? t('companyNew.submitting') : t('companyNew.submit')}
       </button>
     </div>
   )

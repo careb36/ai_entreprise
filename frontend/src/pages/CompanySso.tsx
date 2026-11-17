@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { KeyRound, Loader2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, FlaskConical, Save, Trash2 } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useDeleteSso, useSaveSso, useSsoSettings, useTestSso } from '../hooks/useSso'
 import { errorDetail, type SsoConnection, type SsoConnectionInput, type SsoPreset } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
+import { PageHeader, Panel } from '../components/ui'
+import { AccessNotice, ButtonSpinner, FormActions, LoadError, LoadingRows, SavedNote } from './admin/AdminParts'
 
 const PRESETS: SsoPreset[] = ['generic', 'google', 'entra']
 
@@ -25,26 +27,19 @@ export default function CompanySso() {
   const remove = useDeleteSso(companyId)
 
   return (
-    <div className="page-container max-w-2xl">
-      <div className="page-header mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <KeyRound className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('sso.title', { defaultValue: 'Single sign-on' })}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">
-            {t('sso.subtitle', { defaultValue: 'Let members sign in with your identity provider (OpenID Connect).' })}
-          </p>
-        </div>
-      </div>
+    <div className="page-container max-w-3xl">
+      <PageHeader
+        title={t('sso.title', { defaultValue: 'Single sign-on' })}
+        subtitle={t('sso.subtitle', { defaultValue: 'Let members sign in with your identity provider (OpenID Connect).' })}
+      />
       {role !== 'Owner' ? (
-        <div role="status" className="card p-4 text-sm text-gray-300">
+        <AccessNotice>
           {t('sso.ownerOnly', { role: role ?? '—', defaultValue: 'Only owners manage single sign-on. Your role here is {{role}}.' })}
-        </div>
+        </AccessNotice>
       ) : settings.isLoading ? (
-        <Loader2 className="animate-spin text-brand-400" size={20} />
+        <LoadingRows rows={2} />
       ) : settings.isError ? (
-        <div role="alert" className="alert-error text-sm">{errorDetail(settings.error)}</div>
+        <LoadError message={errorDetail(settings.error)} onRetry={() => settings.refetch()} />
       ) : settings.data ? (
         <SsoForm
           key={settings.data.connection?.updated_at ?? 'new'}
@@ -106,115 +101,135 @@ function SsoForm({ mutations, initial, redirectUri, ownerSignedIn }: FormProps) 
   }
 
   const testResult = test.data
+  const check = 'h-4 w-4 flex-shrink-0 rounded accent-brand-500'
   return (
-    <form onSubmit={e => { e.preventDefault(); submit() }} className="card p-4 space-y-4" aria-label={t('sso.formLabel', { defaultValue: 'SSO connection' })}>
-      <p className="text-xs text-gray-400">
-        {t('sso.redirectUri', { defaultValue: 'Register this redirect URI at your provider:' })}{' '}
-        <code className="text-gray-200 break-all">{redirectUri}</code>
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="input-label">{t('sso.preset', { defaultValue: 'Provider' })}</span>
-          <select className="select w-full" value={form.preset} onChange={e => set('preset', e.target.value as SsoPreset)}>
-            {PRESETS.map(p => <option key={p} value={p}>{t(`sso.presets.${p}`, { defaultValue: p })}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="input-label">{t('sso.slug', { defaultValue: 'SSO name (on the login page)' })}</span>
-          <input className="input w-full" required value={form.slug} onChange={e => set('slug', e.target.value)} placeholder={t('sso.slugPlaceholder', { defaultValue: 'acme' })} />
-        </label>
-        {form.preset === 'generic' && (
-          <label className="block sm:col-span-2">
-            <span className="input-label">{t('sso.issuer', { defaultValue: 'Issuer URL' })}</span>
-            <input className="input w-full" type="url" required value={form.issuer} onChange={e => set('issuer', e.target.value)} placeholder={t('sso.issuerPlaceholder', { defaultValue: 'https://idp.example.com' })} />
-          </label>
-        )}
-        {form.preset === 'entra' && (
-          <label className="block sm:col-span-2">
-            <span className="input-label">{t('sso.tenant', { defaultValue: 'Directory (tenant) ID' })}</span>
-            <input className="input w-full" required value={form.tenant} onChange={e => set('tenant', e.target.value)} />
-          </label>
-        )}
-        <label className="block">
-          <span className="input-label">{t('sso.clientId', { defaultValue: 'Client ID' })}</span>
-          <input className="input w-full" required value={form.client_id} onChange={e => set('client_id', e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="input-label">{t('sso.clientSecret', { defaultValue: 'Client secret' })}</span>
-          <input className="input w-full" type="password" autoComplete="new-password" value={form.client_secret}
-            onChange={e => set('client_secret', e.target.value)}
-            placeholder={initial?.has_client_secret
-              ? t('sso.secretSet', { defaultValue: 'Set — leave empty to keep it' })
-              : t('sso.secretUnset', { defaultValue: 'Not set' })} />
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="input-label">{t('sso.domains', { defaultValue: 'Allowed email domains (comma-separated)' })}</span>
-          <input className="input w-full" required value={form.domains} onChange={e => set('domains', e.target.value)} placeholder={t('sso.domainsPlaceholder', { defaultValue: 'acme.com' })} />
-        </label>
-        <label className="block">
-          <span className="input-label">{t('sso.defaultRole', { defaultValue: 'Role for new members' })}</span>
-          <select className="select w-full" value={form.default_role} onChange={e => set('default_role', e.target.value as 'Viewer' | 'Manager')}>
-            <option value="Viewer">{t('members.roles.Viewer', { defaultValue: 'Viewer' })}</option>
-            <option value="Manager">{t('members.roles.Manager', { defaultValue: 'Manager' })}</option>
-          </select>
-        </label>
-      </div>
-      <div className="space-y-2 text-sm text-gray-300">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={form.enabled} onChange={e => set('enabled', e.target.checked)} />
-          {t('sso.enabled', { defaultValue: 'Enabled' })}
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={form.auto_join} onChange={e => set('auto_join', e.target.checked)} />
-          {t('sso.autoJoin', { defaultValue: 'Let people in the allowed domains join on their first sign-in' })}
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={form.require_sso} onChange={e => set('require_sso', e.target.checked)} />
-          {t('sso.requireSso', { defaultValue: 'Require SSO: turn off password sign-in for members' })}
-        </label>
-        {!ownerSignedIn && (
-          <p className="text-xs text-gray-500">
-            {t('sso.requireHint', { defaultValue: 'Requiring SSO becomes possible once an owner has signed in through this connection.' })}
+    <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-4" aria-label={t('sso.formLabel', { defaultValue: 'SSO connection' })}>
+      <Panel title={t('sso.connectionTitle')}>
+        <div className="space-y-3 p-3">
+          <p className="text-xs text-gray-400">
+            {t('sso.redirectUri', { defaultValue: 'Register this redirect URI at your provider:' })}{' '}
+            <code className="break-all rounded bg-surface-950/60 px-1 py-0.5 font-mono text-gray-200">{redirectUri}</code>
           </p>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" className="btn btn-primary" disabled={save.isPending}>
-          {save.isPending && <Loader2 size={15} className="animate-spin" />}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="input-label">{t('sso.preset', { defaultValue: 'Provider' })}</span>
+              <select className="select w-full" value={form.preset} onChange={e => set('preset', e.target.value as SsoPreset)}>
+                {PRESETS.map(p => <option key={p} value={p}>{t(`sso.presets.${p}`, { defaultValue: p })}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="input-label">{t('sso.slug', { defaultValue: 'SSO name (on the login page)' })}</span>
+              <input className="input w-full" required value={form.slug} onChange={e => set('slug', e.target.value)} placeholder={t('sso.slugPlaceholder', { defaultValue: 'acme' })} />
+            </label>
+            {form.preset === 'generic' && (
+              <label className="block sm:col-span-2">
+                <span className="input-label">{t('sso.issuer', { defaultValue: 'Issuer URL' })}</span>
+                <input className="input w-full" type="url" required value={form.issuer} onChange={e => set('issuer', e.target.value)} placeholder={t('sso.issuerPlaceholder', { defaultValue: 'https://idp.example.com' })} />
+              </label>
+            )}
+            {form.preset === 'entra' && (
+              <label className="block sm:col-span-2">
+                <span className="input-label">{t('sso.tenant', { defaultValue: 'Directory (tenant) ID' })}</span>
+                <input className="input w-full" required value={form.tenant} onChange={e => set('tenant', e.target.value)} />
+              </label>
+            )}
+            <label className="block">
+              <span className="input-label">{t('sso.clientId', { defaultValue: 'Client ID' })}</span>
+              <input className="input w-full" required value={form.client_id} onChange={e => set('client_id', e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="input-label">{t('sso.clientSecret', { defaultValue: 'Client secret' })}</span>
+              <input className="input w-full" type="password" autoComplete="new-password" value={form.client_secret}
+                onChange={e => set('client_secret', e.target.value)}
+                placeholder={initial?.has_client_secret
+                  ? t('sso.secretSet', { defaultValue: 'Set — leave empty to keep it' })
+                  : t('sso.secretUnset', { defaultValue: 'Not set' })} />
+            </label>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title={t('sso.accessTitle')}>
+        <div className="space-y-3 p-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
+            <label className="block">
+              <span className="input-label">{t('sso.domains', { defaultValue: 'Allowed email domains (comma-separated)' })}</span>
+              <input className="input w-full" required value={form.domains} onChange={e => set('domains', e.target.value)} placeholder={t('sso.domainsPlaceholder', { defaultValue: 'acme.com' })} />
+            </label>
+            <label className="block">
+              <span className="input-label">{t('sso.defaultRole', { defaultValue: 'Role for new members' })}</span>
+              <select className="select w-full" value={form.default_role} onChange={e => set('default_role', e.target.value as 'Viewer' | 'Manager')}>
+                <option value="Viewer">{t('members.roles.Viewer', { defaultValue: 'Viewer' })}</option>
+                <option value="Manager">{t('members.roles.Manager', { defaultValue: 'Manager' })}</option>
+              </select>
+            </label>
+          </div>
+          <div className="space-y-2 text-[13px] text-gray-200">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className={check} checked={form.enabled} onChange={e => set('enabled', e.target.checked)} />
+              {t('sso.enabled', { defaultValue: 'Enabled' })}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className={check} checked={form.auto_join} onChange={e => set('auto_join', e.target.checked)} />
+              {t('sso.autoJoin', { defaultValue: 'Let people in the allowed domains join on their first sign-in' })}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className={check} checked={form.require_sso} onChange={e => set('require_sso', e.target.checked)} />
+              {t('sso.requireSso', { defaultValue: 'Require SSO: turn off password sign-in for members' })}
+            </label>
+            {!ownerSignedIn && (
+              <p className="pl-6 text-xs text-gray-400">
+                {t('sso.requireHint', { defaultValue: 'Requiring SSO becomes possible once an owner has signed in through this connection.' })}
+              </p>
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      {save.isError && <div role="alert" className="alert-error text-sm">{t('sso.saveError', { message: errorDetail(save.error), defaultValue: 'Could not save: {{message}}' })}</div>}
+      {test.isError && <div role="alert" className="alert-error text-sm">{errorDetail(test.error)}</div>}
+      {testResult && (
+        <div role="status" className={`${testResult.ok ? 'alert-success' : 'alert-error'} text-sm`}>
+          {testResult.ok
+            ? <CircleCheck size={15} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+            : <CircleAlert size={15} aria-hidden="true" className="mt-0.5 flex-shrink-0" />}
+          <div>
+            <p>{testResult.ok
+              ? t('sso.testOk', { defaultValue: 'The provider answered: discovery and signing keys fetched.' })
+              : t('sso.testFailed', { detail: testResult.detail, defaultValue: 'The provider did not answer as expected: {{detail}}' })}</p>
+            {testResult.ok && (
+              <p className="mt-1 text-xs text-gray-300">
+                {t('sso.testObserved', {
+                  keys: String(testResult.observed.key_count ?? 0),
+                  issuer: String(testResult.observed.issuer ?? ''),
+                  defaultValue: 'Issuer {{issuer}}, {{keys}} signing key(s).',
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <FormActions>
+        <button type="submit" className="btn-primary btn-sm" disabled={save.isPending}>
+          {save.isPending ? <ButtonSpinner /> : <Save size={13} aria-hidden="true" />}
           {t('sso.save', { defaultValue: 'Save' })}
         </button>
         {initial && (
           <>
-            <button type="button" className="btn btn-secondary" disabled={test.isPending} onClick={() => test.mutate()}>
-              {test.isPending && <Loader2 size={15} className="animate-spin" />}
+            <button type="button" className="btn-tool border border-surface-700" disabled={test.isPending} onClick={() => test.mutate()}>
+              {test.isPending ? <ButtonSpinner /> : <FlaskConical size={13} aria-hidden="true" />}
               {t('sso.test', { defaultValue: 'Test connection' })}
             </button>
-            <button type="button" className="btn btn-secondary" disabled={remove.isPending}
+            <button type="button" className="btn-tool border border-surface-700 hover:text-red-300" disabled={remove.isPending}
               onClick={() => { if (window.confirm(t('sso.deleteConfirm', { defaultValue: 'Remove single sign-on? Password sign-in applies again.' }))) remove.mutate() }}>
+              <Trash2 size={13} aria-hidden="true" />
               {t('sso.delete', { defaultValue: 'Remove' })}
             </button>
           </>
         )}
-        {save.isSuccess && <span role="status" className="text-sm text-status-success">{t('sso.saved', { defaultValue: 'Saved.' })}</span>}
-      </div>
-      {save.isError && <div role="alert" className="alert-error text-sm">{t('sso.saveError', { message: errorDetail(save.error), defaultValue: 'Could not save: {{message}}' })}</div>}
-      {test.isError && <div role="alert" className="alert-error text-sm">{errorDetail(test.error)}</div>}
-      {testResult && (
-        <div role="status" className={testResult.ok ? 'text-sm text-status-success' : 'alert-error text-sm'}>
-          <p>{testResult.ok
-            ? t('sso.testOk', { defaultValue: 'The provider answered: discovery and signing keys fetched.' })
-            : t('sso.testFailed', { detail: testResult.detail, defaultValue: 'The provider did not answer as expected: {{detail}}' })}</p>
-          {testResult.ok && (
-            <p className="text-xs text-gray-400 mt-1">
-              {t('sso.testObserved', {
-                keys: String(testResult.observed.key_count ?? 0),
-                issuer: String(testResult.observed.issuer ?? ''),
-                defaultValue: 'Issuer {{issuer}}, {{keys}} signing key(s).',
-              })}
-            </p>
-          )}
-        </div>
-      )}
+        {save.isSuccess && <SavedNote>{t('sso.saved', { defaultValue: 'Saved.' })}</SavedNote>}
+      </FormActions>
     </form>
   )
 }
