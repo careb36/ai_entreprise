@@ -248,3 +248,33 @@ def test_a_merge_commit_holding_c_is_the_record_of_c(sqlite_session):
     fresh = record(cycle_id="cycle-2", candidate_sha="8" * 40, merged_sha="9" * 40)
     new = _import(sqlite_session, company, fresh, owner)
     assert (new.candidate_sha, new.merged_sha) == ("8" * 40, "9" * 40)
+
+
+@pytest.mark.parametrize("how", ["unreadable", "vanished"])
+def test_a_file_the_backend_cannot_read_stays_a_claim(
+    sqlite_session, root, monkeypatch, how
+):
+    real_open = rsi_cycle_import.Path.open
+    if how == "unreadable":
+
+        def denied(self, *args, **kwargs):
+            if self.name == "B-1.json":
+                raise PermissionError(13, "Permission denied")
+            return real_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(rsi_cycle_import.Path, "open", denied)
+    else:
+        probe = rsi_cycle_import._readable
+
+        def gone(base, path):
+            found = probe(base, path)
+            if found is not None:
+                found.unlink()
+            return found
+
+        monkeypatch.setattr(rsi_cycle_import, "_readable", gone)
+    company = hosting(sqlite_session)
+    owner, _ = _person(sqlite_session, company.id, "Owner")
+    cycle = _import(sqlite_session, company, record(), owner, root)
+    assert cycle.kept_files[0]["sha256_observed"] is None
+    assert cycle.kept_files[0]["sha256_claimed"] == record()["kept_files"][0]["sha256"]

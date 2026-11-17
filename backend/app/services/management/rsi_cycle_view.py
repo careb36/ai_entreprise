@@ -87,7 +87,8 @@ def serialize(cycle: RsiCycle) -> dict[str, Any]:
     )
     data = {name: getattr(cycle, name) for name in fields}
     data["reasons"] = cycle.reasons or []
-    data["metrics"] = cycle.metrics or {}
+    data["metrics"] = cycle.metrics if cycle.metrics is not None else []
+    data["bench_tokens"] = cycle.bench_tokens
     data["kept_files"] = cycle.kept_files or []
     for name in ("merged_at", "started_at", "ended_at", "resumed_at", "created_at"):
         data[name] = _iso(getattr(cycle, name))

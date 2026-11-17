@@ -65,7 +65,8 @@ class RsiCycle(SQLModel, table=True):
     reasons: list[Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
-    metrics: dict[str, Any] | None = Field(
+    # fitness.decide's metric rows (a list), as it returned them.
+    metrics: list[Any] | dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
     # C's diff as the workspace daemon read it from git; never declared.
@@ -74,6 +75,8 @@ class RsiCycle(SQLModel, table=True):
     diff_sha256: str | None = None
     token_budget: int | None = None
     tokens_reported: int = 0
+    # The bench runner's reported tokens; None until counted (then unmeasured).
+    bench_tokens: int | None = None
     # [{"path", "sha256_observed", "sha256_claimed"}]
     kept_files: list[Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))

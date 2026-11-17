@@ -241,7 +241,9 @@
         "git_publish",
         "integration",
         "integration_review",
-        "local_merge"
+        "local_merge",
+        "protected_merge",
+        "self_change"
       ],
       "modules": []
     },
@@ -980,6 +982,13 @@
         "models"
       ],
       "test_rsi_backend_cycle.py": [
+        "management"
+      ],
+      "test_rsi_backend_cycle_fitness.py": [
+        "evidence",
+        "management"
+      ],
+      "test_rsi_backend_cycle_review.py": [
         "management"
       ],
       "test_rsi_cycle.py": [

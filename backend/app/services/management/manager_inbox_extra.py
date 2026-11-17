@@ -312,7 +312,7 @@ def _branch_items(
     records = task_projection.records_for(session, done)
     for item in done:
         run = _task_run(session, company.id, item.id)
-        if run is None:
+        if run is None or (category == "merge_local" and _self(session, item=item)):
             continue
         git = _git(session, run)
         commit = str(git.get("commit") or git.get("parent") or "")
@@ -357,6 +357,22 @@ def _branch_items(
             }
         )
     return items
+
+
+def _self(session: Session, *, item=None, row=None) -> bool:
+    """A self-improvement cycle's work, which only an Owner merges."""
+    from services.release import self_change
+
+    company_id = row.company_id if row is not None else None
+    if item is not None:
+        sprint = session.get(Sprint, item.sprint_id)
+        company_id, sprint_id, integration_id = sprint.company_id, item.sprint_id, None
+    else:
+        sprint_id, integration_id = row.sprint_id, row.id
+    found = self_change.cycle_for(
+        session, company_id, integration_id=integration_id, sprint_id=sprint_id
+    )
+    return found is not None
 
 
 def _protected(session, row, facts, state, text) -> tuple[str, str]:
@@ -407,6 +423,8 @@ def _integration_items(session: Session, company: Company) -> list[dict]:
     for sprint_id in sprints:
         row: SprintIntegration | None = integration.latest(session, sprint_id)
         if row is None or row.status not in MERGEABLE_INTEGRATIONS:
+            continue
+        if _self(session, row=row):  # a cycle's: merge_self_change, a person's
             continue
         if (row.details or {}).get("local_merge"):
             continue

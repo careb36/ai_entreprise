@@ -35,9 +35,12 @@ from rsi_cycle_helpers import (
     ended_without_keep,
     finding,
     hosting,
+    integration,
     kept,
     refusal_codes,
+    result,
     rsi_on,  # noqa: F401 - a fixture
+    spend,
     started,
 )
 from services.management import (
@@ -114,7 +117,9 @@ def test_a_running_cycle_stops_at_its_next_step(sqlite_session, monkeypatch, swi
 def test_a_second_cycle_the_same_day_is_refused(sqlite_session):
     company = hosting(sqlite_session)
     first = started(sqlite_session, company, day=3)
-    rsi_cycle_steps.record_decision(sqlite_session, first, {"decision": "revert"})
+    rsi_cycle_steps.record_decision(
+        sqlite_session, first, result("revert", candidate="")
+    )
     other = finding(sqlite_session, company.id, 99)
     _refused(
         "daily_limit",
@@ -191,8 +196,9 @@ def test_a_diff_over_the_cap_or_unread_waits_for_a_person(
 ):
     company = hosting(sqlite_session)
     cycle = started(sqlite_session, company)
-    rsi_cycle_steps.record_candidate(sqlite_session, cycle, C)
-    rsi_cycle_steps.observe_size(sqlite_session, cycle, observed)
+    row = integration(sqlite_session, company, spend(sqlite_session, cycle))
+    rsi_cycle_steps.record_candidate(sqlite_session, cycle, C, integration_id=row.id)
+    rsi_cycle_steps.observe_size(sqlite_session, cycle, observed, integration=row)
     assert cycle.status == "awaiting_person" and cycle.decision == "unmeasured"
     assert cycle.reasons[0]["code"] == code
     assert audits(sqlite_session, company.id, "rsi_cycle_size_refused")
@@ -210,7 +216,7 @@ def test_a_keep_without_an_observed_size_is_unmeasured(sqlite_session):
     company = hosting(sqlite_session)
     cycle = started(sqlite_session, company)
     rsi_cycle_steps.record_candidate(sqlite_session, cycle, C)
-    rsi_cycle_steps.record_decision(sqlite_session, cycle, {"decision": "keep"})
+    rsi_cycle_steps.record_decision(sqlite_session, cycle, result())
     assert cycle.status == "unmeasured" and cycle.decision == "unmeasured"
     assert {"guard": "cycle", "code": "size_unobserved"} in cycle.reasons
     assert rsi_cycle_view.inbox_items(sqlite_session, company) == []
@@ -219,8 +225,7 @@ def test_a_keep_without_an_observed_size_is_unmeasured(sqlite_session):
 def test_a_keep_without_c_is_unmeasured(sqlite_session):
     company = hosting(sqlite_session)
     cycle = started(sqlite_session, company)
-    rsi_cycle_steps.observe_size(sqlite_session, cycle, diff())
-    rsi_cycle_steps.record_decision(sqlite_session, cycle, {"decision": "keep"})
+    rsi_cycle_steps.record_decision(sqlite_session, cycle, result(candidate=""))
     assert cycle.decision == "unmeasured"
     assert {"guard": "cycle", "code": "no_candidate"} in cycle.reasons
 
@@ -398,7 +403,7 @@ def test_a_kept_cycle_waits_in_the_inbox_and_an_owner_merges_it(
     company = hosting(sqlite_session)
     cycle = kept(sqlite_session, company)
     assert cycle.status == "awaiting_merge" and cycle.decision == "keep"
-    assert (cycle.diff_files, cycle.diff_lines, cycle.tokens_reported) == (3, 30, 100)
+    assert (cycle.diff_files, cycle.diff_lines, cycle.tokens_reported) == (3, 30, 200)
     [item] = rsi_cycle_view.inbox_items(sqlite_session, company)
     assert item["category"] == "merge_self_change" and C in item["text"]
     assert item["facts"]["person_merges_required"] == 5
@@ -417,9 +422,10 @@ def test_a_kept_cycle_waits_in_the_inbox_and_an_owner_merges_it(
         if r.action.startswith("rsi_cycle_")
     ] == [
         "rsi_cycle_started",
+        "rsi_cycle_sprint",
         "rsi_cycle_candidate",
-        "rsi_cycle_size",
         "rsi_cycle_tokens",
+        "rsi_cycle_size",
         "rsi_cycle_decided",
         "rsi_cycle_merged",
     ]
@@ -461,7 +467,7 @@ def test_a_revert_is_recorded_on_the_finding(sqlite_session):
     cycle = started(sqlite_session, company)
     rsi_cycle_steps.record_candidate(sqlite_session, cycle, C)
     rsi_cycle_steps.record_decision(
-        sqlite_session, cycle, {"decision": "revert", "reasons": [{"code": "ci"}]}
+        sqlite_session, cycle, result("revert", reasons=[{"code": "ci"}])
     )
     from models import Finding
 
@@ -499,32 +505,18 @@ def test_the_size_is_read_from_the_daemon_s_diff_of_the_integration(
 ):
     import asyncio
 
-    from models.integration import SprintIntegration
     from services.release import integration_review
 
     company = hosting(sqlite_session)
-    sprint = factories.sprint(sqlite_session, company, status="active")
-    row = SprintIntegration(
-        company_id=company.id,
-        sprint_id=sprint.id,
-        trigger="manual",
-        requested_by="person",
-        status="tests_passed",
-        branch="fabrique/integration",
-        base="main",
-        repository="/work/repo",
-        commit="f" * 40,
-    )
-    sqlite_session.add(row)
-    sqlite_session.commit()
     asked = []
 
-    async def read_diff(nats_client, session, integration):
-        asked.append(integration.id)
+    async def read_diff(nats_client, session, row):
+        asked.append(row.id)
         return diff(files=4, lines_per_file=5)
 
     monkeypatch.setattr(integration_review, "read_diff", read_diff)
     cycle = started(sqlite_session, company)
+    row = integration(sqlite_session, company, spend(sqlite_session, cycle))
     rsi_cycle_steps.record_candidate(sqlite_session, cycle, C, integration_id=row.id)
     asyncio.run(rsi_cycle_steps.read_size(object(), sqlite_session, cycle))
     assert asked == [row.id]

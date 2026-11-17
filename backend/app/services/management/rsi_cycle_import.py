@@ -73,20 +73,25 @@ def _readable(root: Path | None, path: str) -> Path | None:
     try:
         base = root.resolve(strict=True)
         candidate = (base / path).resolve(strict=True)
-    except (OSError, RuntimeError):
-        return None
-    if base not in candidate.parents or not candidate.is_file():
-        return None
-    if candidate.stat().st_size > READ_LIMIT:
+        if base not in candidate.parents or not candidate.is_file():
+            return None
+        if candidate.stat().st_size > READ_LIMIT:
+            return None
+    except (OSError, RuntimeError, ValueError):
         return None
     return candidate
 
 
-def _sha256(path: Path) -> str:
+def _sha256(path: Path) -> str | None:
+    """The file's sha256, or None when it cannot be read now (permissions, a
+    file gone since the probe): what the backend cannot read stays a claim."""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
+    try:
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+    except OSError:
+        return None
     return digest.hexdigest()
 
 

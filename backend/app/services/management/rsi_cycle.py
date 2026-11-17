@@ -64,7 +64,7 @@ from sqlmodel import Session, select
 from services.contracts import rsi_cycle_record
 from services.learning import findings
 from services.loop import sprint_control
-from services.platform import protected_paths_setting, teams
+from services.platform import locks, protected_paths_setting, teams
 from services.platform.agent_service import AgentService
 
 CATEGORY = "merge_self_change"
@@ -282,7 +282,37 @@ def start(
     cycle_key: str | None = None,
     now: datetime | None = None,
 ) -> RsiCycle:
-    """Start a cycle for *finding_id* from B, once every limit allows it."""
+    """Start a cycle for *finding_id* from B, once every limit allows it.
+
+    The checks, the creation and its commit run under the company's
+    ``locks.RSI_CYCLE_START``, so two starts cannot both pass the daily and
+    running limits; a start that finds the lock taken is refused.
+    """
+    engine = session.get_bind()
+    with locks.held(engine, locks.RSI_CYCLE_START, company_id) as mine:
+        if not mine:
+            raise refuse(
+                session,
+                company_id,
+                409,
+                "start_in_progress",
+                "another start of a cycle for this company is under way",
+                actor=started_by,
+            )
+        return _start(
+            session, company_id, finding_id, baseline_sha, started_by, cycle_key, now
+        )
+
+
+def _start(
+    session: Session,
+    company_id: int,
+    finding_id: int,
+    baseline_sha: str,
+    started_by: str,
+    cycle_key: str | None,
+    now: datetime | None,
+) -> RsiCycle:
     moment = now or utcnow()
     blocked = why_not_start(session, company_id, moment)
     if blocked:
@@ -404,7 +434,7 @@ def end_cycle(
     status: str,
     decision: str,
     reasons: list[Any],
-    metrics: dict[str, Any] | None = None,
+    metrics: list[Any] | dict[str, Any] | None = None,
 ) -> None:
     """End *cycle* (not committed: the caller's audit commits it)."""
     cycle.status = status

@@ -56,6 +56,7 @@ def upgrade() -> None:
         sa.Column("diff_sha256", text(), nullable=True),
         sa.Column("token_budget", sa.Integer(), nullable=True),
         sa.Column("tokens_reported", sa.Integer(), nullable=False),
+        sa.Column("bench_tokens", sa.Integer(), nullable=True),
         sa.Column("kept_files", json, nullable=True),
         sa.Column("record", json, nullable=True),
         sa.Column("merged_sha", text(), nullable=True),

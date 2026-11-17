@@ -79,21 +79,89 @@ def diff(files: int = 3, lines_per_file: int = 10, **extra):
     }
 
 
+def result(decision: str = "keep", baseline: str = B, candidate: str = C, **over):
+    """A decision in the shape ``fitness.decide`` returns
+    (``test_rsi_backend_cycle_fitness.py`` checks it against a real one)."""
+    found = {
+        "decision": decision,
+        "baseline": baseline,
+        "candidate": candidate,
+        "k": 3,
+        "thresholds": {"rate": 0.05},
+        "reasons": [],
+        "metrics": [{"scope": "totals", "metric": "criteria_rate", "outcome": "pass"}],
+    }
+    found.update(over)
+    return found
+
+
+def spend(session, cycle, tokens: int = 100, status: str = "active"):
+    """The cycle's sprint, with one turn whose usage the provider reported."""
+    from models import Company
+    from services.platform import orchestration_metrics
+
+    company = session.get(Company, cycle.company_id)
+    sprint = factories.sprint(session, company, status=status)
+    task = factories.task(session, sprint, status="in_progress")
+    orchestration_metrics.record_agent_turn(
+        company_id=company.id,
+        sprint_id=sprint.id,
+        backlog_item_id=task.id,
+        agent={"role": "Developer", "name": "dev", "model": "model-a"},
+        action="execute_task",
+        llm_result={
+            "usage": {
+                "prompt_tokens": tokens - 1,
+                "completion_tokens": 1,
+                "total_tokens": tokens,
+            }
+        },
+        session=session,
+    )
+    rsi_cycle_steps.record_sprint(session, cycle, sprint.id)
+    return sprint
+
+
+def measured(session, company, *, day: int = 1, integration_commit: str = C):
+    """A running cycle with C, its sprint's usage and the bench's, and its size."""
+    cycle = started(session, company, day=day)
+    sprint = spend(session, cycle)
+    row = integration(session, company, sprint, commit=integration_commit)
+    rsi_cycle_steps.record_candidate(session, cycle, C, integration_id=row.id)
+    rsi_cycle_steps.account_tokens(session, cycle, bench_tokens=100)
+    rsi_cycle_steps.observe_size(session, cycle, diff(), integration=row)
+    return cycle
+
+
+def integration(session, company, sprint, *, commit: str = C, status="tests_passed"):
+    from models.integration import SprintIntegration
+
+    row = SprintIntegration(
+        company_id=company.id,
+        sprint_id=sprint.id,
+        trigger="manual",
+        requested_by="person",
+        status=status,
+        branch="fabrique/integration",
+        base="main",
+        repository="/work/repo",
+        commit=commit,
+    )
+    session.add(row)
+    session.commit()
+    return row
+
+
 def kept(session, company, *, day: int = 1):
     """A cycle decided keep, waiting for a person's merge at C."""
-    cycle = started(session, company, day=day)
-    rsi_cycle_steps.record_candidate(session, cycle, C)
-    rsi_cycle_steps.observe_size(session, cycle, diff())
-    rsi_cycle_steps.account_tokens(session, cycle, bench_tokens=100)
-    return rsi_cycle_steps.record_decision(
-        session, cycle, {"decision": "keep", "reasons": [], "metrics": {}}
-    )
+    cycle = measured(session, company, day=day)
+    return rsi_cycle_steps.record_decision(session, cycle, result())
 
 
 def ended_without_keep(session, company, *, day: int):
     cycle = started(session, company, day=day)
     return rsi_cycle_steps.record_decision(
-        session, cycle, {"decision": "revert", "reasons": [{"code": "target"}]}
+        session, cycle, result("revert", candidate="", reasons=[{"code": "target"}])
     )
 
 
