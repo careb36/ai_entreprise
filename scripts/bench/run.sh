@@ -75,6 +75,18 @@
 #                                    (services/models/model_routing.py), passed through
 #   BENCH_POLICY [default, or the policy itself]  the policy's label on the
 #                                    scorecard, so compare.py can tell two runs apart
+#   BENCH_GRADING_IMAGE [$FABRIQUE_GRADING_IMAGE]  the image the acceptance
+#                                    tests run in: the daemon's container sandbox
+#                                    (scripts/bench/sandbox_grading.py), no network,
+#                                    the project read-only, limits. It must be on
+#                                    the machine (never pulled while grading) with
+#                                    Python and pytest; docs/OPERATIONS.md. Without
+#                                    a sandbox every criterion is missing
+#                                    (unmeasured), never passed.
+#   BENCH_GRADE_IN_PROCESS [empty]   1: grade on BENCH_PYTHON itself, the
+#                                    project's code in the runner's Python, for
+#                                    local development only; the card's criteria
+#                                    say isolation in_process. Never for a cycle.
 #
 # A grade or a collection that fails stops the run (BENCH FAILED): a spec is
 # never left out of the scorecard, and nothing of an earlier run in the same
@@ -143,6 +155,15 @@ fi
 for d in "${SPECS[@]}"; do
   [ -f "$d/spec.json" ] && [ -d "$d/acceptance" ] || { echo "$d needs a spec.json and an acceptance/ folder" >&2; exit 2; }
 done
+# The grade: in the daemon's sandbox, unless BENCH_GRADE_IN_PROCESS=1.
+GRADING_IMAGE=${BENCH_GRADING_IMAGE:-${FABRIQUE_GRADING_IMAGE:-}}
+if [ "${BENCH_GRADE_IN_PROCESS:-}" = "1" ]; then
+  GRADE_FLAGS=(--in-process)
+  echo "grading in-process (BENCH_GRADE_IN_PROCESS=1): the projects' code runs in $PY; local development only, never a cycle's measurement"
+else
+  GRADE_FLAGS=(--image "$GRADING_IMAGE")
+  echo "grading in the sandbox: image ${GRADING_IMAGE:-none named (every grade will be unmeasured)}"
+fi
 API=http://127.0.0.1:$BACKEND_PORT
 TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
 cleanup() { kill ${BPID:-} ${DPID:-} ${LPID:-} ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
@@ -269,8 +290,10 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
-    || fail "the grade of $name did not run"
+  FABRIQUE_DAEMON_DIR="$REPO/vscode-daemon" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
+    "${GRADE_FLAGS[@]}" --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
+  unmeasured=$(json "d.get('unmeasured') or ''" < "$WORK/$name.grade.json")
+  [ -z "$unmeasured" ] || echo "   grade unmeasured: $unmeasured"
   echo "   criteria passed: $(json "d.get('passed'), 'of', d.get('total')" < "$WORK/$name.grade.json")"
   "$PY" "$REPO/scripts/bench/scorecard.py" collect --api "$API" --name "$name" --status "$status" \
     --company "$cid" --sprint "$sid" --spec-id "$spec_id" --grade "$WORK/$name.grade.json" --wall "$wall" \

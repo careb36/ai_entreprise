@@ -5,6 +5,8 @@
     "scripts/bench/**",
     "scripts/self_host/**",
     "scripts/e2e/**",
+    "vscode-daemon/sandbox.py",
+    "vscode-daemon/sandbox_image.py",
     "scripts/rsi/**",
     "rsi/cycles/**",
     "backend/app/services/evidence/**",

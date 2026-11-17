@@ -287,6 +287,18 @@ def _target(
                 f"the {side} result was read at {got!r}, expected {sha}; refused",
             )
             return
+        # A result graded outside the sandbox (``run_measure`` with
+        # ``--in-process-measure``) ran the candidate's code in the runner's
+        # own Python: local development, never a cycle's measurement (PR 12).
+        if obs.get("isolation", "sandbox") != "sandbox":
+            _reason(
+                reasons,
+                guard,
+                UNMEASURED,
+                "not_sandboxed",
+                f"the {side} result was graded {obs.get('isolation')!r}, not in the sandbox",
+            )
+            return
         sides[side] = obs.get("result")
     rb, rc = sides["baseline"], sides["candidate"]
     if rb not in ("pass", "fail") or rc not in ("pass", "fail"):

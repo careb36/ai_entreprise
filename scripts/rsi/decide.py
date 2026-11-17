@@ -34,7 +34,10 @@ The files:
 - **Tests collected**: ``{"sha", "suites": {"<suite>": <count>}}`` per side,
   an observation of its own: refused without the side's sha.
 - **Target**: ``{"measure", "baseline": {"sha", "result"}, "candidate":
-  {"sha", "result"}}`` with results ``pass``, ``fail`` or ``error``; or
+  {"sha", "result"}}`` with results ``pass``, ``fail`` or ``error``
+  (``unmeasured`` from the sandbox reads as not run) and, copied from
+  ``run_measure``'s report, ``isolation``: a side graded ``in_process`` is
+  refused (``not_sandboxed``); or
   ``{"metric": "<bench metric>"}`` for a change aimed at a bench number.
 - **Verifier bench**: ``{"sha", "cases": {"<case>": "pass"|"fail"}}``.
 - **Fake card**: the circuit check's scorecard on C; only a card with

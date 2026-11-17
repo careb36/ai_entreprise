@@ -412,7 +412,9 @@ def test_the_fake_plan_is_consistent(spec_dir):
     ids=lambda p: p.name,
 )
 def test_the_fake_producer_passes_every_criterion(spec_dir, tmp_path):
-    graded = scorecard.grade(spec_dir, spec_dir / "fake" / "files", sys.executable)
+    graded = scorecard.grade(
+        spec_dir, spec_dir / "fake" / "files", sys.executable, in_process=True
+    )
     assert graded["passed"] == graded["total"] > 0, graded["output_tail"]
-    empty = scorecard.grade(spec_dir, tmp_path, sys.executable)
+    empty = scorecard.grade(spec_dir, tmp_path, sys.executable, in_process=True)
     assert empty["passed"] == 0, empty["results"]

@@ -1030,6 +1030,10 @@
       "test_sandbox_floor.py": [
         "workspace"
       ],
+      "test_sandbox_grading.py": [
+        "repo",
+        "workspace"
+      ],
       "test_sandbox_manager.py": [
         "workspace"
       ],

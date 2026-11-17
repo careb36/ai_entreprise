@@ -154,14 +154,14 @@ beyond the thresholds opens a revert pull request, which a person merges
 
 | Id | Observation | Made by | Read from | Never from |
 |---|---|---|---|---|
-| O1 | Criteria passed / total per bench specification | `scripts/bench/scorecard.py grade`: B's acceptance tests run by the bench runner on the produced folder, in an isolated pytest (`python -I`, JUnit to a random folder) | The scorecard | The factory's own `verified` coverage, which is shown beside it and never instead of it |
+| O1 | Criteria passed / total per bench specification | `scripts/bench/scorecard.py grade`: B's acceptance tests run by the bench runner on the produced folder, in the daemon's container sandbox (`scripts/bench/sandbox_grading.py`: no network, the folder read-only, limits, the report read from the run's output by the runner; PR 12) | The scorecard (`criteria.isolation`) | The factory's own `verified` coverage, which is shown beside it and never instead of it |
 | O2 | Done at the first attempt, rework per task, blocked share | The board (`services/tasks/board.py`, `rework_request_count`), read by `scorecard.py collect` | The scorecard | A reviewer's `APPROVED:` |
 | O3 | Tokens reported by the provider, and cost in cents when priced | The audit log's turns (`orchestration_metrics.record_agent_turn`), priced by `run_cost` / `model_prices` | The scorecard; a cycle total by the runner | An estimate (counted apart, never summed) |
 | O4 | Wall-clock per specification | The bench runner, from `start_sprint` to close | The scorecard | — |
 | O5 | Prompt weight (mean estimated tokens per task, sections cut) | The backend's `prompt_sections` | The scorecard (schema v3) | — |
 | O6 | Verifier bench: every planted case disbelieved, every honest control verified | `bench/verifier/run.py` on C's Verifier, with B's cases | Its exit status and output, hashed by the runner | — |
 | O7 | CI on C: the conclusion of every check-run on C's head sha, and the number of tests collected per suite | GitHub Actions | `GET /repos/<owner>/<repo>/commits/<sha>/check-runs` and the JUnit artifacts, read by the runner **(missing)** | The pull request's body or any comment (PR #33 is why) |
-| O8 | The finding's target measure | A person-written check run by the runner (for example a field of the self-hosting harness's JSON report, or a test) | Its exit status / the report | The sprint's own tests |
+| O8 | The finding's target measure | A person-written check run by the runner in the container sandbox (`spec_source.run_measure`, PR 12), or a field of the self-hosting harness's JSON report | Its exit status as the runtime reports it and pytest's report as the runner's wrapper prints it (`result`: `pass`, `fail`, `unmeasured`; `isolation`) | The sprint's own tests |
 | O9 | The act's sprint: claim gap, rework, blocked share, verdicts | `procedures.board_metrics`, `progress_snapshot.claim_gap`, the Verifier | The backend | — |
 
 O1 to O8 decide. O9 is recorded and used for trends (§4: "no improvement")
@@ -194,6 +194,35 @@ product.
   differ between a B run and a C run, that pair is void. The proxy's
   fallback tiers can cause this (ADR 0011, superseded; the proxy's tiers
   remain).
+- **Graded in the sandbox** (PR 12; threat model
+  [`SANDBOX_GRADING_THREAT_MODEL.md`](SANDBOX_GRADING_THREAT_MODEL.md)). The
+  target measure and the bench's acceptance tests import C's code, so they
+  run in the daemon's container sandbox (`vscode-daemon/sandbox.py`, reused
+  by `scripts/bench/sandbox_grading.py`): network off, the root file system
+  and C's tree read-only, B's graders read-only, a fresh scratch and `/tmp`
+  the only writable places, CPU, memory, process and time limits, an image
+  already on the machine run from its content ID. The verdict is the
+  runtime's exit status and pytest's report printed by the runner's wrapper
+  after every other process was killed, never a file. A sandbox that cannot
+  run it (no runtime, no image, `bwrap`, a timeout, a kill) leaves the
+  measure `unmeasured`. `--in-process-measure` and `BENCH_GRADE_IN_PROCESS=1`
+  keep the earlier in-process run for local development; the result says
+  `isolation: in_process` and `fitness.decide` refuses it (`not_sandboxed`).
+- **The held-out set** (decision 5, G3; interface only, nothing fetches it
+  yet). Its specifications live in the owner's separate private repository,
+  never in this one, never in a path the daemon serves and never in a
+  prompt. The runner reads it at a pinned commit of that repository, as
+  `graders.py` reads B: `git fetch` of exactly that sha into a directory of
+  the runner's own outside every company's project, `git ls-tree` and
+  `git cat-file` from the commit's objects (no working tree), the same
+  layout as `bench/specs/<name>/` (`spec.json`, `acceptance/`), and a record
+  `{"repository", "sha", "trees", "sha256"}` computed by the runner. The
+  specifications are posted to the factory as data like any bench run's; the
+  acceptance tests run in the sandbox above, mounted read-only, and are never
+  posted, copied into a snapshot or stored here: the scorecard keeps only the
+  record and the results per criterion, and the directory is removed after
+  the grade. A held-out run whose record's sha differs from the cycle's
+  pinned one is `unmeasured`.
 
 ### 2.4 Regression
 
@@ -267,6 +296,7 @@ and O8 is then "that metric's median better than B's by more than
 | `bench/` (specifications, acceptance tests, `verifier/` cases, scorecards) | The exam and its answers |
 | `scripts/bench/` | The grader, the schema, the thresholds (`compare.py`), the budget |
 | `scripts/self_host/`, `scripts/e2e/` | The harness and checks that hold target measures |
+| `vscode-daemon/sandbox.py`, `vscode-daemon/sandbox_image.py` | The sandbox the target measure and the bench's grade run in, and the image it observed (PR 12) |
 | `backend/app/services/evidence/` | The Verifier, the risk tier, the standards check, and `fitness.py` |
 | `scripts/rsi/`, `rsi/cycles/` | The keep-or-revert decision, the watch after a merge, and the cycle records (B's medians and spread) it judges against |
 | The tests whose contexts include `evidence`, read from `docs/architecture/contexts.json` (`tests.files`), plus `test_verificador_benchmark.py` and `test_bench_*.py` | The tests that hold the evidence to its behaviour. Derived from data, not a hand list |
@@ -524,7 +554,7 @@ adopted, §10).
 | G1 | B5 | T | The sprint edits a bench acceptance test, `compare.py`'s thresholds or a scorecard to pass | H | H | Critical | New: protected paths (§3, layers 1–5); graders from B (REQ-4); C's grader tree compared with B's (REQ-5) |
 | G2 | B5 | T | The sprint loosens the Verifier, the risk tier or `fitness.py` so its next deliveries pass | M | H | Critical | New: `services/evidence/` protected; the Verifier bench's cases from B (O6). Existing: CODEOWNERS on `verification.py` |
 | G3 | B5 | T | Code special-cases the bench (spec names, file names) and overfits | M | M | High | New: a held-out set kept outside the repository and the company's project, never in a prompt (§10); a finding when C's diff names a bench identifier. Residual |
-| G4 | B12 | T | Code the factory produced for a bench spec tampers with pytest while being graded | M | H | High | Existing: isolated pytest, JUnit to a random folder (`bench/README.md`). New: grade in the sandbox (#323) before automation |
+| G4 | B12 | T | Code the factory produced for a bench spec tampers with pytest while being graded | M | H | High | Existing: isolated pytest; the grade and the target measure in the daemon's container sandbox with the verdict read from outside, failing closed to `unmeasured` (PR 12, `scripts/bench/sandbox_grading.py`; threat model [`SANDBOX_GRADING_THREAT_MODEL.md`](SANDBOX_GRADING_THREAT_MODEL.md)). Residual: imported code forging pytest's result from within the process |
 | G5 | B6 | S | A "CI is green" claim in the PR body or a bot comment | H | M | High | New: check-runs by sha only (REQ-8). Existing rule: never claim a green build |
 | G6 | B6 | T | The PR head changes after measurement (TOCTOU) | M | H | High | New: decision pinned to C's sha; merge with the expected head sha (REQ-17) |
 | G7 | B5 | T | Tests deleted or skipped so CI is green | M | H | High | New: tests collected per suite must not drop (O7); the `evidence` tests protected |
@@ -600,7 +630,8 @@ done.
   (`stack_roots.validate_overrides`, `resolve_folders`,
   `edit_lint.load_profile`, `after_edit`), with no daemon, database or
   model. `self_host.py --steps measure --spec <file>` runs it with pytest on
-  a build's `backend/`, hashes the output itself and exits 3 when it fails.
+  a build's `backend/` in the container sandbox (PR 12, `--grading-image`),
+  hashes the output itself and exits 3 when it fails, 4 when unmeasured.
 - Merge that pull request (reviewed by a person). Its merge commit is **B**.
 
 **Step 2. Measure B.**
@@ -613,7 +644,7 @@ for i in 1 2 3; do BENCH_LLM_URL=<proxy> BENCH_POLICY=default \
 gh api repos/<owner>/<repo>/commits/<B>/check-runs > /tmp/rsi/B-ci.json
 python3 scripts/self_host/self_host.py --checkout <dir>/B --steps checkout,measure \
   --spec scripts/self_host/specs/folder-lint-specification.json \
-  --python <the backend's Poetry python> --report /tmp/rsi/B-measure.json   # target: fails, exit 3
+  --grading-image <image> --report /tmp/rsi/B-measure.json   # target: fails, exit 3
 sha256sum /tmp/rsi/B-* /tmp/rsi/B-real-*/*.json > /tmp/rsi/B.sha256
 ```
 Expected on B: fake 30/30 (as `bench/scorecards/20261114T201804Z`), the
@@ -700,7 +731,7 @@ Each item is one pull request into `main`. Each names the REQs it closes.
 | 9 | `Finding` records in learning (from the retrospective, with the target measure and outcomes); same-text reverts skipped | 20 |
 | 10 | `management/rsi_cycle.py`: the cycle record and audit in the backend, the inbox item, `RSI_ENABLED`, the budget, the stop after N cycles, the size cap, `merge_self_change` in `ALWAYS_ESCALATE` | 22–26 |
 | 11 | The watch after a merge: nightly comparison with the cycle's B and the revert pull request | 19 |
-| 12 | Grading in the sandbox (#323), then, if the owner agrees, the held-out set | G3, G4 |
+| 12 | Grading in the sandbox (#323): first part delivered (`scripts/bench/sandbox_grading.py`, the target measure and the bench's grade in the daemon's container sandbox, failing closed, its threat model); then the held-out set, whose interface is in §2.3 (needs the owner's private repository) | G3, G4 |
 
 Automation of the schedule comes only after at least three manual cycles
 whose decisions a person agreed with.

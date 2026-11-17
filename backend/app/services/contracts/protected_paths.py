@@ -40,6 +40,11 @@ PROTECTED: tuple[tuple[str, str], ...] = (
         "the self-hosting harness and the target measures it holds",
     ),
     ("scripts/e2e/**", "the end-to-end checks"),
+    (
+        "vscode-daemon/sandbox.py",
+        "the sandbox the target measure and the bench's grade run in (rsi-loop PR 12)",
+    ),
+    ("vscode-daemon/sandbox_image.py", "which image a grade ran, observed"),
     ("scripts/rsi/**", "the script that decides keep or revert"),
     (
         "rsi/cycles/**",

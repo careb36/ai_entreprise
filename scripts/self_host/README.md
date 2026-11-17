@@ -51,7 +51,7 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `wait` | Polls until the sprint completes (`--timeout`). |
 | `review` | Lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` records an approving review of the integration (its text the `--accept` comment, else a default; reported under `integration_review`, refused like any approval by the person who started the sprint) and then merges the integration into `main` locally (refused while its suite fails, and, when the company requires an approval, without one). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
-| `measure` | Asked by name only, never part of `all`, and only with `--spec`. Runs the file's `target_measure` (this repository's copy) with pytest on the `backend/` of `--build` (the snapshot by default), using `--python` (a Python with the backend's dependencies). The report keeps the exit status, `passed` and the sha256 of the output, computed by the harness. The exit status is 3 when the measure fails. No API call. |
+| `measure` | Asked by name only, never part of `all`, and only with `--spec`. Runs the file's `target_measure` (this repository's copy) with pytest on the `backend/` of `--build` (the snapshot by default), in the workspace daemon's container sandbox (below), from the image `--grading-image` names (default `FABRIQUE_GRADING_IMAGE`). The report keeps the exit status, `result` (`pass`, `fail` or `unmeasured`, with `reason`), `passed`, `isolation`, the sandbox applied and the sha256 of the output, computed by the harness. The exit status is 3 when the measure fails and 4 when it is unmeasured. No API call. |
 
 ### A finding's specification (`--spec`)
 
@@ -68,14 +68,45 @@ status 2, and nothing is posted. Warnings are reported under
 named after the specification's title, and `target_measure` is never posted.
 
 ```bash
-# The target measure on today's main (it fails: exit status 3)
+# The target measure on today's main, in the sandbox (it fails: exit status 3)
 python3 scripts/self_host/self_host.py --checkout /tmp/rsi/B --steps checkout,measure \
   --spec scripts/self_host/specs/folder-lint-specification.json \
+  --grading-image fabrique-grading:backend
+# The same on this machine's Python, for local development only (says so)
+python3 scripts/self_host/self_host.py --checkout /tmp/rsi/B --steps measure \
+  --spec scripts/self_host/specs/folder-lint-specification.json --in-process-measure \
   --python "$(cd backend && poetry env info -p)/bin/python"
 # The sprint on it, against a real stack
 python3 scripts/self_host/self_host.py --api http://localhost:8000 --checkout /tmp/rsi/B \
   --steps issue,wait,review --spec scripts/self_host/specs/folder-lint-specification.json
 ```
+
+### The measure runs in the sandbox (PR 12)
+
+The target measure imports the build's code, which is the party being
+measured, so it runs in the workspace daemon's container sandbox
+(`vscode-daemon/sandbox.py`, through `scripts/bench/sandbox_grading.py`;
+threat model `docs/design/SANDBOX_GRADING_THREAT_MODEL.md`), never in the
+harness's Python: network off, the build read-only at `/candidate` (the
+measure runs from `/candidate/backend`), the measure's folder from this
+repository read-only at `/graders`, the root file system read-only, a fresh
+scratch and `/tmp` the only writable places, 2 CPUs, 2048 MB, 256 processes
+and `MEASURE_TIMEOUT_SECONDS`, no variable of the harness's environment. The
+image must already be on the machine (it is never pulled while grading) with
+the backend's dependencies and pytest; `docs/OPERATIONS.md` (Grading in the
+sandbox) builds one. The candidate's `conftest.py`, ini files,
+`sitecustomize.py`, a `pytest.py` shadow and `PYTHONPATH`/`PYTEST_ADDOPTS`
+reach nothing (`-I`, `--noconftest`, `-c /dev/null`, plugins not
+auto-loaded, a clean environment). The verdict is the runtime's exit status
+and pytest's JUnit report printed by the harness's own wrapper after every
+other process was killed: `pass` needs exit 0 and a report where every test
+passed; a test that failed or could not be collected is `fail`; anything
+else (no runtime, no image, a timeout, a kill by the memory or process
+limit, a report missing or disagreeing with the exit status) is
+`unmeasured`, never passed. `--in-process-measure` runs it on `--python`
+instead, as before: for local development only; the report says
+`isolation: in_process` with a warning, and `fitness.decide` refuses such a
+result (`not_sandboxed`).
 
 The company id, the sprint id and the record ids are kept in
 `<checkout>.self_host.json` (`--state`); specifications and architecture
