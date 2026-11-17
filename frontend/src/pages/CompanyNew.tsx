@@ -27,6 +27,7 @@ import { AutonomyStep } from './companyNew/AutonomyStep'
 import { PermissionsStep } from './companyNew/PermissionsStep'
 import { TeamStep } from './companyNew/TeamStep'
 import { ReviewStep } from './companyNew/ReviewStep'
+import { PageHeader } from '../components/ui'
 
 export default function CompanyNew() {
   const { t, i18n } = useTranslation()
@@ -211,38 +212,39 @@ export default function CompanyNew() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="page-container max-w-6xl">
-      <div className="mb-6">
-        <h1 className="page-title">🏭 {t('companyNew.newFactory')}</h1>
-        <p className="text-gray-400 text-sm mt-1">{t('companyNew.wizardDescription')}</p>
-      </div>
+    <div className="page-container max-w-6xl space-y-4">
+      <PageHeader title={t('companyNew.newFactory')} subtitle={t('companyNew.wizardDescription')} />
 
       {/* Invited to a company already? Join it instead of creating one. */}
-      <div className="mb-6"><PendingInvitations /></div>
+      <PendingInvitations />
 
-      <StepIndicator current={step} steps={steps} />
+      <div className="panel">
+        <div className="border-b border-surface-700 px-4 py-3">
+          <StepIndicator current={step} steps={steps} />
+        </div>
 
-      <div className="card p-6">
-        {STEP_RENDERERS[step]()}
-      </div>
+        <div className="p-4 sm:p-5">
+          {STEP_RENDERERS[step]()}
+        </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between mt-4">
-        <button type="button" onClick={() => setStep(s => s - 1)}
-          disabled={step === 0}
-          className="btn btn-secondary disabled:opacity-30">
-          ← {t('companyNew.back')}
-        </button>
-
-        <span className="text-xs text-gray-600">{step + 1} / {STEPS.length}</span>
-
-        {step < STEPS.length - 1 ? (
-          <button type="button" onClick={() => setStep(s => s + 1)}
-            disabled={!canProceed()}
-            className="btn btn-primary disabled:opacity-50">
-            {t('companyNew.next')} →
+        {/* Navigation */}
+        <div className="flex items-center justify-between gap-3 border-t border-surface-700 px-4 py-3">
+          <button type="button" onClick={() => setStep(s => s - 1)}
+            disabled={step === 0}
+            className="btn-tool border border-surface-700 disabled:opacity-40">
+            ← {t('companyNew.back')}
           </button>
-        ) : null}
+
+          <span className="text-meta tabular-nums">{step + 1} / {STEPS.length}</span>
+
+          {step < STEPS.length - 1 ? (
+            <button type="button" onClick={() => setStep(s => s + 1)}
+              disabled={!canProceed()}
+              className="btn-primary btn-sm h-8">
+              {t('companyNew.next')} →
+            </button>
+          ) : <span aria-hidden="true" className="w-20" />}
+        </div>
       </div>
     </div>
   )

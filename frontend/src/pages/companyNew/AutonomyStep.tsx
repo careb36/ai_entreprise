@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next'
+import { Check } from 'lucide-react'
+import { StatusBadge } from '../../components/ui'
 import { localizedAutonomy } from './constants'
+import { AUTONOMY_ICONS } from './icons'
 
 /** Step 2: how much the agents may do without a person. */
 export function AutonomyStep({ autonomyLevel, setAutonomyLevel }: {
@@ -11,40 +14,47 @@ export function AutonomyStep({ autonomyLevel, setAutonomyLevel }: {
   return (
   <div className="space-y-4">
     <div>
-      <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.autonomyLevel')}</h2>
-      <p className="text-sm text-gray-400">{t('companyNew.autonomyDescription')}</p>
+      <h2 className="mb-1 text-base font-semibold text-gray-50">{t('companyNew.autonomyLevel')}</h2>
+      <p className="text-[13px] text-gray-400">{t('companyNew.autonomyDescription')}</p>
     </div>
 
-    <div className="space-y-3">
-      {autonomyLevels.map(level => (
-        <button key={level.value} type="button"
-          onClick={() => setAutonomyLevel(level.value)}
-          aria-pressed={autonomyLevel === level.value}
-          className={`w-full text-left rounded-xl border-2 p-4 transition-all ${autonomyLevel === level.value ? level.color + ' border-opacity-100' : 'border-surface-700 bg-surface-800/30 hover:border-surface-600'}`}>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl flex-shrink-0 mt-0.5">{level.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-white text-sm">{level.label}</span>
-                {autonomyLevel === level.value && (
-                  <span className={`badge text-xs ${level.badge}`}>{t('companyNew.selected')}</span>
-                )}
+    <div className="space-y-2">
+      {autonomyLevels.map(level => {
+        const selected = autonomyLevel === level.value
+        const Icon = AUTONOMY_ICONS[level.value]
+        return (
+          <button key={level.value} type="button"
+            onClick={() => setAutonomyLevel(level.value)}
+            aria-pressed={selected}
+            className={`w-full rounded-lg border p-3 text-left transition-colors motion-reduce:transition-none
+              ${selected ? 'border-brand-500 bg-brand-950/30 ring-1 ring-inset ring-brand-500/40' : 'border-surface-700 bg-surface-950/30 hover:border-surface-600 hover:bg-surface-800/40'}`}>
+            <div className="flex items-start gap-3">
+              <span className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border
+                ${selected ? 'border-brand-600/60 text-brand-200' : 'border-surface-700 text-gray-300'}`}>
+                {Icon && <Icon size={16} aria-hidden="true" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-semibold text-gray-50">{level.label}</span>
+                  {selected && <StatusBadge icon={Check} tone="brand" label={t('companyNew.selected')} />}
+                </div>
+                <p className="mt-1 text-xs text-gray-300">{level.desc}</p>
+                <ul className="mt-2 space-y-0.5">
+                  {level.features.map(f => (
+                    <li key={f} className="flex items-center gap-1.5 text-xs text-gray-400">
+                      <span aria-hidden="true" className="text-brand-300">·</span> {f}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <p className="text-xs text-gray-400 mt-1">{level.desc}</p>
-              <ul className="mt-2 space-y-0.5">
-                {level.features.map(f => (
-                  <li key={f} className="text-xs text-gray-500 flex items-center gap-1.5">
-                    <span className="text-brand-400">·</span> {f}
-                  </li>
-                ))}
-              </ul>
+              <span aria-hidden="true" className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border
+                ${selected ? 'border-brand-400 bg-brand-600 text-white' : 'border-surface-600'}`}>
+                {selected && <Check size={10} />}
+              </span>
             </div>
-            <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${autonomyLevel === level.value ? 'border-brand-400 bg-brand-600' : 'border-surface-600'}`}>
-              {autonomyLevel === level.value && <span className="text-white text-xs">✓</span>}
-            </div>
-          </div>
-        </button>
-      ))}
+          </button>
+        )
+      })}
     </div>
   </div>
   )

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { ApiError, ssoStartUrl } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
+import { CircleAlert, CircleCheck, KeyRound, Loader2 } from 'lucide-react'
+import { AUTH_LABEL, AUTH_LINK, AuthCard } from './auth/AuthCard'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -65,20 +67,26 @@ export default function Login() {
   }
 
   return (
-    <div className="page-container max-w-md">
-      <h1 className="text-2xl font-bold text-white mb-6">
-        {t('auth.loginTitle', { defaultValue: 'Log in' })}
-      </h1>
+    <AuthCard
+      title={t('auth.loginTitle', { defaultValue: 'Log in' })}
+      footer={<>
+        {t('auth.noAccount', { defaultValue: "Don't have an account?" })}{' '}
+        <Link className={AUTH_LINK} to="/register">
+          {t('auth.registerLink', { defaultValue: 'Register' })}
+        </Link>
+      </>}
+    >
       {searchParams.get('registered') === 'true' && (
-        <p role="status" className="text-green-300 mb-4">
-          {t('auth.registerSuccess', { defaultValue: 'If this email was not registered already, your account is ready. Log in to continue.' })}
+        <p role="status" className="alert-success mb-4 p-3 text-[13px]">
+          <CircleCheck size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+          <span>{t('auth.registerSuccess', { defaultValue: 'If this email was not registered already, your account is ready. Log in to continue.' })}</span>
         </p>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block text-sm text-gray-300">
-          {t('auth.email', { defaultValue: 'Email' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('auth.email', { defaultValue: 'Email' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="email"
             autoComplete="email"
             required
@@ -86,10 +94,10 @@ export default function Login() {
             onChange={event => setEmail(event.target.value)}
           />
         </label>
-        <label className="block text-sm text-gray-300">
-          {t('auth.password', { defaultValue: 'Password' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('auth.password', { defaultValue: 'Password' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="password"
             autoComplete="current-password"
             required
@@ -97,21 +105,27 @@ export default function Login() {
             onChange={event => setPassword(event.target.value)}
           />
         </label>
-        {error && <p role="alert" className="text-red-300">{error}</p>}
+        {error && (
+          <p role="alert" className="alert-error p-3 text-[13px]">
+            <CircleAlert size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </p>
+        )}
         <button className="btn-primary w-full" type="submit" disabled={submitting}>
+          {submitting && <Loader2 size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
           {submitting
             ? t('auth.loggingIn', { defaultValue: 'Logging in…' })
             : t('auth.loginTitle', { defaultValue: 'Log in' })}
         </button>
       </form>
-      <form onSubmit={startSso} className="space-y-3 mt-6 border-t border-surface-700 pt-5" aria-labelledby="sso-title">
-        <h2 id="sso-title" className="text-sm font-semibold text-white">
+      <form onSubmit={startSso} className="mt-5 space-y-3 border-t border-surface-700 pt-5" aria-labelledby="sso-title">
+        <h2 id="sso-title" className="panel-title">
           {t('sso.loginTitle', { defaultValue: 'Single sign-on' })}
         </h2>
-        <label className="block text-sm text-gray-300">
-          {t('sso.loginKey', { defaultValue: 'Work email or company SSO name' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('sso.loginKey', { defaultValue: 'Work email or company SSO name' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="text"
             autoComplete="username"
             value={ssoKey}
@@ -120,15 +134,10 @@ export default function Login() {
           />
         </label>
         <button className="btn-secondary w-full" type="submit" disabled={!ssoKey.trim()}>
+          <KeyRound size={15} aria-hidden="true" />
           {t('sso.signIn', { defaultValue: 'Sign in with SSO' })}
         </button>
       </form>
-      <p className="text-sm text-gray-400 mt-5">
-        {t('auth.noAccount', { defaultValue: "Don't have an account?" })}{' '}
-        <Link className="text-brand-300" to="/register">
-          {t('auth.registerLink', { defaultValue: 'Register' })}
-        </Link>
-      </p>
-    </div>
+    </AuthCard>
   )
 }

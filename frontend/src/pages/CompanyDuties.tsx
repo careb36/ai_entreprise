@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next'
-import { Scale } from 'lucide-react'
 import AccessReviewPanel from '../components/AccessReviewPanel'
 import ProtectedPathsPanel from '../components/ProtectedPathsPanel'
 import ServiceAccountsPanel from '../components/ServiceAccountsPanel'
@@ -7,6 +6,8 @@ import SodPolicyPanel from '../components/SodPolicyPanel'
 import SodReportPanel from '../components/SodReportPanel'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
+import { PageHeader } from '../components/ui'
+import { AccessNotice } from './admin/AdminParts'
 
 /**
  * Duties and access, for the company's Owners (issue #543): who asked for a
@@ -23,19 +24,9 @@ export default function CompanyDuties() {
 
   return (
     <div className="page-container max-w-5xl">
-      <div className="page-header mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <Scale className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('duties.title')}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">{t('duties.subtitle')}</p>
-        </div>
-      </div>
+      <PageHeader title={t('duties.title')} subtitle={t('duties.subtitle')} />
       {role !== 'Owner' ? (
-        <div role="status" className="card p-4 text-sm text-gray-300">
-          {t('duties.ownerOnly', { role: role ?? '—' })}
-        </div>
+        <AccessNotice>{t('duties.ownerOnly', { role: role ?? '—' })}</AccessNotice>
       ) : (
         <div className="space-y-4">
           <SodPolicyPanel companyId={companyId} />

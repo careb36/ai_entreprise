@@ -181,7 +181,10 @@ OpenID Connect provider (single sign-on, below).
   startup (`backend/app/lifecycle.py`).
 - **API tokens** for external callers (`POST /v1/auth/tokens`,
   `backend/app/services/platform/api_tokens.py`): one company per token, a
-  role (`Viewer` by default, `Manager` at most, never above its creator's),
+  role (`Viewer` by default, `Manager` at most, never above its creator's,
+  when minted and on every use: a token above its creator's current effective
+  role, or whose creator left the company, is a 401 audited
+  `api_token_refused` with the reason),
   an expiry (90 days by default, at most 365), revocable. Only the token's
   sha256 is stored; the raw value (`fab_` + 32 random bytes) is shown once.
   A request made with one acts as `api-token:<id>`, so audit rows name it.
@@ -325,10 +328,9 @@ fallback credential.
   decided at the route that starts or changes the work (Manager to start a
   sprint, Owner to delete one), and the agents' reach is bounded by the
   daemon's sandbox and command policy (§8.3), not by the caller's role.
-- An API token keeps the role it was minted with when its creator is later
-  demoted or leaves the team that made them a Manager, until it is revoked or
-  expires (at most 365 days); refusing such a token at use is planned
-  (`docs/design/TEAMS_AND_USAGE.md`, T5).
+- An API token minted while authentication was off has no recorded creator,
+  so the cap on its creator's current role does not apply to it; the access
+  review lists it with no owner (`docs/design/TEAMS_AND_USAGE.md`, T5).
 - Emergency changes on their own path (a reason, an after-the-fact approval
   by another person within a deadline, listed in the report) are designed,
   not built (`docs/design/SEGREGATION_OF_DUTIES.md`, Next). The Manager agent
