@@ -922,6 +922,9 @@
       "test_prompt_budget.py": [
         "loop"
       ],
+      "test_prompt_sections_off.py": [
+        "loop"
+      ],
       "test_prompt_weight.py": [
         "models"
       ],
