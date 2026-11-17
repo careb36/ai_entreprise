@@ -552,4 +552,7 @@ def extra_items(session: Session, company: Company) -> list[dict[str, Any]]:
         items += _branch_items(session, company, "publish", policy.publish_enabled)
     if "undo_delivery" in rules:
         items += _undo_items(session, company)
+    from services.management import rsi_cycle_view
+
+    items += rsi_cycle_view.inbox_items(session, company)
     return items

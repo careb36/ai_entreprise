@@ -84,7 +84,7 @@ root's profile), before anything is automated.
 | **Learn** | `services/learning/retrospective.build` (board counts, contradictions, notes); procedures proposed and measured (`procedures.propose`, `evaluate`); retrospectives written by a person (`docs/retrospectives/`) | Findings as records with a target measure (`Finding`, **missing**). Today a finding exists only as prose |
 | **Decide** | At autonomy 3 a closed sprint gets a follow-up planned by a model (`services/loop/worker/close.py` `_plan_follow_up`, `services/planning/sprint_planner.plan_self_improvement_sprint`, `AUTO_SELF_IMPROVEMENT_ENABLED`, off by default since decision 8 in §10) | Finding → specification → sprint, chosen by a deterministic rule or by a person, never by the planner's free text. For the self-hosting company the model-planned follow-up is off whatever the setting says (REQ-21, PR 3: `close._complete_sprint_and_plan_follow_up` answers `protected_paths_enabled` and audits `follow_up_sprint_skipped`) |
 | **Apply** | The Verifier (`verify_agent_run`), the risk tier (`services/evidence/risk.classify`; `.github/workflows/` already raises it to high), segregation of duties (`services/platform/sod.enforce`), the integration review and its merge gate (`integration_review.py`, `local_merge.integration_merge_spec`, `companies.integration_review_required`), the history check (`backend/app/history_check.py`) | A protected-paths check (§3); a hold no Manager rule can accept; the same check on the pull request in CI |
-| **Keep or revert** | Procedures: kept or reverted against a baseline of two sprints with tolerances (`REWORK_TOLERANCE` 0.25, `BLOCKED_TOLERANCE` 0.10, `GAP_TOLERANCE` 0.10); `unmeasured` is never `kept` | The same discipline for code changes: `services/evidence/fitness.py` **(missing)**, the cycle record **(missing)**, and a watch after the merge that opens a revert pull request **(missing)** |
+| **Keep or revert** | Procedures: kept or reverted against a baseline of two sprints with tolerances (`REWORK_TOLERANCE` 0.25, `BLOCKED_TOLERANCE` 0.10, `GAP_TOLERANCE` 0.10); `unmeasured` is never `kept` | The same discipline for code changes: `services/evidence/fitness.py` **(missing)**, the cycle record (`scripts/rsi/cycle_record.py`; in the backend, `management/rsi_cycle.py` and the `rsi_cycles` table, PR 10), and a watch after the merge that opens a revert pull request **(missing)** |
 
 ### 1.1 Act
 
@@ -356,7 +356,7 @@ hurry and the numbers are wrong.
 | `evidence/protected_paths.py` (the check), `evidence/fitness.py` (the decision) | evidence | contracts (and platform for logging) only, as ADR 0012 requires |
 | The merge refusal in `release/protected_merge.py`, called from `release/local_merge.py` | release | evidence, contracts, platform |
 | The hold in `management/manager_rules.py` | management | evidence |
-| The cycle record and its orchestration, `management/rsi_cycle.py` **(missing)** | management | every context (it is the owner as a client) |
+| The cycle record and its orchestration, `management/rsi_cycle.py` (with `rsi_cycle_steps.py`, `rsi_cycle_view.py`, `rsi_cycle_import.py`; PR 10) | management | every context (it is the owner as a client) |
 | Reading GitHub's check-runs | `producers/github_adapter.py` (already an HTTP adapter), or the runner script outside `services/` | — |
 
 `fitness.py` sits in evidence on purpose. It judges from observations, it

@@ -175,6 +175,29 @@ Copy `.env.example` to `.env` and fill in:
   commit (`protected_paths_ack`, migration `0042`); and the model-planned
   follow-up above does not run for such a company, whatever
   `AUTO_SELF_IMPROVEMENT_ENABLED` says (audited `follow_up_sprint_skipped`).
+- `RSI_ENABLED` — optional, default `false`. The self-improvement cycle in the
+  backend (`services/management/rsi_cycle.py`, PR 10 of
+  `docs/design/rsi-loop.md`): off, no cycle starts and a running one stops at
+  its next step, its sprint with it (REQ-24). It also needs the company to be
+  marked as hosting the factory (protected paths on, above); there is no
+  second company flag. With it on, the backend enforces decisions 4 and 7,
+  each refusal audited `rsi_cycle_refused` with its reason:
+  `RSI_CYCLES_PER_DAY` (1) cycles started per company and UTC day, one at a
+  time; `RSI_STOP_AFTER_CYCLES_WITHOUT_KEEP` (3): after that many cycles in a
+  row without a keep nothing starts until a signed-in Owner resumes
+  (`POST /v1/companies/{id}/rsi/resume`); `RSI_MAX_DIFF_FILES` (20) and
+  `RSI_MAX_DIFF_LINES` (600): the cap on C's diff, read from git through the
+  workspace daemon, over which the cycle is unmeasured and waits for a
+  person; `RSI_FIRST_SPRINT_TOKENS` (0, unknown): the reported tokens of the
+  first manual iteration's sprint, without which no cycle starts, and
+  `RSI_CYCLE_TOKEN_BUDGET` (0: the cap), a cycle's budget in reported tokens,
+  capped at twice `RSI_FIRST_SPRINT_TOKENS`; passing it ends the cycle
+  `budget_exceeded` and stops its sprint. `RSI_FILES_ROOT` (empty) is the
+  checkout under which the backend reads a cycle record's kept files to hash
+  them itself when an Owner imports the record
+  (`POST /v1/companies/{id}/rsi/cycles/import`); empty, every hash stays the
+  runner's claim. A kept cycle is merged by a person (`merge_self_change` is
+  in `ALWAYS_ESCALATE`), recorded by a signed-in Owner at C's sha.
 - `MANAGER_AGENT_ENABLED` — optional, default `false`. The Manager agent
   (`services/management/manager_agent.py`) reads the inbox every
   `MANAGER_AGENT_INTERVAL_SECONDS` (60): each task blocked for a person or

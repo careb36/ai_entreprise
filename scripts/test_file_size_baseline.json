@@ -2,6 +2,6 @@
   "backend/tests/test_app_check.py": 1320,
   "backend/tests/test_browser_image.py": 642,
   "backend/tests/test_browser_smoke.py": 802,
-  "backend/tests/test_manager_rules.py": 1103,
+  "backend/tests/test_manager_rules.py": 1101,
   "backend/tests/test_run_logs.py": 704
 }
