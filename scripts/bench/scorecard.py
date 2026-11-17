@@ -188,6 +188,7 @@ def summarize_spec(
             "total": int(graded.get("total", 0)),
             "results": dict(graded.get("results") or {}),
             "isolation": graded.get("isolation"),
+            "unmeasured": graded.get("unmeasured"),
         },
         "factory_criteria_verified": factory_verified,
         "tasks": {

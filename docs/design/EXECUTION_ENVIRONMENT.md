@@ -176,6 +176,18 @@ built here (no QEMU); its sha256 was computed from the archive, which holds
 an aarch64 binary. Building needed the `extra_ca` secret: the session's
 proxy intercepts TLS, and npm refused its certificate without it.
 
+Both headless shell sha256 values were re-checked for #529 from another
+machine behind a different proxy, and each archive's MD5 matched the
+`x-goog-hash: md5=` the origin bucket stores for the object
+(`storage.googleapis.com/chrome-for-testing-public/156.0.8078.4/…`, where
+`cdn.playwright.dev` redirects): `dD2se6+Z6qcuIhM16pZvBw==` for
+`linux64`, `Y7JjEbYwKEdpZANoezVM1Q==` for `linux-arm64`. That header is
+the origin's own record, not a value from the party that computed the
+pinned sha256; a network with no proxy at all has still not been used. The
+first `browser-image-probe.yml` run (43746887213) built both architectures
+under QEMU on the runner; the arm64 probe's browser aborted under emulation,
+so the arm64 image has not been seen to run.
+
 ### Taken from Flow, as code
 
 Flow's `docker/base/Dockerfile` and `docker/base/probe-browser.js` at commit
@@ -201,11 +213,12 @@ prints one machine-readable line.
   lifecycle is next.
 - **Publishing the browser image.** Published from the release workflow
   (#529): `images.yml` pushes `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z`
-  for `linux/amd64,linux/arm64` with buildx under QEMU — outside the
-  five-image matrix, signed by digest with keyless cosign and attested with
-  its CycloneDX SBOM as the five others — and the manual
-  `browser-image-probe.yml` checks the runner can build and run both
-  architectures before a tag relies on it. Operators pin
+  for `linux/amd64` with buildx — outside the five-image matrix, signed by
+  digest with keyless cosign and attested with its CycloneDX SBOM as the
+  five others. The manual `browser-image-probe.yml` builds both
+  architectures under QEMU and runs the arm64 image with its probe; its
+  browser aborts under emulation, so arm64 is published only once it has
+  run on arm64 hardware (open). Operators pin
   `DELIVERY_BROWSER_IMAGE` to the digest the run printed
   (`docs/CONFIGURATION.md`, `docs/OPERATIONS.md`); pinning it in the compose
   file is left to the deployment. A project whose own `@playwright/test` is

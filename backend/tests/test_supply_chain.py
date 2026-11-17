@@ -94,7 +94,7 @@ SYFT_URL = "https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.
 SYFT_SHA = "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
 
 # The jobs of images.yml that sign what they push: the five-image matrix and
-# the browser sandbox's multi-arch publish (issue #529).
+# the browser sandbox's linux/amd64 publish (issue #529).
 _SIGNING_JOBS = ("publish", "publish-browser")
 
 
@@ -122,7 +122,7 @@ def test_images_are_signed_by_digest_and_carry_their_sbom():
     data = _workflow("images.yml")
     assert data["permissions"] == {"contents": "read"}
     # The OIDC token only where it signs: the five-image matrix and the
-    # browser sandbox's multi-arch publish (issue #529).
+    # browser sandbox's linux/amd64 publish (issue #529).
     for name, job in data["jobs"].items():
         assert ("id-token" in (job.get("permissions") or {})) is (name in _SIGNING_JOBS)
     publish = data["jobs"]["publish"]
@@ -205,6 +205,98 @@ def test_the_browser_sandbox_publishes_amd64_signed_and_attested():
     )
     assert keep["uses"].startswith("actions/upload-artifact@")
     assert keep["with"]["if-no-files-found"] == "error"
+
+
+# --- the browser image's manual probe (issue #529) ----------------------------------
+
+
+def _probe_problems(data: dict) -> list[str]:
+    """What breaks the probe's promise: run by hand only, with a read-only
+    token, pushing nowhere, and running the arm64 image the way the daemon
+    runs it (network off, capabilities dropped, an unprivileged uid)."""
+    problems = []
+    if set(data.get("on") or {}) != {"workflow_dispatch"}:
+        problems.append("triggered by something other than workflow_dispatch")
+    if data.get("permissions") != {"contents": "read"}:
+        problems.append("the workflow token is not contents: read")
+    for name, job in (data.get("jobs") or {}).items():
+        if "permissions" in job:
+            problems.append(f"job {name} widens its permissions")
+        if job.get("runs-on") != ["self-hosted", "linux", "x64", "lafabrique"]:
+            problems.append(f"job {name} is not on the lafabrique runner")
+        text = _run(job)
+        for forbidden in ("--push", "docker login", "docker push", "type=registry"):
+            if forbidden in text:
+                problems.append(f"job {name} runs {forbidden}")
+        if "--platform linux/amd64,linux/arm64" not in text:
+            problems.append(f"job {name} does not build both architectures")
+        for flag in (
+            "--platform linux/arm64",
+            "--network none",
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges",
+            "--user 4321:4321",
+            "node /opt/fabrique/probe-browser.js",
+        ):
+            if flag not in text:
+                problems.append(f"job {name} runs the probe without {flag}")
+    return problems
+
+
+def _probe() -> dict:
+    return _workflow("browser-image-probe.yml")
+
+
+@pytest.mark.parametrize(
+    "mutate, expected",
+    [
+        (lambda d: d["on"].update({"pull_request": None}), "workflow_dispatch"),
+        (lambda d: d["on"].update({"push": {"tags": ["v*"]}}), "workflow_dispatch"),
+        (lambda d: d.update({"permissions": {"contents": "write"}}), "contents: read"),
+        (
+            lambda d: d["jobs"]["probe"].update({"permissions": {"packages": "write"}}),
+            "widens its permissions",
+        ),
+        (
+            lambda d: d["jobs"]["probe"]["steps"].append(
+                {"run": "docker buildx build --push ."}
+            ),
+            "runs --push",
+        ),
+        (
+            lambda d: d["jobs"]["probe"]["steps"].append(
+                {"run": "printf x | docker login ghcr.io --password-stdin"}
+            ),
+            "runs docker login",
+        ),
+        (lambda d: d["jobs"]["probe"].update({"runs-on": "ubuntu-latest"}), "runner"),
+    ],
+)
+def test_the_browser_probe_check_refuses_a_probe_that_could_publish(mutate, expected):
+    data = _probe()
+    mutate(data)
+    assert any(expected in p for p in _probe_problems(data)), _probe_problems(data)
+
+
+def test_the_browser_probe_check_refuses_a_probe_run_without_the_sandbox_flags():
+    data = _probe()
+    for step in data["jobs"]["probe"]["steps"]:
+        if "run" in step:
+            step["run"] = step["run"].replace("--network none", "")
+    assert any("--network none" in p for p in _probe_problems(data))
+
+
+def test_the_browser_probe_is_manual_read_only_and_pushes_nowhere():
+    """browser-image-probe.yml is the gate for an arm64 browser-sandbox: it
+    builds both architectures with buildx under QEMU and runs the arm64 image
+    once with its probe, without ever holding a token that can publish."""
+    data = _probe()
+    assert _probe_problems(data) == []
+    uses = [s["uses"] for s in data["jobs"]["probe"]["steps"] if "uses" in s]
+    assert any(u.startswith("docker/setup-qemu-action@") for u in uses)
+    assert any(u.startswith("docker/setup-buildx-action@") for u in uses)
+    assert all(SHA40.match(u.split("@")[1].split()[0]) for u in uses)
+    assert "--output type=cacheonly" in _run(data["jobs"]["probe"])
 
 
 def test_the_signing_is_documented_with_its_verification():
