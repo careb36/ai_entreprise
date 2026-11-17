@@ -228,3 +228,25 @@ def test_the_report_builder_carries_no_request_data():
     assert report["route"] == "/v1/things/{thing_id}"
     assert "passwd" not in json.dumps(report)
     asyncio.run(exception_handlers._post_report(report))  # no URL: a no-op
+
+
+def test_a_validation_error_does_not_echo_what_was_sent(test_client):
+    """A 422 names the field and the reason, never the value: the value can be
+    a password or a key (WSTG-v42-ERRH-01)."""
+    marker = "echo-" + secrets.token_hex(8)
+    too_long = {"email": "e@example.com", "full_name": "E", "password": marker * 8}
+    cases = [
+        ("/v1/auth/register", too_long),
+        ("/v1/auth/login", {"email": "e@example.com", "password": 12345}),
+        ("/v1/auth/login", {"email": "e@example.com", "password": "p", "x": marker}),
+        ("/v1/auth/login", [marker]),
+    ]
+    for path, body in cases:
+        response = test_client.post(path, json=body)
+        assert response.status_code == 422, (path, body)
+        assert marker not in response.text and "12345" not in response.text, body
+        for error in response.json()["detail"]:
+            assert set(error) == {"type", "loc", "msg"}, body
+    first = test_client.post("/v1/auth/register", json=too_long).json()
+    assert first["detail"][0]["loc"] == ["body", "password"]
+    assert "at most 72 bytes" in first["detail"][0]["msg"]
