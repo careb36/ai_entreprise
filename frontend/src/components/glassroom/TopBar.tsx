@@ -27,7 +27,8 @@ export function TopBar({ sprintId, scopeSize, isConnected, filters, eventTypes, 
           {scopeSize}
         </span>
       )}
-      <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+      <span role="img" aria-label={isConnected ? t('glassroom.connected') : t('glassroom.disconnected')} title={isConnected ? t('glassroom.connected') : t('glassroom.disconnected')}
+        className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
 
       {/* Filters */}
       <div className="flex items-center gap-1.5 ml-3">
@@ -35,19 +36,21 @@ export function TopBar({ sprintId, scopeSize, isConnected, filters, eventTypes, 
           <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600" />
           <input
             type="text"
+            aria-label={t('glassroom.searchLabel')}
             placeholder={t('glassroom.searchPlaceholder', { defaultValue: 'Search…' })}
             value={filters.searchText}
             onChange={e => filters.setSearchText(e.target.value)}
             className="pl-6 pr-5 py-1 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500 w-32 transition-colors"
           />
           {filters.searchText && (
-            <button onClick={() => filters.setSearchText('')} className="absolute right-1.5 top-1/2 -translate-y-1/2">
-              <X size={11} className="text-gray-500 hover:text-gray-300" />
+            <button type="button" aria-label={t('glassroom.clearSearch')} onClick={() => filters.setSearchText('')} className="absolute right-1.5 top-1/2 -translate-y-1/2">
+              <X size={11} className="text-gray-500 hover:text-gray-300" aria-hidden="true" />
             </button>
           )}
         </div>
 
         <select
+          aria-label={t('glassroom.filterAgentLabel')}
           value={filters.filterAgent}
           onChange={e => filters.setFilterAgent(e.target.value)}
           className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"
@@ -59,6 +62,7 @@ export function TopBar({ sprintId, scopeSize, isConnected, filters, eventTypes, 
         </select>
 
         <select
+          aria-label={t('glassroom.filterTypeLabel')}
           value={filters.filterType}
           onChange={e => filters.setFilterType(e.target.value)}
           className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"

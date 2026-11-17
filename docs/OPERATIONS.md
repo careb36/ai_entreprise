@@ -344,7 +344,7 @@ both.
 
 | Key | Where | What rotating does | How |
 |-----|-------|--------------------|-----|
-| `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
+| `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. The new key must be at least as long as the hash (32 bytes for HS256, 48 for HS384, 64 for HS512); a shorter one counts as unset and login answers 503 (`secrets.token_urlsafe(48)` gives 64). |
 | `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
 | `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. Anchors (issue #542) are not affected by the rotation: they cover the statement, not the key, and their tokens and customer signatures still verify. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
@@ -425,6 +425,46 @@ against a real stack, with real models, are in
 exercises the same harness with the fake model (step 9d). The snapshot has no
 remote: what is kept comes back to this repository as an ordinary pull
 request.
+
+### Run a self-improvement cycle
+
+Once the sprint's change is back as a pull request (`docs/design/rsi-loop.md`
+§7 step 5), `scripts/rsi/cycle.py` measures it against `main` and says
+whether it may be kept. It never merges, pushes or approves; a person does
+(details in [`scripts/rsi/README.md`](../scripts/rsi/README.md)).
+
+1. Save the company's findings as the platform reports them:
+   `GET /v1/findings?company_id=<id>` with an Owner's token, to
+   `findings.json`. A specification whose cycle was reverted does not start
+   again unless you name the person who asks (`--retry-by "<name>"`, REQ-20).
+2. Fetch the pull request's head locally (`git fetch origin
+   pull/<n>/head`), export `GITHUB_TOKEN` (read access to checks and pull
+   requests), the bench's settings (`BENCH_LLM_URL`, the Postgres variables,
+   `BENCH_TOKEN_BUDGET`; `bench/README.md`) and run a dry run first:
+
+   ```bash
+   python3 scripts/rsi/cycle.py run --dry-run --pr <n> --repository <owner>/<repo> \
+     --spec scripts/self_host/specs/<name>-specification.json --findings findings.json \
+     --cycle-id cycle-<n>-<name> --work /tmp/rsi/cycle-<n> --out /tmp/rsi/cycle-<n>.json \
+     --python "$(cd backend && poetry env info -p)/bin/python"
+   ```
+
+   It checks the inputs from git and the files (the specification at B and
+   its measure, the findings, the graders' trees) and prints every step.
+3. Run it again without `--dry-run`. It takes hours (K = 3 real bench runs
+   per side, alternating). Exit status: 0 keep, 1 revert, 2 unmeasured, 3
+   refused (the target already passes on B, a reverted specification, a card
+   not graded by B, a step that failed). The record names every command, its
+   exit status and its output's sha256, and every kept file with its hash.
+4. **Keep**: merge the pull request yourself, pinned to the head the record
+   names (`candidate_sha`; GitHub's "expected head sha"). Then
+   `python3 scripts/rsi/cycle.py record --record /tmp/rsi/cycle-<n>.json
+   --merged-sha <merge commit> --out rsi/cycles/<cycle id>.json` and commit
+   that file in a pull request (`rsi/cycles/` is protected): the nightly watch
+   reads it (REQ-19). **Revert / unmeasured**: close the pull request unmerged
+   (or pass `--close-pr` to the run) and record the decision on the finding.
+5. `python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-<n>.json`
+   hashes the kept files again before anyone relies on them.
 
 ## When something is wrong
 

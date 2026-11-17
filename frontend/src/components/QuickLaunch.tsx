@@ -269,6 +269,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
 
       <textarea
         rows={2}
+        aria-label={t('dashboard.goalLabel')}
         value={goal}
         onChange={e => {
           setGoal(e.target.value)
