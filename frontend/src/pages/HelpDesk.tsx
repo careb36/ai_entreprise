@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, LifeBuoy, Loader2, Save } from 'lucide-react'
+import {
+  Bot, CircleAlert, CircleCheck, Download, Inbox, LifeBuoy, Loader2, MousePointerClick, Save, TriangleAlert, UserCheck,
+} from 'lucide-react'
 import { useSupportAgentRecord, useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
 import { useAuthStore } from '../store/useAuthStore'
+import { CountPill, EmptyState, PageHeader, Panel, Toolbar } from '../components/ui'
+import { TicketStatusBadge } from '../components/TicketStatusBadge'
 import {
   api,
   ApiError,
@@ -44,31 +48,54 @@ export default function HelpDesk() {
 
   return (
     <div className="page-container space-y-6">
-      <div className="page-header flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <LifeBuoy className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('helpDesk.title', { defaultValue: 'Help desk' })}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">
-            {t('helpDesk.subtitle', { defaultValue: 'Problems reported through the support assistant.' })}
-          </p>
-        </div>
-        {canTriage && <LogsDownload />}
-      </div>
+      <PageHeader
+        title={t('helpDesk.title', { defaultValue: 'Help desk' })}
+        subtitle={t('helpDesk.subtitle', { defaultValue: 'Problems reported through the support assistant.' })}
+        actions={canTriage && <LogsDownload />}
+      />
       {canTriage && <AgentRecord />}
       {!canTriage ? (
-        <div role="status" className="card p-4 text-sm text-gray-300">
-          {t('helpDesk.adminOnly', { defaultValue: 'The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend.' })}
+        <div role="status">
+          <EmptyState icon={LifeBuoy} dashed
+            title={t('helpDesk.adminOnlyTitle', { defaultValue: 'For support admins' })}
+            description={t('helpDesk.adminOnly', { defaultValue: 'The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend.' })} />
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <TicketList filters={filters} onFilters={setFilters} selected={selected} onSelect={setSelected} />
           {selected
             ? <TicketPanel key={selected} ticketNum={selected} />
-            : <p className="card p-4 text-sm text-gray-400">{t('helpDesk.pick', { defaultValue: 'Pick a ticket to see its details.' })}</p>}
+            : (
+              <Panel>
+                <EmptyState icon={MousePointerClick} title={t('helpDesk.pick', { defaultValue: 'Pick a ticket to see its details.' })} />
+              </Panel>
+            )}
         </div>
       )}
+    </div>
+  )
+}
+
+/** A field's label in the help desk's forms and filters: small, never below gray-400. */
+const FIELD_LABEL = 'mb-1 block text-[11px] font-medium text-gray-400'
+
+/** A load or save that failed, with its retry. */
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <div role="alert" className="alert-error flex-wrap items-center gap-2 p-3 text-[13px]">
+      <CircleAlert size={15} aria-hidden="true" className="flex-shrink-0" />
+      <span className="min-w-0 flex-1 break-words">{message}</span>
+      <button type="button" onClick={onRetry} className="btn-tool text-red-200">{t('common.retry')}</button>
+    </div>
+  )
+}
+
+/** A spinner and its words, for a list or a ticket on its way. */
+function Loading({ label }: { label: string }) {
+  return (
+    <div role="status" className="flex items-center gap-2 px-3 py-6 text-[13px] text-gray-400">
+      <Loader2 size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> {label}
     </div>
   )
 }
@@ -85,71 +112,71 @@ function TicketList({ filters, onFilters, selected, onSelect }: {
   const rows = tickets.data?.tickets ?? []
 
   return (
-    <section className="card min-w-0 p-4 space-y-3" aria-labelledby="tickets-title">
-      <h2 id="tickets-title" className="text-sm font-semibold text-white">{t('helpDesk.tickets', { defaultValue: 'Tickets' })}</h2>
-      <form className="grid gap-2 sm:grid-cols-3"
+    <Panel className="min-w-0 overflow-hidden" title={t('helpDesk.tickets', { defaultValue: 'Tickets' })}
+      count={tickets.data && <CountPill count={rows.length} label={t('helpDesk.ticketCount', { count: rows.length })} />}>
+      <form className="border-b border-surface-700 px-3 py-2"
         onSubmit={e => { e.preventDefault(); onFilters({ ...filters, reporter_email: email.trim() || undefined }) }}>
-        <label className="block">
-          <span className="input-label">{t('helpDesk.status', { defaultValue: 'Status' })}</span>
-          <select className="select w-full" value={filters.status ?? ''}
-            onChange={e => onFilters({ ...filters, status: (e.target.value || undefined) as TicketStatus | undefined })}>
-            <option value="">{t('helpDesk.any', { defaultValue: 'Any' })}</option>
-            {STATUSES.map(value => <option key={value} value={value}>{t(`support.status.${value}`)}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="input-label">{t('helpDesk.severity', { defaultValue: 'Impact' })}</span>
-          <select className="select w-full" value={filters.severity ?? ''}
-            onChange={e => onFilters({ ...filters, severity: (e.target.value || undefined) as TicketSeverity | undefined })}>
-            <option value="">{t('helpDesk.any', { defaultValue: 'Any' })}</option>
-            {SEVERITIES.map(value => <option key={value} value={value}>{t(`helpDesk.severities.${value}`)}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="input-label">{t('helpDesk.reporter', { defaultValue: 'Reporter email' })}</span>
-          <input type="email" className="input w-full" value={email} onChange={e => setEmail(e.target.value)}
-            onBlur={() => onFilters({ ...filters, reporter_email: email.trim() || undefined })}
-            placeholder={t('support.emailPlaceholder')} />
-        </label>
+        <Toolbar label={t('helpDesk.filters', { defaultValue: 'Filter the tickets' })} className="items-end">
+          <label className="block">
+            <span className={FIELD_LABEL}>{t('helpDesk.status', { defaultValue: 'Status' })}</span>
+            <select className="select control-sm w-36" value={filters.status ?? ''}
+              onChange={e => onFilters({ ...filters, status: (e.target.value || undefined) as TicketStatus | undefined })}>
+              <option value="">{t('helpDesk.any', { defaultValue: 'Any' })}</option>
+              {STATUSES.map(value => <option key={value} value={value}>{t(`support.status.${value}`)}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className={FIELD_LABEL}>{t('helpDesk.severity', { defaultValue: 'Impact' })}</span>
+            <select className="select control-sm w-32" value={filters.severity ?? ''}
+              onChange={e => onFilters({ ...filters, severity: (e.target.value || undefined) as TicketSeverity | undefined })}>
+              <option value="">{t('helpDesk.any', { defaultValue: 'Any' })}</option>
+              {SEVERITIES.map(value => <option key={value} value={value}>{t(`helpDesk.severities.${value}`)}</option>)}
+            </select>
+          </label>
+          <label className="block min-w-0 flex-1 basis-48">
+            <span className={FIELD_LABEL}>{t('helpDesk.reporter', { defaultValue: 'Reporter email' })}</span>
+            <input type="email" className="input control-sm" value={email} onChange={e => setEmail(e.target.value)}
+              onBlur={() => onFilters({ ...filters, reporter_email: email.trim() || undefined })}
+              placeholder={t('support.emailPlaceholder')} />
+          </label>
+        </Toolbar>
       </form>
 
       {tickets.isLoading ? (
-        <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-          <Loader2 size={15} className="animate-spin" /> {t('helpDesk.loading', { defaultValue: 'Loading tickets…' })}
-        </div>
+        <Loading label={t('helpDesk.loading', { defaultValue: 'Loading tickets…' })} />
       ) : tickets.isError ? (
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('helpDesk.loadError', { message: errorDetail(tickets.error), defaultValue: 'Could not load the tickets: {{message}}' })}</span>
-          <button type="button" onClick={() => tickets.refetch()} className="underline">{t('common.retry')}</button>
+        <div className="p-3">
+          <LoadError onRetry={() => tickets.refetch()}
+            message={t('helpDesk.loadError', { message: errorDetail(tickets.error), defaultValue: 'Could not load the tickets: {{message}}' })} />
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-400">{t('helpDesk.empty', { defaultValue: 'No tickets match these filters.' })}</p>
+        <EmptyState icon={Inbox} title={t('helpDesk.empty', { defaultValue: 'No tickets match these filters.' })} />
       ) : (
-        <ul className="divide-y divide-surface-700">
+        <ul className="data-list">
           {rows.map(ticket => (
             <li key={ticket.ticket_num}>
               <button type="button" onClick={() => onSelect(ticket.ticket_num)}
                 aria-current={selected === ticket.ticket_num ? 'true' : undefined}
-                className={`w-full rounded px-2 py-2 text-left hover:bg-surface-800 ${selected === ticket.ticket_num ? 'bg-surface-800' : ''}`}>
-                <span className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                className={`data-row-link w-full text-left ${selected === ticket.ticket_num ? 'bg-surface-800 shadow-[inset_2px_0_0] shadow-brand-500' : ''}`}>
+                <span className="flex flex-wrap items-center gap-2 text-meta">
                   <span className="font-mono text-gray-300">{ticket.ticket_num}</span>
-                  <span className="badge">{t(`support.status.${ticket.status}`, { defaultValue: ticket.status })}</span>
+                  <TicketStatusBadge status={ticket.status} />
                   {/* The impact a support admin decided, else the reporter's choice, marked as such: what the Impact filter reads. */}
                   <span>{ticket.decided_severity
                     ? t(`helpDesk.severities.${ticket.decided_severity}`, { defaultValue: ticket.decided_severity })
                     : ticket.severity
                       ? t('helpDesk.reportedImpact', { severity: t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }) })
                       : '—'}</span>
-                  <span className="ml-auto">{formatDate(ticket.created_at)}</span>
+                  <span className="ml-auto tabular-nums">{formatDate(ticket.created_at)}</span>
                 </span>
-                <span className="mt-0.5 block truncate text-sm text-white">{ticket.title}</span>
-                {ticket.reporter_email && <span className="block truncate text-xs text-gray-500">{ticket.reporter_email}</span>}
+                <span className="mt-1 block truncate text-[13px] font-semibold text-gray-100">{ticket.title}</span>
+                {ticket.reporter_email && <span className="text-meta block truncate">{ticket.reporter_email}</span>}
               </button>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -158,18 +185,12 @@ function TicketPanel({ ticketNum }: { ticketNum: string }) {
   const ticket = useTicket(ticketNum)
 
   if (ticket.isLoading) {
-    return (
-      <div role="status" className="card p-4 flex items-center gap-2 text-sm text-gray-400">
-        <Loader2 size={15} className="animate-spin" /> {t('helpDesk.loadingTicket', { defaultValue: 'Loading the ticket…' })}
-      </div>
-    )
+    return <Panel><Loading label={t('helpDesk.loadingTicket', { defaultValue: 'Loading the ticket…' })} /></Panel>
   }
   if (ticket.isError || !ticket.data) {
     return (
-      <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-        <span>{t('helpDesk.ticketError', { message: errorDetail(ticket.error), defaultValue: 'Could not load the ticket: {{message}}' })}</span>
-        <button type="button" onClick={() => ticket.refetch()} className="underline">{t('common.retry')}</button>
-      </div>
+      <LoadError onRetry={() => ticket.refetch()}
+        message={t('helpDesk.ticketError', { message: errorDetail(ticket.error), defaultValue: 'Could not load the ticket: {{message}}' })} />
     )
   }
   return <TicketDetail ticket={ticket.data} />
@@ -185,66 +206,72 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
     { key: 'resolution', label: t('support.resolution'), value: ticket.resolution },
   ]
   return (
-    <section className="card min-w-0 p-4 space-y-4" aria-labelledby="ticket-title">
-      <div>
-        <p className="font-mono text-xs text-gray-400">{ticket.ticket_num}</p>
-        <h2 id="ticket-title" className="text-base font-semibold text-white break-words">{ticket.title}</h2>
-        <p className="text-xs text-gray-500">
-          {t('helpDesk.meta', {
-            reporter: ticket.reporter_email ?? '—',
-            created: formatDate(ticket.created_at),
-            assignee: ticket.assigned_to ?? '—',
-            defaultValue: 'Reported by {{reporter}} on {{created}} · assigned to {{assignee}}',
-          })}
-        </p>
-      </div>
-      <dl className="space-y-3">
-        {fields.filter(field => field.value).map(field => (
-          <div key={field.key}>
-            <dt className="text-xs font-semibold text-gray-500">{field.label}</dt>
-            <dd className="whitespace-pre-wrap break-words text-sm text-gray-200">{field.value}</dd>
-          </div>
-        ))}
-      </dl>
-      {ticket.triaged_by && (
-        <div className="rounded-lg border border-surface-700 p-3 text-sm" aria-label={t('helpDesk.triage', { defaultValue: 'Triage' })}>
-          <p className="mb-1 text-xs font-semibold text-gray-400">
-            {t('helpDesk.triagedBy', { who: ticket.triaged_by, defaultValue: 'Triage by {{who}} (suggestions; the reporter chose the severity)' })}
+    <Panel className="min-w-0"
+      title={<span className="break-words">{ticket.title}</span>}
+      count={<span className="chip font-mono">{ticket.ticket_num}</span>}
+      actions={<TicketStatusBadge status={ticket.status} />}>
+      <div className="space-y-4 p-3 sm:p-4">
+        <div>
+          <p className="text-meta">
+            {t('helpDesk.meta', {
+              reporter: ticket.reporter_email ?? '—',
+              created: formatDate(ticket.created_at),
+              assignee: ticket.assigned_to ?? '—',
+              defaultValue: 'Reported by {{reporter}} on {{created}} · assigned to {{assignee}}',
+            })}
           </p>
-          {ticket.suggested_severity ? (
-            <>
-              <p className="text-xs text-gray-300">
-                {t('helpDesk.suggested', {
-                  severity: t(`helpDesk.severities.${ticket.suggested_severity}`, { defaultValue: ticket.suggested_severity }),
-                  category: ticket.suggested_category ?? '—',
-                  reported: ticket.severity ? t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }) : '—',
-                  defaultValue: 'Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}',
-                })}
-              </p>
-              {ticket.agent_reply && (
-                <>
-                  <p className="mt-2 text-xs font-semibold text-gray-400">{t('helpDesk.agentReply', { defaultValue: 'First reply sent to the reporter' })}</p>
-                  <p className="whitespace-pre-wrap break-words text-gray-200">{ticket.agent_reply}</p>
-                </>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-gray-400">{t('helpDesk.untriaged', { defaultValue: 'The agent could not triage this ticket; it is left to people.' })}</p>
-          )}
         </div>
-      )}
-      {ticket.decided_by && (
-        <p className="text-xs text-gray-300">
-          {t('helpDesk.decided', {
-            severity: ticket.decided_severity ? t(`helpDesk.severities.${ticket.decided_severity}`, { defaultValue: ticket.decided_severity }) : '—',
-            category: ticket.decided_category ? t(`helpDesk.categories.${ticket.decided_category}`, { defaultValue: ticket.decided_category }) : '—',
-            who: ticket.decided_by,
-            defaultValue: 'Decided: impact {{severity}} · category {{category}}, last changed by {{who}}',
-          })}
-        </p>
-      )}
-      <UpdateForm ticket={ticket} />
-    </section>
+        <dl className="space-y-3">
+          {fields.filter(field => field.value).map(field => (
+            <div key={field.key}>
+              <dt className="text-[11px] font-medium text-gray-400">{field.label}</dt>
+              <dd className="mt-0.5 whitespace-pre-wrap break-words text-[13px] text-gray-200">{field.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {ticket.triaged_by && (
+          // The agent's triage is a claim: dashed, as the board's reported signals are.
+          <div className="rounded-lg border border-dashed border-surface-700 p-3 text-[13px]" aria-label={t('helpDesk.triage', { defaultValue: 'Triage' })}>
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-gray-400">
+              <Bot size={12} aria-hidden="true" className="flex-shrink-0" />
+              {t('helpDesk.triagedBy', { who: ticket.triaged_by, defaultValue: 'Triage by {{who}} (suggestions; the reporter chose the severity)' })}
+            </p>
+            {ticket.suggested_severity ? (
+              <>
+                <p className="text-xs text-gray-300">
+                  {t('helpDesk.suggested', {
+                    severity: t(`helpDesk.severities.${ticket.suggested_severity}`, { defaultValue: ticket.suggested_severity }),
+                    category: ticket.suggested_category ?? '—',
+                    reported: ticket.severity ? t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }) : '—',
+                    defaultValue: 'Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}',
+                  })}
+                </p>
+                {ticket.agent_reply && (
+                  <>
+                    <p className="mt-2 text-[11px] font-medium text-gray-400">{t('helpDesk.agentReply', { defaultValue: 'First reply sent to the reporter' })}</p>
+                    <p className="whitespace-pre-wrap break-words text-gray-200">{ticket.agent_reply}</p>
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">{t('helpDesk.untriaged', { defaultValue: 'The agent could not triage this ticket; it is left to people.' })}</p>
+            )}
+          </div>
+        )}
+        {ticket.decided_by && (
+          <p className="flex items-start gap-1.5 text-xs text-gray-300">
+            <UserCheck size={13} aria-hidden="true" className="mt-px flex-shrink-0 text-gray-400" />
+            {t('helpDesk.decided', {
+              severity: ticket.decided_severity ? t(`helpDesk.severities.${ticket.decided_severity}`, { defaultValue: ticket.decided_severity }) : '—',
+              category: ticket.decided_category ? t(`helpDesk.categories.${ticket.decided_category}`, { defaultValue: ticket.decided_category }) : '—',
+              who: ticket.decided_by,
+              defaultValue: 'Decided: impact {{severity}} · category {{category}}, last changed by {{who}}',
+            })}
+          </p>
+        )}
+        <UpdateForm ticket={ticket} />
+      </div>
+    </Panel>
   )
 }
 
@@ -313,24 +340,24 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
     <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3 border-t border-surface-700 pt-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="input-label">{t('helpDesk.newStatus', { defaultValue: 'Status' })}</span>
+          <span className={FIELD_LABEL}>{t('helpDesk.newStatus', { defaultValue: 'Status' })}</span>
           <select className="select w-full" value={form.status} onChange={e => edit('status', e.target.value as TicketStatus)}>
             {STATUSES.map(value => <option key={value} value={value}>{t(`support.status.${value}`)}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="input-label">{t('helpDesk.assignee', { defaultValue: 'Assigned to' })}</span>
+          <span className={FIELD_LABEL}>{t('helpDesk.assignee', { defaultValue: 'Assigned to' })}</span>
           <input className="input w-full" value={form.assignee} onChange={e => edit('assignee', e.target.value)} />
         </label>
         <label className="block">
-          <span className="input-label">{t('helpDesk.decidedSeverity', { defaultValue: 'Decided impact' })}</span>
+          <span className={FIELD_LABEL}>{t('helpDesk.decidedSeverity', { defaultValue: 'Decided impact' })}</span>
           <select className="select w-full" value={form.severity} onChange={e => edit('severity', e.target.value as TicketSeverity | '')}>
             <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
             {SEVERITIES.map(value => <option key={value} value={value}>{t(`helpDesk.severities.${value}`)}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="input-label">{t('helpDesk.decidedCategory', { defaultValue: 'Decided category' })}</span>
+          <span className={FIELD_LABEL}>{t('helpDesk.decidedCategory', { defaultValue: 'Decided category' })}</span>
           <select className="select w-full" value={form.category} onChange={e => edit('category', e.target.value as TicketCategory | '')}>
             <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
             {CATEGORIES.map(value => <option key={value} value={value}>{t(`helpDesk.categories.${value}`)}</option>)}
@@ -338,29 +365,33 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         </label>
       </div>
       <label className="block">
-        <span className="input-label">{t('support.resolution')}</span>
+        <span className={FIELD_LABEL}>{t('support.resolution')}</span>
         <textarea className="input w-full" rows={3} value={form.resolution} onChange={e => edit('resolution', e.target.value)}
           aria-invalid={needsResolution || undefined} />
       </label>
       {needsResolution && (
-        <p className="text-xs text-amber-300">
+        <p className="flex items-start gap-1.5 text-xs text-amber-300">
+          <TriangleAlert size={13} aria-hidden="true" className="mt-px flex-shrink-0" />
           {t('helpDesk.resolutionRequired', { defaultValue: 'Write the resolution before resolving or closing the ticket.' })}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={update.isPending || needsResolution} className="btn btn-primary">
-          {update.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+        <button type="submit" disabled={update.isPending || needsResolution} className="btn-primary btn-sm">
+          {update.isPending
+            ? <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+            : <Save size={14} aria-hidden="true" />}
           {update.isPending ? t('helpDesk.saving', { defaultValue: 'Saving…' }) : t('helpDesk.save', { defaultValue: 'Save' })}
         </button>
         {update.isSuccess && (
-          <span role="status" className="text-sm text-status-success">{t('helpDesk.saved', { defaultValue: 'Ticket updated' })}</span>
+          <span role="status" className="flex items-center gap-1.5 text-[13px] text-emerald-300">
+            <CircleCheck size={14} aria-hidden="true" />
+            {t('helpDesk.saved', { defaultValue: 'Ticket updated' })}
+          </span>
         )}
       </div>
       {update.isError && (
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('helpDesk.saveError', { message: errorDetail(update.error), defaultValue: 'Could not update the ticket: {{message}}' })}</span>
-          <button type="button" onClick={submit} className="underline">{t('common.retry')}</button>
-        </div>
+        <LoadError onRetry={submit}
+          message={t('helpDesk.saveError', { message: errorDetail(update.error), defaultValue: 'Could not update the ticket: {{message}}' })} />
       )}
     </form>
   )
@@ -398,10 +429,11 @@ function AgentRecord() {
     </p>
   )
   return (
-    <section className="card space-y-1 p-4" aria-label={t('helpDesk.record.title', { defaultValue: "The Support agent's record" })}>
-      <h2 className="text-sm font-semibold text-white">{t('helpDesk.record.title', { defaultValue: "The Support agent's record" })}</h2>
-      {RECORD_FIELDS.map(key => line(key, record.data[key]))}
-    </section>
+    <Panel title={t('helpDesk.record.title', { defaultValue: "The Support agent's record" })}>
+      <div className="space-y-1 p-3">
+        {RECORD_FIELDS.map(key => line(key, record.data[key]))}
+      </div>
+    </Panel>
   )
 }
 
@@ -433,8 +465,10 @@ function LogsDownload() {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button type="button" onClick={() => { void download() }} disabled={state === 'loading'} className="btn btn-secondary btn-sm">
-        {state === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+      <button type="button" onClick={() => { void download() }} disabled={state === 'loading'} className="btn-tool border border-surface-700">
+        {state === 'loading'
+          ? <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          : <Download size={14} aria-hidden="true" />}
         {t('helpDesk.downloadLogs', { defaultValue: 'Download logs' })}
       </button>
       {state === 'missing' && (

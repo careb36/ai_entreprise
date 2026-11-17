@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
+import { CircleAlert, Loader2 } from 'lucide-react'
+import { AUTH_LABEL, AUTH_LINK, AuthCard } from './auth/AuthCard'
 
 export default function Register() {
   const { t } = useTranslation()
@@ -41,15 +43,20 @@ export default function Register() {
   }
 
   return (
-    <div className="page-container max-w-md">
-      <h1 className="text-2xl font-bold text-white mb-6">
-        {t('auth.registerTitle', { defaultValue: 'Create an account' })}
-      </h1>
+    <AuthCard
+      title={t('auth.registerTitle', { defaultValue: 'Create an account' })}
+      footer={<>
+        {t('auth.haveAccount', { defaultValue: 'Already have an account?' })}{' '}
+        <Link className={AUTH_LINK} to="/login">
+          {t('auth.loginTitle', { defaultValue: 'Log in' })}
+        </Link>
+      </>}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block text-sm text-gray-300">
-          {t('auth.fullName', { defaultValue: 'Full name' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('auth.fullName', { defaultValue: 'Full name' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="text"
             autoComplete="name"
             required
@@ -57,10 +64,10 @@ export default function Register() {
             onChange={event => setFullName(event.target.value)}
           />
         </label>
-        <label className="block text-sm text-gray-300">
-          {t('auth.email', { defaultValue: 'Email' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('auth.email', { defaultValue: 'Email' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="email"
             autoComplete="email"
             required
@@ -68,10 +75,10 @@ export default function Register() {
             onChange={event => setEmail(event.target.value)}
           />
         </label>
-        <label className="block text-sm text-gray-300">
-          {t('auth.password', { defaultValue: 'Password' })}
+        <label className="block">
+          <span className={AUTH_LABEL}>{t('auth.password', { defaultValue: 'Password' })}</span>
           <input
-            className="input mt-1 w-full"
+            className="input"
             type="password"
             autoComplete="new-password"
             required
@@ -79,17 +86,17 @@ export default function Register() {
             onChange={event => setPassword(event.target.value)}
           />
         </label>
-        {error && <p role="alert" className="text-red-300">{error}</p>}
+        {error && (
+          <p role="alert" className="alert-error p-3 text-[13px]">
+            <CircleAlert size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </p>
+        )}
         <button className="btn-primary w-full" type="submit" disabled={submitting}>
+          {submitting && <Loader2 size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
           {t('auth.registerTitle', { defaultValue: 'Create an account' })}
         </button>
       </form>
-      <p className="text-sm text-gray-400 mt-5">
-        {t('auth.haveAccount', { defaultValue: 'Already have an account?' })}{' '}
-        <Link className="text-brand-300" to="/login">
-          {t('auth.loginTitle', { defaultValue: 'Log in' })}
-        </Link>
-      </p>
-    </div>
+    </AuthCard>
   )
 }
