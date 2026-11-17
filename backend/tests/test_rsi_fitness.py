@@ -266,6 +266,26 @@ def test_a_target_that_could_not_run_is_unmeasured():
     assert decide(obs)["decision"] == fitness.UNMEASURED
 
 
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+def test_a_target_graded_outside_the_sandbox_is_unmeasured(side):
+    # run_measure's --in-process-measure: the candidate's code ran in the
+    # runner's Python (PR 12); "unmeasured" from the sandbox is not run either.
+    obs = observations()
+    obs["target"]["baseline"]["result"] = "fail"
+    obs["target"]["candidate"]["result"] = "pass"
+    for isolation in ("in_process", None, "container", ""):
+        obs["target"][side]["isolation"] = isolation
+        result = decide(obs)
+        assert result["decision"] == fitness.UNMEASURED, isolation
+        assert "not_sandboxed" in codes(result), isolation
+    # A report from before PR 12 carries no isolation at all: not a result.
+    del obs["target"][side]["isolation"]
+    assert "not_sandboxed" in codes(decide(obs))
+    obs["target"][side]["isolation"] = "sandbox"
+    obs["target"]["candidate"]["result"] = "unmeasured"
+    assert "target_not_run" in codes(decide(obs))
+
+
 def test_a_target_result_reported_by_the_build_is_refused():
     obs = observations()
     obs["target"]["produced_by"] = "candidate"

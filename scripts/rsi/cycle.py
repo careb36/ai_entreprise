@@ -107,6 +107,10 @@ class Cycle:
         }
         self.b_sha = self.c_sha = ""
         self.inputs: dict[str, Path] = {}
+        # The grade is the sandbox's, never in-process (PR 12).
+        self.grading = steps_mod.grading_env(getattr(args, "grading_image", None))
+        self.isolation: dict[str, str | None] = {}
+        self.not_sandboxed: list[str] = []
 
     # ── preflight: git and files only ────────────────────────────────────────
 
@@ -214,11 +218,18 @@ class Cycle:
             self.work / "trees" / "B", build, self.args.spec, self.args.python, report
         )
         status, _ = self.steps.command(
-            f"measure_{side}", argv, self.work / "trees" / "B"
+            f"measure_{side}", argv, self.work / "trees" / "B", env=self.grading
         )
         if report.is_file():
             self.steps.keep(report)
-        return steps_mod.measure_result(status)
+        result = steps_mod.measure_result(status)
+        isolation = steps_mod.measure_isolation(report)
+        self.isolation[side] = isolation
+        if result in ("pass", "fail") and isolation != steps_mod.SANDBOX:
+            # Never a grade outside the sandbox (PR 12): unknown, not a result.
+            self.steps.note(f"measure_{side}_not_sandboxed", isolation=isolation)
+            return "error"
+        return result
 
     def bench(self, b_tree: Path, c_tree: Path) -> dict[str, Any]:
         if not os.environ.get("BENCH_LLM_URL"):
@@ -230,9 +241,10 @@ class Cycle:
             for side, tree in (("B", b_tree), ("C", c_tree)):
                 out = self.work / "bench" / f"{side}-real-{i + 1}"
                 env = {
+                    **self.grading,
                     "BENCH_WORKDIR": str(
                         self.work / "bench-work" / f"{side}-real-{i + 1}"
-                    )
+                    ),
                 }
                 self.steps.command(
                     f"bench_{side}_real_{i + 1}",
@@ -247,6 +259,7 @@ class Cycle:
             steps_mod.bench_argv(c_tree, fake, self.b_sha),
             c_tree,
             env={
+                **self.grading,
                 "BENCH_WORKDIR": str(self.work / "bench-work" / "C-fake"),
                 "BENCH_LLM_URL": None,
             },
@@ -261,6 +274,7 @@ class Cycle:
             self.steps.keep(path)
         if problems := gate.pinned_problems(every, self.b_sha):
             raise Refused("graders_not_pinned", "; ".join(problems))
+        self.not_sandboxed = steps_mod.unsandboxed(every)
         return {"dirs": dirs, "cards": found, "fake": fake_cards}
 
     def verifier_and_tests(self, side: str, sha: str, tree: Path) -> None:
@@ -378,6 +392,8 @@ class Cycle:
                 "baseline": {"sha": self.b_sha, "result": result_b},
                 "candidate": {"sha": self.c_sha, "result": self.measure("C", c_tree)},
             }
+            for side, key in (("B", "baseline"), ("C", "candidate")):
+                target[key]["isolation"] = self.isolation.get(side)
             for side, sha in (("B", self.b_sha), ("C", self.c_sha)):
                 self.check_runs(side, sha)
         else:
@@ -397,6 +413,10 @@ class Cycle:
                 decision = "unmeasured"
                 reasons.append({"guard": "head", "outcome": "unmeasured", "code": "head_moved",
                                 "detail": f"the head moved from {self.c_sha} to {head} (REQ-17)"})  # fmt: skip
+        if self.not_sandboxed:
+            decision = "unmeasured"
+            reasons.append({"guard": "bench", "outcome": "unmeasured", "code": "not_sandboxed",
+                            "detail": "; ".join(self.not_sandboxed)})  # fmt: skip
         if bench:
             self.record.update(gate.baseline_summary(
                 [c for _, c in bench["cards"]["B"] if isinstance(c, dict)],
@@ -430,6 +450,7 @@ class Cycle:
             f"REQ-20: {self.record['findings_gate']['reason']}",
             f"graders' trees on B and C ({graders}); protected paths of C's diff, from git (B's list)",
             f"clone B and C into {w / 'trees'}",
+            f"grading in the sandbox only (image {a.grading_image or 'none named: unmeasured'}); never in-process",
             "target measure (B's copy) on B: must fail (exit 3)",
             *(
                 f"bench {s} real {i + 1}: run.sh --out {w}/bench/{s}-real-{i + 1} --graders {self.b_sha}"
@@ -514,6 +535,11 @@ def parser() -> argparse.ArgumentParser:
         "--python",
         default=sys.executable,
         help="a Python with the backend's dependencies",
+    )
+    r.add_argument(
+        "--grading-image",
+        default=os.environ.get("FABRIQUE_GRADING_IMAGE"),
+        help="the sandbox's image for the measure and the bench (on this machine)",
     )
     r.add_argument("--k", type=int, default=3, choices=range(1, 10), metavar="K")
     r.add_argument(

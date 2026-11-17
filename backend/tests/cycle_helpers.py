@@ -125,11 +125,16 @@ class FakeRunner:
         self.measure = {"B": cycle_steps.MEASURE_FAILED, "C": 0}
         self.graders_sha: str | None = None  # None: the commit --graders names
         self.calls: list[list[str]] = []
+        self.envs: list[tuple[list[str], dict]] = []  # each command with its env
         self.runs = {"B": 0, "C": 0}
+        # How the harness and the bench say they graded (rsi-loop PR 12).
+        self.isolation = {"B": "sandbox", "C": "sandbox"}
+        self.bench_isolation = "sandbox"
 
     def __call__(self, argv, cwd, env, timeout):
         argv = list(argv)
         self.calls.append(argv)
+        self.envs.append((argv, dict(env or {})))
         if argv[1].endswith("decide.py"):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -139,7 +144,8 @@ class FakeRunner:
             side = Path(argv[argv.index("--build") + 1]).name
             status = self.measure[side]
             report = Path(argv[argv.index("--report") + 1])
-            report.write_text(json.dumps({"measure": {"exit_code": status}}), "utf-8")
+            measured = {"exit_code": status, "isolation": self.isolation[side]}
+            report.write_text(json.dumps({"measure": measured}), "utf-8")
             return status, f"measure on {side}: exit {status}\n"
         if argv[0].endswith("run.sh"):
             return self._bench(argv, Path(cwd).name, env)
@@ -162,6 +168,8 @@ class FakeRunner:
         if not fake:
             self.runs[side] += 1
         found = card(self.shas[side], index, llm="fake" if fake else REAL_LLM)
+        for spec in found.get("specs") or []:
+            spec.setdefault("criteria", {})["isolation"] = self.bench_isolation
         found["graders"] = {
             "sha": self.graders_sha or graders,
             "trees": {"bench": "a" * 40, "scripts/bench": "b" * 40},

@@ -39,7 +39,7 @@ Steps (``--steps``, comma-separated; ``all`` by default):
 - ``pack``: the documentation pack (#530) compiled in English and in Spanish,
   with what each could not say.
 - ``measure`` (by name only, with ``--spec``): the file's target measure run
-  on ``--build``'s backend (the snapshot by default); exit status 3 if it fails.
+  in the sandbox on ``--build``'s backend; exit 3 failed, 4 unmeasured.
 
 It prints a JSON report (also written to ``--report``) that the e2e checks
 read and the retrospective cites. Taken from OpenHands, which develops
@@ -563,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spec", help="issue, measure: a finding's specification file, checked first (spec_source.py)")
     parser.add_argument("--revision", help="issue: its architecture change (default: <name>-architecture.json beside it)")
     parser.add_argument("--build", help="measure: the build whose backend/ the measure runs on (default: --checkout)")
-    parser.add_argument("--python", default=sys.executable, help="measure: a Python with the backend's dependencies")
+    spec_source.add_measure_arguments(parser)  # --python, --grading-image, --in-process-measure
     args = parser.parse_args(argv)
     steps = STEPS if args.steps == "all" else tuple(s.strip() for s in args.steps.split(","))
     unknown = [s for s in steps if s not in (*STEPS, "measure")]
@@ -592,8 +592,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.report:
         Path(args.report).write_text(text + "\n", encoding="utf-8")
     print(text)
-    failed = "measure" in report and not report["measure"]["passed"]
-    return 1 if "error" in report else 3 if failed else 0
+    return 1 if "error" in report else spec_source.exit_status(report)  # 3 failed, 4 unmeasured
 
 
 if __name__ == "__main__":

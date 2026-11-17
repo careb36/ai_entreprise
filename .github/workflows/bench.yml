@@ -122,6 +122,12 @@ jobs:
       - name: Run the bench (fake LLM)
         env:
           BENCH_WORKDIR: ${{ runner.temp }}/bench
+          # The acceptance tests run in the daemon's sandbox once the runner
+          # holds a grading image (docs/OPERATIONS.md, Grading in the sandbox)
+          # named by this variable; until then they run in-process and the
+          # card's criteria say isolation in_process.
+          BENCH_GRADING_IMAGE: ${{ vars.BENCH_GRADING_IMAGE }}
+          BENCH_GRADE_IN_PROCESS: ${{ vars.BENCH_GRADING_IMAGE == '' && '1' || '' }}
         run: |
           pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
           BENCH_BACKEND_PORT="$(pick_port)" BENCH_LLM_PORT="$(pick_port)" \
@@ -274,6 +280,12 @@ jobs:
       - name: Run the bench (real models)
         env:
           BENCH_WORKDIR: ${{ runner.temp }}/bench-real
+          # The acceptance tests run in the daemon's sandbox once the runner
+          # holds a grading image (docs/OPERATIONS.md, Grading in the sandbox)
+          # named by this variable; until then they run in-process and the
+          # card's criteria say isolation in_process.
+          BENCH_GRADING_IMAGE: ${{ vars.BENCH_GRADING_IMAGE }}
+          BENCH_GRADE_IN_PROCESS: ${{ vars.BENCH_GRADING_IMAGE == '' && '1' || '' }}
         run: |
           echo "Token budget: $BENCH_TOKEN_BUDGET reported tokens; $BENCH_TIMEOUT s per sprint."
           pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }

@@ -12,7 +12,7 @@ it names another producer. Every case fails closed. The files are built by
 import json
 
 import pytest
-from decide_helpers import card, codes, cycle_files, run, write
+from decide_helpers import card, codes, cycle_files, decide, run, write
 from fitness_helpers import B_SHA, C_SHA
 
 
@@ -152,3 +152,34 @@ def test_an_approval_that_is_not_an_object_is_refused(files, capsys):
     code, out = run(files, capsys)
     assert code == 1
     assert "protected_path" in codes(out)
+
+
+# --- 3. a grade the sandbox could not give (review of PR #634) ----------------------
+
+
+def test_a_grade_the_sandbox_could_not_give_is_not_a_criteria_rate_of_zero(
+    files, capsys
+):
+    # Every criterion missing because no image was there: not measured, so
+    # never a regression read from 0, and never a keep.
+    for path in sorted(files["candidate_cards"].glob("*.json")):
+        found = json.loads(path.read_text("utf-8"))
+        for spec in found["specs"]:
+            spec["criteria"] = {
+                **spec["criteria"],
+                "passed": 0,
+                "results": dict.fromkeys(spec["criteria"]["results"], "missing"),
+                "unmeasured": "no grading image named",
+            }
+        found["totals"]["criteria_passed"], found["totals"]["criteria_rate"] = 0, 0.0
+        path.write_text(json.dumps(found), "utf-8")
+    code, out = run(files, capsys)
+    assert code == 2
+    assert out["decision"] == "unmeasured", out["reasons"]
+    assert not any(
+        r["outcome"] == "revert" and "criteria_rate" in r.get("detail", "")
+        for r in out["reasons"]
+    )
+    run_c = decide.card_run(json.loads(path.read_text("utf-8")), 0)
+    assert run_c["totals"]["criteria_rate"] is None
+    assert all(s["criteria_rate"] is None for s in run_c["specs"].values())

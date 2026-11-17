@@ -83,8 +83,8 @@ def cycle_files(folder: Path) -> dict:
         "target.json",
         {
             "measure": "f4-adr-files",
-            "baseline": {"sha": B_SHA, "result": "fail"},
-            "candidate": {"sha": C_SHA, "result": "pass"},
+            "baseline": {"sha": B_SHA, "result": "fail", "isolation": "sandbox"},
+            "candidate": {"sha": C_SHA, "result": "pass", "isolation": "sandbox"},
         },
     )
     return paths
