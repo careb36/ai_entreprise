@@ -84,6 +84,7 @@ class Toolbox:
         if company_id is None:
             return None
         engine = engine or default_engine
+        actor = f"agent:{role or 'unknown'}"
         specs: list[dict[str, Any]] = []
         refused: dict[str, str] = {}
         try:
@@ -95,6 +96,17 @@ class Toolbox:
                         logger.warning(
                             "MCP server %s not started: %s", row.name, reason
                         )
+                        # The refused start is in the audit trail, as the
+                        # tools endpoint records it.
+                        with Session(engine) as audit_session:
+                            mcp_config.audit_start(
+                                audit_session,
+                                row,
+                                company_id,
+                                actor,
+                                "discovery",
+                                refused=reason,
+                            )
                         continue
                     specs.append(mcp_config.connection_spec(row))
         except Exception as exc:  # noqa: BLE001 - A broken configuration never blocks the task.
@@ -104,7 +116,6 @@ class Toolbox:
             return None
         if not specs:
             return None
-        actor = f"agent:{role or 'unknown'}"
 
         def audit(spec: dict[str, Any], purpose: str) -> None:
             with Session(engine) as session:

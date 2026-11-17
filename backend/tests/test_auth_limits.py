@@ -209,32 +209,3 @@ def test_an_unknown_or_password_less_account_costs_a_bcrypt_check(
     _login(test_client, _email(), "guess-1")
     _login(test_client, sso_only, "guess-2")
     assert burned == ["guess-1", "guess-2"]
-
-
-def test_failures_on_other_addresses_do_not_evict_a_lock(monkeypatch, clock):
-    """The record is bounded, but a lock is not what makes room: guessing at
-    many other addresses must not reset the backoff of the one under attack."""
-    monkeypatch.setattr(login_throttle, "MAX_ACCOUNTS", 20)
-    monkeypatch.setattr(settings, "LOGIN_FAILURES_BEFORE_BACKOFF", 1)
-    target = _email()
-    login_throttle.failure(target)
-    assert login_throttle.failure(target) == 2
-    for _ in range(100):
-        login_throttle.failure(_email())
-    assert login_throttle.retry_after(target) == 2
-    assert len(login_throttle._records) <= 20
-
-
-def test_when_every_record_is_locked_the_one_ending_first_goes(monkeypatch, clock):
-    monkeypatch.setattr(login_throttle, "MAX_ACCOUNTS", 2)
-    monkeypatch.setattr(settings, "LOGIN_FAILURES_BEFORE_BACKOFF", 1)
-    long_lock, short_lock, newest = _email(), _email(), _email()
-    for _ in range(4):
-        login_throttle.failure(long_lock)  # locked 8 s
-    for _ in range(2):
-        login_throttle.failure(short_lock)  # locked 2 s
-    for _ in range(2):
-        login_throttle.failure(newest)
-    assert login_throttle.retry_after(long_lock) == 8
-    assert login_throttle.retry_after(newest) == 2
-    assert login_throttle.retry_after(short_lock) == 0

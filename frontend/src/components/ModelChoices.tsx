@@ -191,7 +191,6 @@ function ModelSelect({ id, label, hideLabel, value, emptyLabel, options, suggest
       </select>
       </label>
       <input type="search" className="input w-full mt-1 text-xs" placeholder={t('models.choices.search', { defaultValue: 'Filter models…' })}
-        aria-label={t('models.choices.search', { defaultValue: 'Filter models…' })}
         value={query} onChange={e => setQuery(e.target.value)} disabled={disabled} />
     </div>
   )

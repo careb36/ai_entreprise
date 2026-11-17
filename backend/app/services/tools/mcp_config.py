@@ -296,7 +296,10 @@ def audit_start(
         target["command"] = get("command")
         target["args_count"] = len(get("args") or [])
     else:
-        target["host"] = urlsplit(str(get("url") or "")).hostname
+        try:
+            target["host"] = urlsplit(str(get("url") or "")).hostname
+        except ValueError:  # A malformed URL is audited without a host.
+            target["host"] = None
     AgentService().audit_interaction(
         session=session,
         company_id=company_id,

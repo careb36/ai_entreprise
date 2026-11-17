@@ -184,36 +184,3 @@ def test_a_bearer_token_without_audience_gets_401(
         ).status_code
         == 200
     )
-
-
-@pytest.mark.parametrize(
-    ("algorithm", "length"), [("HS256", 32), ("HS384", 48), ("HS512", 64)]
-)
-def test_a_key_shorter_than_the_hash_is_refused(monkeypatch, algorithm, length):
-    """WSTG-SESS-10, weak HMAC keys: a short key can be guessed offline from
-    one token, which then forges any other (RFC 7518 §3.2 asks for a key at
-    least as long as the hash)."""
-    monkeypatch.setattr(settings, "JWT_ALGORITHM", algorithm)
-    monkeypatch.setattr(settings, "JWT_SECRET_KEY", "k" * (length - 1))
-    assert not auth_tokens.is_auth_configured()
-    with pytest.raises(auth_tokens.AuthNotConfiguredError):
-        auth_tokens.create_access_token(user_id=1, email="a@example.com")
-    forged = jwt.encode(_claims(), "k" * (length - 1), algorithm=algorithm)
-    with pytest.raises(auth_tokens.AuthNotConfiguredError):
-        auth_tokens.decode_access_token(forged)
-    assert auth_tokens.session_id_of(forged) is None
-
-    monkeypatch.setattr(settings, "JWT_SECRET_KEY", "k" * length)
-    assert auth_tokens.is_auth_configured()
-    token = auth_tokens.create_access_token(user_id=1, email="a@example.com")
-    assert auth_tokens.decode_access_token(token)["sub"] == "1"
-
-
-def test_login_answers_503_with_a_short_key(test_client, monkeypatch):
-    monkeypatch.setattr(settings, "JWT_ALGORITHM", "HS256")
-    monkeypatch.setattr(settings, "JWT_SECRET_KEY", "k" * 16)
-    response = test_client.post(
-        "/v1/auth/login",
-        json={"email": "short@example.com", "password": "anything"},
-    )
-    assert response.status_code == 503

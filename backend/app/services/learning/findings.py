@@ -28,6 +28,7 @@ except a person's close and retry: they are audited, and the audit
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,10 +38,6 @@ from models import Finding, User
 from models.finding import FINDING_STATUSES, OUTCOME_DECISIONS
 from sqlmodel import Session, select
 
-from services.contracts.specification_text import (  # noqa: F401 - re-exported
-    normalize_specification_text,
-    specification_sha256,
-)
 from services.platform import teams
 from services.platform.agent_service import AgentService
 
@@ -77,8 +74,37 @@ class MayStart(NamedTuple):
 
 
 # ── The specification's text ─────────────────────────────────────────────────
-# The canonical text and its sha256 live in contracts, so the cycle runner
-# (``scripts/rsi/cycle.py``), which has no database, compares by the same key.
+
+
+def normalize_specification_text(text: str) -> str:
+    """The specification's canonical text, the one REQ-20 compares.
+
+    A JSON specification is parsed and written again with its keys sorted
+    and no whitespace between tokens, so pretty or compact, its keys in any
+    order, its non-ASCII characters escaped or not, it is the same text; its
+    string values are kept exactly, whitespace included, since that is what
+    a requirement says. Any other text keeps its words and its spacing and
+    only forgets its line endings (CRLF, CR), the trailing whitespace of
+    each line and blank lines at either end.
+    """
+    raw = text or ""
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        pass
+    else:
+        return json.dumps(
+            parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+    lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines).strip("\n")
+
+
+def specification_sha256(text: str) -> str:
+    """The sha256 of the canonical text, computed here — never received
+    from a producer (rule 6)."""
+    normalized = normalize_specification_text(text)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 # ── Creating ─────────────────────────────────────────────────────────────────

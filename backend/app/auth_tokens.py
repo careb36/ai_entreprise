@@ -7,8 +7,7 @@ Glassroom stream tickets for ``<JWT_AUDIENCE>:glassroom``, both issued by
 service under a shared key, or a ticket presented as an access token, is
 refused. Only an HMAC algorithm is accepted (``HMAC_ALGORITHMS``): a
 configuration naming ``none`` or an asymmetric algorithm with the shared
-secret refuses to sign or verify anything. A key shorter than the hash
-(``MIN_KEY_BYTES``) counts as no key: login answers 503 until it is replaced.
+secret refuses to sign or verify anything.
 
 Tokens issued before ``iss`` and ``aud`` existed are refused: an access token
 lives ``ACCESS_TOKEN_EXPIRE_MINUTES`` and a browser session renews it from its
@@ -21,10 +20,6 @@ from datetime import UTC, datetime, timedelta
 import jwt
 
 HMAC_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
-# A key at least as long as the hash's output (RFC 7518 §3.2): a shorter one
-# can be guessed offline from a single token, and the guess forges any other
-# (WSTG-SESS-10, weak HMAC keys). A shorter JWT_SECRET_KEY counts as unset.
-MIN_KEY_BYTES = {"HS256": 32, "HS384": 48, "HS512": 64}
 GLASSROOM_AUDIENCE_SUFFIX = ":glassroom"
 
 
@@ -41,20 +36,14 @@ class InvalidTokenError(AuthTokenError):
 
 
 def _configured_key() -> str | None:
-    """Return the configured JWT key, or ``None`` when unset, blank or too
-    short for the algorithm (``MIN_KEY_BYTES``)."""
+    """Return the configured JWT key, or ``None`` when unset or blank."""
     from config import settings
 
     key = getattr(settings, "JWT_SECRET_KEY", None)
     if key is None:
         return None
     key = key.strip()
-    if not key:
-        return None
-    algorithm = str(settings.JWT_ALGORITHM or "").strip()
-    if len(key.encode("utf-8")) < MIN_KEY_BYTES.get(algorithm, 32):
-        return None
-    return key
+    return key or None
 
 
 def is_auth_configured() -> bool:

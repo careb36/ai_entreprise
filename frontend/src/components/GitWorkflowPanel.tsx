@@ -136,9 +136,7 @@ export default function GitWorkflowPanel({ companyId, canManage }: { companyId: 
         <div className="flex items-center gap-3">
           <button type="button" className="btn-primary btn-sm" disabled={save.isPending}
             onClick={() => save.mutate({ git_workflow: draft.git_workflow, git_base_branch: draft.git_base_branch?.trim() || null }, { onSuccess: () => setSaved(true) })}>
-            {save.isPending
-              ? <><Loader2 size={13} className="animate-spin" aria-hidden="true" /><span className="sr-only">{t('gitSettings.save')}</span></>
-              : t('gitSettings.save')}
+            {save.isPending ? <Loader2 size={13} className="animate-spin" /> : t('gitSettings.save')}
           </button>
           {saved && <span role="status" className="text-xs text-emerald-300">{t('gitSettings.saved')}</span>}
           {save.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(save.error)}</span>}

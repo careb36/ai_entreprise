@@ -215,8 +215,14 @@ def check_url(url: Any, *, resolve: bool = True) -> str:
     url = url.strip()
     if not url or len(url) > MAX_URL_CHARS or any(ch.isspace() for ch in url):
         raise McpPolicyError("url: not a URL")
-    parts = urlsplit(url)
-    host = (parts.hostname or "").lower().rstrip(".")
+    try:
+        # An unclosed or invalid IPv6 literal, or a port that is not a
+        # number in range, raises a plain ValueError here or below.
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower().rstrip(".")
+        parts.port  # noqa: B018 - raises on a bad port.
+    except ValueError as exc:
+        raise McpPolicyError("url: not a URL") from exc
     if not host:
         raise McpPolicyError("url: not a URL")
     if parts.scheme == "http":
@@ -229,10 +235,6 @@ def check_url(url: Any, *, resolve: bool = True) -> str:
         raise McpPolicyError("url: must be an https URL")
     if parts.username or parts.password:
         raise McpPolicyError("url: credentials belong in the headers, not the URL")
-    try:
-        parts.port  # noqa: B018 - raises on a port out of range.
-    except ValueError as exc:
-        raise McpPolicyError("url: not a URL") from exc
     if resolve and not egress.all_public(host):
         raise McpPolicyError(
             "url: the host resolves to a private, loopback, link-local or "

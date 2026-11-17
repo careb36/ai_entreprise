@@ -6,21 +6,6 @@ import react from '@vitejs/plugin-react'
 // Windows' cmd.exe); ELECTRON=1 is still honoured.
 const isElectronBuild = (mode: string) => Boolean(process.env.ELECTRON) || mode === 'electron'
 
-// The web app's headers on the dev server (what `docker compose up` serves)
-// and on `vite preview` (issue #541, WSTG-v42-CLNT-09 and CONF-14): no other
-// site may frame the page where approvals and undo are clicked. Scripts are
-// left to the `<meta>` policy in index.html, which the dev server's inline
-// preamble needs; both policies apply. The desktop app's local server sends
-// its own, stricter set (electron/local-server.ts, PAGE_HEADERS).
-export const WEB_PAGE_HEADERS: Readonly<Record<string, string>> = {
-  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
-  'X-Frame-Options': 'DENY',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
-  'Cross-Origin-Opener-Policy': 'same-origin',
-}
-
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   // Both builds are served from a site root (the desktop app's from its
@@ -48,13 +33,9 @@ export default defineConfig(({ mode }) => ({
     outDir: 'dist',
     emptyOutDir: true
   },
-  preview: {
-    headers: { ...WEB_PAGE_HEADERS },
-  },
   server: {
     port: 5173,
     strictPort: true,
-    headers: { ...WEB_PAGE_HEADERS },
     proxy: {
       '/v1': {
         target: 'http://localhost:8000',

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TIER_META, localizedRoles, localizedSeniorities } from './constants'
 import type { Agent, ModelInfo } from './types'
@@ -19,7 +19,6 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
   const modelInfo = availableModels.find(m => m.id === (agent.model ?? ''))
   const tierMeta  = TIER_META[modelInfo?.tier ?? 'balanced']
   const [showPrompt, setShowPrompt] = useState(false)
-  const id = useId()
 
   return (
     <div className="bg-surface-800 border border-surface-700 rounded-xl p-5 space-y-4">
@@ -50,15 +49,15 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
           {canRemove && (
             <button onClick={() => onRemove(index)}
               className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none p-1 ml-1"
-              type="button" aria-label={t('companyNew.removeAgent')} title={t('companyNew.removeAgent')}><span aria-hidden="true">×</span></button>
+              title={t('companyNew.removeAgent')}>×</button>
           )}
         </div>
       </div>
 
       {/* Name / Alias */}
       <div>
-        <label htmlFor={`${id}-name`} className="input-label">{t('companyNew.agentName')}</label>
-        <input id={`${id}-name`} type="text" value={agent.name}
+        <label className="input-label">{t('companyNew.agentName')}</label>
+        <input type="text" value={agent.name}
           onChange={e => onUpdate(index, 'name', e.target.value)}
           placeholder={t('companyNew.agentNamePlaceholder')}
           className="input w-full" />
@@ -67,14 +66,14 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
       {/* Role + Seniority */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label htmlFor={`${id}-role`} className="input-label">{t('companyNew.agentRole')}</label>
-          <select id={`${id}-role`} value={agent.role} onChange={e => onUpdate(index, 'role', e.target.value)} className="select w-full">
+          <label className="input-label">{t('companyNew.agentRole')}</label>
+          <select value={agent.role} onChange={e => onUpdate(index, 'role', e.target.value)} className="select w-full">
             {roles.map(r => <option key={r.value} value={r.value}>{r.icon} {r.label}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor={`${id}-seniority`} className="input-label">{t('companyNew.seniority')}</label>
-          <select id={`${id}-seniority`} value={agent.seniority} onChange={e => onUpdate(index, 'seniority', e.target.value)} className="select w-full">
+          <label className="input-label">{t('companyNew.seniority')}</label>
+          <select value={agent.seniority} onChange={e => onUpdate(index, 'seniority', e.target.value)} className="select w-full">
             {seniorities.map(s => (
               <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>
             ))}
@@ -84,8 +83,8 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
 
       {/* Model selector */}
       <div>
-        <label htmlFor={`${id}-model`} className="input-label">{t('companyNew.llmModel')}</label>
-        <select id={`${id}-model`} value={agent.model ?? ''}
+        <label className="input-label">{t('companyNew.llmModel')}</label>
+        <select value={agent.model ?? ''}
           onChange={e => onUpdate(index, 'model', e.target.value)} className="select w-full text-xs">
           <option value="">{t('companyNew.selectModel')}</option>
           {availableModels.length === 0 && (
@@ -116,8 +115,8 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
 
       {/* Specialty */}
       <div>
-        <label htmlFor={`${id}-specialty`} className="input-label">{t('companyNew.specialty')}</label>
-        <input id={`${id}-specialty`} type="text" value={agent.specialty || agent.persona}
+        <label className="input-label">{t('companyNew.specialty')}</label>
+        <input type="text" value={agent.specialty || agent.persona}
           onChange={e => { onUpdate(index, 'persona', e.target.value); onUpdate(index, 'specialty', e.target.value) }}
           placeholder={t(`companyNew.specialtyPlaceholders.${['Dev', 'DevOps', 'QA'].includes(roleInfo.value) ? roleInfo.value : 'other'}`)}
           className="input w-full" />
@@ -128,13 +127,11 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
         <div>
           <button type="button"
             onClick={() => setShowPrompt(v => !v)}
-            aria-expanded={showPrompt}
             className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors">
             {showPrompt ? '▾' : '▸'} {t('companyNew.systemPrompt')}
           </button>
           {showPrompt && (
             <textarea
-              aria-label={t('companyNew.systemPrompt')}
               value={agent.system_prompt}
               onChange={e => onUpdate(index, 'system_prompt', e.target.value)}
               rows={4}
@@ -146,9 +143,9 @@ export function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availab
 
       {/* Token budget */}
       <div>
-        <label htmlFor={`${id}-budget`} className="input-label">{t('companyNew.monthlyBudget')}</label>
+        <label className="input-label">{t('companyNew.monthlyBudget')}</label>
         <div className="flex items-center gap-2">
-          <input id={`${id}-budget`} type="range" min={100000} max={5000000} step={100000}
+          <input type="range" min={100000} max={5000000} step={100000}
             value={agent.token_budget ?? 500000}
             onChange={e => onUpdate(index, 'token_budget', parseInt(e.target.value))}
             className="flex-1 accent-brand-500" />

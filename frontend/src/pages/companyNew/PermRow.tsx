@@ -21,7 +21,7 @@ export function PermRow({ icon, label, desc, permKey, value, options, onChange }
         <span className={`text-xs font-medium ${current?.color ?? 'text-gray-400'} w-20 text-right`}>
           {localizedPermission(t, value)}
         </span>
-        <select value={value} aria-label={label} onChange={e => onChange(permKey, e.target.value)}
+        <select value={value} onChange={e => onChange(permKey, e.target.value)}
           className="select w-36 text-xs">
           {options.map(o => (
             <option key={o} value={o}>{localizedPermission(t, o)}</option>

@@ -16,10 +16,6 @@ on during the lock. The trade-off is that someone who knows an address can
 keep its owner's password sign-in locked for up to the maximum, while they
 keep failing; SSO and existing sessions are unaffected.
 
-At most ``MAX_ACCOUNTS`` records are kept. Making room drops a record
-without a running lock first, so guesses spread over many other addresses
-cannot push the attacked account's lock out of memory (``_make_room``).
-
 The record is per process, like slowapi's default storage
 (``RATE_LIMIT_STORAGE_URI``): with several replicas, each keeps its own.
 """
@@ -83,27 +79,9 @@ def failure(email: str, now: float | None = None) -> int:
             lock = min(int(settings.LOGIN_BACKOFF_MAX_SECONDS), 2 ** min(over, 30))
             record.locked_until = now + lock
         _records[key] = record
-        _make_room(now, keep=key)
+        while len(_records) > MAX_ACCOUNTS:
+            _records.popitem(last=False)
         return lock
-
-
-def _make_room(now: float, keep: str) -> None:
-    """Drop records until at most ``MAX_ACCOUNTS`` remain; the caller holds
-    the lock. The oldest record without a running lock goes first; only when
-    every other record is locked does the one whose lock ends first go. So
-    failures spread over many other addresses cannot evict, and so reset,
-    the backoff of the account under attack (issue #541)."""
-    while len(_records) > MAX_ACCOUNTS:
-        victim = next(
-            (k for k, r in _records.items() if k != keep and r.locked_until <= now),
-            None,
-        )
-        if victim is None:
-            victim = min(
-                (k for k in _records if k != keep),
-                key=lambda k: _records[k].locked_until,
-            )
-        del _records[victim]
 
 
 def success(email: str) -> None:

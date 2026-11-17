@@ -95,7 +95,11 @@ async def put_servers(
     """Add the servers in the map; one with a name already taken replaces it."""
     require_company_role(session, user, req.company_id, "Manager")
     try:
-        definitions = mcp_config.parse_mcp_servers(req.mcpServers)
+        # Normalizing resolves each URL's host (``socket.getaddrinfo``), which
+        # blocks: off the event loop.
+        definitions = await asyncio.to_thread(
+            mcp_config.parse_mcp_servers, req.mcpServers
+        )
     except mcp_config.McpConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     rows = mcp_config.upsert_servers(session, req.company_id, definitions, _actor(user))
@@ -164,8 +168,8 @@ async def server_tools(
             status_code=409,
             detail=f"the server's secrets cannot be read: {type(exc).__name__}",
         ) from exc
-    name = server.name
-    mcp_config.audit_start(session, server, server.company_id, actor, "discovery")
+    name, company_id = server.name, server.company_id
+    mcp_config.audit_start(session, server, company_id, actor, "discovery")
     try:
         tools = await asyncio.wait_for(
             mcp_client.list_tools(spec), timeout=DISCOVERY_TIMEOUT_SECONDS
@@ -177,6 +181,10 @@ async def server_tools(
         ) from exc
     except mcp_client.McpPolicyError as exc:  # Refused at connect time (rebinding).
         logger.warning("MCP server %s refused when connecting: %s", name, exc)
+        # Beside the start attempt above, the refusal it ended in.
+        mcp_config.audit_start(
+            session, spec, company_id, actor, "discovery", refused=str(exc)
+        )
         raise HTTPException(status_code=409, detail=f"{name}: {exc}") from exc
     except Exception as exc:  # Logged here; the client gets no exception text.
         logger.warning(

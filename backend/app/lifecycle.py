@@ -318,9 +318,7 @@ async def startup(app):
 
     if not is_auth_configured():
         logger.warning(
-            "JWT_SECRET_KEY is not configured, or is shorter than its algorithm "
-            "needs (32 bytes for HS256). POST /v1/auth/login will return 503 "
-            "until it is set."
+            "JWT_SECRET_KEY is not configured. POST /v1/auth/login will return 503 until it is set."
         )
     from session_cookies import warn_if_insecure
 

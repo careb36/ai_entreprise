@@ -8,7 +8,6 @@ import { chatEndpoints } from './api/chat'
 import { boardNoteEndpoints } from './api/boardNotes'
 import { companyEndpoints } from './api/companies'
 import { evidenceEndpoints } from './api/evidence'
-import { findingEndpoints } from './api/findings'
 import { githubEndpoints } from './api/github'
 import { memoryEndpoints } from './api/memory'
 import { messageEndpoints } from './api/messages'
@@ -34,7 +33,6 @@ export * from './api/chat'
 export * from './api/boardNotes'
 export * from './api/companies'
 export * from './api/evidence'
-export * from './api/findings'
 export * from './api/github'
 export * from './api/memory'
 export * from './api/messages'
@@ -81,7 +79,6 @@ const endpoints = {
   ...teamEndpoints(http),
   ...usageEndpoints(http),
   ...dutiesEndpoints(http),
-  ...findingEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)
