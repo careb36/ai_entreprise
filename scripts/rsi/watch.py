@@ -219,6 +219,8 @@ def _scope_state(
             )
             return None, f"the run did not complete ({', '.join(bad)})", None
         values = repeated.numbers(card["totals"], is_spec=False)
+        if repeated.card_grade_unavailable(card):  # not measured, never 0
+            values["criteria_rate"] = None
         # decide.py's rule: a turn that did not report usage, or no turn that
         # did, leaves the tokens unmeasured (never the card's partial sum).
         values["tokens_reported"] = decide._tokens(card["specs"])

@@ -25,6 +25,7 @@ from cycle_helpers import (
     commit,
     cycle,
     cycle_record,
+    cycle_steps,
     make_repo,
     run_cycle,
 )
@@ -113,8 +114,16 @@ def test_every_kept_file_is_listed_with_the_hash_the_runner_computed(
     ci = str(tmp / "work" / "C-ci.json")
     assert read[ci] == kept["C-ci.json"], "decide.py hashed the same bytes"
     target = json.loads((tmp / "work" / "target.json").read_text("utf-8"))
-    assert target["baseline"] == {"sha": b_sha, "result": "fail"}
-    assert target["candidate"] == {"sha": c_sha, "result": "pass"}
+    assert target["baseline"] == {
+        "sha": b_sha,
+        "result": "fail",
+        "isolation": "sandbox",
+    }
+    assert target["candidate"] == {
+        "sha": c_sha,
+        "result": "pass",
+        "isolation": "sandbox",
+    }
 
 
 def test_b_medians_and_spread_make_a_record_the_watch_accepts(setup, monkeypatch):
@@ -246,3 +255,81 @@ def test_the_dry_run_still_checks_the_inputs(setup, monkeypatch):
         findings=None,
     )
     assert status == 3 and record["status"] == "refused"
+
+
+# --- the grade is the sandbox's, never in-process (rsi-loop PR 12) -----------------
+
+
+def _graded(runner):
+    """The measure and bench commands with the environment each one got."""
+    return [
+        (a, env)
+        for a, env in runner.envs
+        if a[1].endswith("self_host.py") or a[0].endswith("run.sh")
+    ]
+
+
+def test_the_cycle_grades_in_the_sandbox_and_never_in_process(setup, monkeypatch):
+    tmp, repo, b_sha, c_sha = setup
+    # Even with the operator's shell asking for the in-process grade.
+    monkeypatch.setenv("BENCH_GRADE_IN_PROCESS", "1")
+    runner = FakeRunner(b_sha, c_sha)
+    status, record = run_cycle(
+        monkeypatch, tmp, repo, c_sha, runner, FakeGitHub(c_sha),
+        "--grading-image", "fabrique-grading:backend",
+    )  # fmt: skip
+    assert status == 0 and record["decision"] == "keep", record.get("reasons")
+    graded = _graded(runner)
+    assert len(graded) == 2 + 2 * 3 + 1  # two measures, K = 3 per side, the fake
+    for command, env in graded:
+        assert "--in-process-measure" not in command and "--in-process" not in command
+        assert "BENCH_GRADE_IN_PROCESS" not in env
+        assert env["FABRIQUE_GRADING_IMAGE"] == "fabrique-grading:backend"
+        assert env["BENCH_GRADING_IMAGE"] == "fabrique-grading:backend"
+    # The record says what each step set: the in-process grade unset.
+    steps = [s for s in record["steps"] if s["step"].startswith(("measure_", "bench_"))]
+    assert steps and all(s["env"]["BENCH_GRADE_IN_PROCESS"] is None for s in steps)
+
+
+@pytest.mark.parametrize("side", ["B", "C"])
+def test_a_measure_graded_in_process_is_never_a_result(setup, monkeypatch, side):
+    tmp, repo, b_sha, c_sha = setup
+    runner = FakeRunner(b_sha, c_sha)
+    runner.isolation[side] = "in_process"
+    status, record = run_cycle(monkeypatch, tmp, repo, c_sha, runner, FakeGitHub(c_sha))
+    assert record.get("decision") != "keep"
+    notes = [s["step"] for s in record["steps"]]
+    assert f"measure_{side}_not_sandboxed" in notes
+    if side == "B":  # B's measure must fail; an unknown one stops the cycle
+        assert status == 3 and record["status"] == "refused"
+    else:
+        assert status == 2 and record["decision"] == "unmeasured"
+        target = json.loads((tmp / "work" / "target.json").read_text("utf-8"))
+        assert target["candidate"]["result"] == "error"
+
+
+def test_a_measure_the_sandbox_could_not_give_is_unmeasured(setup, monkeypatch):
+    tmp, repo, b_sha, c_sha = setup
+    runner = FakeRunner(b_sha, c_sha)
+    runner.measure["C"] = 4  # self_host.py: unmeasured (no runtime, no image...)
+    status, record = run_cycle(monkeypatch, tmp, repo, c_sha, runner, FakeGitHub(c_sha))
+    assert status == 2 and record["decision"] == "unmeasured"
+
+
+@pytest.mark.parametrize("isolation", ["in_process", None])
+def test_cards_graded_outside_the_sandbox_make_the_cycle_unmeasured(
+    setup, monkeypatch, isolation
+):
+    tmp, repo, b_sha, c_sha = setup
+    runner = FakeRunner(b_sha, c_sha)
+    runner.bench_isolation = isolation
+    status, record = run_cycle(monkeypatch, tmp, repo, c_sha, runner, FakeGitHub(c_sha))
+    assert status == 2 and record["decision"] == "unmeasured"
+    assert any(r["code"] == "not_sandboxed" for r in record["reasons"])
+
+
+def test_the_cycle_source_never_asks_for_the_in_process_grade():
+    for name in ("cycle.py", "cycle_steps.py"):
+        source = (cycle_steps.Path(cycle_steps.__file__).parent / name).read_text()
+        assert "--in-process-measure" not in source, name
+        assert '"BENCH_GRADE_IN_PROCESS": None' in source or name == "cycle.py"

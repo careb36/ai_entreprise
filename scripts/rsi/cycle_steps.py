@@ -43,6 +43,7 @@ WITHHELD_ENV = ("GITHUB_TOKEN", "GH_TOKEN")
 STEP_TIMEOUT_SECONDS = 6 * 3600  # the design's wall-clock per cycle
 GIT_TIMEOUT_SECONDS = 300
 MEASURE_FAILED = 3  # self_host.py's exit status when the measure fails
+SANDBOX = "sandbox"  # the only grade a cycle reads (rsi-loop PR 12)
 _COLLECTED = re.compile(r"(\d+) tests? collected")
 _VERIFIER_ROW = re.compile(r"^(\S+)\s+\S.*\s(ok|FAIL)$")
 
@@ -284,6 +285,41 @@ def measure_result(exit_status: int | None) -> str:
     if exit_status == MEASURE_FAILED:
         return "fail"
     return "error"
+
+
+def grading_env(image: str | None) -> dict[str, str | None]:
+    """What a measure or a bench step sets for the grade (rsi-loop PR 12):
+    the sandbox's image when named, and never the in-process grade, whatever
+    this process's environment says (``BENCH_GRADE_IN_PROCESS`` unset)."""
+    env: dict[str, str | None] = {"BENCH_GRADE_IN_PROCESS": None}
+    if image:
+        env.update(FABRIQUE_GRADING_IMAGE=image, BENCH_GRADING_IMAGE=image)
+    return env
+
+
+def measure_isolation(report: Path) -> str | None:
+    """How the harness graded the measure (``isolation`` in its report)."""
+    try:
+        measured = json.loads(report.read_text(encoding="utf-8")).get("measure")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return measured.get("isolation") if isinstance(measured, dict) else None
+
+
+def unsandboxed(cards: list[tuple[Path, Any]]) -> list[str]:
+    """Each card's specification not graded in the sandbox, or whose grade
+    the sandbox could not give (``criteria.isolation``, ``unmeasured``)."""
+    problems = []
+    for path, card in cards:
+        specs = card.get("specs") if isinstance(card, dict) else None
+        for spec in specs if isinstance(specs, list) else [None]:
+            crit = spec.get("criteria") if isinstance(spec, dict) else None
+            crit = crit if isinstance(crit, dict) else {}
+            if crit.get("isolation") != SANDBOX or crit.get("unmeasured"):
+                name = spec.get("name") if isinstance(spec, dict) else None
+                why = crit.get("unmeasured") or f"graded {crit.get('isolation')!r}"
+                problems.append(f"{path.name} {name}: {why}")
+    return problems
 
 
 def bench_argv(tree: Path, out: Path, graders_sha: str) -> list[str]:

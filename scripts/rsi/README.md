@@ -18,7 +18,7 @@ python3 scripts/rsi/cycle.py run --spec scripts/self_host/specs/<name>-specifica
   --findings findings.json --cycle-id cycle-1-<name> \
   --baseline origin/main --pr <n> --repository <owner>/<repo> \
   --python <backend python> --work /tmp/rsi/cycle-1 --out /tmp/rsi/cycle-1.json \
-  [--k 3] [--retry-by "<person>"] [--close-pr] [--dry-run]
+  [--grading-image <image>] [--k 3] [--retry-by "<person>"] [--close-pr] [--dry-run]
 python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-1.json
 python3 scripts/rsi/cycle.py record --record /tmp/rsi/cycle-1.json \
   --merged-sha <merge commit> --out rsi/cycles/cycle-1-<name>.json
@@ -58,6 +58,15 @@ or the head of `--pr` read from GitHub. Both must be in the local repository
 7. **The Verifier bench** (B's cases, each side's Verifier) and **the tests
    collected** (`pytest --collect-only` on each side's backend).
 8. **The target measure on C**, B's copy.
+   Both measures and every bench run grade in the workspace daemon's container
+   sandbox (rsi-loop PR 12): `--grading-image` (default
+   `FABRIQUE_GRADING_IMAGE`) is passed to them as `FABRIQUE_GRADING_IMAGE` and
+   `BENCH_GRADING_IMAGE`, `BENCH_GRADE_IN_PROCESS` is always unset and
+   `--in-process-measure` never passed. A measure whose report does not say
+   `isolation: sandbox` reads as `error` (on B the cycle is refused, on C it is
+   `unmeasured`), an unmeasured measure (exit 4) too, and a card whose
+   criteria were not graded in the sandbox, or that the sandbox could not
+   grade, makes the decision `unmeasured` (`not_sandboxed`).
 9. **CI** (REQ-8): `GET /repos/{owner}/{repo}/commits/{sha}/check-runs` for B
    and for C, every page, saved as the listing `decide.py` reads; a run whose
    `head_sha` is not the side's sha is named as refused, and `decide.py`

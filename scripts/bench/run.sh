@@ -75,6 +75,18 @@
 #                                    (services/models/model_routing.py), passed through
 #   BENCH_POLICY [default, or the policy itself]  the policy's label on the
 #                                    scorecard, so compare.py can tell two runs apart
+#   BENCH_GRADING_IMAGE [$FABRIQUE_GRADING_IMAGE]  the image the acceptance
+#                                    tests run in: the daemon's container sandbox
+#                                    (scripts/bench/sandbox_grading.py), no network,
+#                                    the project read-only, limits. It must be on
+#                                    the machine (never pulled while grading) with
+#                                    Python and pytest; docs/OPERATIONS.md. Without
+#                                    a sandbox every criterion is missing
+#                                    (unmeasured), never passed.
+#   BENCH_GRADE_IN_PROCESS [empty]   1: grade on BENCH_PYTHON itself, the
+#                                    project's code in the runner's Python, for
+#                                    local development only; the card's criteria
+#                                    say isolation in_process. Never for a cycle.
 #
 # A grade or a collection that fails stops the run (BENCH FAILED): a spec is
 # never left out of the scorecard, and nothing of an earlier run in the same
@@ -126,6 +138,12 @@ rm -f "$WORK"/entries/*.json
 SPECS_ROOT="$REPO/bench/specs"
 GRADER="$REPO/scripts/bench/scorecard.py"
 GRADERS_FLAG=()
+# The daemon's sandbox the grade loads on this machine: this checkout's, or,
+# with --graders, the copy taken from that commit's objects and hash-checked
+# by the grader before it imports it (never the checkout's, which may be the
+# candidate's; review of PR #634).
+DAEMON_DIR="$REPO/vscode-daemon"
+DAEMON_SHA256=""
 if [ -n "$GRADERS_REV" ]; then
   rm -f "$WORK/graders.json"
   "$PY" "$REPO/scripts/bench/graders.py" checkout --repo "$REPO" --rev "$GRADERS_REV" \
@@ -133,6 +151,11 @@ if [ -n "$GRADERS_REV" ]; then
   SPECS_ROOT="$WORK/graders/bench/specs"
   GRADER="$WORK/graders/scripts/bench/scorecard.py"
   GRADERS_FLAG=(--graders "$WORK/graders.json")
+  "$PY" "$REPO/scripts/bench/graders.py" daemon --repo "$REPO" --rev "$GRADERS_REV" \
+    --dest "$WORK/graders-daemon" --out "$WORK/graders-daemon.json" > /dev/null \
+    || { echo "--graders $GRADERS_REV: the daemon's sandbox could not be taken"; exit 2; }
+  DAEMON_DIR="$WORK/graders-daemon"
+  DAEMON_SHA256=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/graders-daemon.json")
   echo "graders: $("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d["sha"], "sha256", d["sha256"])' "$WORK/graders.json")"
   for i in "${!SPECS[@]}"; do SPECS[i]="$SPECS_ROOT/$(basename "${SPECS[i]}")"; done
 fi
@@ -143,6 +166,15 @@ fi
 for d in "${SPECS[@]}"; do
   [ -f "$d/spec.json" ] && [ -d "$d/acceptance" ] || { echo "$d needs a spec.json and an acceptance/ folder" >&2; exit 2; }
 done
+# The grade: in the daemon's sandbox, unless BENCH_GRADE_IN_PROCESS=1.
+GRADING_IMAGE=${BENCH_GRADING_IMAGE:-${FABRIQUE_GRADING_IMAGE:-}}
+if [ "${BENCH_GRADE_IN_PROCESS:-}" = "1" ]; then
+  GRADE_FLAGS=(--in-process)
+  echo "grading in-process (BENCH_GRADE_IN_PROCESS=1): the projects' code runs in $PY; local development only, never a cycle's measurement"
+else
+  GRADE_FLAGS=(--image "$GRADING_IMAGE")
+  echo "grading in the sandbox: image ${GRADING_IMAGE:-none named (every grade will be unmeasured)}"
+fi
 API=http://127.0.0.1:$BACKEND_PORT
 TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
 cleanup() { kill ${BPID:-} ${DPID:-} ${LPID:-} ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
@@ -269,8 +301,10 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
-    || fail "the grade of $name did not run"
+  FABRIQUE_DAEMON_DIR="$DAEMON_DIR" FABRIQUE_DAEMON_SHA256="$DAEMON_SHA256" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
+    "${GRADE_FLAGS[@]}" --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
+  unmeasured=$(json "d.get('unmeasured') or ''" < "$WORK/$name.grade.json")
+  [ -z "$unmeasured" ] || echo "   grade unmeasured: $unmeasured"
   echo "   criteria passed: $(json "d.get('passed'), 'of', d.get('total')" < "$WORK/$name.grade.json")"
   "$PY" "$REPO/scripts/bench/scorecard.py" collect --api "$API" --name "$name" --status "$status" \
     --company "$cid" --sprint "$sid" --spec-id "$spec_id" --grade "$WORK/$name.grade.json" --wall "$wall" \

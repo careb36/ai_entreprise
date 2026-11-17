@@ -446,10 +446,13 @@ whether it may be kept. It never merges, pushes or approves; a person does
    python3 scripts/rsi/cycle.py run --dry-run --pr <n> --repository <owner>/<repo> \
      --spec scripts/self_host/specs/<name>-specification.json --findings findings.json \
      --cycle-id cycle-<n>-<name> --work /tmp/rsi/cycle-<n> --out /tmp/rsi/cycle-<n>.json \
-     --python "$(cd backend && poetry env info -p)/bin/python"
+     --python "$(cd backend && poetry env info -p)/bin/python" \
+     --grading-image fabrique-grading:backend
    ```
 
-   It checks the inputs from git and the files (the specification at B and
+   The measures and the bench grade in the sandbox only (Grading in the
+   sandbox, below): without a usable image the cycle is refused or
+   `unmeasured`, never graded in-process. It checks the inputs from git and the files (the specification at B and
    its measure, the findings, the graders' trees) and prints every step.
 3. Run it again without `--dry-run`. It takes hours (K = 3 real bench runs
    per side, alternating). Exit status: 0 keep, 1 revert, 2 unmeasured, 3
@@ -465,6 +468,47 @@ whether it may be kept. It never merges, pushes or approves; a person does
    (or pass `--close-pr` to the run) and record the decision on the finding.
 5. `python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-<n>.json`
    hashes the kept files again before anyone relies on them.
+
+### Grading in the sandbox
+
+The self-improvement runner grades a candidate build in the workspace
+daemon's container sandbox (`scripts/bench/sandbox_grading.py`, rsi-loop
+PR 12): the target measure (`self_host.py --steps measure`) and the bench's
+acceptance tests (`scripts/bench/run.sh`). What the host needs:
+
+- **Docker or Podman** on the PATH of the account that runs the harness or
+  the bench, with its daemon answering (`docker info`);
+  `FABRIQUE_SANDBOX_RUNTIME` picks one. `bwrap` is not enough: it applies no
+  CPU or memory limit, so grading refuses it.
+- **A grading image already on the machine.** It is never pulled while
+  grading (`--pull=never`) and is run from its content ID, recorded in the
+  report. The measure needs the backend's dependencies and pytest; the
+  bench's tests need Python and pytest. One way to build the backend's,
+  from this repository:
+
+  ```bash
+  docker compose build backend
+  printf 'FROM %s\nRUN pip install --no-cache-dir "pytest>=8.1.1,<10"\n' \
+    "$(docker compose images -q backend | head -1)" | docker build -t fabrique-grading:backend -
+  export FABRIQUE_GRADING_IMAGE=fabrique-grading:backend
+  ```
+
+  For the bench, `BENCH_GRADING_IMAGE` (or `FABRIQUE_GRADING_IMAGE`); CI
+  reads the repository variable `BENCH_GRADING_IMAGE` and grades in-process
+  until it is set (the card's `criteria.isolation` says which).
+- **Room for the limits**: 2 CPUs, 2048 MB of memory, 256 processes, a
+  512 MB `/tmp` and a 256 MB `/workspace` (both tmpfs, nothing on the host's
+  disk) per grade, which runs with the network off, the root file
+  system read-only and the uid of the account running it.
+- **The daemon's code beside the scripts**: `vscode-daemon/sandbox.py` of
+  the same checkout (or `FABRIQUE_DAEMON_DIR`); `run.sh` names its own.
+
+Without any of these the measure is `unmeasured` with the reason
+(`self_host.py` exits 4) and a bench grade leaves every criterion missing;
+it never falls back to the runner's own Python. `--in-process-measure` and
+`BENCH_GRADE_IN_PROCESS=1` do that explicitly, for local development only,
+and the report says `isolation: in_process`, which the fitness decision
+refuses.
 
 ## When something is wrong
 

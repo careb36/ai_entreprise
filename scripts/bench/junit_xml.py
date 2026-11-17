@@ -24,6 +24,7 @@ from xml.parsers import expat
 
 # A test case with one of these as a direct child did not pass.
 NOT_PASSED = ("failure", "error", "skipped")
+PASS, FAIL, SKIP = "pass", "fail", "skip"
 
 
 class JUnitError(ValueError):
@@ -41,6 +42,15 @@ def testcases(xml_text: str) -> list[tuple[str, bool]]:
     ``skipped`` child. Raises ``JUnitError`` on malformed XML and on any
     ``<!DOCTYPE``, entity declaration or external entity reference.
     """
+    return [(name, outcome == PASS) for name, outcome in outcomes(xml_text)]
+
+
+def outcomes(xml_text: str) -> list[tuple[str, str]]:
+    """Each ``<testcase>`` as ``(name, outcome)``, in document order: ``fail``
+    with a ``failure`` or ``error`` child, else ``skip`` with a ``skipped``
+    one, else ``pass``. A skip is told apart from a failure because pytest
+    exits 0 on a run of passes and skips (review of PR #634). Raises
+    ``JUnitError`` as ``testcases`` does."""
     parser = expat.ParserCreate()
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.StartDoctypeDeclHandler = _refuse
@@ -53,9 +63,12 @@ def testcases(xml_text: str) -> list[tuple[str, bool]]:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         if name == "testcase":
-            cases.append([attrs.get("name", ""), True])
+            cases.append([attrs.get("name", ""), PASS])
         elif name in NOT_PASSED and stack and stack[-1] == "testcase":
-            cases[-1][1] = False
+            if name != "skipped":
+                cases[-1][1] = FAIL
+            elif cases[-1][1] == PASS:
+                cases[-1][1] = SKIP
         stack.append(name)
 
     def end(_name: str) -> None:
@@ -67,4 +80,4 @@ def testcases(xml_text: str) -> list[tuple[str, bool]]:
         parser.Parse(xml_text, True)
     except expat.ExpatError as exc:
         raise JUnitError(str(exc)) from exc
-    return [(name, passed) for name, passed in cases]
+    return [(name, outcome) for name, outcome in cases]

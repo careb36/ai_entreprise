@@ -80,6 +80,11 @@
 /scripts/bench/                                  @careb36
 /scripts/self_host/                              @careb36
 /scripts/rsi/                                    @careb36
+# El sandbox con el que se califica, y lo que importa en el anfitrión.
+/vscode-daemon/sandbox.py                        @careb36
+/vscode-daemon/sandbox_image.py                  @careb36
+/vscode-daemon/sandbox_cache.py                  @careb36
+/vscode-daemon/run_logs.py                       @careb36
 /rsi/cycles/                                     @careb36
 /backend/app/services/evidence/                  @careb36
 /backend/tests/test_verificador_benchmark.py     @careb36

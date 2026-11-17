@@ -3,7 +3,9 @@
 A report with a document type is refused before anything is expanded (issue
 #522); the fake producer's files pass, an empty project fails, a wrong answer
 fails only its criteria; the produced project cannot stand in for the grader
-or forge its report, and a report pytest did not finish is not read.
+or forge its report, and a report pytest did not finish is not read. These
+run the in-process path (``in_process=True``, local development); the
+sandbox's grade is ``test_sandbox_grading.py``.
 
 No stack here: ``scripts/bench/run.sh`` drives the factory; these tests check
 the pieces it relies on. The shared readers and rows are in ``bench_helpers``.
@@ -98,13 +100,15 @@ def test_the_junit_reader_looks_only_at_direct_children_of_a_case():
 
 def test_grading_the_fake_producers_files_passes_every_criterion():
     spec_dir = BENCH / "specs" / "02-lib-roman"
-    graded = scorecard.grade(spec_dir, spec_dir / "fake" / "files", sys.executable)
+    graded = scorecard.grade(
+        spec_dir, spec_dir / "fake" / "files", sys.executable, in_process=True
+    )
     assert (graded["passed"], graded["total"]) == (5, 5), graded["output_tail"]
 
 
 def test_grading_an_empty_project_fails_every_criterion(tmp_path):
     graded = scorecard.grade(
-        BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable
+        BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable, in_process=True
     )
     assert graded["passed"] == 0
     assert set(graded["results"].values()) == {"fail"}
@@ -118,7 +122,9 @@ def test_grading_a_wrong_answer_fails_only_its_criteria(tmp_path):
     # A reader that accepts IIII: only the criterion that refuses it fails.
     broken = source.replace("or to_roman(total) != s", "")
     (tmp_path / "romannum" / "__init__.py").write_text(broken)
-    graded = scorecard.grade(BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable)
+    graded = scorecard.grade(
+        BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable, in_process=True
+    )
     assert [c for c, r in graded["results"].items() if r != "pass"] == ["REQ-2.2"]
 
 
@@ -143,7 +149,7 @@ def test_a_project_cannot_stand_in_for_the_grader(tmp_path):
     (tmp_path / "usercustomize.py").write_text("raise SystemExit(0)\n")
     (tmp_path / "conftest.py").write_text("raise SystemExit(0)\n")
     graded = scorecard.grade(
-        BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable
+        BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable, in_process=True
     )
     assert graded["exit_code"] == 1, graded["output_tail"]
     assert set(graded["results"].values()) == {"fail"}
@@ -157,7 +163,9 @@ def test_the_project_comes_after_the_standard_library(tmp_path):
         BENCH / "specs" / "02-lib-roman" / "fake" / "files" / "romannum" / "__init__.py"
     )
     (tmp_path / "romannum" / "__init__.py").write_text(source.read_text())
-    graded = scorecard.grade(BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable)
+    graded = scorecard.grade(
+        BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable, in_process=True
+    )
     assert (graded["passed"], graded["total"]) == (5, 5), graded["output_tail"]
 
 
@@ -168,6 +176,8 @@ def test_a_report_pytest_did_not_finish_is_not_read(tmp_path):
         f"#!{sys.executable}\n" + FORGED_REPORT.replace("sys.exit(0)", "sys.exit(2)")
     )
     fake.chmod(0o755)
-    graded = scorecard.grade(BENCH / "specs" / "01-cli-wordcount", tmp_path, str(fake))
+    graded = scorecard.grade(
+        BENCH / "specs" / "01-cli-wordcount", tmp_path, str(fake), in_process=True
+    )
     assert graded["exit_code"] == 2
     assert set(graded["results"].values()) == {"missing"}

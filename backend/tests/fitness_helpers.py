@@ -100,8 +100,8 @@ def observations():
         "target": {
             "produced_by": fitness.PLATFORM,
             "measure": "f4-adr-files",
-            "baseline": {"sha": B_SHA, "result": "fail"},
-            "candidate": {"sha": C_SHA, "result": "pass"},
+            "baseline": {"sha": B_SHA, "result": "fail", "isolation": "sandbox"},
+            "candidate": {"sha": C_SHA, "result": "pass", "isolation": "sandbox"},
         },
         "protected": {"produced_by": fitness.PLATFORM, "sha": C_SHA, "touched": []},
     }
