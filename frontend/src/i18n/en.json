@@ -1057,7 +1057,9 @@
     "summary": {
       "aria": "Evidence by verdict",
       "all": "All"
-    }
+    },
+    "claimedHint": "What the producer reported about its own run: a claim, not a check.",
+    "observedHint": "What the Verifier observed itself, from what the run delivered."
   },
   "analytics": {
     "title": "Analytics",
@@ -1707,7 +1709,9 @@
       "edit": "Edit answer",
       "answerLabel": "Answer to question {{n}}",
       "save": "Save answer",
-      "error": "Could not save the answer: {{message}}"
+      "error": "Could not save the answer: {{message}}",
+      "countLabel_one": "{{count}} question",
+      "countLabel_other": "{{count}} questions"
     },
     "requirements": {
       "title": "Requirements",
@@ -1716,7 +1720,9 @@
       "criteriaOf": "Acceptance criteria of {{id}}",
       "given": "Given",
       "when": "When",
-      "then": "Then"
+      "then": "Then",
+      "countLabel_one": "{{count}} requirement",
+      "countLabel_other": "{{count}} requirements"
     },
     "coverage": {
       "uncovered": "Uncovered",
@@ -1801,7 +1807,10 @@
       "after": "After: {{titles}}",
       "uncovered_one": "{{count}} criterion stays uncovered: {{ids}}. The sprint can still start.",
       "uncovered_other": "{{count}} criteria stay uncovered: {{ids}}. The sprint can still start."
-    }
+    },
+    "listTitle": "All specifications",
+    "countLabel_one": "{{count}} specification",
+    "countLabel_other": "{{count}} specifications"
   },
   "architectures": {
     "title": "Architecture",
@@ -1839,20 +1848,26 @@
       "none": "No modules.",
       "dependsOn": "Depends on",
       "covers": "Covers",
-      "coversIn": "Covers in {{title}}"
+      "coversIn": "Covers in {{title}}",
+      "countLabel_one": "{{count}} module",
+      "countLabel_other": "{{count}} modules"
     },
     "interfaces": {
       "title": "Interfaces",
       "none": "No interfaces.",
       "providedBy": "Provided by",
-      "consumers": "Consumed by"
+      "consumers": "Consumed by",
+      "countLabel_one": "{{count}} interface",
+      "countLabel_other": "{{count}} interfaces"
     },
     "decisions": {
       "title": "Decisions",
       "none": "No decisions.",
       "context": "Context",
       "decision": "Decision",
-      "consequences": "Consequences"
+      "consequences": "Consequences",
+      "countLabel_one": "{{count}} decision",
+      "countLabel_other": "{{count}} decisions"
     },
     "conventions": {
       "title": "Conventions",
@@ -1929,7 +1944,9 @@
       "forSpecification": "drafted for {{title}}",
       "covers_one": "covers {{count}} specification",
       "covers_other": "covers {{count}} specifications",
-      "approvedOn": "approved on {{date}}"
+      "approvedOn": "approved on {{date}}",
+      "countLabel_one": "{{count}} version",
+      "countLabel_other": "{{count}} versions"
     }
   },
   "procedures": {
@@ -1973,7 +1990,9 @@
     "body": "The rule",
     "create": "Put in force",
     "duplicate": "That procedure is already in force or proposed.",
-    "createError": "Could not save it: {{message}}"
+    "createError": "Could not save it: {{message}}",
+    "countLabel_one": "{{count}} procedure",
+    "countLabel_other": "{{count}} procedures"
   },
   "inbox": {
     "subtitle": "What the company needs you for. The agents do the rest.",
@@ -2762,7 +2781,8 @@
       "Executing": "Executing",
       "Monitoring and Controlling": "Monitoring and Controlling",
       "Closing": "Closing"
-    }
+    },
+    "compileOptions": "Compile options"
   },
   "chat": {
     "title": "Chat approvals",
@@ -3120,7 +3140,9 @@
     "runLint": "Check the pages now",
     "lintDone_one": "{{count}} page marked stale.",
     "lintDone_other": "{{count}} pages marked stale.",
-    "version": "v{{number}}"
+    "version": "v{{number}}",
+    "countLabel_one": "{{count}} page",
+    "countLabel_other": "{{count}} pages"
   },
   "duties": {
     "title": "Duties and access",
@@ -3502,6 +3524,9 @@
       "outcomesHint": "Each cycle measures the baseline (B) and the candidate (C) with the same graders; the fitness function decides and names every guard it judged.",
       "specification": "Specification",
       "noSpecificationText": "The specification's text was not stored; its sha256 is above."
-    }
+    },
+    "listTitle": "All findings",
+    "countLabel_one": "{{count}} finding",
+    "countLabel_other": "{{count}} findings"
   }
 }

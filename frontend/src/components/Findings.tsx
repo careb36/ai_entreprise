@@ -9,7 +9,7 @@ import { AlertCircle } from 'lucide-react'
 import type { Finding } from '../services/specifications'
 
 export function Where({ where }: { where: string }) {
-  return <code className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-gray-300">{where}</code>
+  return <code className="rounded-md bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] leading-4 text-gray-300">{where}</code>
 }
 
 export function FindingList({ findings, severity }: { findings: Finding[]; severity: Finding['severity'] }) {
@@ -20,11 +20,11 @@ export function FindingList({ findings, severity }: { findings: Finding[]; sever
   const label = blocking ? t('specifications.check.blocking') : t('specifications.check.warnings')
   return (
     <div>
-      <h3 className={`mb-1 text-xs font-semibold uppercase tracking-wider ${blocking ? 'text-red-300' : 'text-amber-300'}`}>{label}</h3>
-      <ul aria-label={label} className="space-y-1">
+      <h3 className={`mb-1.5 text-[11px] font-semibold uppercase tracking-wider ${blocking ? 'text-red-300' : 'text-amber-300'}`}>{label}</h3>
+      <ul aria-label={label} className="space-y-1.5">
         {own.map((finding, i) => (
-          <li key={`${finding.where}-${finding.code}-${i}`} className="flex flex-wrap items-center gap-2 text-sm text-gray-200">
-            <AlertCircle size={14} className={blocking ? 'text-red-300' : 'text-amber-300'} aria-hidden="true" />
+          <li key={`${finding.where}-${finding.code}-${i}`} className="flex flex-wrap items-center gap-2 text-[13px] text-gray-200">
+            <AlertCircle size={13} className={`flex-shrink-0 ${blocking ? 'text-red-300' : 'text-amber-300'}`} aria-hidden="true" />
             <Where where={finding.where} />
             <span>{finding.message}</span>
           </li>
