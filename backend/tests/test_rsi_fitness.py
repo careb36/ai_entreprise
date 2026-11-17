@@ -273,10 +273,14 @@ def test_a_target_graded_outside_the_sandbox_is_unmeasured(side):
     obs = observations()
     obs["target"]["baseline"]["result"] = "fail"
     obs["target"]["candidate"]["result"] = "pass"
-    obs["target"][side]["isolation"] = "in_process"
-    result = decide(obs)
-    assert result["decision"] == fitness.UNMEASURED
-    assert "not_sandboxed" in codes(result)
+    for isolation in ("in_process", None, "container", ""):
+        obs["target"][side]["isolation"] = isolation
+        result = decide(obs)
+        assert result["decision"] == fitness.UNMEASURED, isolation
+        assert "not_sandboxed" in codes(result), isolation
+    # A report from before PR 12 carries no isolation at all: not a result.
+    del obs["target"][side]["isolation"]
+    assert "not_sandboxed" in codes(decide(obs))
     obs["target"][side]["isolation"] = "sandbox"
     obs["target"]["candidate"]["result"] = "unmeasured"
     assert "target_not_run" in codes(decide(obs))

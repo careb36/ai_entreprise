@@ -138,6 +138,12 @@ rm -f "$WORK"/entries/*.json
 SPECS_ROOT="$REPO/bench/specs"
 GRADER="$REPO/scripts/bench/scorecard.py"
 GRADERS_FLAG=()
+# The daemon's sandbox the grade loads on this machine: this checkout's, or,
+# with --graders, the copy taken from that commit's objects and hash-checked
+# by the grader before it imports it (never the checkout's, which may be the
+# candidate's; review of PR #634).
+DAEMON_DIR="$REPO/vscode-daemon"
+DAEMON_SHA256=""
 if [ -n "$GRADERS_REV" ]; then
   rm -f "$WORK/graders.json"
   "$PY" "$REPO/scripts/bench/graders.py" checkout --repo "$REPO" --rev "$GRADERS_REV" \
@@ -145,6 +151,11 @@ if [ -n "$GRADERS_REV" ]; then
   SPECS_ROOT="$WORK/graders/bench/specs"
   GRADER="$WORK/graders/scripts/bench/scorecard.py"
   GRADERS_FLAG=(--graders "$WORK/graders.json")
+  "$PY" "$REPO/scripts/bench/graders.py" daemon --repo "$REPO" --rev "$GRADERS_REV" \
+    --dest "$WORK/graders-daemon" --out "$WORK/graders-daemon.json" > /dev/null \
+    || { echo "--graders $GRADERS_REV: the daemon's sandbox could not be taken"; exit 2; }
+  DAEMON_DIR="$WORK/graders-daemon"
+  DAEMON_SHA256=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/graders-daemon.json")
   echo "graders: $("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d["sha"], "sha256", d["sha256"])' "$WORK/graders.json")"
   for i in "${!SPECS[@]}"; do SPECS[i]="$SPECS_ROOT/$(basename "${SPECS[i]}")"; done
 fi
@@ -290,7 +301,7 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  FABRIQUE_DAEMON_DIR="$REPO/vscode-daemon" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
+  FABRIQUE_DAEMON_DIR="$DAEMON_DIR" FABRIQUE_DAEMON_SHA256="$DAEMON_SHA256" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
     "${GRADE_FLAGS[@]}" --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
   unmeasured=$(json "d.get('unmeasured') or ''" < "$WORK/$name.grade.json")
   [ -z "$unmeasured" ] || echo "   grade unmeasured: $unmeasured"

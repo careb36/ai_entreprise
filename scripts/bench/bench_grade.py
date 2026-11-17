@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Any
 
 import sandbox_grading
-from junit_xml import JUnitError, testcases
+from junit_xml import FAIL as CASE_FAILED
+from junit_xml import JUnitError, outcomes, testcases
 from schema import FAIL, MISSING, PASS
 
 _TEST_NAME = re.compile(r"^test_req_(\d+)_(\d+)(?:_|\[|$)")
@@ -125,7 +126,8 @@ def _sandboxed_report(
         reason = f"exit status {code}: pytest did not finish a run"
     if reason is None:
         try:
-            failed = any(not ok for _, ok in testcases(report))
+            # A skip is no failure: pytest exits 0 on passes and skips.
+            failed = any(o == CASE_FAILED for _, o in outcomes(report))
         except JUnitError as exc:
             failed, reason = False, f"the report could not be read: {exc}"
         if reason is None and failed != (code == 1):

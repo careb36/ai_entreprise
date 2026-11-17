@@ -290,7 +290,9 @@ def _target(
         # A result graded outside the sandbox (``run_measure`` with
         # ``--in-process-measure``) ran the candidate's code in the runner's
         # own Python: local development, never a cycle's measurement (PR 12).
-        if obs.get("isolation", "sandbox") != "sandbox":
+        # It must say "sandbox": a missing value (a report from before PR 12)
+        # or any other is not a result (review of PR #634).
+        if obs.get("isolation") != "sandbox":
             _reason(
                 reasons,
                 guard,

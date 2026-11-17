@@ -233,6 +233,7 @@ def run_measure(
         "passed": result == sandbox_grading.PASS,
         "reason": reason,
         "sandbox": run["sandbox"],
+        "cleanup": run.get("cleanup"),
         **sandbox_grading.output_record(run),
     }
 

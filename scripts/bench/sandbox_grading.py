@@ -48,23 +48,37 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import importlib
+import inspect
 import os
 import secrets
 import shlex
 import subprocess
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from junit_xml import JUnitError, testcases
+import graders
+from junit_xml import FAIL as CASE_FAILED
+from junit_xml import SKIP as CASE_SKIPPED
+from junit_xml import JUnitError, outcomes
 
 SANDBOX, IN_PROCESS = "sandbox", "in_process"
 PASS, FAIL, UNMEASURED = "pass", "fail", "unmeasured"
 IMAGE_ENV = "FABRIQUE_GRADING_IMAGE"
 DAEMON_DIR_ENV = "FABRIQUE_DAEMON_DIR"
+# The digest ``graders.py daemon`` computed for the copy it took from B: when
+# set, the folder must match it before anything in it is imported.
+DAEMON_SHA256_ENV = "FABRIQUE_DAEMON_SHA256"
+# The writable scratch at /workspace: a tmpfs of this size (charged to the
+# memory limit, like the /tmp tmpfs), never a folder of the host's disk.
+SCRATCH_MB = 256
+# How long the runtime may take to kill a container that timed out.
+KILL_SECONDS = 30
+# Free space (KiB) under which /workspace or /tmp counts as filled up.
+FULL_KIB = 1024
 CANDIDATE, GRADERS = "/candidate", "/graders"
 LIMITS = {"cpus": 2.0, "memory_mb": 2048, "pids_limit": 256}
 FRAME = "@@FABRIQUE-GRADE"
@@ -82,22 +96,46 @@ class Unavailable(RuntimeError):
 
 def daemon_sandbox():
     """The daemon's ``sandbox`` module, from ``FABRIQUE_DAEMON_DIR`` or this
-    repository's ``vscode-daemon/`` (graders taken from a commit hold no
-    daemon: ``run.sh`` names the runner's own)."""
+    repository's ``vscode-daemon/``. With ``FABRIQUE_DAEMON_SHA256`` (what
+    ``run.sh --graders`` sets for the copy ``graders.py daemon`` took from B's
+    objects) the folder's ``graders.daemon_digest`` must match before anything
+    is imported. The modules are imported from that folder alone, under their
+    own names only while loading (``sandbox``, ``sandbox_image``,
+    ``sandbox_cache``, ``run_logs``): a module of the same name loaded earlier
+    from elsewhere never stands in, and none is left in ``sys.modules``."""
     configured = os.environ.get(DAEMON_DIR_ENV, "").strip()
     folder = (
         Path(configured)
         if configured
         else Path(__file__).resolve().parents[2] / "vscode-daemon"
-    )
+    ).resolve()
     if not (folder / "sandbox.py").is_file():
         raise Unavailable(
             f"the daemon's sandbox (sandbox.py) is not in {folder}; set {DAEMON_DIR_ENV}"
         )
-    if str(folder) not in sys.path:
-        sys.path.append(str(folder))
-    import sandbox
-
+    expected = os.environ.get(DAEMON_SHA256_ENV, "").strip()
+    if expected and graders.daemon_digest(folder) != expected:
+        raise Unavailable(
+            f"the daemon in {folder} does not match its sha256 {expected}: not loaded"
+        )
+    names = [n.removesuffix(".py") for n in graders.DAEMON_FILES]
+    saved = {n: sys.modules.pop(n) for n in names if n in sys.modules}
+    sys.path.insert(0, str(folder))
+    try:
+        sandbox = importlib.import_module("sandbox")
+        strays = [
+            n
+            for n in names
+            if n in sys.modules
+            and Path(getattr(sys.modules[n], "__file__", "") or "").parent != folder
+        ]
+    finally:
+        sys.path.remove(str(folder))
+        for n in names:
+            sys.modules.pop(n, None)
+        sys.modules.update(saved)
+    if strays:
+        raise Unavailable(f"{', '.join(strays)} did not come from {folder}")
     return sandbox
 
 
@@ -118,7 +156,16 @@ def wrapper(
         f'{shlex.join(argv)} "--junitxml=$r/report.xml" </dev/null\n'
         "code=$?\n"
         'if [ "$$" = 1 ]; then kill -9 -1 2>/dev/null; kill -9 -1 2>/dev/null; fi\n'
-        f"printf '\\n{FRAME} %s %s\\n' \"$code\" {nonce}\n"
+        # Filled up: /workspace or /tmp with less than FULL_KIB free (or
+        # unreadable) after the run; the runner reads it as unmeasured.
+        "full=0\n"
+        "for d in /workspace /tmp; do\n"
+        '  [ -d "$d" ] || continue\n'
+        "  a=$(df -Pk \"$d\" 2>/dev/null | awk 'NR==2 {print $4}')\n"
+        '  case "$a" in ""|*[!0-9]*) full=1 ;; '
+        f'*) [ "$a" -lt {FULL_KIB} ] && full=1 ;; esac\n'
+        "done\n"
+        f"printf '\\n{FRAME} %s %s %s\\n' \"$code\" {nonce} \"$full\"\n"
         'base64 "$r/report.xml" 2>/dev/null\n'
         f"printf '{FRAME}-END %s\\n' {nonce}\n"
         'rm -rf "$r"\n'
@@ -139,10 +186,15 @@ def read_frame(
     parts = head.split()
     end = f"{FRAME}-END {nonce}"
     body, found, after = rest.partition(end)
-    if len(parts) != 3 or parts[2] != nonce or not found or after.strip():
+    if len(parts) != 4 or parts[2] != nonce or not found or after.strip():
         return None, "the report frame is not this run's, or is not the last output"
     if parts[1] != str(exit_code):
         return None, f"the frame says exit {parts[1]}, the runtime {exit_code}"
+    if parts[3] != "0":
+        return None, (
+            f"the scratch (/workspace, {SCRATCH_MB} MB) or /tmp filled up: "
+            "the disk limit, not a result"
+        )
     try:
         report = base64.b64decode("".join(body.split()), validate=True).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError):
@@ -200,6 +252,10 @@ def run_pytest(
                 **(limits or {}),
             }
         )
+        if "scratch_mb" not in inspect.signature(sandbox.container_command).parameters:
+            raise Unavailable(
+                "the daemon's sandbox.py cannot give a bounded scratch (no scratch_mb)"
+            )
         runtime = sandbox.container_runtime()
     except (Unavailable, RuntimeError, ValueError) as exc:
         return unavailable(str(exc))
@@ -211,7 +267,7 @@ def run_pytest(
             "read_only_root": True,
             "pull": "never",
             "mounts": {path: "ro" for path in mounts},
-            "scratch": sandbox.CONTAINER_WORKDIR,
+            "scratch": f"{sandbox.CONTAINER_WORKDIR} tmpfs {SCRATCH_MB} MB",
         }
     )
     if not identity.get("id"):
@@ -224,13 +280,17 @@ def run_pytest(
     for path, host in mounts.items():
         extra += ["-v", f"{Path(host).resolve()}:{path}:ro"]
     name = f"fabrique-grade-{uuid.uuid4().hex[:12]}"
-    with tempfile.TemporaryDirectory(prefix="fabrique-grade-scratch-") as scratch:
-        command = sandbox.container_command(
-            runtime, run_box, wrapper(argv, cwd, nonce, env), scratch, name, extra
-        )
-        run = sandbox.run_bounded(command, timeout, own_group=True)
-        if run["timed_out"]:  # the runtime's client is gone; the container next
-            subprocess.run([runtime, "kill", name], capture_output=True, check=False)
+    # No folder of the host is writable: /workspace is a bounded tmpfs.
+    command = sandbox.container_command(
+        runtime,
+        run_box,
+        wrapper(argv, cwd, nonce, env),
+        "/nonexistent",
+        name,
+        extra,
+        scratch_mb=SCRATCH_MB,
+    )
+    run = sandbox.run_bounded(command, timeout, own_group=True)
     if run["timed_out"]:
         return {
             **unavailable(f"stopped after {timeout:g} s (the time limit)", applied),
@@ -238,6 +298,7 @@ def run_pytest(
             "timed_out": True,
             "stdout": run["stdout"],
             "stderr": run["stderr"],
+            "cleanup": kill(runtime, name),
         }
     report, why = read_frame(run["stdout"], nonce, run["exit_code"])
     if report is None and run["exit_code"] == sandbox.RUNTIME_FAILURE_EXIT:
@@ -256,6 +317,29 @@ def run_pytest(
         "report": report,
         "sandbox": applied,
     }
+
+
+def kill(runtime: str, name: str) -> str | None:
+    """Kill the container *name* within ``KILL_SECONDS``; None when the
+    runtime said it did, else what went wrong (recorded, never raised: the
+    run stays unmeasured either way)."""
+    tool = os.path.basename(runtime)
+    try:
+        done = subprocess.run(
+            [runtime, "kill", name],
+            capture_output=True,
+            text=True,
+            timeout=KILL_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return f"{tool} kill {name} did not answer within {KILL_SECONDS} s"
+    except OSError as exc:
+        return f"{tool} kill {name} could not run: {exc}"
+    if done.returncode != 0:
+        said = (done.stderr or "").strip()[-200:] or f"exit {done.returncode}"
+        return f"{tool} kill {name} failed: {said}"
+    return None
 
 
 def measure_verdict(run: dict[str, Any]) -> tuple[str, str | None]:
@@ -278,16 +362,21 @@ def measure_verdict(run: dict[str, Any]) -> tuple[str, str | None]:
     if run.get("report") is None:
         return UNMEASURED, run.get("reason") or "no report"
     try:
-        cases = testcases(run["report"])
+        cases = outcomes(run["report"])
     except JUnitError as exc:
         return UNMEASURED, f"the report could not be read: {exc}"
     if not cases:
         return UNMEASURED, "the report names no test"
-    failed = sum(1 for _, ok in cases if not ok)
-    if code == 0 and not failed:
-        return PASS, None
+    failed = sum(1 for _, o in cases if o == CASE_FAILED)
+    skipped = sum(1 for _, o in cases if o == CASE_SKIPPED)
+    if (code == 0) == (failed > 0):  # pytest exits 0 only with nothing failed
+        return UNMEASURED, f"exit status {code} and a report with {failed} failed disagree"
     if failed:
-        return FAIL, f"{failed} of {len(cases)} test(s) did not pass"
+        return FAIL, f"{failed} of {len(cases)} test(s) failed"
+    if skipped:
+        return FAIL, f"{skipped} of {len(cases)} test(s) skipped: the measure did not pass"
+    if code == 0:
+        return PASS, None
     return (
         UNMEASURED,
         f"exit status {code} and a report where every test passed disagree",

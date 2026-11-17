@@ -23,6 +23,16 @@ FILE gets the record the scorecard carries (``graders``, schema v3, optional):
 
 Every hash is the runner's own; none is read from the build under test
 (rule 6 of ``docs/POSITIONING.md``).
+
+    graders.py daemon --repo DIR --rev REV --dest DIR --out FILE
+
+``daemon`` takes the workspace daemon's sandbox and the daemon modules it
+imports (``DAEMON_FILES``) from the same commit's objects into DEST, flat,
+for ``sandbox_grading.py`` to load before any container starts: the bench run
+from a candidate's checkout never imports the candidate's daemon on the host
+(review of PR #634). FILE gets ``{"sha", "files": {name: blob id},
+"sha256"}``, the last ``daemon_digest`` of DEST, which the grader checks again
+before importing.
 """
 
 import argparse
@@ -36,6 +46,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 GRADER_PATHS = ("bench", "scripts/bench")
+# What sandbox_grading.py imports from the daemon on the host: the sandbox and
+# every daemon module it loads (all protected paths).
+DAEMON_FILES = ("sandbox.py", "sandbox_image.py", "sandbox_cache.py", "run_logs.py")
+DAEMON_FOLDER = "vscode-daemon"
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -82,9 +96,11 @@ def tree_ids(repo: Path, sha: str) -> dict[str, str]:
     return out
 
 
-def _entries(repo: Path, sha: str) -> list[tuple[str, str, str]]:
-    """(mode, object id, path) of every file under the grading paths."""
-    listing = _git(repo, "ls-tree", "-r", "-z", "--full-tree", sha, "--", *GRADER_PATHS)
+def _entries(
+    repo: Path, sha: str, paths: tuple[str, ...] = GRADER_PATHS
+) -> list[tuple[str, str, str]]:
+    """(mode, object id, path) of every file under *paths* (the grading paths)."""
+    listing = _git(repo, "ls-tree", "-r", "-z", "--full-tree", sha, "--", *paths)
     entries = []
     for record in listing.decode("utf-8").split("\0"):
         if not record:
@@ -153,6 +169,40 @@ def checkout(repo: Path, rev: str, dest: Path) -> dict[str, Any]:
     return {"sha": sha, "trees": trees, "sha256": content_digest(dest)}
 
 
+def daemon_digest(folder: Path) -> str:
+    """sha256 over ``DAEMON_FILES`` in *folder*: each name and its own sha256,
+    in that order; a missing file counts as empty bytes under its name."""
+    digest = hashlib.sha256()
+    for name in DAEMON_FILES:
+        path = folder / name
+        own = hashlib.sha256(path.read_bytes() if path.is_file() else b"").hexdigest()
+        digest.update(f"{name}\0{own}\n".encode())
+    return digest.hexdigest()
+
+
+def daemon(repo: Path, rev: str, dest: Path) -> dict[str, Any]:
+    """Take ``DAEMON_FILES`` of *rev* from its objects into *dest* (emptied
+    first, flat); the record with the runner's digest."""
+    sha = resolve(repo, rev)
+    wanted = tuple(f"{DAEMON_FOLDER}/{name}" for name in DAEMON_FILES)
+    entries = _entries(repo, sha, wanted)
+    found = {PurePosixPath(path).name: (mode, oid) for mode, oid, path in entries}
+    missing = [name for name in DAEMON_FILES if name not in found]
+    if missing:
+        raise GradersError(f"{', '.join(missing)} not in {DAEMON_FOLDER}/ of {sha[:12]}")
+    blobs = _blobs(repo, sorted(oid for _, oid in found.values()))
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    for name in DAEMON_FILES:
+        (dest / name).write_bytes(blobs[found[name][1]])
+    return {
+        "sha": sha,
+        "files": {name: found[name][1] for name in DAEMON_FILES},
+        "sha256": daemon_digest(dest),
+    }
+
+
 def problems(card: dict[str, Any]) -> list[str]:
     """What is wrong with the optional ``graders`` block of *card*."""
     if "graders" not in card:
@@ -201,9 +251,14 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--rev", required=True)
     c.add_argument("--dest", required=True, type=Path)
     c.add_argument("--out", required=True, type=Path)
+    d = sub.add_parser("daemon")
+    for flag in ("--repo", "--dest", "--out"):
+        d.add_argument(flag, required=True, type=Path)
+    d.add_argument("--rev", required=True)
     args = parser.parse_args(argv)
+    take = daemon if args.command == "daemon" else checkout
     try:
-        record = checkout(args.repo, args.rev, args.dest)
+        record = take(args.repo, args.rev, args.dest)
     except GradersError as exc:
         print(f"the graders could not be taken: {exc}", file=sys.stderr)
         return 2

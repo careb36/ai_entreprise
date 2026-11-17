@@ -460,8 +460,9 @@ acceptance tests (`scripts/bench/run.sh`). What the host needs:
   For the bench, `BENCH_GRADING_IMAGE` (or `FABRIQUE_GRADING_IMAGE`); CI
   reads the repository variable `BENCH_GRADING_IMAGE` and grades in-process
   until it is set (the card's `criteria.isolation` says which).
-- **Room for the limits**: 2 CPUs, 2048 MB of memory, 256 processes and a
-  512 MB `/tmp` per grade, which runs with the network off, the root file
+- **Room for the limits**: 2 CPUs, 2048 MB of memory, 256 processes, a
+  512 MB `/tmp` and a 256 MB `/workspace` (both tmpfs, nothing on the host's
+  disk) per grade, which runs with the network off, the root file
   system read-only and the uid of the account running it.
 - **The daemon's code beside the scripts**: `vscode-daemon/sandbox.py` of
   the same checkout (or `FABRIQUE_DAEMON_DIR`); `run.sh` names its own.
