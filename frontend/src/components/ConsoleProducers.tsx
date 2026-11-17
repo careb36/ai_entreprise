@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Terminal } from 'lucide-react'
+import { CircleCheck, Loader2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { consoleProducersApi, type ConsoleProducers as Settings } from '../services/consoleProducers'
+import { Panel } from './ui'
+import { TABLE, TD, TH, TR } from './adminTable'
 
 /**
  * Which terminal coding agent (Claude Code, Codex CLI, Gemini CLI, Cursor CLI)
@@ -41,8 +43,8 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
     return settings.isError ? (
       <div role="alert" className="alert-error text-sm">{errorDetail(settings.error)}</div>
     ) : (
-      <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-        <Loader2 size={15} className="animate-spin" /> {t('common.loading')}
+      <div role="status" className="panel flex items-center gap-2 px-3 py-3 text-xs text-gray-400">
+        <Loader2 size={13} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> {t('common.loading')}
       </div>
     )
   }
@@ -51,35 +53,33 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
   const cooling = data.clis.filter(cli => cli.cooldown_until)
 
   return (
-    <section aria-labelledby="console-producers" className="card space-y-4">
-      <div className="flex items-center gap-2">
-        <Terminal size={18} className="text-brand-400" />
-        <h2 id="console-producers" className="text-lg font-semibold">{t('consoleProducers.title')}</h2>
+    <Panel title={t('consoleProducers.title')}>
+      <div className="space-y-2 p-3">
+        <p className="text-xs text-gray-400">{t('consoleProducers.subtitle')}</p>
+        {!data.git_workflow && <p className="text-xs text-amber-300">{t('consoleProducers.needsGit')}</p>}
+        {(data.warnings ?? []).map(warning => (
+          <p key={warning} role="note" className="text-xs text-amber-300">{t('consoleProducers.sandboxWarning', { reason: warning })}</p>
+        ))}
+        {cooling.map(cli => (
+          <p key={cli.id} className="text-xs text-amber-300">
+            {t('consoleProducers.cooldown', { cli: cli.label, until: new Date(cli.cooldown_until as string).toLocaleString() })}
+          </p>
+        ))}
       </div>
-      <p className="text-sm text-gray-400">{t('consoleProducers.subtitle')}</p>
-      {!data.git_workflow && <p className="text-sm text-amber-300">{t('consoleProducers.needsGit')}</p>}
-      {(data.warnings ?? []).map(warning => (
-        <p key={warning} role="note" className="text-sm text-amber-300">{t('consoleProducers.sandboxWarning', { reason: warning })}</p>
-      ))}
-      {cooling.map(cli => (
-        <p key={cli.id} className="text-xs text-amber-300">
-          {t('consoleProducers.cooldown', { cli: cli.label, until: new Date(cli.cooldown_until as string).toLocaleString() })}
-        </p>
-      ))}
-      <table className="w-full text-sm">
+      <table className={TABLE}>
         <thead>
-          <tr className="text-left text-xs text-gray-400">
-            <th className="py-1 pr-2 font-medium">{t('consoleProducers.role')}</th>
-            <th className="py-1 font-medium">{t('consoleProducers.producer')}</th>
+          <tr>
+            <th className={TH}>{t('consoleProducers.role')}</th>
+            <th className={TH}>{t('consoleProducers.producer')}</th>
           </tr>
         </thead>
         <tbody>
           {data.roles.map(role => (
-            <tr key={role} className="border-t border-surface-700">
-              <td className="py-2 pr-2 font-medium">{role}</td>
-              <td className="py-2">
+            <tr key={role} className={TR}>
+              <td className={`${TD} text-[13px] font-medium text-gray-100`}>{role}</td>
+              <td className={TD}>
                 <label htmlFor={`console-producer-${role}`} className="sr-only">{role}</label>
-                <select id={`console-producer-${role}`} className="input w-full" value={draft[role] ?? ''} disabled={locked}
+                <select id={`console-producer-${role}`} className="select control-sm w-full" value={draft[role] ?? ''} disabled={locked}
                   onChange={e => { setSaved(false); setDraft(current => ({ ...current, [role]: e.target.value })) }}>
                   <option value="">{t('consoleProducers.model')}</option>
                   {data.clis.map(cli => <option key={cli.id} value={cli.id}>{`${cli.label} · ${cli.command}`}</option>)}
@@ -89,16 +89,20 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
           ))}
         </tbody>
       </table>
-      <p className="text-xs text-gray-500">{t('consoleProducers.evidence')}</p>
+      <p className="border-t border-surface-700 px-3 py-2 text-xs text-gray-400">{t('consoleProducers.evidence')}</p>
       {canManage && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-surface-700 p-3">
           <button type="button" className="btn-primary btn-sm" disabled={locked} onClick={() => save.mutate()}>
             {t('common.save')}
           </button>
-          {saved && <span role="status" className="text-sm text-emerald-300">{t('consoleProducers.saved')}</span>}
-          {save.isError && <span role="alert" className="text-sm text-red-300">{errorDetail(save.error)}</span>}
+          {saved && (
+            <span role="status" className="inline-flex items-center gap-1 text-xs text-emerald-300">
+              <CircleCheck size={13} aria-hidden="true" />{t('consoleProducers.saved')}
+            </span>
+          )}
+          {save.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(save.error)}</span>}
         </div>
       )}
-    </section>
+    </Panel>
   )
 }
