@@ -44,6 +44,7 @@ MANAGER_ITEM = "manager-item"
 MANAGER_BRIEF = "manager-brief"
 SPRINT_INTEGRATION = "sprint-integration"
 INTAKE_WAKE = "intake-wake"
+RSI_CYCLE_START = "rsi-cycle-start"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()

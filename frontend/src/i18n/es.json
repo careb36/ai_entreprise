@@ -587,6 +587,105 @@
     "success": "¡Sprint iniciado correctamente!",
     "error": "Error al iniciar el sprint"
   },
+  "kanbanBoard": {
+    "toolbar": {
+      "total_one": "{{count}} tarea",
+      "total_other": "{{count}} tareas",
+      "compact": "Tarjetas compactas",
+      "collapseAll": "Plegar todo",
+      "expandAll": "Desplegar todo",
+      "activity": "Actividad",
+      "search": "Buscar tareas",
+      "searchPlaceholder": "Título o #número",
+      "role": "Filtrar por rol",
+      "allRoles": "Todos los roles",
+      "presets": "Vistas rápidas",
+      "clear": "Quitar filtros",
+      "showing_one": "Se muestra {{shown}} de {{count}} tarea",
+      "showing_other": "Se muestran {{shown}} de {{count}} tareas"
+    },
+    "preset": {
+      "all": "Todas",
+      "needsPerson": "Necesita a una persona",
+      "highRisk": "Riesgo alto",
+      "waiting": "Esperan otras tareas"
+    },
+    "keyboardHint": "Para mover una tarea, enfocala y apretá Alt con la flecha izquierda o derecha: pasa a la columna anterior o siguiente. Apretá / para buscar en el tablero.",
+    "columnsRegion": "Columnas del tablero",
+    "column": {
+      "count_one": "{{count}} tarea",
+      "count_other": "{{count}} tareas",
+      "countFiltered_one": "Se muestra {{shown}} de {{count}} tarea",
+      "countFiltered_other": "Se muestran {{shown}} de {{count}} tareas",
+      "needsPerson_one": "{{count}} tarea necesita a una persona",
+      "needsPerson_other": "{{count}} tareas necesitan a una persona",
+      "collapse": "Plegar {{column}}",
+      "expand": "Desplegar {{column}}",
+      "emptyFiltered": "Ninguna tarea coincide",
+      "dropHere": "Soltá la tarea acá"
+    },
+    "card": {
+      "observed": "Observado",
+      "observedHint": "Lo que muestran el Verificador y el registro de la tarea, nunca lo que dijo un agente",
+      "reported": "Informado",
+      "reportedHint": "Sale de los mensajes de la tarea: lo que dijeron los agentes, sin verificar",
+      "risk": "Riesgo {{tier}}",
+      "held": "Retenida: ruta protegida",
+      "heldTitle": "La entrega cambia rutas protegidas, así que decide una persona: {{paths}}",
+      "declared": "Declarada: ruta protegida",
+      "declaredTitle": "El productor dice que la entrega cambia rutas protegidas; el Verificador no las vio escritas: {{paths}}",
+      "graderTitle": "El Verificador clasificó una ruta cambiada en el área del evaluador: los evaluadores, la evidencia, la CI o las reglas",
+      "needsPerson": "Necesita a una persona",
+      "needsPersonTitle": "Bloqueada, y nada de lo que haga el ejecutor de tareas por su cuenta la mueve",
+      "unassigned": "Sin asignar",
+      "assignee": "Asignada a {{role}}",
+      "priorityTitle": "Prioridad: {{priority}}",
+      "updated": "Actualizada {{time}}",
+      "messages_one": "{{count}} mensaje",
+      "messages_other": "{{count}} mensajes",
+      "moved": "\"{{title}}\" pasó a {{column}}."
+    },
+    "area": {
+      "grader": "Área del evaluador",
+      "secrets": "Secretos",
+      "CI_pipeline": "Pipeline de CI",
+      "authentication": "Autenticación",
+      "payments": "Pagos",
+      "shell_script": "Script de shell",
+      "database_migration": "Migración de base de datos",
+      "dependencies": "Dependencias",
+      "containers_and_infrastructure": "Contenedores e infraestructura"
+    },
+    "riskTier": {
+      "low": "bajo",
+      "medium": "medio",
+      "high": "alto"
+    },
+    "priority": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "critical": "Crítica"
+    },
+    "chip": {
+      "label": "Tarea {{id}}: {{title}}",
+      "labelWithSignal": "Tarea {{id}}: {{title}} ({{signal}})",
+      "signal": {
+        "held": "necesita a una persona",
+        "blocked": "bloqueada",
+        "refuted": "refutada",
+        "verified": "verificada"
+      }
+    },
+    "activity": {
+      "title": "Actividad",
+      "close": "Cerrar actividad",
+      "claimNote": "Los últimos mensajes en las tareas de este sprint. Un mensaje es una afirmación, no un hecho verificado: lo observado está en las tarjetas.",
+      "empty": "Todavía no hay mensajes.",
+      "on": "en",
+      "claim": "Afirmación"
+    }
+  },
   "kanban": {
     "title": "Tablero del Sprint",
     "todo": "Por Hacer",

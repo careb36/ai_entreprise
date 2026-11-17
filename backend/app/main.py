@@ -53,6 +53,7 @@ from routers.procedures import router as procedures_router
 from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
+from routers.rsi_cycles import router as rsi_cycles_router
 from routers.run_secrets import router as run_secrets_router
 from routers.security_tests import router as security_tests_router
 from routers.sod import router as sod_router
@@ -184,6 +185,7 @@ app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
 app.include_router(sod_router)
 app.include_router(protected_paths_router)
+app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)
 app.include_router(invitations_router)

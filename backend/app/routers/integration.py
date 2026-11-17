@@ -197,7 +197,7 @@ async def merge_sprint_integration(
         reply = await daemon_request(
             nats_client,
             "workspace.git.merge",
-            integration_merge_spec(session, row, diff),
+            integration_merge_spec(session, row, diff, merger=user),
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
         return record_integration_merge(

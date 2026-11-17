@@ -127,6 +127,19 @@ class Settings(BaseSettings):
     # Off by default (docs/design/rsi-loop.md, decision 8): the model-planned
     # follow-up sprint ran with no protected-path guard; a company turns it on.
     AUTO_SELF_IMPROVEMENT_ENABLED: bool = False
+    # The self-improvement cycle (services/management/rsi_cycle.py, decisions
+    # 4 and 7 of docs/design/rsi-loop.md): off, no cycle starts or advances.
+    RSI_ENABLED: bool = False
+    RSI_CYCLES_PER_DAY: int = 1
+    RSI_STOP_AFTER_CYCLES_WITHOUT_KEEP: int = 3
+    RSI_MAX_DIFF_FILES: int = 20
+    RSI_MAX_DIFF_LINES: int = 600
+    # Reported tokens of the first manual iteration's sprint; 0 is unknown and
+    # no cycle starts. A cycle's budget is at most twice it.
+    RSI_FIRST_SPRINT_TOKENS: int = 0
+    RSI_CYCLE_TOKEN_BUDGET: int = 0  # 0: the cap, twice the first sprint
+    # Where the backend reads a cycle record's kept files to hash them itself.
+    RSI_FILES_ROOT: str = ""
     CONSOLE_ASSISTANTS_ENABLED: bool = True
     # The Support agent triages new help-desk tickets (suggested severity and
     # category, a first reply to the reporter). Off by default: reporting a

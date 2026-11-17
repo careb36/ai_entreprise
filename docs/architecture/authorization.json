@@ -272,6 +272,15 @@
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/protected_paths": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/rsi/cycles": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/service-accounts": {
       "access": "Owner"
     },
@@ -645,6 +654,18 @@
     },
     "POST /v1/companies/{company_id}/providers/{provider_id}/validate": {
       "access": "Manager"
+    },
+    "POST /v1/companies/{company_id}/rsi/cycles/import": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}/merge": {
+      "access": "Owner",
+      "body": {
+        "merged_sha": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "POST /v1/companies/{company_id}/rsi/resume": {
+      "access": "Owner"
     },
     "POST /v1/companies/{company_id}/sandbox/cache/reset": {
       "access": "Manager"

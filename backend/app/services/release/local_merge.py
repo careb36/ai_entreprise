@@ -37,7 +37,7 @@ from sqlmodel import Session
 
 from services.evidence.review_changes import run_changes
 from services.platform.agent_service import AgentService
-from services.release import integration_review, protected_merge
+from services.release import integration_review, protected_merge, self_change
 from services.release.git_publish import PublishRefused
 
 LOCAL = "local"
@@ -52,8 +52,20 @@ def _base(session: Session, company_id: int, base: str | None) -> str:
     return (company.git_base_branch or "") if company else ""
 
 
-def run_merge_spec(session: Session, run: AgentRun) -> dict[str, Any]:
-    """The ``workspace.git.merge`` request for *run*'s task branch, or why there is none."""
+def run_merge_spec(
+    session: Session, run: AgentRun, *, merger: Any = None
+) -> dict[str, Any]:
+    """The ``workspace.git.merge`` request for *run*'s task branch, or why there is none.
+
+    A task branch of a self-improvement cycle's sprint is merged only by a
+    signed-in Owner (*merger*; ``self_change.require_owner``).
+    """
+    self_change.require_owner(
+        session,
+        run.company_id,
+        sprint_id=self_change.sprint_of_run(session, run),
+        merger=merger,
+    )
     git = run_changes(session, run).get("git") or {}
     if not git.get("branch") or not git.get("repository"):
         raise PublishRefused(409, "This run was not delivered on a Git branch")
@@ -82,14 +94,27 @@ def protected_facts(session: Session, row: SprintIntegration) -> dict[str, Any] 
 
 
 def integration_merge_spec(
-    session: Session, row: SprintIntegration, diff: dict[str, Any] | None = None
+    session: Session,
+    row: SprintIntegration,
+    diff: dict[str, Any] | None = None,
+    *,
+    merger: Any = None,
 ) -> dict[str, Any]:
     """The ``workspace.git.merge`` request for the sprint's integrated branch, or why not.
 
     *diff* is the daemon's diff of *row* (``integration_review.read_diff``),
     needed when ``needs_diff``: a protected path in it is merged only with an
-    Owner's acknowledgement (``protected_merge.guard``).
+    Owner's acknowledgement (``protected_merge.guard``). A self-improvement
+    cycle's integration, or one of its sprint, is merged only by a signed-in
+    Owner (*merger*; ``self_change.require_owner``).
     """
+    self_change.require_owner(
+        session,
+        row.company_id,
+        integration_id=row.id,
+        sprint_id=row.sprint_id,
+        merger=merger,
+    )
     if row.status == "conflict":
         raise PublishRefused(
             409,

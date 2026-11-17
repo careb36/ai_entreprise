@@ -106,6 +106,8 @@ DECISIONS = {
     "resume_after_credit": ("resume", ESCALATE),
     "approve_specification": ("approve", ESCALATE),
     "approve_architecture": ("approve", ESCALATE),
+    # In ALWAYS_ESCALATE: a "merge" is recorded as the agent's claim and refused.
+    "merge_self_change": ("merge", ESCALATE),
 }
 _ANSWER = re.compile(
     r"^DECISION:\s*(?P<decision>[\w-]+)\s*$\s*"
