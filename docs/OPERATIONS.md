@@ -457,6 +457,33 @@ turns whose usage the provider reported, so the provider's own spending
 limit is still the last guard (`bench/README.md`, "The nightly real-model
 run").
 
+**A revert pull request opened.** The nightly `watch` job
+(`.github/workflows/bench.yml`; `docs/design/rsi-loop.md` §1.6, REQ-19)
+compares every merged self-improvement cycle with its baseline B for two
+nights (`scripts/rsi/watch.py`, the records under `rsi/cycles/`). When a
+nightly real-model run regresses beyond both the threshold of decision 4
+and B's own spread, the `revert` job opens a pull request titled
+`revert: cycle <id> regressed the nightly bench (<sha>)` from the branch
+`rsi/revert-<cycle id>`, with the nights, the numbers and the reasons in
+its body. **Nothing merges it automatically.** A person reads the numbers
+(the pull request's body and the `watch` job summary of the nightly run),
+decides whether the regression is the cycle's, and merges the revert — or
+closes it when the numbers are wrong (a provider or a machine that moved,
+a card that was not comparable) and records that as a finding on the
+cycle. If the revert does not apply cleanly the job fails without pushing:
+prepare the revert by hand. If the job says a revert pull request is
+already open, the watch found the regression again on a later night; the
+open pull request is the one to decide on. A record whose watch answers
+`unmeasured` for the same reason every night (a void pair: the models
+served changed; a card nobody commits) is a record a person must look at —
+the watch job fails on a record that does not validate. Once a cycle
+closed (two nights ok) or was reverted, its record under `rsi/cycles/` may
+be removed in the retrospective or the revert's pull request; a record
+kept after the cycle closed only reports `ok`. To stop the watch
+altogether, remove the records or turn `BENCH_REAL_MODELS` off, which
+stops the nightly runs that feed it (`bench/README.md`, "The watch after a
+merge").
+
 **The runners stop taking jobs, or their disk fills up.** The runner services
 are user services on this machine: `systemctl --user is-active
 'actions-runner-lafabrique*'` answers `active` for all seven while GitHub shows

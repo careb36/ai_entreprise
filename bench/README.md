@@ -332,6 +332,78 @@ complete run, not one the budget cut) and copy its `<stamp>.json` and
 `<stamp>.md` into `bench/scorecards/real/` in a pull request. Nothing in the
 workflow commits a card.
 
+## The watch after a merge
+
+A merged self-improvement cycle stays measured
+(`docs/design/rsi-loop.md` §1.6, §7 step 8; REQ-19). `scripts/rsi/watch.py`
+takes a cycle record and the nightly real-model scorecards made on `main`
+after the cycle's merge, and while the merged change has fewer than two such
+nights it compares each with the cycle's own baseline B — the medians and
+spread the record carries — with the same rule `scripts/bench/repeated.py`
+and `services/evidence/fitness.py` implement (the watch imports them, it
+does not copy them): a regression must exceed both the threshold of decision
+4 (rate 0.05, rework 0.25, tokens 0.15 and wall-clock 0.25 relative,
+`fitness.THRESHOLDS`) and B's own spread. The wall-clock is judged: the
+nightly runs on the same self-hosted runner.
+
+```bash
+python3 scripts/rsi/watch.py --cycle rsi/cycles/<cycle id>.json \
+  --cards bench/scorecards/real --cards /tmp/rsi/tonight/<stamp>.json --repo .
+```
+
+**The cycle record** (schema and validator: `scripts/rsi/cycle_record.py`,
+the contract PR 8's `scripts/rsi/cycle.py` conforms to) carries the cycle's
+id, the sha merged into `main` and when, the graders' sha, the models B was
+served per role, and B's medians and spread per metric (in the totals, and
+per specification for the ones B measured in full). A person commits the
+record under `rsi/cycles/<cycle id>.json`. A record that does not validate
+is refused: the watch answers `unmeasured` (exit 2), never `ok`.
+
+**Which cards count.** A card counts only when its served model is real
+(`llm` is not `fake`), its stamp is strictly after the merge, its `commit`
+is a full sha that exists in `--repo`, has the merged sha as an ancestor and
+is reachable from the trusted tip of main (`--main-ref`, default
+`origin/main`) — verified with `git merge-base --is-ancestor`, never on the
+card's word, so a run on a feature branch descended from the merge does not
+count — and it carries no
+`graders` block or one whose `sha` is the record's `graders_sha` (a card
+graded by another commit's graders does not count). Everything else is
+excluded and named in the output. A counted card that measures nothing still
+makes its night `unmeasured`, never `ok`: a card served by different models
+than B's (a void pair, REQ-7), a card that names no served model at all, a
+run the token budget cut, or a metric B or the card did not measure are
+unmeasured (the tokens are unmeasured when a turn did not report usage, or
+none did: `scripts/rsi/decide.py`'s rule, imported); a specification B measured in full that did not complete is a
+regression. The cards of one UTC day are one night.
+
+**The decision.** Per night: `ok`, `regressed` or `unmeasured`, with the
+reasons and the numbers. The window closes on the second `ok` night: later
+nights are excluded and named, and do not reopen a closed watch. Overall:
+`regressed` when a night in the window regressed, `ok` when two nights were
+watched with no regression — the cycle closes — and `unmeasured` otherwise. Exit status 0 ok, 1 regressed, 2 unmeasured or
+bad input; the JSON also carries the sha256 of every file read, computed by
+the script.
+
+**The revert pull request.** On a regression, `scripts/rsi/revert.py`
+reverts the merged sha (with `-m 1` when it is a merge commit) on a branch
+`rsi/revert-<cycle id>` cut from `origin/main` in a worktree of its own, so
+one pull request reverts exactly one cycle however many regressed, pushes it and opens a pull request naming the
+cycle, with the nights, the numbers and the reasons, through the gh API with
+the workflow's token. **It never merges anything: a person reviews and
+merges the revert** (`docs/OPERATIONS.md`). A revert that does not apply
+cleanly is aborted and left to a person (exit 2, nothing pushed); a revert
+pull request already open for the cycle is not opened twice, and when gh
+cannot say whether one is open nothing is opened.
+
+**The nightly.** The `watch` job of `.github/workflows/bench.yml` runs
+after `bench-real` whenever that job ran on `main` (a `workflow_dispatch`
+from a branch runs neither the watch nor the revert): it takes tonight's card from the
+`bench-real` artifact plus the committed references in
+`bench/scorecards/real/`, watches every record under `rsi/cycles/`, and puts
+each night's decision in the job summary. A cycle that regressed goes to the
+`revert` job, the workflow's only writer (`contents: write` for the branch
+push, `pull-requests: write` for the pull request).
+
 ## The reference specifications
 
 | Specification | Shape | Criteria |
