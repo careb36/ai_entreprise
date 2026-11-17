@@ -144,6 +144,14 @@ def replay(doc: dict[str, Any], root: Path) -> Any:
     with pytest.MonkeyPatch.context() as patch:
         for name in DAEMON_ENV:
             patch.delenv(name, raising=False)
+        # The daemon keeps state (the repository map's cache, the delivery
+        # journal) under the home directory by default. A runner reuses
+        # pytest's numbered temp paths across runs, so a fixture replayed
+        # in a path an earlier run used would find that run's cache and
+        # answer ``cached: true``. Each replay gets its own state.
+        state = root.parent / "daemon-state"
+        patch.setenv("FABRIQUE_MAP_STATE", str(state / "maps"))
+        patch.setenv("FABRIQUE_DAEMON_STATE", str(state))
         for name, value in (doc.get("daemon_env") or {}).items():
             assert name in DAEMON_ENV, f"not a daemon setting a fixture sets: {name}"
             patch.setenv(name, value)
