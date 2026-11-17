@@ -28,7 +28,7 @@ For support: from the address a person reports to the file to read. The routes a
 | `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete` |
 | `/` | redirects to `/evidence` |
 | `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
-| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`) |
+| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
 | `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` |
 | `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
 | `/companies/new`, `/companies/select` | `CompanyNew` (shows the person's pending invitations above the wizard, `components/PendingInvitations`), `CompanySelect` |
