@@ -1,8 +1,21 @@
 import { useTranslation } from 'react-i18next'
 import { useSodReport } from '../hooks/useDuties'
+import { Bot, CircleHelp, ShieldAlert, ShieldCheck, ShieldX, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { errorDetail, type SodApproval, type SodReport } from '../services/api'
+import { Panel, StatusBadge, type StatusTone } from './ui'
+import { TABLE, TD, TH, TR } from './adminTable'
 
 const STATUSES = ['separated', 'exception', 'violation', 'unattributed', 'not_a_person'] as const
+
+/** Each status as an icon, a word and a tone: never the colour alone. */
+const STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
+  separated: { icon: ShieldCheck, tone: 'success' },
+  exception: { icon: ShieldAlert, tone: 'warning' },
+  violation: { icon: ShieldX, tone: 'danger' },
+  unattributed: { icon: CircleHelp, tone: 'neutral' },
+  not_a_person: { icon: Bot, tone: 'neutral' },
+}
+const UNKNOWN_LOOK: { icon: LucideIcon; tone: StatusTone } = { icon: CircleHelp, tone: 'neutral' }
 
 /**
  * The segregation-of-duties report (issue #543): every approval beside who
@@ -18,63 +31,74 @@ export default function SodReportPanel({ companyId }: { companyId: number | null
   if (!report.data) return null
   const data = report.data
   return (
-    <section className="card p-4 space-y-4" aria-label={t('duties.report.title')}>
-      <h2 className="text-base font-semibold text-gray-100">{t('duties.report.title')}</h2>
-      <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
-        {STATUSES.map(s => (
-          <div key={s}>
-            <dt className="text-xs text-gray-400">{t(`duties.report.status.${s}`)}</dt>
-            <dd className="text-gray-100">{data.summary[s]}</dd>
-          </div>
-        ))}
+    <Panel title={t('duties.report.title')}>
+      <dl className="grid grid-cols-2 gap-px border-b border-surface-700 bg-surface-700 sm:grid-cols-5">
+        {STATUSES.map(s => {
+          const { icon: Icon } = STATUS_LOOK[s]
+          return (
+            <div key={s} className="bg-surface-900 px-3 py-2">
+              <dt className="text-meta flex items-center gap-1"><Icon size={11} aria-hidden="true" />{t(`duties.report.status.${s}`)}</dt>
+              <dd className="mt-0.5 text-lg font-semibold tabular-nums text-gray-100">{data.summary[s]}</dd>
+            </div>
+          )
+        })}
       </dl>
-      <div>
-        <h3 className="text-sm font-semibold text-gray-200">{t('duties.report.violations')}</h3>
-        {data.violations.length === 0
-          ? <p className="text-xs text-gray-400">{t('duties.report.noViolations')}</p>
-          : <Approvals rows={data.violations} label={t('duties.report.violations')} />}
+      <div className="space-y-4 py-3">
+        <div>
+          <h3 className="flex items-center gap-1.5 px-3 text-[13px] font-semibold text-gray-100">
+            <TriangleAlert size={13} aria-hidden="true" className="text-gray-400" />{t('duties.report.violations')}
+          </h3>
+          {data.violations.length === 0
+            ? <p className="px-3 pt-1 text-xs text-gray-400">{t('duties.report.noViolations')}</p>
+            : <Approvals rows={data.violations} label={t('duties.report.violations')} />}
+        </div>
+        <details>
+          <summary className="mx-3 cursor-pointer rounded-sm text-xs text-gray-300 hover:text-white">
+            {t('duties.report.allApprovals', { count: data.approvals.length })}
+          </summary>
+          <Approvals rows={data.approvals} label={t('duties.report.allApprovalsLabel')} />
+        </details>
+        <Matrix matrix={data.matrix} />
+        {data.refusals.length > 0 && (
+          <p className="px-3 text-xs text-gray-400">{t('duties.report.refusals', { count: data.refusals.length })}</p>
+        )}
       </div>
-      <details>
-        <summary className="cursor-pointer text-sm text-gray-200">
-          {t('duties.report.allApprovals', { count: data.approvals.length })}
-        </summary>
-        <Approvals rows={data.approvals} label={t('duties.report.allApprovalsLabel')} />
-      </details>
-      <Matrix matrix={data.matrix} />
-      {data.refusals.length > 0 && (
-        <p className="text-xs text-gray-400">{t('duties.report.refusals', { count: data.refusals.length })}</p>
-      )}
-    </section>
+    </Panel>
   )
 }
 
 function Approvals({ rows, label }: { rows: SodApproval[]; label: string }) {
   const { t } = useTranslation()
   return (
-    <table className="mt-2 w-full text-sm" aria-label={label}>
-      <thead className="text-left text-xs text-gray-400">
-        <tr>
-          <th className="py-1">{t('duties.report.action')}</th>
-          <th>{t('duties.report.subject')}</th>
-          <th>{t('duties.report.requester')}</th>
-          <th>{t('duties.report.approver')}</th>
-          <th>{t('duties.report.statusLabel')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(a => (
-          <tr key={`${a.action}-${a.subject.kind}-${a.subject.id}-${a.at}`} className="border-t border-surface-700">
-            <td className="py-1">{t(`duties.actions.${a.action}`, { defaultValue: a.action })}</td>
-            <td>{a.subject.label}</td>
-            <td>{a.requesters.map(r => r.label ?? '—').join(', ') || '—'}</td>
-            <td>{a.approver.label ?? '—'}</td>
-            <td className={a.status === 'violation' ? 'text-red-400' : a.status === 'exception' ? 'text-amber-300' : ''}>
-              {t(`duties.report.status.${a.status}`)}
-            </td>
+    <div className="mt-2 overflow-x-auto">
+      <table className={TABLE} aria-label={label}>
+        <thead>
+          <tr>
+            <th className={TH}>{t('duties.report.action')}</th>
+            <th className={TH}>{t('duties.report.subject')}</th>
+            <th className={TH}>{t('duties.report.requester')}</th>
+            <th className={TH}>{t('duties.report.approver')}</th>
+            <th className={TH}>{t('duties.report.statusLabel')}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(a => {
+            const look = STATUS_LOOK[a.status] ?? UNKNOWN_LOOK
+            return (
+              <tr key={`${a.action}-${a.subject.kind}-${a.subject.id}-${a.at}`} className={TR}>
+                <td className={TD}>{t(`duties.actions.${a.action}`, { defaultValue: a.action })}</td>
+                <td className={TD}>{a.subject.label}</td>
+                <td className={TD}>{a.requesters.map(r => r.label ?? '—').join(', ') || '—'}</td>
+                <td className={TD}>{a.approver.label ?? '—'}</td>
+                <td className={TD}>
+                  <StatusBadge icon={look.icon} tone={look.tone} label={t(`duties.report.status.${a.status}`)} />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -86,27 +110,33 @@ function Matrix({ matrix }: { matrix: SodReport['matrix'] }) {
     ...matrix.agents.map(a => ({ key: `a${a.role}`, name: a.role, role: t('duties.report.agent'), flag: false, counts: a })),
   ]
   return (
-    <table className="w-full text-sm" aria-label={t('duties.report.matrix')}>
-      <caption className="text-left text-sm font-semibold text-gray-200">{t('duties.report.matrix')}</caption>
-      <thead className="text-left text-xs text-gray-400">
-        <tr>
-          <th className="py-1">{t('duties.report.who')}</th>
-          <th>{t('duties.report.role')}</th>
-          {matrix.duties.map(d => <th key={d}>{t(`duties.duty.${d}`)}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(row => (
-          <tr key={row.key} className="border-t border-surface-700">
-            <td className="py-1">
-              {row.name}
-              {row.flag && <span className="ml-1 text-xs text-amber-300">{t('duties.report.both')}</span>}
-            </td>
-            <td className="text-gray-400">{row.role}</td>
-            {matrix.duties.map(d => <td key={d}>{row.counts[d]}</td>)}
+    <div className="overflow-x-auto">
+      <table className={TABLE} aria-label={t('duties.report.matrix')}>
+        <caption className="px-3 pb-1 text-left text-[13px] font-semibold text-gray-100">{t('duties.report.matrix')}</caption>
+        <thead>
+          <tr>
+            <th className={TH}>{t('duties.report.who')}</th>
+            <th className={TH}>{t('duties.report.role')}</th>
+            {matrix.duties.map(d => <th key={d} className={`${TH} text-right`}>{t(`duties.duty.${d}`)}</th>)}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.key} className={TR}>
+              <td className={TD}>
+                {row.name}
+                {row.flag && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 text-[11px] text-amber-300">
+                    <ShieldAlert size={11} aria-hidden="true" />{t('duties.report.both')}
+                  </span>
+                )}
+              </td>
+              <td className={`${TD} text-gray-400`}>{row.role}</td>
+              {matrix.duties.map(d => <td key={d} className={`${TD} text-right tabular-nums`}>{row.counts[d]}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

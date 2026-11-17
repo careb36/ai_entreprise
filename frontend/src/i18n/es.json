@@ -485,7 +485,9 @@
         "label": "Experto",
         "experience": "Más de 10 años"
       }
-    }
+    },
+    "stepsLabel": "Pasos del asistente",
+    "stepDone": "(hecho)"
   },
   "sprintBoard": {
     "title": "Iniciar Nuevo Sprint",
@@ -1244,6 +1246,11 @@
     "retry": "Intentar de nuevo",
     "loading": "Cargando tu cuenta…",
     "selectCompany": "Selecciona una empresa",
+    "selectCompanySubtitle": "Elige la empresa en la que trabajar. Puedes cambiarla desde el menú de empresas cuando quieras.",
+    "noCompanies": "Todavía no eres miembro de ninguna empresa.",
+    "yourCompanies": "Tus empresas",
+    "companyCount_one": "{{count}} empresa",
+    "companyCount_other": "{{count}} empresas",
     "productName": "La Fabrique"
   },
   "agentsConfig": {
@@ -1333,7 +1340,12 @@
     "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia.",
     "connectionGroup": "Conexión de la empresa: {{connection}}",
     "connectionModelHint": "Corre por la conexión {{connection}} de la empresa; la clave queda en la empresa.",
-    "clearSearch": "Borrar la búsqueda"
+    "clearSearch": "Borrar la búsqueda",
+    "agentCount_one": "{{count}} agente",
+    "agentCount_other": "{{count}} agentes",
+    "shownCount": "{{shown}} de {{total}} agentes mostrados",
+    "toolbarLabel": "Buscar y filtrar agentes",
+    "roleFilterLabel": "Filtrar por rol"
   },
   "common": {
     "loading": "Cargando...",
@@ -1501,7 +1513,9 @@
     "pendingRow": "{{email}} como {{role}}",
     "revoke": "Revocar",
     "revokeLabel": "Revocar la invitación de {{email}}",
-    "revokeError": "No se pudo revocar: {{message}}"
+    "revokeError": "No se pudo revocar: {{message}}",
+    "pendingCount_one": "{{count}} invitación pendiente",
+    "pendingCount_other": "{{count}} invitaciones pendientes"
   },
   "github": {
     "title": "Integración con GitHub",
@@ -2290,7 +2304,9 @@
       "baseUrlPlaceholder": "obligatoria para un endpoint compatible con OpenAI",
       "apiKey": "Clave de API",
       "keyNote": "La clave se guarda cifrada y no se vuelve a mostrar. Los servidores locales (Ollama, LM Studio, vLLM) no necesitan clave.",
-      "connect": "Conectar"
+      "connect": "Conectar",
+      "count_one": "{{count}} conexión",
+      "count_other": "{{count}} conexiones"
     },
     "choices": {
       "title": "Modelos por rol",
@@ -2684,7 +2700,9 @@
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
       "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
-    }
+    },
+    "connectionTitle": "Proveedor de identidad",
+    "accessTitle": "Miembros e inicio de sesión"
   },
   "documentation": {
     "title": "Documentación",
@@ -2812,7 +2830,8 @@
       "postCredential": "URL del webhook entrante",
       "signingSecret": "Token de seguridad del webhook saliente",
       "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
-    }
+    },
+    "selectCompany": "Selecciona una empresa para vincular tus cuentas de chat."
   },
   "taskRelations": {
     "title": "Tareas relacionadas",
@@ -2945,7 +2964,9 @@
       "seq": "Fila",
       "state": "Estado",
       "anchoredAt": "Anclado el"
-    }
+    },
+    "anchorCount_one": "{{count}} ancla",
+    "anchorCount_other": "{{count}} anclas"
   },
   "sprintProgress": {
     "title": "Declarado como hecho frente a verificado",
@@ -3007,7 +3028,9 @@
     "member": "Miembro",
     "ownRole": "Rol propio",
     "effectiveRole": "Rol efectivo",
-    "inTeams": "Equipos"
+    "inTeams": "Equipos",
+    "memberCount_one": "{{count}} miembro",
+    "memberCount_other": "{{count}} miembros"
   },
   "usage": {
     "title": "Uso",
@@ -3458,7 +3481,10 @@
     "loadError": "No se pudieron cargar tus invitaciones: {{message}}",
     "respondError": "No se pudo responder a la invitación: {{message}}",
     "tokenNotFound": "Este enlace no corresponde a una invitación pendiente para la dirección con la que has iniciado sesión.",
-    "tokenExpired": "Esta invitación ha caducado. Pide una nueva."
+    "tokenExpired": "Esta invitación ha caducado. Pide una nueva.",
+    "subtitle": "Invitaciones para unirte a una empresa, a la espera de tu respuesta.",
+    "count_one": "{{count}} invitación",
+    "count_other": "{{count}} invitaciones"
   },
   "findings": {
     "title": "Hallazgos",

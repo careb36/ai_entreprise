@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Loader2, Plug, Trash2, XCircle } from 'lucide-react'
+import { CircleCheck, CircleDashed, CirclePower, CircleX, Loader2, Plug, Trash2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { modelsApi, OPENAI_COMPATIBLE, type NewConnection, type ProviderConnection } from '../services/models'
+import { CountPill, EmptyState, Panel, StatusBadge } from './ui'
+
+function Loader({ size }: { size: number }) {
+  return <Loader2 size={size} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+}
 
 /** The query keys every part of the Models page refreshes after a change. */
 export const MODEL_QUERY_KEYS = ['model-connections', 'company-models', 'model-suggestions', 'model-settings']
@@ -34,46 +39,45 @@ export default function ModelConnections({ companyId, canManage }: { companyId: 
   const connections = query.data?.providers ?? []
 
   return (
-    <section aria-labelledby="model-connections" className="card space-y-4">
-      <div className="flex items-center gap-2">
-        <Plug size={18} className="text-brand-400" />
-        <h2 id="model-connections" className="text-lg font-semibold">{t('models.connections.title')}</h2>
-      </div>
-      <p className="text-sm text-gray-400">{t('models.connections.subtitle')}</p>
-      {error && <div role="alert" className="alert-error text-sm">{error}</div>}
+    <Panel title={t('models.connections.title')}
+      count={query.data && <CountPill count={connections.length} label={t('models.connections.count', { count: connections.length })} />}>
+      <p className="px-3 pt-3 text-xs text-gray-400">{t('models.connections.subtitle')}</p>
+      {error && <div className="px-3 pt-3"><div role="alert" className="alert-error text-sm">{error}</div></div>}
       {query.isLoading ? (
-        <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-          <Loader2 size={15} className="animate-spin" /> {t('common.loading')}
+        <div role="status" className="flex items-center gap-2 px-3 py-3 text-xs text-gray-400">
+          <Loader size={13} /> {t('common.loading')}
         </div>
       ) : query.isError ? (
-        <div role="alert" className="alert-error text-sm">{errorDetail(query.error)}</div>
+        <div className="p-3"><div role="alert" className="alert-error text-sm">{errorDetail(query.error)}</div></div>
       ) : connections.length === 0 ? (
-        <p className="text-sm text-gray-400">{t('models.connections.none')}</p>
+        <EmptyState icon={Plug} title={t('models.connections.none')} />
       ) : (
-        <ul className="divide-y divide-surface-700">
+        <ul className="data-list mt-2 border-t border-surface-700">
           {connections.map(row => (
-            <li key={row.id} className="flex flex-wrap items-center gap-3 py-3">
+            <li key={row.id} className="data-row flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
-                <div className="font-medium">
-                  {row.name} <span className="text-xs text-gray-400">{row.provider}</span>
-                  {!row.enabled && <span className="badge ml-2 bg-gray-800 text-gray-400">{t('models.connections.off')}</span>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-semibold text-gray-100">{row.name}</span>
+                  <span className="chip">{row.provider}</span>
+                  {!row.enabled && <StatusBadge icon={CirclePower} label={t('models.connections.off')} />}
                 </div>
-                <div className="truncate text-xs text-gray-500">{row.base_url}</div>
+                <div className="text-meta mt-0.5 truncate font-mono">{row.base_url}</div>
                 <ValidationState row={row} />
               </div>
               {canManage && (
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="btn-secondary btn-sm" disabled={validate.isPending}
+                <div className="flex flex-wrap gap-1">
+                  <button type="button" className="btn-tool border border-surface-700" disabled={validate.isPending}
                     onClick={() => validate.mutate(row.id)}>
                     {t('models.connections.validate')}
                   </button>
-                  <button type="button" className="btn-ghost btn-sm" disabled={toggle.isPending} onClick={() => toggle.mutate(row)}>
+                  <button type="button" className="btn-tool" disabled={toggle.isPending} onClick={() => toggle.mutate(row)}>
                     {row.enabled ? t('models.connections.turnOff') : t('models.connections.turnOn')}
                   </button>
-                  <button type="button" className="btn-danger btn-sm" disabled={remove.isPending}
+                  <button type="button" className="btn-tool hover:text-red-300" disabled={remove.isPending}
                     aria-label={t('models.connections.removeNamed', { name: row.name })}
+                    title={t('models.connections.removeNamed', { name: row.name })}
                     onClick={() => { if (window.confirm(t('models.connections.confirmRemove', { name: row.name }))) remove.mutate(row.id) }}>
-                    <Trash2 size={14} />
+                    <Trash2 size={13} aria-hidden="true" />
                   </button>
                 </div>
               )}
@@ -82,7 +86,7 @@ export default function ModelConnections({ companyId, canManage }: { companyId: 
         </ul>
       )}
       {canManage && <NewConnectionForm companyId={companyId} onAdded={onSuccess} />}
-    </section>
+    </Panel>
   )
 }
 
@@ -91,18 +95,22 @@ function ValidationState({ row }: { row: ProviderConnection }) {
   if (row.validation_ok === true) {
     return (
       <div className="mt-1 flex items-center gap-1 text-xs text-emerald-300">
-        <CheckCircle2 size={13} /> {t('models.connections.validated', { count: row.listed_models.length })}
+        <CircleCheck size={12} aria-hidden="true" /> {t('models.connections.validated', { count: row.listed_models.length })}
       </div>
     )
   }
   if (row.validation_ok === false) {
     return (
       <div className="mt-1 flex items-center gap-1 text-xs text-red-300">
-        <XCircle size={13} /> {t('models.connections.failed', { detail: row.validation_detail ?? '' })}
+        <CircleX size={12} aria-hidden="true" /> {t('models.connections.failed', { detail: row.validation_detail ?? '' })}
       </div>
     )
   }
-  return <div className="mt-1 text-xs text-gray-400">{t('models.connections.notValidated')}</div>
+  return (
+    <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+      <CircleDashed size={12} aria-hidden="true" /> {t('models.connections.notValidated')}
+    </div>
+  )
 }
 
 function NewConnectionForm({ companyId, onAdded }: { companyId: number; onAdded: () => void }) {
@@ -127,9 +135,9 @@ function NewConnectionForm({ companyId, onAdded }: { companyId: number; onAdded:
     setForm(current => ({ ...current, [key]: event.target.value }))
 
   return (
-    <form aria-labelledby="new-connection" className="space-y-3 border-t border-surface-700 pt-4"
+    <form aria-labelledby="new-connection" className="space-y-3 border-t border-surface-700 p-3"
       onSubmit={event => { event.preventDefault(); if (form.provider.trim()) connect.mutate() }}>
-      <h3 id="new-connection" className="font-medium">{t('models.connections.add')}</h3>
+      <h3 id="new-connection" className="text-[13px] font-semibold text-gray-100">{t('models.connections.add')}</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="input-label">{t('models.connections.provider')}</span>
