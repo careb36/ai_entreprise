@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Loader2 } from 'lucide-react'
+import { ArrowLeft, CircleAlert, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../store/useAuthStore'
+import { AuthCard } from './auth/AuthCard'
 
 /** The codes the backend's SSO callback can send back (`routers/sso.py`). */
 const KNOWN_ERRORS = new Set([
@@ -36,25 +37,26 @@ export default function SsoComplete() {
 
   if (!error) {
     return (
-      <div className="page-container max-w-md" role="status">
-        <Loader2 className="animate-spin text-brand-400 mb-3" size={22} />
-        <p className="text-gray-300">{t('sso.completing', { defaultValue: 'Signing you in…' })}</p>
-      </div>
+      <AuthCard>
+        <div role="status" className="flex items-center gap-3 text-[13px] text-gray-300">
+          <Loader2 aria-hidden="true" className="flex-shrink-0 animate-spin text-brand-400 motion-reduce:animate-none" size={20} />
+          <p>{t('sso.completing', { defaultValue: 'Signing you in…' })}</p>
+        </div>
+      </AuthCard>
     )
   }
 
   const reason = KNOWN_ERRORS.has(error) ? error : 'unknown'
   return (
-    <div className="page-container max-w-md">
-      <h1 className="text-2xl font-bold text-white mb-4">
-        {t('sso.failedTitle', { defaultValue: 'Single sign-on did not complete' })}
-      </h1>
-      <p role="alert" className="text-red-300 mb-4">
-        {t(`sso.errors.${reason}`, { defaultValue: t('sso.errors.unknown', { defaultValue: 'The sign-in could not be completed. Try again.' }) })}
+    <AuthCard title={t('sso.failedTitle', { defaultValue: 'Single sign-on did not complete' })}>
+      <p role="alert" className="alert-error mb-5 p-3 text-[13px]">
+        <CircleAlert size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+        <span>{t(`sso.errors.${reason}`, { defaultValue: t('sso.errors.unknown', { defaultValue: 'The sign-in could not be completed. Try again.' }) })}</span>
       </p>
-      <Link className="text-brand-300" to="/login">
+      <Link className="btn-secondary w-full" to="/login">
+        <ArrowLeft size={15} aria-hidden="true" />
         {t('sso.backToLogin', { defaultValue: 'Back to log in' })}
       </Link>
-    </div>
+    </AuthCard>
   )
 }
