@@ -7,7 +7,7 @@ part as case-sensitive, but no provider a person signs up with does, and two
 accounts that differ only in case are a takeover waiting to happen. Nothing
 else is rewritten (no dot or ``+tag`` folding, no Unicode normalisation), so
 the rule stays predictable. Registration, sign-in, invitations and every
-lookup by address go through it; migration 0044 applied it to the rows
+lookup by address go through it; migration 0045 applied it to the rows
 already stored, and a unique index on ``lower(email)`` keeps it.
 """
 

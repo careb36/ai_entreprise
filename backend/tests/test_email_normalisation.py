@@ -2,7 +2,7 @@
 
 An email is normalised by stripping the spaces around it and lower-casing it,
 on registration, sign-in, invitation and every lookup, so ``Ana@x`` and
-``ana@x`` are one account. Migration 0044 normalises the rows already there
+``ana@x`` are one account. Migration 0045 normalises the rows already there
 and stops, naming the ids, when two of them collide (it never merges or
 deletes an account), then adds a unique index on ``lower(email)``.
 """

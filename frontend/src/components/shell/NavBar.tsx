@@ -145,6 +145,7 @@ export function NavBar() {
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
                   <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
+                  <Link role="menuitem" to="/company/findings" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.findings')}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>

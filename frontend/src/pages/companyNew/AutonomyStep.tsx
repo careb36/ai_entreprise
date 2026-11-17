@@ -19,6 +19,7 @@ export function AutonomyStep({ autonomyLevel, setAutonomyLevel }: {
       {autonomyLevels.map(level => (
         <button key={level.value} type="button"
           onClick={() => setAutonomyLevel(level.value)}
+          aria-pressed={autonomyLevel === level.value}
           className={`w-full text-left rounded-xl border-2 p-4 transition-all ${autonomyLevel === level.value ? level.color + ' border-opacity-100' : 'border-surface-700 bg-surface-800/30 hover:border-surface-600'}`}>
           <div className="flex items-start gap-3">
             <span className="text-2xl flex-shrink-0 mt-0.5">{level.icon}</span>

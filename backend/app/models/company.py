@@ -153,7 +153,7 @@ class User(SQLModel, table=True):
     password_hash: str  # bcrypt-hashed; raw password is never stored
 
 
-# One account per address whatever its case (migration 0044): the app stores
+# One account per address whatever its case (migration 0045): the app stores
 # the normalised address (services/contracts/emails.py), and this index
 # refuses a second row that differs from it only in case.
 Index("ux_users_email_lower", func.lower(User.email), unique=True)

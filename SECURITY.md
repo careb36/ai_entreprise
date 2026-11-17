@@ -92,7 +92,7 @@ OpenID Connect provider (single sign-on, below).
   whose cost is below the current one (`backend/app/routers/auth.py`).
 - **One account per address.** Emails are stripped and lower-cased wherever
   they are compared (`services/contracts/emails.py`: registration, sign-in,
-  invitations, lookups); migration 0044 normalised the stored rows (stopping,
+  invitations, lookups); migration 0045 normalised the stored rows (stopping,
   never merging, on a collision) and a unique index on `lower(email)` keeps
   it.
 - **Guessing and enumeration** (issue #541; WSTG-v42-ATHN-03, IDNT-04).
@@ -103,7 +103,9 @@ OpenID Connect provider (single sign-on, below).
   most `LOGIN_BACKOFF_MAX_SECONDS` (15 minutes); a locked account answers 429
   with `Retry-After` before its password is checked, and a success clears the
   record (`services/platform/login_throttle.py`, keyed by the sha256 of the
-  email whether or not an account exists). `POST /v1/auth/register` is limited
+  email whether or not an account exists; at most 10,000 records, and making
+  room drops one without a running lock first, so guesses spread over other
+  addresses cannot evict the attacked account's lock). `POST /v1/auth/register` is limited
   per address (`REGISTER_RATE_LIMIT`, 5/minute) and answers the same body for
   a new and an existing email, after a bcrypt hash and an insert either way
   (the unique index refuses the taken one), leaving the existing account
@@ -138,7 +140,10 @@ OpenID Connect provider (single sign-on, below).
   other (issue #541, WSTG-SESS-10 at latest@87cf4a4). Tokens issued before
   `iss` and `aud` existed are refused: a browser renews its access token from
   the refresh cookie without noticing, a script's 15-minute Bearer token logs
-  in again. There is no `nbf` claim.
+  in again. There is no `nbf` claim. A `JWT_SECRET_KEY` shorter than the
+  hash (32 bytes for HS256, 48 for HS384, 64 for HS512; RFC 7518 §3.2)
+  counts as unset, so login answers 503 rather than sign with a key that can
+  be guessed offline from one token (`auth_tokens.MIN_KEY_BYTES`).
 - **Browser sessions** (issue #524; design and threat model in
   `docs/design/SESSIONS.md`). Password login and the SSO exchange set three
   cookies and return no token (`backend/app/session_cookies.py`):
@@ -353,11 +358,23 @@ on every answer but the documentation, unless the route set its own (the
 Glassroom stream's `no-cache`), so no authenticated answer stays in a cache.
 `/docs`, `/redoc` and `/openapi.json` answer 404 unless
 `API_DOCS_ENABLED=true` (WSTG-v42-CONF-05): off by default, turned on by
-`docker-compose.yml` for local development only. The repository ships no
-production server for the frontend (the compose service runs the Vite dev
-server; the built `dist/` is served by whatever the operator puts in front),
-so the frontend's headers are the ingress's job, with the list below; a CI
-check waits for that server to exist. CORS allows only `CORS_ORIGINS`, with
+`docker-compose.yml` for local development only. A request that fails
+validation answers 422 with each error's `type`, `loc` and `msg`, never the
+value sent (FastAPI's `input` and `ctx` are dropped: the value can be a
+password or a key; `exception_handlers.validation_errors`, WSTG-v42-ERRH-01).
+The repository ships no production server for the web frontend (the compose
+service runs the Vite dev server; the built `dist/` is served by whatever the
+operator puts in front). The Vite dev server and `vite preview` send
+`Content-Security-Policy: frame-ancestors 'none'; object-src 'none';
+base-uri 'self'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin` and
+the `Permissions-Policy` (`frontend/vite.config.ts`, `WEB_PAGE_HEADERS`,
+checked against a running dev server by `frontend/vite.config.test.ts`), so
+no other site can frame the page where approvals and undo are clicked;
+scripts stay under the `<meta>` policy of `index.html`, which the dev
+server's inline preamble needs. Behind any other server, the frontend's
+headers are the ingress's job, with the list below. The desktop app's local
+server sends its own stricter set (`frontend/electron/local-server.ts`). CORS allows only `CORS_ORIGINS`, with
 credentials only when they are explicit origins. The frontend holds no
 credential (#524): the access and refresh tokens are `HttpOnly` cookies
 (§3.1), and `frontend/src/store/useAuthStore.ts` persists only the profile,
@@ -1020,7 +1037,8 @@ Before the stack serves anyone but the person running it:
       works (`Viewer` by default; a Manager at most, never above the creator's
       own role), an expiry (90 days by default, at most 365) and revoked when
       no longer used. A token cannot create tokens, and the audit rows its
-      requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set and
+      requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set (at
+      least 32 bytes for HS256, or the backend treats it as unset) and
       `AUTH_REQUIRED` on.
 - [ ] **Browser sessions.** The frontend and the API served over https under
       one site, `SESSION_COOKIE_SECURE` left on, `CORS_ORIGINS` listing the

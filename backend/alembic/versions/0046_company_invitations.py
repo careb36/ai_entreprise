@@ -6,10 +6,10 @@ adds nobody; the invitee's acceptance creates the membership
 
 New table; no existing row changes.
 
-Follows 0044 (one account per email address).
+Follows 0045 (one account per email address).
 
-Revision ID: 0045
-Revises: 0044
+Revision ID: 0046
+Revises: 0045
 Create Date: 2026-11-17 13:05:00 UTC
 """
 
@@ -20,8 +20,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0045"
-down_revision = "0044"
+revision = "0046"
+down_revision = "0045"
 branch_labels = None
 depends_on = None
 

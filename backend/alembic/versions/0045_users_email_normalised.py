@@ -8,9 +8,11 @@ the migration stops and names each address with the ids of the accounts that
 share it. It never merges or deletes an account; an operator decides which to
 keep (``docs/OPERATIONS.md``, The email migration stops on duplicates).
 
-Follows 0043 (the findings of the self-improvement loop).
+Follows 0043 (the findings of the self-improvement loop). Numbered 0045
+because 0044 is taken by `rsi_cycles` (PR #632); whichever merges second
+points this `down_revision` at the other so the chain stays linear.
 
-Revision ID: 0044
+Revision ID: 0045
 Revises: 0043
 Create Date: 2026-11-17 13:00:00 UTC
 """
@@ -23,7 +25,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0044"
+revision = "0045"
 down_revision = "0043"
 branch_labels = None
 depends_on = None
@@ -49,7 +51,7 @@ def upgrade() -> None:
             for address, ids in sorted(collisions.items())
         )
         raise RuntimeError(
-            "migration 0044 stopped: these accounts share an email address once "
+            "migration 0045 stopped: these accounts share an email address once "
             f"it is lower-cased and stripped ({listed}). Nothing was changed. "
             "Keep one account per address (change the others' email, or move "
             "their memberships and delete them) and run the migration again; "

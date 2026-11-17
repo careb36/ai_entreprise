@@ -41,6 +41,8 @@ Copy `.env.example` to `.env` and fill in:
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+  A key shorter than the algorithm's hash (32 bytes for `HS256`, 48 for
+  `HS384`, 64 for `HS512`) counts as unset (issue #541, WSTG-SESS-10).
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
 - `JWT_ALGORITHM` — default `HS256`; only `HS256`, `HS384` or `HS512` is
   accepted, anything else (`none`, an asymmetric name) refuses to sign or
