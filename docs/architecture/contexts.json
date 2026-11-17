@@ -979,7 +979,7 @@
       "test_routing_record.py": [
         "models"
       ],
-      "test_rsi_cycle.py": [
+      "test_rsi_backend_cycle.py": [
         "management"
       ],
       "test_rsi_cycle_import.py": [
