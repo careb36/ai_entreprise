@@ -38,17 +38,17 @@ export function StatusPill({ t }: { t: Translate }) {
       <button type="button" onClick={() => setOpen(value => !value)}
         onKeyDown={event => { if (event.key === 'Escape') setOpen(false) }}
         aria-expanded={open} aria-controls="service-status"
-        className="flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400 hover:border-surface-600">
-        <span className={online ? 'status-dot-pulse' : 'w-2 h-2 rounded-full bg-red-500'} />
+        className="btn-tool border border-surface-700 text-gray-300">
+        <span aria-hidden="true" className={online ? 'status-dot-pulse motion-reduce:animate-none' : 'status-dot bg-red-500'} />
         {online ? t('nav.online', { defaultValue: 'Online' }) : t('nav.offline', { defaultValue: 'Offline' })}
       </button>
       {open && (
         <div id="service-status" role="dialog" aria-label={t('health.title', { defaultValue: 'Service status' })}
-          className="absolute right-0 top-full z-20 mt-2 w-72 rounded-lg border border-surface-700 bg-surface-900 p-3 text-xs shadow-lg">
+          className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-surface-700 bg-surface-900 p-3 text-xs shadow-card-md">
           <p className="mb-2 font-semibold text-gray-200">{t('health.title', { defaultValue: 'Service status' })}</p>
           {deep.isLoading ? (
             <p role="status" className="flex items-center gap-2 text-gray-400">
-              <Loader2 size={12} className="animate-spin" /> {t('health.checking', { defaultValue: 'Checking services…' })}
+              <Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> {t('health.checking', { defaultValue: 'Checking services…' })}
             </p>
           ) : deep.isError || !deep.data ? (
             <p role="alert" className="text-red-300">{t('health.error', { defaultValue: 'Could not check the services.' })}</p>

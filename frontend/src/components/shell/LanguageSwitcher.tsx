@@ -17,9 +17,9 @@ export function LanguageSwitcher() {
     <button
       onClick={toggle}
       aria-label={t(`language.switchTo.${next}`)}
-      className="btn-ghost btn-sm flex items-center gap-1.5 border border-surface-700"
+      className="btn-tool border border-surface-700"
     >
-      <Globe size={14} />
+      <Globe size={13} aria-hidden="true" />
       {current.toUpperCase()}
     </button>
   )

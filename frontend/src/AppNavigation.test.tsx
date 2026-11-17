@@ -370,7 +370,7 @@ describe('app navigation', () => {
           expect(company).not.toHaveAttribute('aria-current')
         } else {
           expect(company).toBe(current[0])
-          expect(company.className).toContain('bg-brand-600/20')
+          expect(company.className).toContain('nav-link-current')
           expect(within(primary).queryAllByRole('link').filter(link => link.hasAttribute('aria-current'))).toHaveLength(0)
         }
       })
