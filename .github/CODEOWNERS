@@ -93,6 +93,7 @@
 /backend/tests/test_agent_tools_delivery.py      @careb36
 /backend/tests/test_app_check.py                 @careb36
 /backend/tests/test_board_moves_carry.py         @careb36
+/backend/tests/test_board_observed.py            @careb36
 /backend/tests/test_browser_image.py             @careb36
 /backend/tests/test_browser_smoke.py             @careb36
 /backend/tests/test_code_graph.py                @careb36

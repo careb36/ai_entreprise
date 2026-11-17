@@ -586,6 +586,105 @@
     "success": "Sprint started successfully!",
     "error": "Failed to start sprint"
   },
+  "kanbanBoard": {
+    "toolbar": {
+      "total_one": "{{count}} task",
+      "total_other": "{{count}} tasks",
+      "compact": "Compact cards",
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
+      "activity": "Activity",
+      "search": "Search tasks",
+      "searchPlaceholder": "Title or #number",
+      "role": "Filter by role",
+      "allRoles": "All roles",
+      "presets": "Presets",
+      "clear": "Clear filters",
+      "showing_one": "{{shown}} of {{count}} task shown",
+      "showing_other": "{{shown}} of {{count}} tasks shown"
+    },
+    "preset": {
+      "all": "All",
+      "needsPerson": "Needs a person",
+      "highRisk": "High risk",
+      "waiting": "Waiting on tasks"
+    },
+    "keyboardHint": "To move a task, focus it and press Alt with the left or right arrow: it goes to the previous or next column. Press / to search the board.",
+    "columnsRegion": "Board columns",
+    "column": {
+      "count_one": "{{count}} task",
+      "count_other": "{{count}} tasks",
+      "countFiltered_one": "{{shown}} of {{count}} task shown",
+      "countFiltered_other": "{{shown}} of {{count}} tasks shown",
+      "needsPerson_one": "{{count}} task needs a person",
+      "needsPerson_other": "{{count}} tasks need a person",
+      "collapse": "Collapse {{column}}",
+      "expand": "Expand {{column}}",
+      "emptyFiltered": "No matching tasks",
+      "dropHere": "Drop the task here"
+    },
+    "card": {
+      "observed": "Observed",
+      "observedHint": "What the Verifier and the task's record show, never what an agent said",
+      "reported": "Reported",
+      "reportedHint": "Read from the task's messages: what agents said, not verified",
+      "risk": "Risk {{tier}}",
+      "held": "Held: protected path",
+      "heldTitle": "The delivery changes protected paths, so a person decides: {{paths}}",
+      "declared": "Declared: protected path",
+      "declaredTitle": "The producer says the delivery changes protected paths; the Verifier did not see them written: {{paths}}",
+      "graderTitle": "The Verifier classed a changed path in the grader area: the graders, the evidence, CI or the rules",
+      "needsPerson": "Needs a person",
+      "needsPersonTitle": "Blocked, and nothing the task worker does on its own moves it",
+      "unassigned": "Unassigned",
+      "assignee": "Assigned to {{role}}",
+      "priorityTitle": "Priority: {{priority}}",
+      "updated": "Updated {{time}}",
+      "messages_one": "{{count}} message",
+      "messages_other": "{{count}} messages",
+      "moved": "\"{{title}}\" moved to {{column}}."
+    },
+    "area": {
+      "grader": "Grader area",
+      "secrets": "Secrets",
+      "CI_pipeline": "CI pipeline",
+      "authentication": "Authentication",
+      "payments": "Payments",
+      "shell_script": "Shell script",
+      "database_migration": "Database migration",
+      "dependencies": "Dependencies",
+      "containers_and_infrastructure": "Containers and infrastructure"
+    },
+    "riskTier": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "chip": {
+      "label": "Task {{id}}: {{title}}",
+      "labelWithSignal": "Task {{id}}: {{title}} ({{signal}})",
+      "signal": {
+        "held": "needs a person",
+        "blocked": "blocked",
+        "refuted": "refuted",
+        "verified": "verified"
+      }
+    },
+    "activity": {
+      "title": "Activity",
+      "close": "Close activity",
+      "claimNote": "The latest messages on this sprint's tasks. A message is a claim, not a verified fact: what was observed is on the cards.",
+      "empty": "No messages yet.",
+      "on": "on",
+      "claim": "Claim"
+    }
+  },
   "kanban": {
     "title": "Sprint Board",
     "todo": "To Do",

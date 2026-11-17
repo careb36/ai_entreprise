@@ -37,7 +37,7 @@ from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
 from services.planning import arch_author, spec_check, spec_planning, sprint_team
 from services.platform import sod
-from services.tasks import dependencies, sprint_board, task_events
+from services.tasks import dependencies, sprint_board, task_events, task_filter
 from services.tasks.board import (
     count_architect_advice,
     count_console_advice,
@@ -430,6 +430,10 @@ async def get_sprint_board(
         select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
     ).all()
     by_id = {i.id: i for i in items_db}
+    # What was observed, apart from the row (and its claims) by design.
+    observed = task_filter.board_observations(
+        session, sprint.company_id, list(items_db)
+    )
 
     items = [
         {
@@ -446,6 +450,8 @@ async def get_sprint_board(
             "waiting_for": dependencies.waiting_for(by_id, i),
             "created_at": str(i.created_at),
             "updated_at": str(i.updated_at),
+            "observed": observed[i.id]["observed"],
+            "reported": observed[i.id]["reported"],
         }
         for i in items_db
     ]
