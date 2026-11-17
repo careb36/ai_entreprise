@@ -507,6 +507,10 @@
         "evidence",
         "loop"
       ],
+      "test_board_observed.py": [
+        "evidence",
+        "loop"
+      ],
       "test_brief_mail.py": [
         "management"
       ],
