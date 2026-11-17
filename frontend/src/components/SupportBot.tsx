@@ -270,8 +270,8 @@ export const SupportBot: React.FC = () => {
           <div className="px-4 py-3 bg-indigo-600 text-white flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               {view !== 'chat' && (
-                <button onClick={() => setView('chat')} className="hover:bg-indigo-500 p-0.5 rounded shrink-0">
-                  <ChevronRight size={16} className="rotate-180" />
+                <button type="button" aria-label={t('common.back')} onClick={() => setView('chat')} className="hover:bg-indigo-500 p-0.5 rounded shrink-0">
+                  <ChevronRight size={16} className="rotate-180" aria-hidden="true" />
                 </button>
               )}
               <div className="min-w-0">
@@ -309,13 +309,13 @@ export const SupportBot: React.FC = () => {
             </div>
             <div className="p-3 border-t bg-white">
               <div className="flex gap-2 items-end">
-                <textarea ref={textareaRef} value={input}
+                <textarea ref={textareaRef} value={input} aria-label={t('support.inputLabel')}
                   onChange={handleInputChange} onKeyDown={handleKeyDown}
                   placeholder={t('support.inputPlaceholder')} rows={2}
                   className="flex-1 p-2 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-indigo-400 outline-none" />
-                <button onClick={handleSend} disabled={isSending || !input.trim()}
+                <button type="button" aria-label={t('support.send')} onClick={handleSend} disabled={isSending || !input.trim()}
                   className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 self-end">
-                  <Send size={17} />
+                  <Send size={17} aria-hidden="true" />
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-1">{t('support.enterToSend')}</p>
@@ -382,10 +382,11 @@ export const SupportBot: React.FC = () => {
             <div className="flex flex-col h-[340px]">
               <div className="p-3 border-b flex gap-2">
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  aria-label={t('support.emailToSearch')}
                   onKeyDown={e => e.key==='Enter' && loadTickets()}
                   placeholder={t('support.emailToSearch')}
                   className="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
-                <button onClick={() => loadTickets()} disabled={!email.trim() || loadingTickets}
+                <button type="button" aria-label={t('support.searchTickets')} onClick={() => loadTickets()} disabled={!email.trim() || loadingTickets}
                   className="p-2 bg-indigo-600 text-white rounded-lg disabled:opacity-40">
                   {loadingTickets ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
                 </button>
