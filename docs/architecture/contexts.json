@@ -812,6 +812,9 @@
       "test_mcp_router.py": [
         "tools"
       ],
+      "test_mcp_security.py": [
+        "tools"
+      ],
       "test_mcp_tools.py": [
         "evidence",
         "loop"

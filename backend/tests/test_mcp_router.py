@@ -12,13 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 import auth_tokens
 from config import settings
+from egress_fakes import FakeResolver
 from models.company import Company, CompanyMember, User
+from services.platform import egress
 from services.tools import mcp_client
+
+GITHUB_SERVER = "/opt/mcp/bin/server-github"
 
 
 @pytest.fixture(autouse=True)
 def auth_on(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
+    # The operator allows the one stdio command named here; DNS answers public.
+    monkeypatch.setattr(settings, "MCP_STDIO_ALLOWED_COMMANDS", GITHUB_SERVER)
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
     key = secrets.token_urlsafe(48)
     monkeypatch.setattr(auth_tokens, "_configured_key", lambda: key)
 
@@ -59,8 +66,8 @@ _DEFINITION = {
         "headers": {"Authorization": "Bearer placeholder-qz"},
     },
     "gh": {
-        "command": "npx",
-        "args": ["server-github"],
+        "command": GITHUB_SERVER,
+        "args": ["stdio"],
         "env": {"GITHUB_TOKEN": "ghp_secret"},
     },
 }
@@ -240,7 +247,7 @@ def test_the_tools_endpoint_reports_what_the_server_advertises_or_why_not(
 
     monkeypatch.setattr(mcp_client, "list_tools", fake_list)
     resp = test_client.get(
-        f"/v1/mcp/servers/{server_id}/tools", headers=company["viewer"]
+        f"/v1/mcp/servers/{server_id}/tools", headers=company["manager"]
     )
     assert resp.status_code == 200
     assert resp.json() == {
@@ -266,9 +273,9 @@ def test_the_tools_endpoint_reports_what_the_server_advertises_or_why_not(
 
     monkeypatch.setattr(mcp_client, "list_tools", failing)
     resp = test_client.get(
-        f"/v1/mcp/servers/{server_id}/tools", headers=company["viewer"]
+        f"/v1/mcp/servers/{server_id}/tools", headers=company["manager"]
     )
-    assert (
-        resp.status_code == 502
-        and "docs could not be reached: ConnectError: refused" in resp.json()["detail"]
-    )
+    # The reason stays in the backend's log (test_mcp_security.py).
+    assert resp.status_code == 502
+    assert resp.json()["detail"].startswith("docs could not be reached")
+    assert "refused" not in resp.json()["detail"]

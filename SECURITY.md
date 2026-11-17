@@ -873,6 +873,72 @@ already: OpenHands' scoped API keys and the per-integration tokens of GitHub
 Copilot coding agent and OpenAI Codex, one credential per component with only
 what it needs.
 
+### 8.7 MCP servers: who may start what
+
+A company's Manager configures the MCP servers its agents may call
+(`POST /v1/mcp/servers`, `services/tools/mcp_config.py`). A server is either a
+**stdio** server, a process the backend spawns with its own user, network and
+files, or an **HTTP/SSE** server, a URL the backend connects to. Both cross a
+trust boundary the Manager does not own: the backend's host and its network.
+The trust model (WSTG review, `services/tools/mcp_policy.py`):
+
+- **The operator decides what can run; the company decides what it uses.**
+  What may be started is set in the backend's environment, never through the
+  API: `MCP_STDIO_ALLOWED_COMMANDS` (absolute paths of the commands a stdio
+  server may spawn) and `MCP_HTTP_ALLOWED_HOSTS` (hosts that may use plain
+  http). A Manager can only pick among what the operator allowed.
+- **stdio is off by default.** With an empty allowlist a stdio server is
+  refused when saved (400), when enabled (`PATCH`, 409) and when started.
+  A command must be exactly one of the listed paths: a bare name looked up on
+  `PATH`, a relative path, `..` or `//` in it, another case or a symlink under
+  another name is refused. The process is spawned as `[command, *args]`
+  without a shell, so an argument is never interpreted; arguments are a list
+  of at most 64 strings of at most 4096 characters without NUL. An
+  environment variable that changes how a program loads its code (`PATH`,
+  `LD_*`, `DYLD_*`, `PYTHON*`, `NODE_*`, `NPM_CONFIG_*`, `GIT_*`,
+  `JAVA_TOOL_OPTIONS`, `BASH_ENV`...) is refused, and `cwd` must be an
+  absolute path. **Allowing an interpreter or a package runner (`npx`, `uvx`,
+  `node`, `python`, a shell) lets a Manager run any code as the backend,**
+  since the arguments choose the program: allow a fixed server binary or a
+  wrapper script that execs one (docs/OPERATIONS.md, MCP servers). The
+  backend logs at startup which commands are allowed, an entry that allows
+  nothing, and a warning for an entry that is an interpreter, a package
+  runner or a shell.
+- **A stored row is checked again before every start.** The allowlist can
+  shrink after a server was saved: such a row lists with `start_refused`
+  naming the reason, and the tools endpoint, the task worker
+  (`mcp_tools.Toolbox.load`) and the client itself (`mcp_client.connect`)
+  refuse to start it. Listing the servers never starts one.
+- **Starting a server takes a Manager, and every start is audited.**
+  `GET /v1/mcp/servers/{id}/tools` connects to the server, so it takes the
+  Manager role (`docs/architecture/authorization.json`); a Viewer gets 403
+  and nothing runs. Each start it asks for, and each refusal, writes an audit
+  row (`mcp_server_start`, `mcp_server_start_refused`: the server, the
+  command or the host, the number of arguments, never a value or a secret)
+  before anything starts. The task worker audits every start of a stdio
+  server (its discovery and each call) as `agent:<role>`, and does not start
+  one it cannot audit.
+- **An HTTP server is reached only on a public address.** Its URL must be
+  https (http only for a host in `MCP_HTTP_ALLOWED_HOSTS`, which does not
+  waive the address check), carry no credentials, and its host must resolve
+  only to public addresses (`services/platform/egress.py`, the helper of the
+  webhook, the OIDC client and the research fetches): loopback, private,
+  link-local (169.254.0.0/16, the cloud metadata service), CGNAT, multicast,
+  reserved and the IPv6 forms that embed them are refused when the server is
+  saved and again right before each connection, which goes to the address
+  just checked, with the host in `Host` and TLS SNI. A request for any other
+  host (another origin, a scheme change) is refused by the client
+  (`mcp_client.PinnedTransport`), environment proxies (`HTTPS_PROXY`) are not
+  used, and the
+  MCP transports follow a redirect only within the origin. There is no
+  setting that allows a private MCP host.
+- **A failure says nothing about the inside.** A server that cannot be
+  reached answers 502 with a fixed message; the exception (an address, a
+  port, a library's text) is only in the backend's log.
+- **The rest is unchanged:** secrets (`env`, `headers`) are Fernet-encrypted
+  and listed by name only, masked out of the results the model sees, and
+  every tool call is an observation on the run's evidence (§8.2).
+
 ---
 
 ## 9. Incident Response
@@ -1019,6 +1085,11 @@ Before the stack serves anyone but the person running it:
 - [ ] **Secrets at rest.** `FERNET_SECRET_KEY` set, so provider keys, MCP
       secrets, run secrets and project credentials are encrypted (the backend
       warns at startup without it); `AUDIT_SIGNING_KEY` keys the audit chain.
+- [ ] **MCP servers.** `MCP_STDIO_ALLOWED_COMMANDS` empty unless a stdio
+      server is needed, and then only fixed server binaries or wrapper
+      scripts, never an interpreter, a package runner or a shell, in a
+      directory the backend's user cannot write; `MCP_HTTP_ALLOWED_HOSTS`
+      empty unless a server cannot speak https (§8.7).
 - [ ] **Sandbox.** With `DELIVERY_TESTS_ENABLED`, `DELIVERY_SANDBOX=container`
       (or each company's mode), and `FABRIQUE_SANDBOX_REQUIRED=container` on the
       daemon's machine so nothing falls back to the host.

@@ -14,6 +14,13 @@ arguments, whether it erred, how long it took, the sha256 of what came back
 annotation raises the delivery's risk tier. What the model says it learned
 from a tool stays a claim. Tool results are masked for the server's own
 secrets and cut at ``result_max_chars`` before the model sees them.
+
+A server the operator does not allow (``mcp_config.start_refusal``: a stdio
+command off ``MCP_STDIO_ALLOWED_COMMANDS``, a URL that is not public https)
+is never started: ``load`` names it in ``unavailable`` with the reason. Every
+start of a stdio server (its discovery and each call, since a connection
+lasts one exchange) is audited before it happens through ``audit``; without
+a way to audit, a stdio server is not started.
 """
 
 from __future__ import annotations
@@ -56,13 +63,16 @@ class Toolbox:
         tool_timeout: float | None = None,
         connect_timeout: float | None = None,
         result_max_chars: int | None = None,
+        unavailable: dict[str, str] | None = None,
+        audit: Callable[[dict[str, Any], str], None] | None = None,
     ) -> None:
         self.specs = {spec["name"]: spec for spec in specs}
+        self._audit = audit
         self.tool_timeout = tool_timeout or settings.MCP_TOOL_TIMEOUT_SECONDS
         self.connect_timeout = connect_timeout or settings.MCP_CONNECT_TIMEOUT_SECONDS
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.tools: dict[str, dict[str, Any]] = {}
-        self.unavailable: dict[str, str] = {}
+        self.unavailable: dict[str, str] = dict(unavailable or {})
         self._loop: mcp_client.Loop | None = None
         self._discovered = False
 
@@ -73,16 +83,44 @@ class Toolbox:
         """The toolbox for a role in a company, or ``None`` when it has no servers."""
         if company_id is None:
             return None
+        engine = engine or default_engine
+        specs: list[dict[str, Any]] = []
+        refused: dict[str, str] = {}
         try:
-            with Session(engine or default_engine) as session:
-                rows = mcp_config.servers_for_role(session, company_id, role)
-                specs = [mcp_config.connection_spec(row) for row in rows]
+            with Session(engine) as session:
+                for row in mcp_config.servers_for_role(session, company_id, role):
+                    reason = mcp_config.start_refusal(row)
+                    if reason:
+                        refused[row.name] = reason[:300]
+                        logger.warning(
+                            "MCP server %s not started: %s", row.name, reason
+                        )
+                        continue
+                    specs.append(mcp_config.connection_spec(row))
         except Exception as exc:  # noqa: BLE001 - A broken configuration never blocks the task.
             logger.warning(
                 "MCP servers unavailable for company=%s: %s", company_id, exc
             )
             return None
-        return cls(specs) if specs else None
+        if not specs:
+            return None
+        actor = f"agent:{role or 'unknown'}"
+
+        def audit(spec: dict[str, Any], purpose: str) -> None:
+            with Session(engine) as session:
+                mcp_config.audit_start(session, spec, company_id, actor, purpose)
+
+        return cls(specs, unavailable=refused, audit=audit)
+
+    def _starting(self, spec: dict[str, Any], purpose: str) -> None:
+        """Audit a stdio server's start before it happens; refuse without an audit."""
+        if spec.get("transport") != "stdio":
+            return
+        if self._audit is None:
+            raise mcp_client.McpPolicyError(
+                "a stdio server is started only when its start can be audited"
+            )
+        self._audit(spec, purpose)
 
     def _run(self, coro, timeout: float):
         if self._loop is None:
@@ -95,6 +133,7 @@ class Toolbox:
         self._discovered = True
         for name, spec in self.specs.items():
             try:
+                self._starting(spec, "discovery")
                 tools = self._run(mcp_client.list_tools(spec), self.connect_timeout)
             except Exception as exc:  # noqa: BLE001 - The server is left out and named.
                 reason = (
@@ -159,6 +198,7 @@ class Toolbox:
             return observation, NO_TOOL_NOTE
         started = time.monotonic()
         try:
+            self._starting(self.specs[tool["server"]], f"call {tool['name']}")
             result = self._run(
                 mcp_client.call_tool(
                     self.specs[tool["server"]],

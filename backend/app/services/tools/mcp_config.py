@@ -10,6 +10,12 @@ are dropped, as OpenHands does (``drop_unknown_mcp_server_fields``).
 Secrets (``env``, ``headers``) are encrypted with the Fernet key and the API
 only ever lists their names (``serialize``); ``connection_spec`` decrypts them
 for the client, inside the backend.
+
+What may be saved and started is the operator's (``mcp_policy``): a stdio
+server only for a command on ``MCP_STDIO_ALLOWED_COMMANDS``, an HTTP server
+only on a public https URL. ``start_refusal`` re-checks a stored row, since
+the allowlist can shrink after it was saved, and ``audit_start`` records each
+start in the company's audit chain before it happens.
 """
 
 from __future__ import annotations
@@ -18,10 +24,14 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import crypto
 from models.mcp import MCP_TRANSPORTS, McpServer
 from sqlmodel import Session, select
+
+from services.platform.agent_service import AgentService
+from services.tools import mcp_policy
 
 NAME_LIMIT = 64
 # Names the built-in toolboxes use for their tools (``<name>__<tool>``).
@@ -50,11 +60,12 @@ def _string_map(value: Any, field: str, name: str) -> dict[str, str]:
     return dict(value)
 
 
-def normalize_server(name: str, raw: Any) -> dict[str, Any]:
+def normalize_server(name: str, raw: Any, *, resolve: bool = True) -> dict[str, Any]:
     """One server from the ``mcpServers`` map, validated and in the row's shape.
 
     Returns the row fields plus ``env`` and ``headers`` in clear; the caller
-    stores those through ``store_secrets``.
+    stores those through ``store_secrets``. A stdio command must be on the
+    operator's allowlist and a URL public (resolved unless not *resolve*).
     """
     name = (name or "").strip()
     if not name or len(name) > NAME_LIMIT or "__" in name:
@@ -95,15 +106,25 @@ def normalize_server(name: str, raw: Any) -> dict[str, Any]:
         or timeout <= 0
     ):
         raise McpConfigError(f"{name}: 'timeout' must be a positive number of seconds")
+    env = _string_map(raw.get("env"), "env", name)
+    headers = _string_map(raw.get("headers"), "headers", name)
+    cwd = raw.get("cwd") if isinstance(raw.get("cwd"), str) else None
+    try:
+        if transport == "stdio":
+            mcp_policy.check_stdio(command.strip(), args, env.keys(), cwd)
+        else:
+            mcp_policy.check_url(url, resolve=resolve)
+    except mcp_policy.McpPolicyError as exc:
+        raise McpConfigError(f"{name}: {exc}") from exc
     return {
         "name": name,
         "transport": transport,
         "url": url.strip() if transport != "stdio" and isinstance(url, str) else None,
         "command": command.strip() if transport == "stdio" else None,
         "args": list(args) if transport == "stdio" else [],
-        "cwd": raw.get("cwd") if isinstance(raw.get("cwd"), str) else None,
-        "env": _string_map(raw.get("env"), "env", name),
-        "headers": _string_map(raw.get("headers"), "headers", name),
+        "cwd": cwd if transport == "stdio" else None,
+        "env": env,
+        "headers": headers,
         "roles": roles,
         "enabled": bool(raw.get("enabled", True)),
         "description": raw.get("description")
@@ -113,7 +134,9 @@ def normalize_server(name: str, raw: Any) -> dict[str, Any]:
     }
 
 
-def parse_mcp_servers(payload: Any) -> dict[str, dict[str, Any]]:
+def parse_mcp_servers(
+    payload: Any, *, resolve: bool = True
+) -> dict[str, dict[str, Any]]:
     """The ``mcpServers`` map (or a bare map of servers), each one normalized."""
     servers = payload
     if isinstance(payload, Mapping) and "mcpServers" in payload:
@@ -122,7 +145,10 @@ def parse_mcp_servers(payload: Any) -> dict[str, dict[str, Any]]:
         raise McpConfigError("expected an object mapping server names to definitions")
     if not servers:
         raise McpConfigError("no servers given")
-    return {name: normalize_server(name, raw) for name, raw in servers.items()}
+    return {
+        name: normalize_server(name, raw, resolve=resolve)
+        for name, raw in servers.items()
+    }
 
 
 def store_secrets(env: Mapping[str, str], headers: Mapping[str, str]) -> str | None:
@@ -224,8 +250,65 @@ def serialize(server: McpServer) -> dict[str, Any]:
         "created_by": server.created_by,
         "created_at": server.created_at.isoformat() if server.created_at else None,
         "updated_at": server.updated_at.isoformat() if server.updated_at else None,
+        "start_refused": start_refusal(server),
         **secret_names(server.secrets),
     }
+
+
+def start_refusal(server: McpServer) -> str | None:
+    """Why this deployment would not start the stored server now, or ``None``.
+
+    Reads only the row and the operator's settings: it starts nothing and
+    resolves nothing (the URL's address is checked when connecting).
+    """
+    try:
+        if server.transport == "stdio":
+            env_keys = secret_names(server.secrets)["env_keys"]
+            mcp_policy.check_stdio(server.command, server.args, env_keys, server.cwd)
+        elif server.transport in ("http", "sse"):
+            mcp_policy.check_url(server.url, resolve=False)
+        else:
+            return f"unknown transport {server.transport!r}"
+    except mcp_policy.McpPolicyError as exc:
+        return str(exc)
+    return None
+
+
+def audit_start(
+    session: Session,
+    server: McpServer | Mapping[str, Any],
+    company_id: int,
+    actor: str,
+    purpose: str,
+    refused: str | None = None,
+) -> None:
+    """One audit row for a start of *server* (or its refusal), committed.
+
+    Names the command or the host, never an argument's value or a secret.
+    """
+
+    def get(key: str) -> Any:
+        return server.get(key) if isinstance(server, Mapping) else getattr(server, key)
+
+    transport = get("transport")
+    target: dict[str, Any] = {"transport": transport}
+    if transport == "stdio":
+        target["command"] = get("command")
+        target["args_count"] = len(get("args") or [])
+    else:
+        target["host"] = urlsplit(str(get("url") or "")).hostname
+    AgentService().audit_interaction(
+        session=session,
+        company_id=company_id,
+        interaction_id=f"mcp:{company_id}:{get('name')}",
+        agent_id=actor,
+        action="mcp_server_start_refused" if refused else "mcp_server_start",
+        details={"company_id": company_id, "server": get("name"), "purpose": purpose},
+        result={**target, "refused": refused} if refused else target,
+        decision_signature=None,
+        cost_tokens=0,
+    )
+    session.commit()
 
 
 def connection_spec(server: McpServer) -> dict[str, Any]:
