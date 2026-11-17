@@ -1058,6 +1058,9 @@
       "test_run_cost.py": [
         "loop"
       ],
+      "test_run_log_view.py": [
+        "workspace"
+      ],
       "test_run_logs.py": [
         "loop"
       ],

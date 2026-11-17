@@ -113,6 +113,12 @@
     "GET /v1/agent_runs/{run_id}/cost": {
       "access": "Viewer"
     },
+    "GET /v1/agent_runs/{run_id}/logs": {
+      "access": "Viewer"
+    },
+    "GET /v1/agent_runs/{run_id}/logs/{log_id}": {
+      "access": "Viewer"
+    },
     "GET /v1/agent_runs/{run_id}/publications": {
       "access": "Viewer"
     },

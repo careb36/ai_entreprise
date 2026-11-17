@@ -3511,5 +3511,43 @@
       "specification": "Specification",
       "noSpecificationText": "The specification's text was not stored; its sha256 is above."
     }
+  },
+  "runLogs": {
+    "title": "Full logs",
+    "count_one": "{{count}} full log",
+    "count_other": "{{count}} full logs",
+    "empty": "No full log was recorded",
+    "emptyHint": "A run records its full logs when full logs are on and the object store is available.",
+    "loadError": "The run's full logs could not be loaded.",
+    "noStream": "no stream",
+    "size": "{{size}} bytes recorded",
+    "truncated": "cut at the daemon's cap",
+    "open": "Open",
+    "close": "Close",
+    "notKept": "Not kept: {{reason}}",
+    "reading": "Reading the log back and computing its sha256…",
+    "observedBy": "{{size}} bytes served, hashed by {{by}}",
+    "download": "Download",
+    "recordedSha": "sha256 recorded",
+    "observedSha": "sha256 of the bytes served",
+    "notRecorded": "not recorded",
+    "search": "Search the log",
+    "lines_one": "{{count}} of {{total}} lines",
+    "lines_other": "{{count}} of {{total}} lines",
+    "page": "Page {{page}} of {{pages}}",
+    "previous": "Previous page",
+    "next": "Next page",
+    "integrity": {
+      "matched": "Hash matches the record",
+      "mismatched": "Hash does not match the record",
+      "missing": "Log missing",
+      "unavailable": "Integrity unknown"
+    },
+    "refused": {
+      "matched": "The log could not be served.",
+      "mismatched": "The log could not be served.",
+      "missing": "The object store no longer holds this log.",
+      "unavailable": "The log could not be read, so its integrity is unknown."
+    }
   }
 }

@@ -18,6 +18,7 @@ import { Verdict } from '../components/Verdict'
 import { ReviewChanges } from '../components/ReviewChanges'
 import { RunCostCard } from '../components/CostSummary'
 import { ReviewPanel } from '../components/ReviewPanel'
+import { RunLogViewer } from '../components/RunLogViewer'
 import { useRunChanges } from '../services/reviewChanges'
 import { parseRouteId } from '../lib/routeId'
 import { taskOfRun } from '../lib/taskEvidence'
@@ -185,6 +186,8 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
           {latestVerification && <span className="text-xs text-gray-500">{new Date(latestVerification.observed_at).toLocaleString()}</span>}
         </div>
       </section>
+
+      <RunLogViewer companyId={companyId} runId={runId} />
 
       <section className="card p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
