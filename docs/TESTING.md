@@ -744,6 +744,19 @@ punctuation, emoji, ALL_CAPS codes, hex colours, Tailwind class lists and the
 brand name are allowed; keep value lists (enums, time zones) in module
 constants rather than inline in JSX.
 
+What the lint rule cannot see is checked by `src/uiRules.test.ts`, over every
+view in `pages/` and `components/` (the rules are in `src/test/uiRules.ts`,
+read from the TypeScript syntax tree): a template literal with words shown as
+text or read aloud, prose given to an attribute the lint rule does not check,
+an `eslint-disable` of the i18next rule, an `<img>` without `alt`, an
+icon-only `<button>`, `<a>` or `<Link>` with no name, a form control with no
+label, and a clickable `div`/`span`/… a keyboard cannot reach. Its allowlist,
+`src/test/uiRulesBaseline.json`, counts by `file: rule` and only shrinks: a
+fixed entry fails until it is lowered (`UPDATE_UI_RULES_BASELINE=1 npx vitest
+run src/uiRules.test.ts` lowers it; nothing adds or raises one). It holds one
+entry today. `src/i18n/locales.test.ts` keeps the key sets of `en.json` and
+`es.json` identical.
+
 The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 `frontend/` with `npm run test` for watch mode during development, or
 `npm run test:run` for the non-watch CI/local verification command.
@@ -755,6 +768,8 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option; the new roles offered with their labels, Backend Developer the new agent's default; the models the company's validated connections listed, grouped by connection; a Viewer reads the agents with nothing to change them, a Manager changes them |
 | `src/store/useAuthStore.test.ts` / `src/services/api.auth.test.ts` | No credential in the browser (issue #524): after a login nothing token-, JWT- or CSRF-like is in `localStorage` or `sessionStorage`, login and logout send cookies and logout reaches the server with the CSRF header; a late profile from an older session is dropped. The client sends cookies and never an `Authorization` header, the CSRF header on unsafe methods only, fetches `/v1/auth/csrf` once on a 403 that asks for it (not on another 403); a 401 refreshes once and retries, a 409 (another tab) retries, a refused refresh or a second 401 signs out and calls the hook once; parallel 401s refresh once; a stale 401 does not end a newer session; without a session nothing is refreshed |
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
+| `src/uiRules.test.ts` | Each view rule of `src/test/uiRules.ts` on small sources, what it reports and what it lets through (a template with words, prose in an unchecked attribute, the i18next rule turned off, an image without `alt`, an icon-only control, an unlabelled control, a click a keyboard cannot reach); then every view in `pages/` and `components/` breaks no rule beyond `src/test/uiRulesBaseline.json`, and that allowlist holds no count above what is found |
+| `src/pages/CompanyFindings.test.tsx` | The Findings page and a finding's page (`docs/design/rsi-loop.md`): the list with source, status as text, target measure and a link to each; a reverted finding's cycle with its decision, reasons, B and C shas (the full sha as the title) and date; the empty state; an error with a retry; a Viewer sees no button or field on either page; the detail shows the record, the cycles and the specification text, and a finding of another company or none is not found |
 | `src/pages/CompanyNew.test.tsx` | The "New company" wizard in Spanish: untouched defaults follow a language change while edits stay and the API payload is clean, discovered specialties left untranslated, all six steps, the folder picker and daemon help, scan and discovery errors, detected stack metadata and team suggestions, model tiers and initialization failures localized with API identifiers preserved; the created company and workspace kept when the profile refresh fails (issue #6); the sprint list with the reason when no foundation sprint was planned (F8). Shared host and inspection: `src/test/companyNewFixtures.ts` |
 | `src/pages/CompanyNewFolder.test.tsx` | The wizard's project folder on the user's computer: an empty field with the host platform's placeholder, the daemon unknown, absent (with how to start it) or incompatible, the picker's folder inspected with its canonical path, provider and branch, a folder that is not a repository or does not exist, the desktop app's native dialog (and cancelling it), a typed path scanned with the daemon down, the Git workflow and base branch pre-set from the inspection and reset for another folder, one inspection on Scan, the Windows start command |
 | `src/pages/ChatApprovals.test.tsx` | Chat approvals (issue #512): a Viewer asks for a Slack link code and sees how to type it, without the connection settings being requested; a linked account is shown and unlinked; an Owner sees the Request URL, the credentials stay write-only (empty field, "set" placeholder) and a save without them sends only the workspace, channel and switch |

@@ -102,13 +102,14 @@ export default function Generate() {
         {/* Company ID info */}
         <div className="flex items-center gap-2 text-xs text-gray-500 bg-surface-800 rounded-lg px-3 py-2">
           <span className="text-gray-400">{t('generate.companyId', 'Company')}:</span>
-          <span className="font-mono text-brand-300">{companyName ?? `ID ${companyId ?? 1}`}</span>
+          <span className="font-mono text-brand-300">{companyName ?? t('generate.companyFallback', { id: companyId ?? 1 })}</span>
         </div>
 
         {/* Story */}
         <div>
-          <label className="input-label">{t('generate.story', 'Story / Feature request')} *</label>
+          <label htmlFor="generate-story" className="input-label">{t('generate.story', 'Story / Feature request')} *</label>
           <textarea
+            id="generate-story"
             value={story}
             onChange={e => setStory(e.target.value)}
             required
@@ -121,8 +122,9 @@ export default function Generate() {
 
         {/* Constraints */}
         <div>
-          <label className="input-label">{t('generate.constraints', 'Constraints')} <span className="text-gray-600">{t('common.optional', { defaultValue: '(optional)' })}</span></label>
+          <label htmlFor="generate-constraints" className="input-label">{t('generate.constraints', 'Constraints')} <span className="text-gray-600">{t('common.optional', { defaultValue: '(optional)' })}</span></label>
           <textarea
+            id="generate-constraints"
             value={constraints}
             onChange={e => setConstraints(e.target.value)}
             rows={3}

@@ -174,7 +174,8 @@
     "manageAgents": "Gestionar agentes",
     "manageQuotas": "Gestionar cuotas",
     "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites.",
-    "tokenUsage": "{{used}} / {{limit}} tokens"
+    "tokenUsage": "{{used}} / {{limit}} tokens",
+    "goalLabel": "Objetivo del sprint"
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -795,7 +796,11 @@
     "searchPlaceholder": "Buscar…",
     "clearFilters": "Quitar filtros",
     "newMessages": "Mensajes nuevos",
-    "agentsWorkingCount": "{{count}} trabajando"
+    "agentsWorkingCount": "{{count}} trabajando",
+    "searchLabel": "Buscar en la actividad",
+    "clearSearch": "Borrar la búsqueda",
+    "filterAgentLabel": "Filtrar por agente",
+    "filterTypeLabel": "Filtrar por tipo de evento"
   },
   "governance": {
     "title": "Gobernanza",
@@ -853,7 +858,9 @@
     "reviewerVerifier": "; el veredicto del Verifier por sí solo, con {{verifier}} de las {{called}} que decidió.",
     "reviewerVerifierNone": "; el veredicto del Verifier no decidió ninguna.",
     "suggestion": "El Reviewer agent sugiere: {{decision}}",
-    "suggestionUnusable": "El Reviewer agent no pudo sugerir una decisión; queda para las personas."
+    "suggestionUnusable": "El Reviewer agent no pudo sugerir una decisión; queda para las personas.",
+    "historyPeriod": "Período del historial de uso",
+    "dayTokens": "{{date}}: {{tokens}} tokens"
   },
   "evidence": {
     "title": "Evidencia",
@@ -1026,7 +1033,8 @@
     "copied": "¡Copiado!",
     "error": "Error en la generación",
     "started": "¡Generación iniciada!",
-    "sprintLink": "Sprint #{{id}}"
+    "sprintLink": "Sprint #{{id}}",
+    "companyFallback": "ID {{id}}"
   },
   "support": {
     "title": "Asistente La Fabrique",
@@ -1077,7 +1085,10 @@
     },
     "emailPlaceholder": "tu@empresa.com",
     "ownTicketsOnly": "Solo puedes ver los tickets reportados con el email de tu cuenta ({{email}}).",
-    "agentReply": "Respuesta del agente de Soporte"
+    "agentReply": "Respuesta del agente de Soporte",
+    "inputLabel": "Mensaje para el agente de soporte",
+    "send": "Enviar",
+    "searchTickets": "Buscar mis tickets"
   },
   "sprintCalendar": {
     "title": "Calendario del Sprint",
@@ -1215,7 +1226,8 @@
     },
     "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia.",
     "connectionGroup": "Conexión de la empresa: {{connection}}",
-    "connectionModelHint": "Corre por la conexión {{connection}} de la empresa; la clave queda en la empresa."
+    "connectionModelHint": "Corre por la conexión {{connection}} de la empresa; la clave queda en la empresa.",
+    "clearSearch": "Borrar la búsqueda"
   },
   "common": {
     "loading": "Cargando...",
