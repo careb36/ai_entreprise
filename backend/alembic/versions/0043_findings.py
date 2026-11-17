@@ -46,6 +46,12 @@ def upgrade() -> None:
         sa.Column("closed_by", text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=True),
+        # One finding per specification in a company (REQ-20).
+        sa.UniqueConstraint(
+            "company_id",
+            "specification_sha256",
+            name="uq_findings_company_specification",
+        ),
     )
     op.create_index("ix_findings_company_id", "findings", ["company_id"], unique=False)
     op.create_index(

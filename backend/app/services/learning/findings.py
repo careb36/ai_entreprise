@@ -13,12 +13,17 @@ writes one, and no hash is taken from the party being recorded: the
 specification's sha256 is computed here, from the text as read.
 
 ``may_start`` is REQ-20: a specification whose text is the same — the sha256
-of its *normalised* text decides, so whitespace and line endings cannot make
-a difference — as one whose cycle was reverted does not start a cycle again,
-unless a signed-in person asks: never an agent, never an API token (the rule
-of ``routers/sod.owner_person``). Another company's reverts are not read.
+of its *canonical* text decides, so a JSON specification rewritten pretty or
+compact, or a text with other line endings, cannot make a difference — as
+one whose cycle was reverted does not start a cycle again, unless a person
+asks: a signed-in Manager or Owner of the company, never an agent, never an
+API token (the rule of ``routers/sod.owner_person``). ``retry_by_person`` is
+that request: it sends the reverted finding into a cycle again, its earlier
+outcomes kept. Another company's reverts are not read.
 
-Every function takes the caller's session and leaves committing to it.
+Every function takes the caller's session and leaves committing to it,
+except a person's close and retry: they are audited, and the audit
+(``AgentService.audit_interaction``) commits the change with its entry.
 """
 
 from __future__ import annotations
@@ -33,6 +38,9 @@ from models import Finding, User
 from models.finding import FINDING_STATUSES, OUTCOME_DECISIONS
 from sqlmodel import Session, select
 
+from services.platform import teams
+from services.platform.agent_service import AgentService
+
 # The only producer an outcome may name. The fitness observations say the
 # same (``services/evidence/fitness_checks.PLATFORM``); evidence is not a
 # context learning may import, so the name is repeated here, as data.
@@ -43,6 +51,13 @@ STATUS_BY_DECISION = {
     "revert": "reverted",
     "unmeasured": "unmeasured",
 }
+
+# The least role a person needs to close a finding or to retry one; a Viewer
+# only reads.
+PERSON_MINIMUM_ROLE = "Manager"
+# The statuses a person may send into a cycle again: a cycle ended and kept
+# nothing. A running, a kept, an open or a person-closed finding is not.
+RETRYABLE_STATUSES = ("reverted", "unmeasured")
 
 
 class FindingRefused(ValueError):
@@ -62,14 +77,31 @@ class MayStart(NamedTuple):
 
 
 def normalize_specification_text(text: str) -> str:
-    """The text with every whitespace run as one space, the ends stripped:
-    line endings, indentation and trailing spaces do not make two
-    specifications different (REQ-20)."""
-    return " ".join((text or "").split())
+    """The specification's canonical text, the one REQ-20 compares.
+
+    A JSON specification is parsed and written again with its keys sorted
+    and no whitespace between tokens, so pretty or compact, its keys in any
+    order, its non-ASCII characters escaped or not, it is the same text; its
+    string values are kept exactly, whitespace included, since that is what
+    a requirement says. Any other text keeps its words and its spacing and
+    only forgets its line endings (CRLF, CR), the trailing whitespace of
+    each line and blank lines at either end.
+    """
+    raw = text or ""
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        pass
+    else:
+        return json.dumps(
+            parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+    lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines).strip("\n")
 
 
 def specification_sha256(text: str) -> str:
-    """The sha256 of the normalised text, computed here — never received
+    """The sha256 of the canonical text, computed here — never received
     from a producer (rule 6)."""
     normalized = normalize_specification_text(text)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -136,7 +168,7 @@ def create_from_specification(
 ) -> Finding:
     """Record a finding with the specification drafted for it.
 
-    The sha256 of the normalised text is computed here; a second finding of
+    The sha256 of the canonical text is computed here; a second finding of
     the same company carrying the same specification is refused, so the text
     of a reverted cycle stays findable by ``may_start``. *target_measure* may
     be ``None`` for a finding recorded before its grader is written, but the
@@ -146,7 +178,7 @@ def create_from_specification(
     text = specification_text or ""
     if not text.strip():
         raise FindingRefused("the specification text is empty")
-    clean_title = (title or "").strip()
+    clean_title = title.strip() if isinstance(title, str) else ""
     if not clean_title:
         raise FindingRefused("the finding has no title")
     sha = specification_sha256(text)
@@ -278,43 +310,104 @@ def record_outcome(
 
 
 def mark_in_cycle(session: Session, finding: Finding) -> Finding:
-    """An open finding a cycle starts for (whether one may: ``may_start``)."""
+    """An open finding a cycle starts for, when ``may_start`` lets it. A
+    finding a cycle already ended for goes back through ``retry_by_person``."""
     if finding.status != "open":
         raise FindingRefused(f"the finding is {finding.status}, not open")
+    answer = may_start(session, finding.company_id, finding)
+    if not answer.allowed:
+        raise FindingRefused(f"no cycle may start for this finding: {answer.reason}")
     finding.status = "in_cycle"
     finding.updated_at = datetime.now(UTC)
     session.add(finding)
     return finding
 
 
-def close_by_person(session: Session, finding: Finding, asked_by: Any) -> Finding:
-    """A person takes the finding off the loop; an agent, an API token or
-    nobody cannot (the same check ``may_start`` makes)."""
-    person = person_who_asked(session, asked_by)
-    if person is None:
+def retry_by_person(session: Session, finding: Finding, asked_by: Any) -> Finding:
+    """A person sends a reverted (or unmeasured) finding into a cycle again:
+    the request REQ-20 waits for. *asked_by* is a signed-in Manager or Owner
+    of the finding's company; an agent, an API token, a Viewer or a person of
+    another company is refused. The earlier outcomes stay and the next
+    cycle's is appended; the retry is audited under the person's name. A
+    running, a kept, an open or a person-closed finding is refused."""
+    person = _person_or_refuse(session, finding, asked_by, "retried")
+    if finding.status not in RETRYABLE_STATUSES:
         raise FindingRefused(
-            "a finding is closed by a signed-in person, not an agent or a token"
+            f"the finding is {finding.status}; only a "
+            f"{' or '.join(RETRYABLE_STATUSES)} finding is retried"
         )
+    from_status = finding.status
+    finding.status = "in_cycle"
+    finding.updated_at = datetime.now(UTC)
+    session.add(finding)
+    _audit(session, finding, person, "finding.retry", from_status)
+    return finding
+
+
+def close_by_person(session: Session, finding: Finding, asked_by: Any) -> Finding:
+    """A person takes the finding off the loop: a signed-in Manager or Owner
+    of its company; an agent, an API token or nobody cannot (the same check
+    ``may_start`` makes). The close is audited."""
+    person = _person_or_refuse(session, finding, asked_by, "closed")
     if finding.status == "closed_by_person":
         raise FindingRefused("the finding is already closed")
+    from_status = finding.status
     finding.status = "closed_by_person"
     finding.closed_by = person.email
     finding.updated_at = datetime.now(UTC)
     session.add(finding)
+    _audit(session, finding, person, "finding.close", from_status)
     return finding
+
+
+def _person_or_refuse(
+    session: Session, finding: Finding, asked_by: Any, verb: str
+) -> User:
+    person = person_who_asked(session, asked_by, finding.company_id)
+    if person is None:
+        raise FindingRefused(
+            f"a finding is {verb} by a signed-in person, a Manager or Owner "
+            "of its company, not an agent or a token"
+        )
+    return person
+
+
+def _audit(
+    session: Session, finding: Finding, person: User, action: str, from_status: str
+) -> None:
+    """The person's decision in the company's audit chain (this commits)."""
+    AgentService().audit_interaction(
+        session=session,
+        company_id=finding.company_id,
+        interaction_id=f"finding:{finding.id}",
+        agent_id=f"human:{person.email}",
+        action=action,
+        details={"company_id": finding.company_id, "finding_id": finding.id},
+        result={
+            "finding_id": finding.id,
+            "from_status": from_status,
+            "to_status": finding.status,
+            "outcomes": len(finding.outcomes or []),
+        },
+        decision_signature=None,
+        cost_tokens=0,
+    )
 
 
 # ── REQ-20: the same text as a reverted cycle ────────────────────────────────
 
 
-def person_who_asked(session: Session, asked_by: Any) -> User | None:
-    """The signed-in person behind *asked_by*, or ``None``.
+def person_who_asked(session: Session, asked_by: Any, company_id: int) -> User | None:
+    """The signed-in person behind *asked_by*, a Manager or Owner of
+    *company_id*, or ``None``.
 
     A person is a ``User`` row that exists: an API token's synthetic user
     (``_api_token_company_id``, a negative id) is refused the way
     ``routers/sod.owner_person`` refuses it, and so is anything else — an
     agent's role name, an ``Agent`` row, a label, a ``User`` that was never
-    persisted, or nobody.
+    persisted, or nobody. So is a person who is not a member of the
+    company, or only its Viewer: another company's people do not decide
+    for this one.
     """
     if not isinstance(asked_by, User):
         return None
@@ -322,7 +415,13 @@ def person_who_asked(session: Session, asked_by: Any) -> User | None:
         return None
     if asked_by.id is None or asked_by.id <= 0:
         return None
-    return session.get(User, asked_by.id)
+    person = session.get(User, asked_by.id)
+    if person is None:
+        return None
+    role = teams.member_role(session, company_id, person.id)
+    if teams.ROLE_RANK.get(role or "", 0) < teams.ROLE_RANK[PERSON_MINIMUM_ROLE]:
+        return None
+    return person
 
 
 def _reverted(finding: Finding) -> bool:
@@ -355,12 +454,16 @@ def may_start(
 
     *finding_or_specification* is a finding (its sha256 decides) or the
     specification's text (its sha256 is computed here). The same text as a
-    specification whose cycle was reverted — after normalisation, so
-    whitespace and line endings cannot make a difference — does not start
-    again, unless a signed-in person asked (*asked_by*): an agent, an API
-    token or nobody gets the refusal, naming the reverted finding.
+    specification whose cycle was reverted — in canonical form, so a JSON
+    specification's formatting and a text's line endings cannot make a
+    difference — does not start again, unless a person asked (*asked_by*: a
+    signed-in Manager or Owner of *company_id*): an agent, an API token,
+    another company's person or nobody gets the refusal, naming the reverted
+    finding. A finding of another company is not judged here.
     """
     if isinstance(finding_or_specification, Finding):
+        if finding_or_specification.company_id != company_id:
+            return MayStart(False, "another_company", None)
         sha = finding_or_specification.specification_sha256
         if not sha:
             # No specification drafted yet: nothing a revert could match.
@@ -374,6 +477,6 @@ def may_start(
     reverted = reverted_twin(session, company_id, sha)
     if reverted is None:
         return MayStart(True, "no_reverted_cycle", None)
-    if person_who_asked(session, asked_by) is None:
+    if person_who_asked(session, asked_by, company_id) is None:
         return MayStart(False, "specification_reverted", reverted.id)
     return MayStart(True, "person_asked", reverted.id)

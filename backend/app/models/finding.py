@@ -15,7 +15,7 @@ a producer (rule 6 of ``docs/POSITIONING.md``).
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON
+from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Column, Field, SQLModel
 
 FINDING_STATUSES = (
@@ -32,6 +32,16 @@ OUTCOME_DECISIONS = ("keep", "revert", "unmeasured")
 
 class Finding(SQLModel, table=True):
     __tablename__ = "findings"
+    # One finding per specification in a company, so the text of a reverted
+    # cycle stays findable (REQ-20) even if two writers race the service's
+    # check; findings with no specification yet (NULL) are not compared.
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "specification_sha256",
+            name="uq_findings_company_specification",
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", index=True)
@@ -40,8 +50,10 @@ class Finding(SQLModel, table=True):
     source_ref: str | None = None  # "F5"
     title: str
     # The specification drafted for the finding. The sha256 is of the
-    # normalised text and the platform computes it; it is the key REQ-20
-    # compares, so whitespace or line endings make no second specification.
+    # canonical text (JSON re-serialised with sorted keys, other text with
+    # its line endings and trailing spaces dropped) and the platform computes
+    # it; it is the key REQ-20 compares, so formatting makes no second
+    # specification while a changed string value does.
     specification_sha256: str | None = Field(default=None, index=True)
     specification_path: str | None = None
     specification_text: str | None = None

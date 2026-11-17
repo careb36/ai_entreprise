@@ -676,6 +676,9 @@
       "test_findings.py": [
         "learning"
       ],
+      "test_findings_retry.py": [
+        "learning"
+      ],
       "test_foundation_sprint.py": [
         "release"
       ],

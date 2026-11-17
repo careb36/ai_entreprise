@@ -166,9 +166,9 @@ def test_an_agent_a_token_or_nobody_cannot_ask(sqlite_session, tmp_path):
         )
         assert answer.allowed is False, asked_by
         assert answer.reason == "specification_reverted"
-    assert findings.person_who_asked(sqlite_session, person) is not None
+    assert findings.person_who_asked(sqlite_session, person, company.id) is not None
     for asked_by in not_people:
-        assert findings.person_who_asked(sqlite_session, asked_by) is None
+        assert findings.person_who_asked(sqlite_session, asked_by, company.id) is None
 
 
 # -- The outcomes: observations only the platform writes -----------------------
