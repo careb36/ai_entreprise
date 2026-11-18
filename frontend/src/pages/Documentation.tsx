@@ -12,8 +12,7 @@ import { AlertTriangle, Archive, BookOpen, CheckCircle, CircleCheck, FolderOutpu
 import { C4DiagramView } from '../components/C4DiagramView'
 import { PersonSections } from '../components/documentation/PersonSections'
 import { PackMarkdown } from '../components/PackMarkdown'
-import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
-import { EmptyState, PageHeader, Panel, StatusBadge, Toolbar, type StatusTone } from '../components/ui'
+import { EmptyState, LoadError, LoadingLine, PageHeader, Panel, Spinner, StatusBadge, type StatusTone, Toolbar } from '../components/ui'
 import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail } from '../services/api'
 import {
@@ -186,7 +185,7 @@ export default function Documentation() {
       {packs.isLoading ? (
         <LoadingLine>{t('documentation.loading')}</LoadingLine>
       ) : packs.isError ? (
-        <LoadErrorAlert>{t('documentation.loadError', { message: errorDetail(packs.error) })}</LoadErrorAlert>
+        <LoadError>{t('documentation.loadError', { message: errorDetail(packs.error) })}</LoadError>
       ) : list.length === 0 ? (
         <EmptyState icon={BookOpen} title={t('documentation.empty')} dashed />
       ) : (
@@ -202,7 +201,7 @@ export default function Documentation() {
             </label>
           </Toolbar>
           {pack.isLoading && <LoadingLine>{t('documentation.loading')}</LoadingLine>}
-          {pack.isError && <LoadErrorAlert>{t('documentation.loadError', { message: errorDetail(pack.error) })}</LoadErrorAlert>}
+          {pack.isError && <LoadError>{t('documentation.loadError', { message: errorDetail(pack.error) })}</LoadError>}
           {pack.data && <PackView key={pack.data.id} pack={pack.data} canManage={canManage} isOwner={role === 'Owner'} />}
         </>
       )}

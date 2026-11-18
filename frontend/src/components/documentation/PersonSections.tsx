@@ -8,8 +8,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { MessageSquareQuote } from 'lucide-react'
-import { CountPill, Panel } from '../ui'
-import { LoadErrorAlert, LoadingLine } from '../knowledge/PageStates'
+import { CountPill, LoadError, LoadingLine, Panel } from '../ui'
 import { errorDetail } from '../../services/api'
 import { usePersonSections } from '../../services/documentation'
 import { PersonSectionRow } from './PersonSectionRow'
@@ -20,9 +19,9 @@ export function PersonSections({ companyId, document, canWrite }: { companyId: n
   if (query.isLoading) return <LoadingLine>{t('documentation.personSections.loading')}</LoadingLine>
   if (query.isError) {
     return (
-      <LoadErrorAlert onRetry={() => query.refetch()}>
+      <LoadError onRetry={() => query.refetch()}>
         {t('documentation.personSections.loadError', { message: errorDetail(query.error) })}
-      </LoadErrorAlert>
+      </LoadError>
     )
   }
   const sections = (query.data?.sections ?? []).filter(s => s.document === document)

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError, type SupportTicket } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, Circle, UserRound } from 'lucide-react'
-import { TICKET_STATUS_LOOK, TicketStatusBadge } from './TicketStatusBadge'
+import { TICKET_STATUS_LOOK, TicketStatusBadge } from './ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

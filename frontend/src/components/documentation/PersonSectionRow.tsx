@@ -8,11 +8,11 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { History, PencilLine, Undo2 } from 'lucide-react'
-import { Spinner } from '../knowledge/PageStates'
 import { errorDetail } from '../../services/api'
 import { type PersonSection, useWithdrawPersonSection, useWritePersonSection } from '../../services/documentation'
 import { PersonSectionHistory } from './PersonSectionHistory'
 import { StatementClaim } from './StatementClaim'
+import { Spinner } from '../ui'
 
 /** The i18n key of a section (`charter.budget` -> `charter_budget`: i18next splits keys on dots). */
 export const sectionKey = (key: string) => key.replace(/\./g, '_')

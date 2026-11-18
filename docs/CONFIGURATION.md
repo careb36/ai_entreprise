@@ -500,6 +500,30 @@ Copy `.env.example` to `.env` and fill in:
   started from either way. Before a browser e2e command the daemon also
   probes for a browser (`vscode-daemon/browser_probe.py`) and `e2e_run` says
   whether one was present.
+- `DELIVERY_BROWSER_IMAGES` — optional, default empty (one browser image,
+  `DELIVERY_BROWSER_IMAGE`, for every project, as before). In container mode,
+  the browser sandbox image of each Playwright release, as
+  `1.63.0=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…,1.64.1=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
+  (commas or spaces between entries). `images.yml` builds one image per
+  release of `vscode-daemon/images/browser/playwright_versions.json` (today
+  1.63.0 and 1.64.1, the default), tagged `X.Y.Z-playwright-<release>`, and
+  its summary prints each entry to paste. Every image must be named by its
+  digest (`…@sha256:<64 hex>`, or a local content ID `sha256:…`): an entry
+  with a tag, an inexact version or a release listed twice is refused, kept
+  on the run's evidence (`app_run.browser_image.refused`) and never run.
+  Before a browser e2e command the backend asks the daemon for a fresh
+  snapshot of the project (`workspace.inspect`), in which the daemon reports
+  the Playwright the project pins, read from its `package.json` and lockfile
+  (`vscode-daemon/playwright_pin.py`; npm, pnpm, Yarn, Bun), never from what
+  the producer reported. A listed release runs in its image (`match:
+  exact`); a release not listed runs in `DELIVERY_BROWSER_IMAGE` (or
+  `DELIVERY_SANDBOX_IMAGE` when that is empty) with the mismatch recorded
+  (`match: fallback`); a project that declares no Playwright runs in
+  `DELIVERY_BROWSER_IMAGE` (`not_declared`); a version nobody could tell (a
+  range no lockfile resolves, a lockfile with several versions, a daemon
+  from before this setting) starts the application but not the browser
+  suite, and `e2e_run` is unverifiable with the reason (`unknown`), never a
+  pass. The choice is kept as `app_run.browser_image`.
 - `DELIVERY_FULL_LOGS` — optional, default `true`. The install, the test run
   and the application check ask the daemon for their whole output: it uploads
   each stream (up to `FABRIQUE_FULL_LOG_MAX_MB` on the daemon's machine,

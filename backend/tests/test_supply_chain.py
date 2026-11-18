@@ -207,6 +207,57 @@ def test_the_browser_sandbox_publishes_amd64_signed_and_attested():
     assert keep["with"]["if-no-files-found"] == "error"
 
 
+def test_the_browser_sandbox_is_built_once_per_playwright_release():
+    """Issue #315: the releases come from playwright_versions.json, checked by
+    playwright_matrix.py in the version job; each build gets its values
+    through the environment, is tagged with its Playwright and recorded by
+    the digest the registry stored. Only the default release moves the
+    plain version tag and ``latest``."""
+    data = _workflow("images.yml")
+    version = data["jobs"]["version"]
+    assert version["outputs"]["browser_matrix"] == "${{ steps.browser.outputs.matrix }}"
+    resolve = next(s for s in version["steps"] if s.get("id") == "browser")
+    assert (
+        "python3 -I vscode-daemon/images/browser/playwright_matrix.py" in resolve["run"]
+    )
+    assert "playwright_versions.json" in resolve["run"]
+    job = data["jobs"]["publish-browser"]
+    assert job["strategy"]["fail-fast"] is False
+    assert job["strategy"]["matrix"] == {
+        "include": "${{ fromJSON(needs.version.outputs.browser_matrix) }}"
+    }
+    env = job["env"]
+    assert env["PLAYWRIGHT"] == "${{ matrix.playwright }}"
+    assert env["LOCK_DIR"] == "${{ matrix.lockfile_dir }}"
+    assert env["SHELL_SHA256_AMD64"] == "${{ matrix.sha256_amd64 }}"
+    assert env["DEFAULT_RELEASE"] == "${{ matrix.default }}"
+    text = _run(job)
+    # No matrix value is pasted into a script (an injection would run there).
+    assert "${{" not in text
+    assert '--tag "${image}:${VERSION}-playwright-${PLAYWRIGHT}"' in text
+    default_block = text.split('if [ "$DEFAULT_RELEASE" = "true" ]; then', 1)[1]
+    assert default_block.index('"${image}:${VERSION}"') < default_block.index("fi")
+    assert 'tags+=(--tag "${image}:latest")' in default_block
+    for arg in (
+        "PLAYWRIGHT_VERSION=${PLAYWRIGHT}",
+        "PLAYWRIGHT_LOCK_DIR=${LOCK_DIR}",
+        "HEADLESS_SHELL_REVISION=${SHELL_REVISION}",
+        "HEADLESS_SHELL_VERSION=${SHELL_VERSION}",
+        "HEADLESS_SHELL_SHA256_AMD64=${SHELL_SHA256_AMD64}",
+    ):
+        assert f'--build-arg "{arg}"' in text
+    # Recorded by digest: the record file and the line operators paste.
+    assert ".digest.json" in text and "DELIVERY_BROWSER_IMAGES" in text
+    assert "${PLAYWRIGHT}=${image}@${digest}" in text
+    keep = next(
+        s for s in job["steps"] if s.get("name", "").startswith("Keep the SBOM")
+    )
+    assert (
+        keep["with"]["name"]
+        == "sbom-browser-sandbox-playwright-${{ matrix.playwright }}"
+    )
+
+
 # --- the browser image's manual probe (issue #529) ----------------------------------
 
 

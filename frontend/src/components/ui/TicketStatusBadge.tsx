@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { CircleCheck, CircleDashed, CircleDot, CirclePlay, CircleSlash, Hourglass, type LucideIcon } from 'lucide-react'
-import { StatusBadge, type StatusTone } from './ui'
+import { CircleCheck, CircleDot, CirclePlay, CircleSlash, Hourglass } from 'lucide-react'
+import { StatusBadge, statusLook, type StatusLook } from './StatusBadge'
 
-/** Each support ticket status as an icon, a word and a tone: never the colour alone. */
-export const TICKET_STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
+/** Each support ticket status as an icon and a tone; the word comes from `support.status.*`. */
+export const TICKET_STATUS_LOOK: Record<string, StatusLook> = {
   open: { icon: CircleDot, tone: 'info' },
   in_progress: { icon: CirclePlay, tone: 'brand' },
   waiting: { icon: Hourglass, tone: 'warning' },
@@ -13,11 +13,11 @@ export const TICKET_STATUS_LOOK: Record<string, { icon: LucideIcon; tone: Status
 
 /**
  * A support ticket's status (the help desk's list and detail, the support
- * bot's tickets), in the design system's `StatusBadge`. An unknown status
- * shows its own word with a neutral dashed icon.
+ * bot's tickets). An unknown status shows its own word with the neutral
+ * dashed icon.
  */
 export function TicketStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation()
-  const look = TICKET_STATUS_LOOK[status] ?? { icon: CircleDashed, tone: 'neutral' as const }
+  const look = statusLook(TICKET_STATUS_LOOK, status)
   return <StatusBadge icon={look.icon} tone={look.tone} label={t(`support.status.${status}`, { defaultValue: status })} />
 }

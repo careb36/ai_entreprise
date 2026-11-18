@@ -4,8 +4,7 @@ import { Check, CircleCheck, CircleDot, Clock, History, Pencil, TriangleAlert, X
 import { useDecideWikiVersion, useWikiVersions, useWriteWikiPage } from '../hooks/useWiki'
 import { errorDetail, type WikiBlock, type WikiPageDetail, type WikiSource, type WikiVersion } from '../services/api'
 import { WikiMarkdown } from './WikiMarkdown'
-import { Spinner } from './knowledge/PageStates'
-import { StatusBadge, type StatusTone } from './ui'
+import { Spinner, StatusBadge, type StatusTone } from './ui'
 
 /** A page's status as an icon and a word (current, stale, proposed); never the colour alone. */
 const WIKI_STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
