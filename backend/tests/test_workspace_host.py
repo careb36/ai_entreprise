@@ -324,7 +324,15 @@ def test_status_reports_the_daemon_machine(test_client, daemon):
     absent_body = absent.json()
     # The protocol, heartbeat and liveness fields are added beside the old ones
     # (tests/test_daemon_protocol.py); the old ones keep their values.
-    added = ("protocol", "heartbeat", "liveness", "reported_by_daemon")
+    # The environment volume's status (#315) is added the same way.
+    added = (
+        "protocol",
+        "heartbeat",
+        "liveness",
+        "reported_by_daemon",
+        "sandbox_environment",
+    )
+    assert absent_body["sandbox_environment"] is None
     assert {k: v for k, v in absent_body.items() if k not in added} == {
         "connected": False,
         "state": "absent",

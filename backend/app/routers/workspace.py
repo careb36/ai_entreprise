@@ -85,6 +85,8 @@ async def workspace_status(
         "host": status.get("host"),
         # The daemon's dependency cache: allowed, and the projects quarantined.
         "sandbox_cache": status.get("sandbox_cache"),
+        # Its environment volume (#315): allowed, and the projects quarantined.
+        "sandbox_environment": status.get("sandbox_environment"),
         "jetstream": bool(getattr(request.app.state, "jetstream", False)),
         "protocol": protocol,
         "heartbeat": heartbeat,

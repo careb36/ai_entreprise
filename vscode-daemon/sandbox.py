@@ -119,6 +119,8 @@ def normalize(request: Any) -> dict[str, Any]:
         "env": env_names,
         "purpose": purpose if purpose in PURPOSES else "test",
         "cache": raw.get("cache") is True,
+        "environment": raw.get("environment") is True,
+        "scope": sandbox_cache.clean_scope(raw.get("scope")),
     }
 
 
@@ -211,6 +213,10 @@ def report(box: dict[str, Any], runtime: str | None = None) -> dict[str, Any]:
         out["cache"] = {"state": "not_used", "mounted": False, "reason": (
             "the dependency cache is mounted only in container mode" if box["mode"] != "container"
             else "this run does not mount the dependency cache")}
+    if box.get("environment"):
+        out["environment"] = {"state": "not_used", "mounted": False, "reason": (
+            "the environment volume is mounted only in container mode" if box["mode"] != "container"
+            else "this run does not mount the environment volume")}
     if box["mode"] == "host":
         out.update({"isolated": False, "network": "host", "env": "inherited",
                     "image_identity": sandbox_image.no_image("host mode runs no image: the daemon's own machine ran it")})
@@ -352,12 +358,18 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full:
     runtime = container_runtime() if box["mode"] == "container" else None
     name = f"fabrique-run-{uuid.uuid4().hex[:12]}"
     cache: dict[str, Any] | None = None
+    env: dict[str, Any] | None = None
     if runtime:
         # Run from the image's content ID, observed now (``sandbox_image``).
         run_box, identity = sandbox_image.pinned(runtime, box)
         if box["cache"]:
             cache = sandbox_cache.prepare(runtime, run_box["image"], cwd)
-        argv = container_command(runtime, run_box, command, cwd, name, (cache or {}).get("args"))
+        if box["environment"]:
+            # Keyed by the image asked for: a first run that pulls it keeps its key.
+            env = sandbox_cache.prepare_env(runtime, box["image"], cwd, box["purpose"], box["scope"], BASE_ENV["PATH"], run_box["image"])
+        # The environment's variables last: they win over the cache's for Go.
+        extra = [*(cache or {}).get("args", []), *(env or {}).get("args", [])]
+        argv = container_command(runtime, run_box, command, cwd, name, extra)
     else:
         argv = bwrap_command(box, command, cwd)
     applied = report(box, runtime)
@@ -371,6 +383,8 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full:
             subprocess.run([runtime, "kill", name], capture_output=True, check=False)
         if cache is not None:
             applied["cache"] = sandbox_cache.finish(runtime, cache, box["purpose"], False, cwd)
+        if env is not None:
+            applied["environment"] = sandbox_cache.finish_env(runtime, env, box["purpose"], False)
         return {
             "success": False,
             "stdout": run["stdout"],
@@ -390,6 +404,8 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full:
         )
     if cache is not None:
         applied["cache"] = sandbox_cache.finish(runtime, cache, box["purpose"], run["exit_code"] == 0, cwd)
+    if env is not None:
+        applied["environment"] = sandbox_cache.finish_env(runtime, env, box["purpose"], run["exit_code"] == 0)
     return {
         "success": run["exit_code"] == 0,
         "stdout": run["stdout"],

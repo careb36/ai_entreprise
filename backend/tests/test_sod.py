@@ -144,6 +144,89 @@ def test_a_token_the_starter_made_is_refused_like_its_creator(
     assert row.details["actor_token_id"] is not None
 
 
+# A token stands for its creator's account, not for an email address
+# (issue #512): the creator is found by ``created_by_user_id``.
+
+
+def _rename(session, user, email):
+    user.email = email
+    session.add(user)
+    session.commit()
+
+
+def _token_of(session, company_id, user):
+    _, raw = api_tokens.create_token(
+        session,
+        company_id,
+        "ci",
+        user.email,
+        [],
+        role="Manager",
+        created_by_user_id=user.id,
+    )
+    return {"Authorization": f"Bearer {raw}"}
+
+
+def test_a_renamed_creators_token_cannot_approve_its_own_request(
+    sqlite_session, test_client
+):
+    acme = _company(sqlite_session)
+    starter, _ = _person(sqlite_session, acme.id, "Manager")
+    _person(sqlite_session, acme.id, "Manager")  # another approver exists
+    item, run = held_task(sqlite_session, acme.id)
+    _started_by(sqlite_session, item, starter.id)
+    as_token = _token_of(sqlite_session, acme.id, starter)
+
+    _rename(sqlite_session, starter, f"moved-{secrets.token_hex(4)}@example.test")
+    refused = _approve(test_client, acme.id, run, as_token)
+
+    assert refused.status_code == 403
+    (row,) = _audits(sqlite_session, acme.id, "sod_refused")
+    assert row.details["actor_user_id"] == starter.id
+
+
+def test_a_reused_email_does_not_block_its_new_holder(sqlite_session, test_client):
+    acme = _company(sqlite_session)
+    creator, _ = _person(sqlite_session, acme.id, "Manager")
+    as_token = _token_of(sqlite_session, acme.id, creator)
+    address = creator.email
+    _rename(sqlite_session, creator, f"moved-{secrets.token_hex(4)}@example.test")
+    # Someone else takes the creator's old address and starts the sprint.
+    holder, _ = _person(sqlite_session, acme.id, "Manager")
+    _rename(sqlite_session, holder, address)
+    item, run = held_task(sqlite_session, acme.id)
+    _started_by(sqlite_session, item, holder.id)
+
+    accepted = _approve(test_client, acme.id, run, as_token)
+
+    assert accepted.status_code == 201
+    assert _audits(sqlite_session, acme.id, "sod_refused") == []
+
+
+def test_a_token_whose_creator_id_has_no_account_is_not_read_by_email(
+    sqlite_session,
+):
+    from models import ApiToken, User
+
+    acme = _company(sqlite_session)
+    holder, _ = _person(sqlite_session, acme.id, "Manager")
+    token, _ = api_tokens.create_token(
+        sqlite_session,
+        acme.id,
+        "ci",
+        holder.email,
+        [],
+        role="Manager",
+        created_by_user_id=10_000_000,
+    )
+    synthetic = User(id=-token.id, email=f"api-token:{token.id}", password_hash="")
+    synthetic._api_token_company_id = acme.id
+    actor = sod.actor_of(sqlite_session, synthetic)
+    assert actor.user_id == 10_000_000 and actor.email is None
+    assert not sod.same_person(actor, Person(holder.id, holder.email))
+    assert sqlite_session.get(ApiToken, token.id) is not None
+
+
 def test_a_chat_button_refuses_the_starter_and_keeps_the_message_open(
     sqlite_session, test_client, monkeypatch
 ):

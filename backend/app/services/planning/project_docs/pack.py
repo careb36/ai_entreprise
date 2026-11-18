@@ -37,6 +37,7 @@ from services.planning.project_docs import (
     scope_docs,
     security_docs,
     specs,
+    status_docs,
     texts,
 )
 from services.planning.project_docs.layout import (
@@ -165,6 +166,7 @@ def build_documents(
         log_docs.issues(snapshot),
         log_docs.changes(snapshot),
         control_docs.lessons(snapshot),
+        status_docs.report(snapshot),
         checks.document(snapshot),
         security_docs.checklist(snapshot),
         security_docs.report(snapshot),

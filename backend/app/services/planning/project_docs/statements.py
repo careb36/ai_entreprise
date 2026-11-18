@@ -10,9 +10,9 @@ shows a filled one.
 A statement is a **claim** by the person who wrote it, never an observation:
 
 - it lives in its own snapshot key per document (``statements_charter``,
-  ``statements_risks``, ``statements_checks``), never inside a compiled field,
-  so a builder cannot mistake it for a record and a check result never reads
-  it;
+  ``statements_risks``, ``statements_checks``,
+  ``statements_status_report``), never inside a compiled field, so a builder
+  cannot mistake it for a record and a check result never reads it;
 - the pack quotes it under its section with the author's company role and the
   time it was recorded, says it is a claim, and cites it as a ``statement``
   source marked as a claim, with the digest the backend computed;
@@ -52,8 +52,13 @@ SECTIONS: dict[str, tuple[str, str, str]] = {
     "risks.appetite": ("risks", "person.risk", "person.risk_what"),
     "checks.budget": ("checks", "check.budget", "person.check_budget_what"),
     "checks.external": ("checks", "check.external", "person.check_external_what"),
+    "status_report.forecast": (
+        "status_report",
+        "person.forecast",
+        "person.forecast_what",
+    ),
 }
-DOCUMENTS = ("charter", "risks", "checks")
+DOCUMENTS = ("charter", "risks", "checks", "status_report")
 
 
 def key_of(document: str) -> str:

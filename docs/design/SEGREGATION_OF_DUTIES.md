@@ -39,7 +39,8 @@ and architectures) or `off`. Opening a pull request (`publish`) is not an
 approval here: the platform's own review and branch protection decide it.
 
 A person is matched by account id, else by email. An **API token acts for
-its creator** (`sod.actor_of` reads `api_tokens.created_by`), so minting a
+its creator** (`sod.actor_of` reads `api_tokens.created_by_user_id`, the
+creator's account, and the email only on a token without it), so minting a
 token does not get around the rule. With `AUTH_REQUIRED=false` and no token
 there is no actor: the approval is `unattributed` and passes (a local demo).
 
@@ -176,6 +177,13 @@ late record, the inventory without values),
   rule holds; only the held delivery's acceptance is.
 - `drafted_by` keeps the last person who wrote the draft; an earlier editor
   who later approves is not seen. Accepted until edits are recorded as events.
+- Closed (issue #512): a token's creator was found by email, so a creator
+  who changed address could approve their own request with their token, and
+  whoever took the old address was refused. `sod.actor_of` now reads
+  `api_tokens.created_by_user_id` (migration `0048`), as the role cap does;
+  only a token the migration could not match to an account is still found by
+  email. `tests/test_sod.py`: a renamed creator refused, a reused address not
+  blocking its new holder.
 - An API token minted while authentication was off has no recorded creator;
   its approvals are `unattributed` and pass. Such tokens show in the access
   review and the inventory with no owner, to be removed there.

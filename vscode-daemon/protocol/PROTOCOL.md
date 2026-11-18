@@ -190,7 +190,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 
 | Subject | Kind | Module | Request | Reply |
 | --- | --- | --- | --- | --- |
-| `workspace.status` | request | `daemon_status.py`, `abilities.py` | `{}` | `host`, `version`, `protocol_version`, `protocol_min`, `daemon_id`, `heartbeat_seconds`, `jetstream`, `sandbox_cache`, `abilities` (§2.1) |
+| `workspace.status` | request | `daemon_status.py`, `abilities.py` | `{}` | `host`, `version`, `protocol_version`, `protocol_min`, `daemon_id`, `heartbeat_seconds`, `jetstream`, `sandbox_cache`, `sandbox_environment` (§5.1.2), `abilities` (§2.1) |
 | `workspace.heartbeat` | published | `daemon_status.py` | — | §3 |
 | `workspace.capabilities` | request | `daemon.py` | `commands`? | `assistants` |
 | `workspace.generate` | request | `daemon.py`, `delivery.py` | `workspace_root`, `files` (`path` with `content` or `edits`), `git`?, `sprint_id`? | `ok`, `workspace_root`, `files` (per file `status`, `sha256` read back, the diff), `snapshot` or `git`, `project_files` |
@@ -210,7 +210,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.related` | request | `code_graph.py` | `workspace_root`, `seeds`, `hops`?, `max_files`? | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched` |
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git` | `ok`, `worktree`, `branch`, `head`, `guard`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
-| `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root` | `volume`, `volume_reset`, `quarantine_cleared`, … |
+| `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`? | `ok`, the branch, commit and request URL |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
 | `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
@@ -298,6 +298,25 @@ the bound). The daemon judges nothing: the backend maps the answers to OWASP
 WSTG items (`services/evidence/security_probe.py`). Without the field no
 request is sent and the reply has no `security_probe`; a daemon from before
 it ignores the field, and the backend records the probe as not observed.
+
+### 5.1.2 The environment volume (additive, issue #315)
+
+**`environment: true`** and **`scope`** (letters, digits, `:`, `_`, `.`, `-`,
+at most 64; the backend sends `company:<id>`) in the `sandbox` of
+`workspace.execute` and `workspace.app.check`, announced as the feature
+`sandbox_environment`. In container mode the daemon mounts the project's
+environment volume at `/fabrique-env` (`sandbox_cache.prepare_env`):
+read-write for `purpose: install`, which creates it, read-only for every
+other run, and not at all before an install filled it. The reply's
+`sandbox.environment`: `state` (`created`, `reused`, `absent`, `quarantined`,
+`refused`, `unavailable`, `not_used`), `volume`, `mounted`, `writable`,
+`project_key`, `scope`, `manifests_sha256` (the daemon's key material, not
+evidence of what was installed), `reason`, and after the run `after`,
+`failed_installs`, `quarantined`, `evicted`. `workspace.sandbox.reset` takes
+the same `scope` and replies `environment_reset` (`volumes`, each with what
+its removal did, `quarantine_cleared`, `quarantined` while one is left);
+`workspace.status` replies `sandbox_environment` (`enabled`, `quarantined`).
+A daemon from before it ignores the fields and replies without them.
 
 ### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
 

@@ -121,6 +121,10 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Resources | Work goes to the team that was formed | assigned tasks go to hired roles |
 | Risk | The risk process runs on every delivery | every verified delivery carries a risk tier |
 | Risk | The security tests that apply are run | applicable WSTG tests observed passing, against the specification's security target (measured; STD-PO-1) |
+| Scope | Deliveries meet the standard without rework | done tasks accepted on their first delivery, from the backend's effort observation (measured; phase 2) |
+| Schedule | Work planned for a sprint is finished in it | tasks carried to a later sprint over the tasks planned (measured; phase 2) |
+| Finance | Model spend is known for every completed sprint | each completed sprint's usage reported by the provider and priced (phase 2) |
+| Resources | The effort each task took is observed, not reported | every task of a completed sprint has an `effort_observed` event (phase 2) |
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
@@ -240,6 +244,28 @@ separate, marked section).
 | Reported | the ScrumMaster's `retrospective` message (`AgentMessage`) | message ref, **claim** |
 | Procedures after it | `Procedure` with `source_sprint_id`, its status | procedure ref |
 | Measured result | `Procedure.outcome.result` (kept / reverted), from the board's numbers | procedure ref |
+
+### Status and work performance report (`status_report.md`; Governance, Monitoring and Controlling; inputs: sprints, events, verifications, effort, costs, statements_status_report)
+
+Phase 2. The book's chain of work performance data, information and report
+maps onto observation, analysis and claim: `collect_status` reads the
+observations, `performance` is the analysis, `status_docs` renders the
+figures, and the only claim is a person's forecast below them.
+
+| Field | Source | Kind |
+|---|---|---|
+| Tasks done / planned, blocked | each sprint's tasks and their board status | sprint ref (digest) |
+| Carried out / in | `carried_over` task events (`direction` `to` / `from`) | event ref (chain hash) |
+| Verifier readings, high risk | every `Verification` of the sprint's tasks, verdict and tier | verification ref (artifact digest) |
+| First pass, rework cycles and requests, send-backs, review failures | the latest `effort_observed` event per task, written by the backend at sprint close (`services/models/effort.py`); an event of that kind by any other actor or observer is not read | event ref (chain hash) |
+| Holds and escalations | `blocked`, `escalated`, `risk_hold` task events | event ref (chain hash) |
+| Model spend | the sprint's turns whose usage the LLM proxy reported, priced from the catalogue (`run_cost.sprint_costs`); unknown with its reason, never 0 | `cost` ref (digest of the usage summary the backend computed) |
+| Forecast and decisions requested | `status_report.forecast`, a person's statement | person, **claim** |
+
+Retrospectives, agent messages and delivery texts are not inputs: a claim can
+neither appear in the report nor make it stale. A price change in the model
+catalogue changes a sprint's spend, and so makes the report stale; that is
+intended, the figure it shows would no longer be the one the backend computes.
 
 ### Architecture diagrams, C4 (`c4.md`; inputs: architecture, stack)
 
