@@ -16,6 +16,9 @@ bench/
     acceptance/test_*.py the acceptance tests a person wrote; they grade the result
     fake/plan.json       the fake producer's plan (CI only, see below)
     fake/files/...       the files the fake producer delivers
+    seed/...             (optional) an existing repository the project starts
+                         from instead of an empty folder, with its own tests
+                         (see "Specifications against an existing repository")
     wstg_expected.json   (optional) the OWASP WSTG tests the security test
                          plan must select for it, auto and manual (issue #539;
                          backend/tests/test_wstg_plan.py)
@@ -31,6 +34,9 @@ bench/
 - `scripts/bench/scorecard.py` grades a produced project (`grade`), collects
   a sprint's numbers (`collect`) and writes the scorecard (`write`).
 - `scripts/bench/broker.py` refuses a broker the bench must not share.
+- `scripts/bench/seed.py` prepares each produced project: an empty folder
+  holding a README, or a specification's `seed/` committed as the base of a
+  repository.
 - `scripts/bench/prompt_weight.py` weighs the prompts the backend sent, per
   section; `scripts/bench/readers.py` reads the run's Postgres (the audit
   log's turns, each run's stored evidence).
@@ -413,12 +419,46 @@ push, `pull-requests: write` for the pull request).
 | `03-http-api` | A JSON HTTP API in memory, a WSGI callable (`notesapi.app.make_app`); the tests call it with a constructed environ, no socket | 7 |
 | `04-data-job` | A CSV batch job (`python -m salesjob input.csv`): sums per region in exact decimals, JSON or CSV out, bad rows reported on stderr by line, exit codes 0, 1 and 2 | 7 |
 | `05-lib-config` | A parser with validation errors (`confcheck`): an INI-style file read with the offending line named, then checked against a typed schema, every problem reported in one call | 7 |
+| `06-repo-shopcart` | A change to an existing repository (`shopcart`, from `seed/`): a bug fixed in code the factory did not write (removing more than the cart holds), discount codes in a new module, and a new option on the existing command line | 7 |
 
 Every project is standard library only: the grade needs no network and no
-package. A specification against an existing repository (the produced
-project starting from a checkout rather than a folder holding a README) is
-next: `run.sh` starts every company in an empty folder today, so that needs
-runner support before such a specification can be added.
+package.
+
+## Specifications against an existing repository
+
+Most of the factory's real work is on code it did not write, and the
+self-hosting findings (#555) showed that this case behaves differently from
+a project started from nothing. A specification with a `seed/` folder starts
+from that repository:
+
+- `run.sh` empties the project folder, copies `seed/` into it and commits it
+  as the base of a new Git repository (`scripts/bench/seed.py`) before the
+  company is created. The commit has a fixed author, committer and date and
+  ignores the machine's Git configuration, so the same seed always gives the
+  same base sha; `git -C <project> diff <base>` shows what the factory
+  changed. The base and the number of files are printed in the run's log.
+- The workspace daemon observes a repository with code, so the company gets
+  no foundation sprint, as for a person's existing project.
+- The company is created with `git_workflow: false`: the deliveries land in
+  the folder, which is what the grade reads, as for the other
+  specifications. (With the workflow on they would be commits on task
+  branches, which the grade does not read.)
+- A symbolic link, a `.git` entry or anything other than files and folders
+  under `seed/` stops the run; Python's caches are not copied.
+- A specification without `seed/` starts as before, from an empty folder
+  holding `# <name>` in `README.md`.
+
+The acceptance tests grade the change, not the seed: the seed alone passes
+no criterion, and a criterion also checks that what the seed already did
+still works where the change touches it, so breaking the existing code fails
+that criterion. `tests/test_bench_specs.py` checks every seeded
+specification: the base is committed and clean, the seed's own tests pass,
+the seed alone passes no criterion and the seed with the fake's delivery on
+top passes all of them.
+
+The card needs nothing new: a seeded specification is a specification like
+the others, under its folder's name. With `--graders`, the seed is read from
+the graders' commit with the rest of `bench/`.
 
 ## Adding a reference specification
 
@@ -446,7 +486,17 @@ runner support before such a specification can be added.
    QA's files import inside each test, since they land before the code, and
    a task's own unit tests import only what that task or an earlier one
    delivers.
-4. Run `scripts/bench/run.sh bench/specs/<nn>-<name>` and the backend suite
+4. For a specification against an existing repository, add `seed/`: a small
+   repository (its package, its tests in `tests/` that pass with
+   `python -m pytest` from its root, a README), no `.git`, no symbolic link.
+   Write the specification as a change to it (name the existing files it
+   changes and the public names it must keep in the constraints), and write
+   the acceptance tests so the seed alone passes none of them. The fake's
+   `fake/files/` must still pass every criterion on its own (the shared
+   test grades it alone too), so deliver the whole package there, the files
+   the seed already has included; a task's delivery may rely on the seed's
+   files being there.
+5. Run `scripts/bench/run.sh bench/specs/<nn>-<name>` and the backend suite
    (`tests/test_bench_specs.py`, `tests/test_bench_grading.py` and
    `tests/test_bench_prompt_weight.py`
    check the new specification too: the spec check, a test per criterion,
