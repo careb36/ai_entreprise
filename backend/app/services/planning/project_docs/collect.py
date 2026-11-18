@@ -18,7 +18,9 @@ task was merged at), ``wstg_observations`` (the WSTG items the Verifier's
 checks observed), ``wstg_reviews`` (a person's recorded reviews, without
 the reviewer's name), ``effort`` and ``costs`` (the backend's effort
 observation per task and each sprint's reported model usage,
-``collect_status``) and ``statements_<document>`` (a person's current
+``collect_status``), ``iteration_plans``, ``carries`` and ``releases``
+(each sprint's scope and team source, the platform's carries, the published
+integrations; ``collect_release``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -52,7 +54,12 @@ from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
-from services.planning.project_docs import collect_status, statements, texts
+from services.planning.project_docs import (
+    collect_release,
+    collect_status,
+    statements,
+    texts,
+)
 from services.planning.project_docs.refs import digest
 from services.platform import wstg_catalogue
 
@@ -568,5 +575,10 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "wstg_reviews": _wstg_reviews(session, company.id),
         "effort": collect_status.effort(session, company.id),
         "costs": collect_status.costs(session, company.id, [s["id"] for s in sprints]),
+        "iteration_plans": collect_release.iteration_plans(
+            session, [s["id"] for s in sprints]
+        ),
+        "carries": collect_release.carries(session, company.id),
+        "releases": collect_release.releases(session, company.id),
         **_person_statements(session, company.id),
     }

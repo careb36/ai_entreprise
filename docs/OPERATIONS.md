@@ -307,7 +307,28 @@ linked only when it is a member of this company and of no other; it then
 becomes SSO-only (its password is cleared) unless it is an Owner. Someone who
 already has an account and is not a member is told to ask an Owner for an
 invitation; someone who belongs to other companies too keeps signing in with
-their password. A domain can be listed by one company only.
+their password.
+
+**Verify each allowed domain.** SSO creates or links accounts only in a
+domain the company has proved it holds. After saving, the page lists each
+domain with a TXT record to publish at your DNS host:
+
+```
+_la-fabrique-verify.acme.com.  TXT  "la-fabrique-domain-verification=<token>"
+```
+
+then press **Check** (or wait for the daily re-check,
+`SSO_DOMAIN_RECHECK_HOURS`). Each check is recorded with what DNS answered.
+Leave the record in place: a re-check that finds it gone unverifies the
+domain, and new people can no longer join through it (members already linked
+keep signing in). A domain another company has verified cannot be listed;
+if your company now holds a domain someone else verified, publish your record
+and check: their claim is looked up again first and released if their record
+is gone. Domains listed before the upgrade to migration `0049` keep working
+unverified for `SSO_LEGACY_DOMAIN_GRACE_DAYS` (30) while
+`SSO_LEGACY_DOMAIN_GRACE` is on; verify them in that time. The backend asks
+the system's resolver unless `SSO_DNS_NAMESERVERS` names others, and needs
+outbound DNS (UDP and TCP port 53) to them.
 
 Every sign-in writes an `sso_sign_in` audit row with what the provider asserted
 and the outcome (`created`, `linked`, `signed_in` or `refused:<reason>`), and

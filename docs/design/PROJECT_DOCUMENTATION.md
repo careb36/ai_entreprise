@@ -65,6 +65,7 @@ Brown, c4model.com, CC BY 4.0).
 | Scope | Planning | Work breakdown structure (`wbs.md`) | specification, tasks |
 | Scope | Monitoring and Controlling | Requirements traceability matrix (`traceability.md`) | specification, tasks, verifications, integrations |
 | Schedule | Planning | Schedule and milestones (`schedule.md`) | approvals, sprints, integrations |
+| Schedule | Planning | Release and iteration plan (`release_plan.md`, phase 2) | sprints and their plan, specifications, carries, published integrations; one person section |
 | Resources | Planning | Responsibility assignment, RACI (`raci.md`) | roster, members, tasks, factory rules |
 | Risk | Planning | Risk register (`risks.md`) | verifications, holds; one person section |
 | Scope | Monitoring and Controlling | Security test checklist, OWASP WSTG (`wstg_checklist.md`, CC BY-SA 4.0) | specification, architecture, stack discovery, the Verifier's WSTG items, people's recorded reviews |
@@ -93,6 +94,7 @@ the index:
 | Charter | Business justification, expected benefits, budget envelope, sponsor |
 | Risk register | Risk appetite and project-level risks (market, staffing, budget) |
 | Check results | Finance (within budget), Stakeholders (outside the company) |
+| Release and iteration plan | Target release dates and scope ahead (phase 2) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
 author recorded in the audit, is the first item of phase 2. The TechWriter's
@@ -125,6 +127,8 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Schedule | Work planned for a sprint is finished in it | tasks carried to a later sprint over the tasks planned (measured; phase 2) |
 | Finance | Model spend is known for every completed sprint | each completed sprint's usage reported by the provider and priced (phase 2) |
 | Resources | The effort each task took is observed, not reported | every task of a completed sprint has an `effort_observed` event (phase 2) |
+| Scope | Requirements are delivered by the iterations | requirements a done task covers, over the documented specifications' requirements (measured; phase 2) |
+| Schedule | Completed iterations leave the factory as releases | completed sprints whose integration was published as a request (measured; phase 2) |
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
@@ -266,6 +270,31 @@ Retrospectives, agent messages and delivery texts are not inputs: a claim can
 neither appear in the report nor make it stale. A price change in the model
 catalogue changes a sprint's spend, and so makes the report stale; that is
 intended, the figure it shows would no longer be the one the backend computes.
+
+### Release and iteration plan (`release_plan.md`; Schedule, Planning; inputs: specification, sprints, iteration_plans, carries, releases, statements_release_plan, and specifications when there are several)
+
+Phase 2. The plan an adaptive project keeps of its iterations and releases,
+compiled from what was recorded rather than written ahead: what each iteration
+was planned to do, which requirements it carries, what moved between
+iterations and what left the factory. `collect_release` reads the three new
+snapshot keys, `iterations` counts, `release_docs` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| Iteration: planned from | `Sprint.specification_id`, with the version when the snapshot holds that specification | sprint ref (digest), specification ref |
+| Iteration: goal as planned, team, who chose it, scope size | `Sprint.goal`, `team`, `team_source`, `scope_size` as recorded when the sprint started; shown as the plan, never as a result | sprint ref (digest) |
+| Iteration: done / planned, requirements carried | each sprint's tasks, their board status and `covers` (a criterion id read as its requirement) | sprint ref (digest) |
+| Requirement by iteration | the tasks whose `covers` name it, in its own specification's sprints; delivered (a covering task done), planned, not planned | requirement ref, task ref (digests) |
+| Carry-over | `carried_over` task events leaving a sprint, written by the platform (actor `system`, `services/loop/carry_over.py`), with the task and sprint they went to; any other actor is a claim and is not read | event ref (chain hash) |
+| Release | a `SprintIntegration` with a `publication`: the daemon's commit, how it was published (`gh`, `glab`, `compare`), and the audit row the backend wrote (`sprint_published`), its time and chain hash; the publisher's name and the request's address are left out | `release` ref (the audit row's chain hash) |
+| Target release dates and scope ahead | `release_plan.targets`, a person's statement | person, **claim** |
+
+A release here is what the factory can observe today: a sprint's integration
+published as one pull or merge request. A tagged version and its deployment
+are the ITIL release and deployment plan of phase 5. Retrospectives and agent
+messages are not inputs. A date ahead is never computed: the plan shows the
+dates the records hold (a sprint's start, its first and last event, a
+publication), and the dates the project commits to are the person section's.
 
 ### Architecture diagrams, C4 (`c4.md`; inputs: architecture, stack)
 
@@ -473,7 +502,8 @@ kept apart from the compiled fields and cited as the person's statement);
 then the status and work performance reports (board state, sprint progress
 against plan, holds, integrations: the book's chain of work performance data,
 information and report maps onto observation, analysis and claim) and the
-release and iteration plan as its own document. Then the final report from a
+release and iteration plan as its own document (both done: `status_report.md`,
+`release_plan.md`). Then the final report from a
 completed project's integrations, the traceability matrix and the
 retrospectives, and more computed checks per domain (backlog rates, a
 stakeholder register from members plus a person's external list). After that: communications and quality plans

@@ -29,6 +29,7 @@ from typing import Any
 
 from services.contracts import roles as role_catalogue
 from services.planning.project_docs import (
+    iterations,
     performance,
     specs,
     statements,
@@ -372,6 +373,38 @@ def effort_observed(snapshot: dict, src: Sources, tr: Tr) -> Result:
     )
 
 
+def requirements_delivered(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Measured: which requirements an iteration has delivered is the plan's
+    progress, not a verdict (the Owner sets the pace)."""
+    listed = [s for s in specs.documented(snapshot) if s.get("requirements")]
+    if not listed:
+        return NOT_COMPUTABLE, tr("check.no_requirements"), ""
+    total = iterations.totals(snapshot)
+    return (
+        MEASURED,
+        tr("check.delivered_obs", part=total["delivered"], whole=total["requirements"]),
+        " ".join(src.cite(spec_ref(s, src.lang)) for s in listed),
+    )
+
+
+def iterations_released(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Measured: whether every iteration is released is the Owner's choice."""
+    done = [
+        s
+        for s in snapshot.get("sprints") or []
+        if s.get("status") == iterations.COMPLETED
+    ]
+    if not done:
+        return NOT_COMPUTABLE, tr("check.lessons_none"), ""
+    total = iterations.totals(snapshot)
+    released = {r.get("sprint_id") for r in iterations.releases(snapshot)}
+    return (
+        MEASURED,
+        tr("check.released_obs", part=total["completed_released"], whole=len(done)),
+        _sprint_marks([s for s in done if s.get("id") in released] or done, src),
+    )
+
+
 def _person(_snapshot: dict, _src: Sources, tr: Tr) -> Result:
     return PERSON, tr("check.person_obs"), ""
 
@@ -383,8 +416,13 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("stability", requirements_stability),
         ("covered", requirements_covered),
         ("first_pass", first_pass),
+        ("delivered", requirements_delivered),
     ],
-    "Schedule": [("schedule", schedule_documented), ("carry_over", carry_over)],
+    "Schedule": [
+        ("schedule", schedule_documented),
+        ("carry_over", carry_over),
+        ("released", iterations_released),
+    ],
     "Finance": [("budget", _person), ("spend", spend_known)],
     "Stakeholders": [("people", people_recorded), ("external", _person)],
     "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
@@ -405,6 +443,7 @@ CHECK_INPUTS = (
     "events",
     "effort",
     "costs",
+    "releases",
     statements.key_of("checks"),
 )
 
