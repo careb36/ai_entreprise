@@ -67,6 +67,7 @@ from config import settings
 
 # The tests never call models.dev: the catalogue stays on its snapshot.
 settings.MODELS_CATALOG_REFRESH_HOURS = 0
+import shared_sqlite
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
@@ -139,15 +140,18 @@ from sqlmodel import Session, SQLModel, create_engine
 # In-memory SQLite engine — shared across all tests within a session via
 # StaticPool so every Session sees the same in-memory database. An in-memory
 # database belongs to its process, so under pytest-xdist each worker has its
-# own and no worker sees another's rows.
+# own and no worker sees another's rows. The one connection's transaction
+# belongs to the checkout that opened it (``shared_sqlite``): the app writes
+# from ``asyncio.to_thread`` while the loop goes on with sessions of its own.
 # ---------------------------------------------------------------------------
 _SQLITE_URL = "sqlite://"
 
 _engine = create_engine(
     _SQLITE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=shared_sqlite.connect_args(),
     poolclass=StaticPool,
 )
+shared_sqlite.install(_engine)
 
 
 # ---------------------------------------------------------------------------

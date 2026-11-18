@@ -213,7 +213,7 @@ def test_run_sh_skips_the_rest_once_the_budget_is_passed():
 def test_the_budget_exceeded_card():
     card = _cut_card()
     assert scorecard.validate(card) == []
-    assert card["schema_version"] == 3
+    assert card["schema_version"] == scorecard.SCHEMA_VERSION
     assert card["run"] == {
         "status": "budget_exceeded",
         "budget": 1000,
