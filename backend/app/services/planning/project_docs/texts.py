@@ -20,6 +20,8 @@ from typing import Any
 from services.planning.project_docs import (
     texts_en,
     texts_es,
+    texts_final_en,
+    texts_final_es,
     texts_plans_en,
     texts_plans_es,
     texts_release_en,
@@ -34,9 +36,9 @@ LANGUAGES = ("en", "es")
 DEFAULT_LANGUAGE = "en"
 
 # The security documents' strings (issue #539), the status report's
-# (``status_docs``) and the release and iteration plan's (``release_docs``)
-# live in their own modules; so do the quality and communications plans'
-# (``texts_plans_*``).
+# (``status_docs``), the release and iteration plan's (``release_docs``) and
+# the final report's (``final_docs``) live in their own modules; so do the
+# quality and communications plans' (``texts_plans_*``).
 TEXTS: dict[str, dict[str, str]] = {
     "en": {
         **texts_plans_en.TEXTS,
@@ -44,6 +46,7 @@ TEXTS: dict[str, dict[str, str]] = {
         **texts_wstg_en.TEXTS,
         **texts_status_en.TEXTS,
         **texts_release_en.TEXTS,
+        **texts_final_en.TEXTS,
     },
     "es": {
         **texts_plans_es.TEXTS,
@@ -51,6 +54,7 @@ TEXTS: dict[str, dict[str, str]] = {
         **texts_wstg_es.TEXTS,
         **texts_status_es.TEXTS,
         **texts_release_es.TEXTS,
+        **texts_final_es.TEXTS,
     },
 }
 

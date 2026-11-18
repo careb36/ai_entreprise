@@ -2506,6 +2506,41 @@
       "deliveryUnconfirmed": "Entrega sin confirmar"
     }
   },
+  "missingModuleMentions": {
+    "title": "Pedidos de retrabajo que nombran un módulo faltante (palabras de los revisores)",
+    "count_one": "{{count}} pedido de retrabajo que nombra un módulo faltante",
+    "count_other": "{{count}} pedidos de retrabajo que nombran un módulo faltante",
+    "claimed": "Afirmado: cuenta lo que los revisores escribieron en sus pedidos de retrabajo, no si de verdad faltaba un módulo. A diferencia de las refutaciones de al lado, no son observaciones.",
+    "cutoffDefault": "Antes y después de {{cutoff}}, cuando se fusionó la verificación de dependencias (#503)",
+    "cutoffChosen": "Antes y después de {{cutoff}}",
+    "none": "Ningún pedido de retrabajo en este período.",
+    "beforeAfter": "Proporción de pedidos de retrabajo que nombran un módulo faltante, antes y después del corte",
+    "before": "Antes",
+    "after": "Después",
+    "ofRequests_one": "{{mentions}} de {{count}} pedido de retrabajo",
+    "ofRequests_other": "{{mentions}} de {{count}} pedidos de retrabajo",
+    "days_one": "en {{count}} día",
+    "days_other": "en {{count}} días",
+    "bySource": "Nombran un módulo faltante / pedidos de retrabajo, según quién los escribió",
+    "sourceColumn": "Escrito por",
+    "source": {
+      "gate": "La compuerta",
+      "person": "Una persona",
+      "agentReviewer": "Un agente revisor"
+    },
+    "gateHint": "Las devoluciones de la compuerta usan las palabras del propio backend y se cuentan aparte para no inflar la cifra de los revisores.",
+    "byWeek": "Pedidos que nombran un módulo faltante por semana",
+    "chartLabel": "Pedidos de retrabajo que nombran un módulo faltante por semana ISO, antes y después del corte",
+    "weekValue_one": "{{week}} ({{side}}): {{count}} de {{requests}} pedidos de retrabajo nombra un módulo faltante",
+    "weekValue_other": "{{week}} ({{side}}): {{count}} de {{requests}} pedidos de retrabajo nombran un módulo faltante",
+    "cutoffMark": "Corte",
+    "showTable": "Mostrar las semanas como tabla",
+    "tableCaption": "Pedidos de retrabajo que nombran un módulo faltante por semana ISO y lado del corte",
+    "week": "Semana",
+    "sideColumn": "Lado del corte",
+    "mentionsColumn": "Nombran un módulo faltante",
+    "requestsColumn": "Pedidos de retrabajo"
+  },
   "routing": {
     "title": "Dificultad y modelo",
     "hint": "Sprints cerrados, según la dificultad con la que se enrutó cada tarea y el modelo de su última entrega.",
@@ -2958,6 +2993,18 @@
         "release_plan_targets": {
           "title": "Fechas objetivo de entrega y alcance por delante",
           "what": "Las fechas con las que el proyecto se compromete para sus próximas entregas, qué debe contener cada entrega e iteración por venir, y las decisiones de alcance tomadas por adelantado, leídas frente al plan anterior."
+        },
+        "final_report_acceptance": {
+          "title": "Aceptación por el patrocinador",
+          "what": "Si el patrocinador acepta lo entregado, con las condiciones o reservas que tenga, leído frente a la entrega y las retenciones abiertas indicadas arriba."
+        },
+        "final_report_benefits": {
+          "title": "Perspectiva de realización de beneficios",
+          "what": "Qué beneficios se espera que aporte el resultado después del cierre, cuándo, y quién les hará seguimiento."
+        },
+        "final_report_handover": {
+          "title": "Notas de traspaso",
+          "what": "Quién recibe el resultado (operaciones, mantenimiento, el cliente), qué recibe y qué debe saber sobre las retenciones y los riesgos que quedan abiertos."
         }
       }
     }

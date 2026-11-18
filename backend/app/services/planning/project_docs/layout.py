@@ -70,6 +70,7 @@ PLACEMENT: dict[str, tuple[str, str]] = {
     "lessons": ("Governance", "Executing"),
     "checks": ("Governance", "Monitoring and Controlling"),
     "status_report": ("Governance", "Monitoring and Controlling"),
+    "final_report": ("Governance", "Closing"),
     # Security testing is quality (Scope); its findings are risk (issue #539).
     "wstg_checklist": ("Scope", "Monitoring and Controlling"),
     "security_report": ("Risk", "Monitoring and Controlling"),

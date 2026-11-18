@@ -4,6 +4,8 @@ Endpoints (split out of ``routers/enterprise.py``, which re-exports them):
 - ``GET /v1/analytics/summary``              — AI Scrum Master sprint health report.
 - ``GET /v1/analytics/orchestration_health`` — weekly KPI trends of the orchestration.
 - ``GET /v1/analytics/gate_refutations``     — deliveries the gate before QA sent back.
+- ``GET /v1/analytics/missing_module_mentions`` — rework requests naming a missing
+  module, before and after a cutoff (the grounded check's merge by default).
 - ``GET /v1/enterprise/quota_usage_history`` — a company's daily token usage.
 """
 
@@ -20,6 +22,9 @@ from models import AuditLog, Sprint, TaskEvent, User
 from schemas import (
     GateRefutationsResponse,
     GateRefutationWeek,
+    MissingModuleMentionsResponse,
+    MissingModulePeriod,
+    MissingModuleWeek,
     OrchestrationHealthResponse,
     OrchestrationHealthSummaries,
     OrchestrationHealthSummary,
@@ -30,6 +35,11 @@ from services.platform.orchestration_metrics import (
     GATE_UNCONFIRMED,
     count_gate_refutations,
     gate_refutation_problem,
+)
+from services.platform.rework_mentions import (
+    COUNTS_WHAT,
+    GROUNDED_CHECK_SHIPPED_AT,
+    count_rework_mentions,
 )
 from services.tasks.task_events import GATE
 from sqlalchemy import text
@@ -310,6 +320,93 @@ async def get_gate_refutations(
         weeks=[
             GateRefutationWeek(week=week, by_problem=count_gate_refutations(rows))
             for week, rows in sorted(weekly.items())
+        ],
+    )
+
+
+@router.get(
+    "/analytics/missing_module_mentions",
+    response_model=MissingModuleMentionsResponse,
+    tags=["Enterprise"],
+)
+async def get_missing_module_mentions(
+    company_id: int = Query(..., description="Company whose task events are read"),
+    sprint_id: int | None = Query(None, description="Only this sprint's tasks"),
+    cutoff: datetime | None = Query(  # noqa: B008 - FastAPI query marker.
+        None,
+        description="Where before ends and after starts (UTC); defaults to the "
+        "merge of the grounded check, pull request #503",
+    ),
+    since: date | None = Query(None, description="First day, inclusive"),  # noqa: B008 - FastAPI query marker.
+    until: date | None = Query(None, description="Last day, inclusive (today)"),  # noqa: B008 - FastAPI query marker.
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """
+    Rework requests whose text names a missing module, package or import,
+    before and after *cutoff*, per ISO week (issue #549).
+
+    The events are the backend's record (the task-event chain), but a rework
+    request's text is what a reviewer wrote: this counts what reviewers
+    claimed, not whether a module was missing. The gate's own send-backs are
+    counted under ``gate``, apart from people's and agents'. The matching rule
+    is ``services/platform/rework_mentions.MISSING_MODULE_RULES``. ``since``
+    defaults to eight weeks before the cutoff.
+    """
+    require_company_role(session, user, company_id, "Viewer")
+    is_default = cutoff is None
+    split = cutoff or GROUNDED_CHECK_SHIPPED_AT
+    if split.tzinfo is not None:
+        split = split.astimezone(UTC).replace(tzinfo=None)
+    until = until or datetime.now(UTC).date()
+    since = since or split.date() - timedelta(days=_GATE_REFUTATION_DAYS)
+    if since > until:
+        raise HTTPException(status_code=400, detail="since is after until")
+    if sprint_id is not None:
+        sprint = session.get(Sprint, sprint_id)
+        if sprint is None or sprint.company_id != company_id:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+    start = datetime.combine(since, datetime.min.time())
+    end = datetime.combine(until + timedelta(days=1), datetime.min.time())
+    boundary = min(max(split, start), end)
+    query = select(TaskEvent).where(
+        TaskEvent.company_id == company_id,
+        TaskEvent.event_type.in_(("reviewed", "sent_back")),  # type: ignore[attr-defined]
+        TaskEvent.created_at >= start,
+        TaskEvent.created_at < end,
+    )
+    if sprint_id is not None:
+        query = query.where(TaskEvent.sprint_id == sprint_id)
+    sides: dict[str, list[tuple]] = {"before": [], "after": []}
+    weekly: dict[tuple[str, str], list[tuple]] = {}
+    for event in session.exec(query.order_by(TaskEvent.id)).all():
+        row = (event.event_type, event.actor, event.payload)
+        side = "before" if event.created_at < boundary else "after"
+        sides[side].append(row)
+        year, week, _ = event.created_at.isocalendar()
+        weekly.setdefault((f"{year}-W{week:02d}", side), []).append(row)
+
+    def period(first: datetime, last: datetime, rows: list[tuple]):
+        return MissingModulePeriod(
+            since=first.isoformat(),
+            until=last.isoformat(),
+            days=round((last - first).total_seconds() / 86400, 2),
+            **count_rework_mentions(rows),
+        )
+
+    return MissingModuleMentionsResponse(
+        company_id=company_id,
+        sprint_id=sprint_id,
+        counts_what=COUNTS_WHAT,
+        cutoff=split.isoformat(),
+        cutoff_is_default=is_default,
+        before=period(start, boundary, sides["before"]),
+        after=period(boundary, end, sides["after"]),
+        weeks=[
+            MissingModuleWeek(week=week, period=side, **count_rework_mentions(rows))
+            for (week, side), rows in sorted(
+                weekly.items(), key=lambda kv: (kv[0][0], kv[0][1] == "after")
+            )
         ],
     )
 
