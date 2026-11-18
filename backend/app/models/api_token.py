@@ -13,7 +13,13 @@ class ApiToken(SQLModel, table=True):
     company_id: int = Field(foreign_key="companies.id", index=True)
     name: str
     token_hash: str = Field(index=True)
+    # The creator's email as it was when the token was minted (shown in the
+    # access review), and the creator's account id, which the cap on every
+    # use reads (issue #512): an address can pass to another account, an id
+    # cannot. None on rows migration 0048 could not match to an account;
+    # those are judged by email, as before.
     created_by: str | None = None
+    created_by_user_id: int | None = Field(default=None, foreign_key="users.id")
     scopes: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     revoked_at: datetime | None = None
