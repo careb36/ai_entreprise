@@ -1,5 +1,5 @@
 """A company's SSO connection, managed by its Owners (``routers/sso_admin.py``;
-docs/design/SSO.md, T5–T8, T11, T12, T14): only a signed-in human Owner
+docs/design/SSO.md, T5–T8, T11, T12, T14, T19): only a signed-in human Owner
 reads or changes it; the client secret is encrypted and never returned; the
 issuer, domains and default role are checked (never Owner, never a public mail
 domain); Google and Entra are presets of the issuer; the test reports what the
@@ -15,7 +15,15 @@ from config import settings
 from models import AuditLog, SsoConnection
 from services.platform import api_tokens
 from sqlmodel import select
-from sso_fake_idp import CLIENT_ID, ISSUER, company, connect, member, sign_in
+from sso_fake_idp import (
+    CLIENT_ID,
+    ISSUER,
+    company,
+    connect,
+    member,
+    sign_in,
+    verify_domains,
+)
 
 
 def _url(company_id, suffix=""):
@@ -182,6 +190,7 @@ def test_requiring_sso_waits_for_an_owners_sign_in(
     )
     assert refused.status_code == 409 and "Owner" in refused.json()["detail"]
     assert test_client.put(_url(acme.id), json=body, headers=owner).status_code == 200
+    verify_domains(sqlite_session, acme.id)  # the domain's TXT record was found
     # The Owner signs in through the connection: now it is proven to work.
     fake_idp.claims = {"email": owner_user.email, "sub": "subject-owner"}
     assert "code" in sign_in(test_client, fake_idp, body["slug"])
@@ -266,12 +275,21 @@ def test_deleting_the_connection_is_audited(sqlite_session, test_client, fake_id
     assert "sso_connection_deleted" in actions
 
 
-def test_a_domain_belongs_to_one_company(sqlite_session, test_client, fake_idp):
+def test_a_domain_verified_by_one_company_is_held_by_it(
+    sqlite_session, test_client, fake_idp
+):
     acme, other = company(sqlite_session), company(sqlite_session)
     _, owner = member(sqlite_session, acme.id, "Owner")
     _, other_owner = member(sqlite_session, other.id, "Owner")
     body = _body()
     assert test_client.put(_url(acme.id), json=body, headers=owner).status_code == 200
     squat = _body(allowed_domains=["unique-x.test", body["allowed_domains"][0]])
+    # Unverified, the first listing holds nothing (docs/design/SSO.md, T19).
+    assert (
+        test_client.put(_url(other.id), json=squat, headers=other_owner).status_code
+        == 200
+    )
+    verify_domains(sqlite_session, acme.id)
     response = test_client.put(_url(other.id), json=squat, headers=other_owner)
-    assert response.status_code == 409 and "claimed" in response.json()["detail"]
+    assert response.status_code == 409
+    assert "verified by another company" in response.json()["detail"]
