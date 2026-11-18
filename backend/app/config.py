@@ -214,6 +214,10 @@ class Settings(BaseSettings):
     # last this many rounds go to the model as one line each; the evidence
     # keeps them whole. 0 keeps every result whole.
     TOOL_HISTORY_KEEP_ROUNDS: int = 3
+    # Named sections of the Developer's task prompt left out of every prompt,
+    # comma-separated (``services/loop/worker/prompt_budget.py``, issue #443):
+    # a with/without comparison for the bench. Empty: nothing is off.
+    PROMPT_SECTIONS_OFF: str = ""
     # The research tools (``services/research_tools.py``): the roles that
     # decide read official sources (documentation, registries, OSV) through
     # the backend's own egress, from the default hosts plus these; every

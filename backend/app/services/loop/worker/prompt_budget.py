@@ -16,6 +16,15 @@ Budgets, in estimated tokens: ``PROMPT_BUDGET_<ROLE>`` (the role upper-cased,
 anything but letters and digits as ``_``), else ``PROMPT_BUDGET``. Unset, 0 or
 not a number: no budget, every section is kept and still measured.
 
+Sections can also be turned off by name for a with/without comparison (the
+bench, #316): ``PROMPT_SECTIONS_OFF`` lists them, comma-separated. They are
+left out before the budget is applied, the prompt does not name them (the
+comparison is of a prompt without the section, not of one that points at
+it), and the measure records them as ``off`` (the names configured) and
+``off_dropped`` (those this prompt would have carried), so a scorecard can
+tell the runs apart. An unknown name, or a required section's, is ignored
+with a warning at startup (``startup_warnings``). Unset: nothing is off.
+
 Priorities follow what the issue asked to study: Aider caps its repository map
 by a token budget, OpenHands' condenser drops the least recent context first.
 No code was taken.
@@ -29,8 +38,35 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from config import settings
+
 REQUIRED = 0
 CHARS_PER_TOKEN = 4
+
+# The Developer prompt's sections, in prompt order (``worker/execute``);
+# ``test_prompt_sections_off`` keeps this list in step with the prompt.
+SECTION_NAMES = (
+    "output_format",
+    "standards_and_procedures",
+    "lessons",
+    "task",
+    "requirements",
+    "repository",
+    "related_code",
+    "wiki",
+    "memory",
+    "previous_attempt",
+    "completed_tasks",
+    "sprint_board",
+    "console_assistant_notes",
+    "architect_brief",
+    "review_feedback",
+)
+# Never cut by the budget, and never turned off: without them there is no task.
+REQUIRED_NAMES = frozenset(
+    {"output_format", "task", "architect_brief", "review_feedback"}
+)
+OFF_SETTING = "PROMPT_SECTIONS_OFF"
 
 
 @dataclass(frozen=True)
@@ -63,6 +99,54 @@ def budget_for(role: str | None, env: dict[str, str] | None = None) -> int | Non
     return None
 
 
+def _requested(raw: str | None) -> list[str]:
+    raw = settings.PROMPT_SECTIONS_OFF if raw is None else raw
+    names = (name.strip().lower() for name in str(raw or "").split(","))
+    return list(dict.fromkeys(name for name in names if name))
+
+
+def sections_off(raw: str | None = None) -> frozenset[str]:
+    """The sections turned off: the known, optional names in *raw*
+    (``PROMPT_SECTIONS_OFF`` by default); anything else is ignored."""
+    return frozenset(
+        name
+        for name in _requested(raw)
+        if name in SECTION_NAMES and name not in REQUIRED_NAMES
+    )
+
+
+def startup_warnings(raw: str | None = None) -> list[str]:
+    """What ``PROMPT_SECTIONS_OFF`` ignores, and what it turns off, one line each."""
+    requested = _requested(raw)
+    warnings = []
+    unknown = [name for name in requested if name not in SECTION_NAMES]
+    if unknown:
+        optional = [name for name in SECTION_NAMES if name not in REQUIRED_NAMES]
+        warnings.append(
+            f"{OFF_SETTING} names unknown prompt sections, ignored: "
+            + ", ".join(unknown)
+            + ". Known sections: "
+            + ", ".join(optional)
+            + "."
+        )
+    required = [name for name in requested if name in REQUIRED_NAMES]
+    if required:
+        warnings.append(
+            f"{OFF_SETTING} names required prompt sections, which stay on: "
+            + ", ".join(required)
+            + "."
+        )
+    off = sections_off(raw)
+    if off:
+        warnings.append(
+            f"{OFF_SETTING}: left out of every Developer task prompt "
+            "(a with/without comparison): "
+            + ", ".join(name for name in SECTION_NAMES if name in off)
+            + "."
+        )
+    return warnings
+
+
 def cut_note(names: list[str]) -> str:
     return (
         "\n\n## Left out of this prompt\n"
@@ -74,14 +158,25 @@ def cut_note(names: list[str]) -> str:
 
 
 def fit(
-    sections: list[Section], budget: int | None = None
+    sections: list[Section],
+    budget: int | None = None,
+    off: frozenset[str] = frozenset(),
 ) -> tuple[str, dict[str, Any]]:
-    """The prompt text and its measure: ``{budget, tokens, sections: [...], cut: [...]}``.
+    """The prompt text and its measure: ``{budget, tokens, sections: [...], cut: [...]}``,
+    and ``off``/``off_dropped``.
 
-    Empty sections are skipped. Over budget, the highest-priority number goes
-    first and, among equals, the later section (the more variable one).
+    Empty sections are skipped, and so are the optional ones named in *off*
+    (``off_dropped``; the prompt does not name them). Over budget, the
+    highest-priority number goes first and, among equals, the later section
+    (the more variable one).
     """
-    present = [s for s in sections if s.text]
+    off = frozenset(name for name in off if name not in REQUIRED_NAMES)
+
+    def turned_off(s: Section) -> bool:
+        return s.name in off and s.priority > REQUIRED
+
+    dropped = [s.name for s in sections if s.text and turned_off(s)]
+    present = [s for s in sections if s.text and not turned_off(s)]
     cut: set[int] = set()
 
     def render() -> str:
@@ -116,5 +211,8 @@ def fit(
             for i, s in enumerate(present)
         ],
         "cut": [s.name for i, s in enumerate(present) if i in cut],
+        # Turned off by name (PROMPT_SECTIONS_OFF), apart from the budget's cut.
+        "off": sorted(off),
+        "off_dropped": dropped,
     }
     return text, measure
