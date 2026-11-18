@@ -1,4 +1,4 @@
-import type { C4Diagram, DocumentationPack } from '../services/documentation'
+import type { C4Diagram, DocumentationPack, PersonSectionList, PersonStatement } from '../services/documentation'
 
 export const EVIL = '<img src=x onerror="alert(1)"><script>alert(2)</script>'
 
@@ -54,5 +54,27 @@ export function pack(overrides: Partial<DocumentationPack> = {}): DocumentationP
     diagrams: [DIAGRAM],
     lint: { ok: true, stale: false, blocking: 0, findings: [{ severity: 'info', where: 'risks', message: 'No record for: risks.' }], documents: [], diagrams: [] },
     ...overrides,
+  }
+}
+
+/** A person statement as the backend returns it: a claim with its author, role, time and digest. */
+export function statement(overrides: Partial<PersonStatement> = {}): PersonStatement {
+  return {
+    id: 7, section: 'charter.budget', text: 'Forty thousand over six months.', withdrawn: false,
+    author: 'sponsor@example.test', author_role: 'Owner', recorded_at: '2026-11-16T09:30:00',
+    supersedes_id: null, statement_sha256: 'ef'.repeat(32), ...overrides,
+  }
+}
+
+/** The person sections of company 4: the charter's budget filled (by default), the rest empty. */
+export function personSections(filled: PersonStatement | null = statement()): PersonSectionList {
+  const keys: [string, string][] = [
+    ['charter.justification', 'charter'], ['charter.benefits', 'charter'], ['charter.budget', 'charter'],
+    ['charter.sponsor', 'charter'], ['risks.appetite', 'risks'], ['checks.budget', 'checks'], ['checks.external', 'checks'],
+  ]
+  return {
+    company_id: 4,
+    text_limit: 2000,
+    sections: keys.map(([key, document]) => ({ key, document, statement: filled && filled.section === key ? filled : null })),
   }
 }

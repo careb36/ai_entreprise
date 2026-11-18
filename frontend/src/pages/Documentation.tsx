@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Archive, BookOpen, CheckCircle, CircleCheck, FolderOutput, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react'
 import { C4DiagramView } from '../components/C4DiagramView'
+import { PersonSections } from '../components/documentation/PersonSections'
 import { PackMarkdown } from '../components/PackMarkdown'
 import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
 import { EmptyState, PageHeader, Panel, StatusBadge, Toolbar, type StatusTone } from '../components/ui'
@@ -121,6 +122,7 @@ function PackView({ pack, canManage, isOwner }: { pack: DocumentationPack; canMa
           ? <EmptyState title={t('documentation.noDiagrams')} dashed />
           : <div className="space-y-4">{pack.diagrams.map(d => <C4DiagramView key={d.key} diagram={d} />)}</div>
       ) : doc ? (
+        <>
         <article className="panel" role="tabpanel">
           <p className="text-meta border-b border-surface-700 px-4 py-2 tabular-nums">
             {t('documentation.file', { file: doc.file })} · {t('documentation.sourcesCount', { count: doc.sources.length })}
@@ -132,6 +134,8 @@ function PackView({ pack, canManage, isOwner }: { pack: DocumentationPack; canMa
             <PackMarkdown markdown={doc.markdown} />
           </div>
         </article>
+        <PersonSections companyId={pack.company_id} document={doc.key} canWrite={canManage} />
+        </>
       ) : null}
     </div>
   )
