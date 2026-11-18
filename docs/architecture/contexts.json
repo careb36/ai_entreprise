@@ -522,6 +522,9 @@
         "evidence",
         "loop"
       ],
+      "test_browser_images_playwright.py": [
+        "loop"
+      ],
       "test_browser_smoke.py": [
         "evidence",
         "loop"
@@ -899,6 +902,9 @@
       ],
       "test_passwords.py": [
         "platform"
+      ],
+      "test_playwright_pin.py": [
+        "workspace"
       ],
       "test_procedures.py": [
         "loop"
