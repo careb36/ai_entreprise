@@ -90,14 +90,6 @@ def _connection(session: Session, company_id: int) -> SsoConnection | None:
     ).first()
 
 
-def _identity_at(session: Session, user_id: int, issuer: str) -> SsoIdentity | None:
-    return session.exec(
-        select(SsoIdentity).where(
-            SsoIdentity.user_id == user_id, SsoIdentity.issuer == issuer
-        )
-    ).first()
-
-
 def start(
     session: Session, user: User, company_id: int, session_id: str, binding: str
 ) -> str:
@@ -108,7 +100,7 @@ def start(
     conn = _connection(session, company_id)
     if conn is None:
         raise LinkRefused(404, "no_connection")
-    if _identity_at(session, user.id, conn.issuer) is not None:
+    if sso_flow.linked_at(session, user.id, conn.issuer) is not None:
         raise LinkRefused(409, "already_linked")
     return sso_flow.authorization_url(
         session, conn, "link", binding_hash(binding, session_id), user_id=user.id
@@ -188,16 +180,36 @@ def complete(
         outcome = link(session, conn, user, claims)
         session.flush()
     except IntegrityError:
-        # Another link of the same subject won the unique constraint.
+        # Another link won a unique index since the checks: of this subject
+        # (``identity_taken``) or of this account at this provider.
         session.rollback()
-        _audit(session, conn, user, "refused:identity_taken", claims)
-        raise oidc.SsoError("identity_taken") from None
+        code = _race_code(session, conn, user, claims)
+        _audit(session, conn, user, f"refused:{code}", claims)
+        raise oidc.SsoError(code) from None
     except oidc.SsoError as exc:
         session.rollback()
         _audit(session, conn, user, f"refused:{exc.code}", claims)
         raise
-    _audit(session, conn, user, outcome, claims)
+    # The identity and its audit row are one commit: if the row cannot be
+    # written, nothing is linked.
+    try:
+        _audit(session, conn, user, outcome, claims)
+    except Exception:
+        session.rollback()
+        raise
     return outcome
+
+
+def _race_code(
+    session: Session, conn: SsoConnection, user: User, claims: dict | None
+) -> str:
+    subject = str((claims or {}).get("sub", ""))
+    taken = session.exec(
+        select(SsoIdentity.user_id).where(
+            SsoIdentity.issuer == conn.issuer, SsoIdentity.subject == subject
+        )
+    ).first()
+    return "identity_taken" if taken not in (None, user.id) else "identity_conflict"
 
 
 def link(session: Session, conn: SsoConnection, user: User, claims: dict) -> str:
@@ -229,7 +241,7 @@ def link(session: Session, conn: SsoConnection, user: User, claims: dict) -> str
                 "identity_taken", "this identity is linked to another account"
             )
         return "already_linked"
-    if _identity_at(session, user.id, issuer) is not None:
+    if sso_flow.linked_at(session, user.id, issuer) is not None:
         raise oidc.SsoError(
             "identity_conflict", "the account is linked to another subject"
         )
@@ -303,27 +315,34 @@ def unlink(
         "issuer": identity.issuer,
         "subject": identity.subject,
     }
-    session.delete(identity)
-    ended = 0
-    if by == "owner":
-        session.flush()
-        ended = sessions.revoke_users(session, [user.id], "sso_unlinked", method="sso")
-    AgentService().audit_interaction(
-        session=session,
-        company_id=owning,
-        interaction_id=f"sso-identity:{details['identity_id']}",
-        agent_id=f"human:{actor.email}",
-        action="sso_identity_unlink",
-        details=details,
-        result={
-            "by": by,
-            "user_id": user.id,
-            "other_sign_in": remaining,
-            "sessions_ended": ended,
-        },
-        decision_signature=None,
-        cost_tokens=0,
-    )
+    # The deletion, the revoked sessions and the audit row are one commit
+    # (the audit write's): if the row cannot be written, nothing changes.
+    try:
+        session.delete(identity)
+        ended = 0
+        if by == "owner":
+            ended = sessions.revoke_users(
+                session, [user.id], "sso_unlinked", method="sso", commit=False
+            )
+        AgentService().audit_interaction(
+            session=session,
+            company_id=owning,
+            interaction_id=f"sso-identity:{details['identity_id']}",
+            agent_id=f"human:{actor.email}",
+            action="sso_identity_unlink",
+            details=details,
+            result={
+                "by": by,
+                "user_id": user.id,
+                "other_sign_in": remaining,
+                "sessions_ended": ended,
+            },
+            decision_signature=None,
+            cost_tokens=0,
+        )
+    except Exception:
+        session.rollback()
+        raise
     return {"unlinked": True, "other_sign_in": remaining, "sessions_ended": ended}
 
 

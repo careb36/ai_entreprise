@@ -32,6 +32,7 @@ from urllib.parse import urlencode
 
 from models import CompanyMember, SsoConnection, SsoFlowState, SsoIdentity, User
 from sqlalchemy import delete, func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from services.platform import oidc, sso_connections, sso_domains
@@ -263,6 +264,12 @@ def finish_login(
     try:
         claims = exchange_claims(conn, row, code, error)
         user, outcome, cleared = resolve_identity(session, conn, claims)
+        session.flush()
+    except IntegrityError:
+        # A link of this account at this provider won the race since the check.
+        session.rollback()
+        _audit(session, conn, "refused:identity_conflict", claims)
+        raise oidc.SsoError("identity_conflict") from None
     except oidc.SsoError as exc:
         session.rollback()
         _audit(session, conn, f"refused:{exc.code}", claims)
@@ -279,6 +286,16 @@ def finish_login(
     )
     _audit(session, conn, outcome, claims, user.id, password_cleared=cleared)
     return handoff
+
+
+def linked_at(session: Session, user_id: int, issuer: str) -> SsoIdentity | None:
+    """The account's identity at *issuer*, if any: one per account and provider
+    (the unique index ``ux_sso_identities_user_issuer`` backs this check)."""
+    return session.exec(
+        select(SsoIdentity).where(
+            SsoIdentity.user_id == user_id, SsoIdentity.issuer == issuer
+        )
+    ).first()
 
 
 def _memberships(session: Session, user_id: int) -> dict[int, str]:
@@ -348,11 +365,7 @@ def resolve_identity(
             raise oidc.SsoError(
                 "link_refused", "the account belongs to other companies too"
             )
-        if session.exec(
-            select(SsoIdentity.id).where(
-                SsoIdentity.user_id == user.id, SsoIdentity.issuer == issuer
-            )
-        ).first():
+        if linked_at(session, user.id, issuer) is not None:
             raise oidc.SsoError(
                 "identity_conflict", "the account is linked to another subject"
             )

@@ -4,8 +4,8 @@ Status: draft, written before the code by the `threat-model` skill; a person
 reviews it before it guides more work · Issue: #512 · SDL practice 3 ·
 Amended 2026-11-18 for the DNS verification of allowed domains (T16–T24,
 again written before the code) · Amended 2026-11-18 for linking an identity
-from inside a signed-in session (T25–T32, written with the tests, before the
-code)
+from inside a signed-in session (T25–T33, written with the tests, before the
+code; T31's single transaction and T33 added after the sdl-review)
 
 ## What is built
 
@@ -106,7 +106,8 @@ check rows are the observation; the status is derived only from the latter.
 | T28 | B8 | E | A subject already linked to one account is re-linked to another, or one account collects several subjects at the same issuer | L | H | Medium | New: an `(issuer, subject)` linked to someone else is refused (`identity_taken`; the unique constraint backs it in a race), one already linked to this account is `already_linked`, a second subject at the same issuer is refused at start (409) and at the callback (`identity_conflict`); tests |
 | T29 | B1 | D | A person unlinks their only way to sign in and is locked out (no password reset exists) | M | M | Medium | New: oneself may unlink only while a password **that no SSO requirement refuses** (break-glass counted) or another identity through an enabled connection remains (409 `last_sign_in_method`); tests for an SSO-only account and a password refused by "require SSO" |
 | T30 | B1 | E | An Owner of one company unlinks (or lists) an identity of another company's connection, or a person unlinks someone else's | L | M | Medium | New: the Owner routes act only on identities whose connection is the company's and whose user is still a member (404 otherwise); a person's own route only on their identities (404); the routes are in `authorization.json`; tests |
-| T31 | — | R | A link or unlink leaves no record | M | M | Medium | New: every link callback writes a signed, chained `sso_identity_link` row (observed claims, outcome, refusals included) and every unlink an `sso_identity_unlink` row (issuer, subject, by self or owner, whether another sign-in remained, sessions ended); tests |
+| T31 | — | R | A link or unlink leaves no record, or a failed audit write leaves the change without its row | M | M | Medium | New: every link callback writes a signed, chained `sso_identity_link` row (observed claims, outcome, refusals included) and every unlink an `sso_identity_unlink` row (issuer, subject, by self or owner, whether another sign-in remained, sessions ended). The change and its row are one commit: the new identity, or the deletion with the Owner's session revocations (`sessions.revoke_users(…, commit=False)`), is committed only by the audit write, and rolled back if it fails; tests that make the audit write fail for a link, a self-unlink and an Owner's unlink |
+| T33 | B1 | T | Two links of one account at one provider race past the `identity_conflict` check (two tabs, two states) and leave the account with two subjects there | L | M | Low | New: a unique index on `sso_identities (user_id, issuer)` (migration `0050`, which stops on existing duplicates and changes nothing, as `0045` does); the losing link's flush fails, is rolled back and ends as `identity_conflict` (or `identity_taken` if its subject was the one taken), audited, never a server error; the sign-in's linking by email likewise; tests for the index, both races and the migration |
 | T32 | B1 | E | An identity the Owner removes keeps working through sessions it already started | M | M | Medium | New: an Owner's unlink revokes the person's SSO-started session families at once (`sessions.revoke_users(…, method="sso")`, reason `sso_unlinked`); test. A person's own unlink ends nothing (they are using a session) |
 
 Assume breach: if the resolver the backend asks is compromised, it can
@@ -145,6 +146,12 @@ re-checks the older claim; create and link refused for an unverified domain,
 a linked identity still signs in; legacy grace on, off, over and void once
 another company verified; the domain lookup on the login page; migration
 0049's backfill.
+
+`test_sso_link_integrity.py`: an audit write that fails leaves no link,
+no self-unlink and no Owner unlink (identity kept, sessions not revoked); the
+database refuses a second identity per account and provider; a link and a
+sign-in racing past the check end as `identity_conflict`; migration 0050
+stops on an existing duplicate without changing anything, then applies.
 
 `test_sso_link.py` (the same fake IdP; a browser session from the password
 login): a member of several companies links (PKCE verifier matches the
@@ -273,8 +280,9 @@ unlink another company's.
   `https://login.microsoftonline.com/{tenant}/v2.0` with a tenant GUID;
   `generic` → any https issuer.
 
-- **Linking in a session** (no migration: `sso_flow_states.kind` takes
-  `link`, its `user_id` and `binding_hash` hold the person and the binding):
+- **Linking in a session** (`sso_flow_states.kind` takes `link`, its
+  `user_id` and `binding_hash` hold the person and the binding; migration
+  `0050` adds the unique index `ux_sso_identities_user_issuer`, T33):
   `sso_link.py` (platform) starts a link (`start`), finishes the callback's
   link states (`complete`, after `sso_flow.take_state` consumed it and
   `sso_flow.exchange_claims` validated the token, both shared with the
