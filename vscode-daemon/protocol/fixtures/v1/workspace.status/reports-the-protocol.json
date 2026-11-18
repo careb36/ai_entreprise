@@ -19,6 +19,10 @@
       "enabled": true,
       "quarantined": []
     },
+    "sandbox_environment": {
+      "enabled": true,
+      "quarantined": []
+    },
     "abilities": {
       "abilities_version": 1,
       "subjects": [
@@ -55,11 +59,13 @@
           "browser_probe",
           "cache",
           "full_log",
+          "sandbox_environment",
           "security_probe"
         ],
         "workspace.execute": [
           "full_log",
           "purpose_assistant",
+          "sandbox_environment",
           "sandbox_floor"
         ]
       }
@@ -69,6 +75,7 @@
     "/host",
     "/daemon_id",
     "/sandbox_cache",
+    "/sandbox_environment",
     "/heartbeat_seconds"
   ]
 }

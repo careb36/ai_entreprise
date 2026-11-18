@@ -17,6 +17,14 @@ cannot flood the chain). The token is not revoked: promoted back, its creator
 carries it again. A token with no recorded creator (minted while
 authentication was off) is not capped; the access review lists it with no
 owner (``docs/design/SEGREGATION_OF_DUTIES.md``, residual risks).
+
+The creator is found by account id (``created_by_user_id``), never by email
+when the id is there: a creator who changes address keeps the token's
+standing, and whoever takes the old address does not inherit it. An id whose
+account is gone is refused; it does not fall back to the email. A token from
+before the id was recorded that migration 0048 could not match to an account
+(no account held the address then) has no id and is judged by its email, as
+before.
 """
 
 from __future__ import annotations
@@ -54,6 +62,7 @@ def create_token(
     scopes: list[str] | None = None,
     role: str = DEFAULT_ROLE,
     expires_in_days: int | None = DEFAULT_DAYS,
+    created_by_user_id: int | None = None,
 ) -> tuple[ApiToken, str]:
     if role not in TOKEN_ROLES:
         raise ValueError(f"role must be one of {', '.join(TOKEN_ROLES)}")
@@ -63,6 +72,7 @@ def create_token(
         name=name,
         token_hash=_hash(raw),
         created_by=created_by,
+        created_by_user_id=created_by_user_id,
         scopes=list(scopes or []),
         role=role,
         expires_at=(
@@ -123,10 +133,14 @@ def refusal(token_role: str | None, creator_role: str | None) -> str | None:
 
 def creator_role(session: Session, token: ApiToken) -> str | None:
     """The effective role, teams included, the token's creator holds now in
-    the token's company; ``None`` when the account is gone or not a member."""
-    creator = session.exec(
-        select(User).where(User.email == normalize_email(token.created_by or ""))
-    ).first()
+    the token's company; ``None`` when the account is gone or not a member.
+    By id when the token has one; by email only on a row without it."""
+    if token.created_by_user_id is not None:
+        creator = session.get(User, token.created_by_user_id)
+    else:
+        creator = session.exec(
+            select(User).where(User.email == normalize_email(token.created_by or ""))
+        ).first()
     if creator is None or creator.id is None:
         return None
     return teams.member_role(session, token.company_id, creator.id)
@@ -158,6 +172,7 @@ def _audit_refusal(
             "token_name": token.name,
             "token_role": token.role,
             "creator": token.created_by,
+            "creator_user_id": token.created_by_user_id,
             "creator_role": role,
         },
         result={"outcome": "refused", "reason": reason},
@@ -174,7 +189,7 @@ def verify(session: Session, raw: str) -> ApiToken | None:
         return None
     if expired(token):
         return None
-    if token.created_by:
+    if token.created_by or token.created_by_user_id is not None:
         role = creator_role(session, token)
         reason = refusal(token.role, role)
         if reason is not None:

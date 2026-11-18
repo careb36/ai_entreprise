@@ -72,6 +72,9 @@ async def create_api_token(
         req.scopes,
         role=req.role,
         expires_in_days=req.expires_in_days,
+        # The cap on every use reads the id (issue #512); a token never mints
+        # tokens (refused above), so this is a person's account id.
+        created_by_user_id=getattr(user, "id", None),
     )
     return {**_serialize(token), "token": raw}
 

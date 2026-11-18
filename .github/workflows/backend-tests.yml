@@ -119,6 +119,14 @@ jobs:
           # BACKEND_TEST_WORKERS; docs/OPERATIONS.md, Runner capacity).
           PYTHONPATH=.:app poetry run pytest tests -v --tb=short -n "$WORKERS" --dist loadgroup
 
+      - name: Run workspace daemon tests
+        working-directory: ./backend
+        run: |
+          # The daemon's own tests (vscode-daemon/tests) import its modules by
+          # name, as the daemon does; they run in the backend's venv, which has
+          # pytest and every module the daemon imports.
+          poetry run python -m pytest ../vscode-daemon/tests -q
+
       - name: Run llm-proxy tests
         working-directory: .
         env:
