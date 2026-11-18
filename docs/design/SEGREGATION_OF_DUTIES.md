@@ -176,6 +176,11 @@ late record, the inventory without values),
   rule holds; only the held delivery's acceptance is.
 - `drafted_by` keeps the last person who wrote the draft; an earlier editor
   who later approves is not seen. Accepted until edits are recorded as events.
+- `sod.actor_of` finds a token's creator by `api_tokens.created_by`, an
+  email, while the role cap (`api_tokens.creator_role`) reads
+  `created_by_user_id` since migration `0048` (issue #512). A creator whose
+  address changes, or an address that passes to another account, is matched
+  by address here until `sod.py` (a protected path) reads the id too.
 - An API token minted while authentication was off has no recorded creator;
   its approvals are `unattributed` and pass. Such tokens show in the access
   review and the inventory with no owner, to be removed there.
