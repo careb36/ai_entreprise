@@ -380,3 +380,63 @@ def test_the_retry_gives_up_and_leaves_memory_search(graph_on, monkeypatch):
 
     assert asyncio.run(lifecycle._connect_graph_later(app, True)) is False
     assert app.state.memory_graph is False
+
+
+# ── The LLM proxy's providers on /health/deep ───────────────────────────
+
+
+def _probe_proxy(monkeypatch, body):
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url):
+            return FakeResponse()
+
+    monkeypatch.setattr(healthcheck.httpx, "AsyncClient", FakeClient)
+    return asyncio.run(healthcheck.probe_llm_proxy())
+
+
+def test_the_proxy_probe_passes_on_what_the_proxy_saw_of_each_provider(monkeypatch):
+    seen = {
+        "deepseek": {
+            "status": "no_credit",
+            "observed_at": "2026-11-18T20:00:00+00:00",
+            "http_status": 402,
+            "source": "startup",
+            "checked": "key_and_credit",
+            "detail": "Insufficient Balance",
+            "unexpected": "dropped",
+        },
+        "qwen": {"status": "not_configured", "http_status": None},
+    }
+    result = _probe_proxy(
+        monkeypatch, {"status": "healthy", "models": [], "providers": seen}
+    )
+
+    # The proxy is up; whether a provider can serve is the proxy's observation, read-only.
+    assert result["status"] == "up"
+    assert result["providers"]["deepseek"]["status"] == "no_credit"
+    assert result["providers"]["deepseek"]["http_status"] == 402
+    assert "unexpected" not in result["providers"]["deepseek"]
+    assert result["providers"]["qwen"] == {
+        "status": "not_configured",
+        "http_status": None,
+    }
+
+
+def test_an_older_proxy_without_providers_adds_no_block(monkeypatch):
+    result = _probe_proxy(monkeypatch, {"status": "healthy", "models": ["m"]})
+    assert result["status"] == "up" and "providers" not in result

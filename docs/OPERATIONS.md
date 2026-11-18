@@ -484,7 +484,10 @@ https address, or run as a stdio wrapper.
   `degraded` when NATS is, or Neo4j while it is enabled (API reads work, but
   without NATS no sprint moves), and `healthy` otherwise. Each component
   carries its `reason`. Neo4j switched off (`NEO4J_ENABLED=false`) is
-  reported as `disabled`, is not probed and degrades nothing.
+  reported as `disabled`, is not probed and degrades nothing. The
+  `llm_proxy` component carries the proxy's `providers` block as it is:
+  the proxy being up does not mean a provider can serve (a key without
+  credit is `no_credit`), and this does not change the severity.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,
