@@ -23,7 +23,7 @@ import jwt
 from config import settings
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
-from models import Company, CompanyMember, SsoConnection, User
+from models import Company, CompanyMember, SsoConnection, SsoDomain, User
 from services.platform import oidc
 
 ISSUER = "https://idp.test"
@@ -121,7 +121,10 @@ def company(session) -> Company:
     return row
 
 
-def connect(session, company_id: int, **overrides) -> SsoConnection:
+def connect(
+    session, company_id: int, verified: bool = True, **overrides
+) -> SsoConnection:
+    """A connection; its domains verified by DNS unless *verified* is false."""
     values = {
         "slug": f"acme-{secrets.token_hex(3)}",
         "issuer": ISSUER,
@@ -134,7 +137,31 @@ def connect(session, company_id: int, **overrides) -> SsoConnection:
     row = SsoConnection(company_id=company_id, **values)
     session.add(row)
     session.commit()
+    if verified:
+        verify_domains(session, company_id)
     return row
+
+
+def verify_domains(session, company_id: int) -> None:
+    """Record the company's allowed domains as verified by DNS, as a check
+    that found the expected TXT record would (``sso_domains.check``)."""
+    from datetime import UTC, datetime
+
+    from services.platform import sso_domains
+    from sqlmodel import select
+
+    conn = session.exec(
+        select(SsoConnection).where(SsoConnection.company_id == company_id)
+    ).one()
+    sso_domains.sync(session, company_id, list(conn.allowed_domains or []))
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for row in session.exec(
+        select(SsoDomain).where(SsoDomain.company_id == company_id)
+    ).all():
+        row.status, row.verified_at, row.last_checked_at = "verified", now, now
+        row.last_outcome = "verified"
+        session.add(row)
+    session.commit()
 
 
 def member(session, company_id: int | None, role: str, email: str | None = None):

@@ -2766,10 +2766,33 @@
       "invalid_handoff": "El código de inicio de sesión no es válido o caducó. Empieza de nuevo.",
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
-      "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
+      "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario.",
+      "domain_unverified": "El dominio de tu correo todavía no está verificado para esta empresa. Pide a un propietario que publique su registro DNS y lo compruebe."
     },
     "connectionTitle": "Proveedor de identidad",
-    "accessTitle": "Miembros e inicio de sesión"
+    "accessTitle": "Miembros e inicio de sesión",
+    "domainCheck": {
+      "title": "Verificación de dominios",
+      "intro": "El inicio de sesión único crea o vincula cuentas solo en un dominio que hayas demostrado controlar. Publica cada registro TXT de abajo en tu proveedor de DNS y compruébalo. Mantén el registro: se vuelve a comprobar cada día.",
+      "check": "Comprobar",
+      "recordName": "Nombre TXT",
+      "recordValue": "Valor TXT",
+      "graceUntil": "Funciona sin verificar hasta",
+      "lastChecked": "Última comprobación",
+      "seen": "El DNS respondió: {{values}}",
+      "status": {
+        "verified": "Verificado",
+        "grace": "Período de gracia",
+        "unverified": "Sin verificar"
+      },
+      "outcome": {
+        "verified": "El registro contiene el token: el dominio está verificado.",
+        "no_match": "El nombre existe, pero ningún valor TXT coincide con el token.",
+        "not_found": "No se encontró ningún registro con ese nombre.",
+        "unavailable": "El DNS no respondió; no cambió nada. Vuelve a intentarlo más tarde.",
+        "verified_elsewhere": "El registro verificado de otra empresa para este dominio sigue publicado."
+      }
+    }
   },
   "documentation": {
     "title": "Documentación",
@@ -2919,6 +2942,10 @@
         "status_report_forecast": {
           "title": "Pronóstico y decisiones solicitadas",
           "what": "Qué debe esperar el patrocinador a continuación (alcance, fechas, gasto) y qué decisiones se le piden, leído frente a las cifras anteriores."
+        },
+        "release_plan_targets": {
+          "title": "Fechas objetivo de entrega y alcance por delante",
+          "what": "Las fechas con las que el proyecto se compromete para sus próximas entregas, qué debe contener cada entrega e iteración por venir, y las decisiones de alcance tomadas por adelantado, leídas frente al plan anterior."
         }
       }
     }
@@ -3677,5 +3704,43 @@
     "listTitle": "Todos los hallazgos",
     "countLabel_one": "{{count}} hallazgo",
     "countLabel_other": "{{count}} hallazgos"
+  },
+  "runLogs": {
+    "title": "Registros completos",
+    "count_one": "{{count}} registro completo",
+    "count_other": "{{count}} registros completos",
+    "empty": "No se guardó ningún registro completo",
+    "emptyHint": "Una ejecución guarda sus registros completos cuando están activados y el almacén de objetos está disponible.",
+    "loadError": "No se pudieron cargar los registros completos de la ejecución.",
+    "noStream": "sin flujo",
+    "size": "{{size}} bytes registrados",
+    "truncated": "cortado en el límite del daemon",
+    "open": "Abrir",
+    "close": "Cerrar",
+    "notKept": "No se guardó: {{reason}}",
+    "reading": "Leyendo el registro y calculando su sha256…",
+    "observedBy": "{{size}} bytes servidos, hash calculado por {{by}}",
+    "download": "Descargar",
+    "recordedSha": "sha256 registrado",
+    "observedSha": "sha256 de los bytes servidos",
+    "notRecorded": "no registrado",
+    "search": "Buscar en el registro",
+    "lines_one": "{{count}} de {{total}} líneas",
+    "lines_other": "{{count}} de {{total}} líneas",
+    "page": "Página {{page}} de {{pages}}",
+    "previous": "Página anterior",
+    "next": "Página siguiente",
+    "integrity": {
+      "matched": "El hash coincide con el registro",
+      "mismatched": "El hash no coincide con el registro",
+      "missing": "Registro ausente",
+      "unavailable": "Integridad desconocida"
+    },
+    "refused": {
+      "matched": "No se pudo servir el registro.",
+      "mismatched": "No se pudo servir el registro.",
+      "missing": "El almacén de objetos ya no guarda este registro.",
+      "unavailable": "No se pudo leer el registro, así que su integridad es desconocida."
+    }
   }
 }

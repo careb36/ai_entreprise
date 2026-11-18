@@ -125,6 +125,25 @@ Copy `.env.example` to `.env` and fill in:
     addresses; set this for a provider on a private network.
   - `SSO_HTTP_TIMEOUT_SECONDS` (10) and `SSO_CLOCK_SKEW_SECONDS` (60, the leeway
     on the ID token's `exp` and `iat`).
+  - DNS verification of the allowed domains (`docs/design/SSO.md`, Domain
+    verification): SSO creates or links accounts only in a domain whose TXT
+    record `_la-fabrique-verify.<domain>` holds the token the backend issued.
+    - `SSO_LEGACY_DOMAIN_GRACE` — default `true`. Domains listed before the
+      upgrade to migration `0049` are `legacy`: while this is on they keep
+      creating and linking accounts, unverified, for
+      `SSO_LEGACY_DOMAIN_GRACE_DAYS` (default `30`) counted from the upgrade,
+      unless another company verified the domain. Set `false` to require
+      verification at once. Domains added after the upgrade are never legacy.
+    - `SSO_DOMAIN_RECHECK_HOURS` — default `24`. How often every domain is
+      looked up again (by one replica, under an advisory lock): a record that
+      is definitely gone unverifies its domain, a newly published one verifies
+      it. `0` turns the re-check off (the Owner's "Check" still works).
+    - `SSO_DNS_TIMEOUT_SECONDS` — default `5`. The whole lookup's deadline.
+    - `SSO_DNS_NAMESERVERS` — optional, comma-separated IP addresses of the
+      resolvers to ask instead of the system's (`/etc/resolv.conf`). The
+      backend does not validate DNSSEC itself; name a validating resolver here
+      if you need that. An entry that is not an IP address makes every lookup
+      `unavailable`.
   - The client secret is encrypted with `FERNET_SECRET_KEY`; without that key
     it is stored with a `plaintext:` prefix, as other credentials are.
 - Approvals in Slack and Teams (issue #512, phase 4; `docs/design/CHAT_APPROVALS.md`,

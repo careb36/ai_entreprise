@@ -15,7 +15,7 @@ from config import settings
 from models import AuditLog, CompanyMember, RefreshToken, SessionFamily
 from services.platform import sessions
 from sqlmodel import select
-from sso_fake_idp import CLIENT_ID, ISSUER, company, member, sign_in
+from sso_fake_idp import CLIENT_ID, ISSUER, company, member, sign_in, verify_domains
 
 
 @pytest.fixture
@@ -341,6 +341,7 @@ def test_requiring_sso_ends_password_sessions(sqlite_session, browser, fake_idp)
     body = _sso_body(f"req-{tag}", domain)
     url = f"/v1/companies/{acme.id}/sso"
     assert browser.put(url, json=body, headers=owner_bearer).status_code == 200
+    verify_domains(sqlite_session, acme.id)  # its TXT record was found
     fake_idp.claims = {"email": owner.email, "sub": f"subject-owner-{tag}"}
     sso_owner = sign_in(browser, fake_idp, body["slug"])
     browser.post("/v1/auth/sso/exchange", json={"code": sso_owner["code"]})

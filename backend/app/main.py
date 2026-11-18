@@ -55,6 +55,7 @@ from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.rsi_cycles import router as rsi_cycles_router
+from routers.run_logs import router as run_logs_router
 from routers.run_secrets import router as run_secrets_router
 from routers.security_tests import router as security_tests_router
 from routers.sod import router as sod_router
@@ -65,6 +66,7 @@ from routers.sprint_crud import router as sprint_crud_router
 from routers.sprint_progress import router as sprint_progress_router
 from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
+from routers.sso_domains import router as sso_domains_router
 from routers.support import router as support_router
 from routers.task_relations import router as task_relations_router
 from routers.task_views import router as task_views_router
@@ -128,8 +130,17 @@ app.add_middleware(
     allow_credentials=cors_allows_credentials(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
-    # The support logs download names its file in this header.
-    expose_headers=["Content-Disposition", "X-Fabrique-CSRF"],
+    # The support logs download names its file in this header; the run log
+    # view reads its integrity observation from the X-Log-* ones.
+    expose_headers=[
+        "Content-Disposition",
+        "X-Fabrique-CSRF",
+        "X-Log-Integrity",
+        "X-Log-Sha256-Recorded",
+        "X-Log-Sha256-Observed",
+        "X-Log-Size",
+        "X-Log-Observed-By",
+    ],
 )
 
 # Setup security (rate limiting + security headers)
@@ -141,6 +152,7 @@ setup_metrics(app)
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(sso_admin_router)
+app.include_router(sso_domains_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)
@@ -155,6 +167,7 @@ app.include_router(costs_router)
 app.include_router(agents_router)
 app.include_router(audit_anchors_router)
 app.include_router(agent_runs_router)
+app.include_router(run_logs_router)
 app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)

@@ -11,7 +11,7 @@ const KNOWN_ERRORS = new Set([
   'state_mismatch', 'idp_denied', 'idp_error', 'idp_unreachable', 'idp_misconfigured',
   'invalid_token', 'token_expired', 'invalid_nonce', 'email_unverified', 'email_missing',
   'domain_not_allowed', 'not_a_member', 'identity_conflict', 'invalid_handoff',
-  'account_exists', 'link_refused', 'account_missing',
+  'account_exists', 'link_refused', 'account_missing', 'domain_unverified',
 ])
 
 /**

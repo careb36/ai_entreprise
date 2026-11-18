@@ -59,6 +59,7 @@ PLACEMENT: dict[str, tuple[str, str]] = {
     "wbs": ("Scope", "Planning"),
     "traceability": ("Scope", "Monitoring and Controlling"),
     "schedule": ("Schedule", "Planning"),
+    "release_plan": ("Schedule", "Planning"),
     "raci": ("Resources", "Planning"),
     "risks": ("Risk", "Planning"),
     "issues": ("Governance", "Executing"),
