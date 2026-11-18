@@ -2881,6 +2881,10 @@
         "checks_external": {
           "title": "Stakeholders outside the company are engaged",
           "what": "Who the stakeholders outside the company are, and how they are kept informed and involved."
+        },
+        "status_report_forecast": {
+          "title": "Forecast and decisions requested",
+          "what": "What the sponsor should expect next (scope, dates, spend) and which decisions are asked of them, read against the figures above."
         }
       }
     }
