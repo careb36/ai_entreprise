@@ -1,3 +1,9 @@
+# gitleaks configuration, used by the pre-commit hook, security-scan.yml
+# (`secrets-pr`, a pull request's commits) and security-baseline.yml (the
+# weekly full-history scan). Every exception here is narrow and reviewed;
+# SECURITY.md §17.1 (E-15) is the register. Findings already in the history
+# that can never come back (the file was fixed or deleted) are ignored by
+# fingerprint in `.gitleaksignore`, not here.
 [extend]
 useDefault = true
 
@@ -6,3 +12,27 @@ description = "Reviewed documentation example tokens; not live credentials."
 paths = [
   '''docs/API\.md''',
 ]
+
+# backend/tests/test_standards.py tests that the standards check (STD-SEC-1)
+# refutes a delivery holding a secret, so it must feed the check a value the
+# check recognises. The file is protected (protected_list.json), so its
+# literals cannot be rewritten by concatenation by an agent. Each entry
+# allows one fixed fake value (an alphabet run) in that one file and for that
+# one rule (condition AND): any other value there, or this value anywhere
+# else, is still reported. Triaged in issue #522. The `la-fabrique/` prefix
+# is the same file in commit 2572ebe (the rebuild of 2026-11-08).
+[[rules]]
+id = "generic-api-key"
+[rules.allowlist]
+description = "#522: the fake OpenAI-style key in the standards test."
+condition = "AND"
+paths = ['''^(la-fabrique/)?backend/tests/test_standards\.py$''']
+regexes = ['''^sk-(abcdefghijklmnopqrstuvwxyz)(1234)$''']
+
+[[rules]]
+id = "aws-access-token"
+[rules.allowlist]
+description = "#522: the fake AWS access key id in the standards test."
+condition = "AND"
+paths = ['''^(la-fabrique/)?backend/tests/test_standards\.py$''']
+regexes = ['''^AKIA(ABCDEFGHIJKLMNOP)$''']

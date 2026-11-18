@@ -767,6 +767,10 @@ Security checks on every pull request into `main` are in
 - `secrets-pr`: gitleaks (the pinned, checksummed release the weekly baseline
   uses, with `.gitleaks.toml`) over every commit the pull request adds
   (`--log-opts base..head`), so a secret added and then removed still fails.
+  Reviewed fixtures are excepted narrowly: findings already in the history by
+  fingerprint in `.gitleaksignore` (read by gitleaks from the repository
+  root), a fixture still in the tree by path, rule and exact value in
+  `.gitleaks.toml`; SECURITY.md §17.1, E-15, is the register.
 - `sast-pr`: Semgrep with the weekly baseline's rule set and severity
   (`p/security-audit`, `ERROR`), with the pull request's base as
   `--baseline-commit`: it fails only on findings the change adds, so a finding
