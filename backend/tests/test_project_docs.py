@@ -38,6 +38,7 @@ def test_the_same_records_give_the_same_bytes():
         "wbs",
         "traceability",
         "schedule",
+        "release_plan",
         "raci",
         "risks",
         "issues",

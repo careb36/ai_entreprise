@@ -2919,6 +2919,10 @@
         "status_report_forecast": {
           "title": "Pronóstico y decisiones solicitadas",
           "what": "Qué debe esperar el patrocinador a continuación (alcance, fechas, gasto) y qué decisiones se le piden, leído frente a las cifras anteriores."
+        },
+        "release_plan_targets": {
+          "title": "Fechas objetivo de entrega y alcance por delante",
+          "what": "Las fechas con las que el proyecto se compromete para sus próximas entregas, qué debe contener cada entrega e iteración por venir, y las decisiones de alcance tomadas por adelantado, leídas frente al plan anterior."
         }
       }
     }

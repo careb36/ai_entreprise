@@ -2919,6 +2919,10 @@
         "status_report_forecast": {
           "title": "Forecast and decisions requested",
           "what": "What the sponsor should expect next (scope, dates, spend) and which decisions are asked of them, read against the figures above."
+        },
+        "release_plan_targets": {
+          "title": "Target release dates and scope ahead",
+          "what": "The dates the project commits to for its coming releases, what each coming release and iteration is to contain, and the scope decisions taken ahead, read against the plan above."
         }
       }
     }
