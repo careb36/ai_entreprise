@@ -134,6 +134,9 @@
     "GET /v1/agents": {
       "access": "Viewer"
     },
+    "GET /v1/analytics/gate_refutations": {
+      "access": "Viewer"
+    },
     "GET /v1/analytics/orchestration_health": {
       "access": "Viewer"
     },
