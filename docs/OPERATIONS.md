@@ -383,7 +383,12 @@ api.slack.com/apps:
 **People.** Each member links their own account on the same page (*Link my
 Slack account* gives a ten-minute code to type as `/fabrique link CODE`, or
 `@Fabrique link CODE` in Teams). Only a linked account with the Manager role
-or above decides; a Viewer's click is refused and recorded.
+or above decides; a Viewer's click is refused and recorded. Two kinds of
+message are posted: a delivery held for acceptance (Approve, Send back) and a
+task blocked for a person's triage (Send back only, as on the board). A
+send-back with a reason is `/fabrique sendback CODE <reason>` in Slack (the
+code is on the message) or `@Fabrique sendback CODE <reason>` in Teams; the
+Slack button sends it back without one. The slash command needs no new scope.
 
 **Rotating the secrets.** Each is changed on the page by an Owner; an empty
 field keeps the stored value, and every change is audited by field name.
