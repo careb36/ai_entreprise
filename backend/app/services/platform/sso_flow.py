@@ -10,8 +10,9 @@ exchanges for the same access token the password login issues.
 
 Identity is ``(issuer, sub)``, never the email (after AixleHQ/flow's
 identity resolver, AD-3): the email links an existing account once, only in
-an allowed domain and only when the account belongs to this company alone
-(``resolve_identity`` says why). The role always comes from the company's
+an allowed domain the company verified by DNS (``sso_domains``) and only
+when the account belongs to this company alone (``resolve_identity`` says
+why). The role always comes from the company's
 membership, never from a claim; a new member gets the connection's default
 role, never Owner. Each completed callback writes one audit row with what
 the provider asserted and the outcome.
@@ -29,7 +30,7 @@ from models import CompanyMember, SsoConnection, SsoFlowState, SsoIdentity, User
 from sqlalchemy import delete, func
 from sqlmodel import Session, select
 
-from services.platform import oidc, sso_connections
+from services.platform import oidc, sso_connections, sso_domains
 from services.platform.agent_service import AgentService
 
 STATE_TTL = timedelta(minutes=10)
@@ -73,6 +74,12 @@ def find_connection(session: Session, key: str) -> SsoConnection:
         ).all()
         if domain in (conn.allowed_domains or [])
     ]
+    # An unverified listing proves nothing: when several companies list the
+    # domain, the one that may use it (verified, or in its grace) is meant.
+    if len(matches) > 1:
+        matches = [
+            c for c in matches if sso_domains.usable(session, c.company_id, domain)
+        ]
     if len(matches) != 1:
         raise oidc.SsoError("unknown_connection")
     return matches[0]
@@ -265,6 +272,15 @@ def resolve_identity(
     else:
         user = session.exec(select(User).where(func.lower(User.email) == email)).first()
         outcome = "linked" if user is not None else "created"
+    # Only a domain the company proved by DNS (or a legacy one in its grace)
+    # lets the provider's email create or link an account; an identity
+    # already linked keeps signing in, so a lapsed record locks no one out.
+    if outcome != "signed_in" and not sso_domains.usable(
+        session, conn.company_id, email.rsplit("@", 1)[1]
+    ):
+        raise oidc.SsoError(
+            "domain_unverified", "the email's domain is not verified by DNS"
+        )
     roles = _memberships(session, user.id) if user is not None else {}
     member = conn.company_id in roles
     if outcome == "linked":

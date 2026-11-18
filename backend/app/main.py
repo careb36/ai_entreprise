@@ -65,6 +65,7 @@ from routers.sprint_crud import router as sprint_crud_router
 from routers.sprint_progress import router as sprint_progress_router
 from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
+from routers.sso_domains import router as sso_domains_router
 from routers.support import router as support_router
 from routers.task_relations import router as task_relations_router
 from routers.task_views import router as task_views_router
@@ -141,6 +142,7 @@ setup_metrics(app)
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(sso_admin_router)
+app.include_router(sso_domains_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)
