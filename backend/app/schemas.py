@@ -513,6 +513,37 @@ class GateRefutationsResponse(BaseModel):
     weeks: list[GateRefutationWeek]
 
 
+class MissingModulePeriod(BaseModel):
+    """One side of the cutoff. Counts are by source (gate, person, agent_reviewer);
+    the text counted is a reviewer's claim, not an observation."""
+
+    since: str  # ISO-8601, inclusive
+    until: str  # ISO-8601, exclusive
+    days: float
+    rework_requests: dict[str, int]
+    requests_whose_text_names_missing_module: dict[str, int]
+
+
+class MissingModuleWeek(BaseModel):
+    week: str  # ISO week, e.g. 2026-W46
+    period: str  # "before" or "after" the cutoff; a week across it appears twice
+    rework_requests: dict[str, int]
+    requests_whose_text_names_missing_module: dict[str, int]
+
+
+class MissingModuleMentionsResponse(BaseModel):
+    """Response shape for ``GET /v1/analytics/missing_module_mentions``."""
+
+    company_id: int
+    sprint_id: int | None
+    counts_what: str  # what the counts mean, and what they do not
+    cutoff: str  # ISO-8601 datetime, naive UTC
+    cutoff_is_default: bool  # the moment the grounded check (#503) merged
+    before: MissingModulePeriod
+    after: MissingModulePeriod
+    weeks: list[MissingModuleWeek]
+
+
 class AgentCreateRequest(RequestModel):
     """Payload for POST /v1/agents — create an agent for a company."""
 
