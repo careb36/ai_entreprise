@@ -9,6 +9,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, fetchApi } from './api'
 
+/** The person sections of a pack (issue #530, phase 2). */
+export * from './personSections'
+
 export type PackStatus = 'draft' | 'approved' | 'superseded'
 export type DocLanguage = 'en' | 'es'
 export const DOC_LANGUAGES: DocLanguage[] = ['en', 'es']
