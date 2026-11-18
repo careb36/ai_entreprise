@@ -28,8 +28,7 @@ import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { SprintProgress } from '../components/SprintProgress'
 import { parseRouteId } from '../lib/routeId'
-import { CountPill, PageHeader } from '../components/ui'
-import { SprintStatusBadge } from './sprint/SprintStatusBadge'
+import { CountPill, PageHeader, SprintStatusBadge } from '../components/ui'
 
 export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'notes', 'analytics'] as const
 export type SprintTab = typeof SPRINT_TABS[number]

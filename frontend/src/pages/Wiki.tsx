@@ -6,8 +6,7 @@ import { useLintWiki, useWiki, useWikiPage, useWikiSettings, useWriteWikiPage } 
 import { WIKI_KINDS, errorDetail, type WikiKind, type WikiPageSummary } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { WikiPageView, WikiStatusBadge } from '../components/WikiPageView'
-import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
-import { CountPill, EmptyState, PageHeader } from '../components/ui'
+import { CountPill, EmptyState, LoadError, LoadingLine, PageHeader, Spinner } from '../components/ui'
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/
 
@@ -35,7 +34,7 @@ export default function Wiki() {
       {query.isLoading ? (
         <LoadingLine>{t('wiki.loading')}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('wiki.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('wiki.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
           <aside className="space-y-3">

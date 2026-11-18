@@ -23,6 +23,7 @@ import { LearningTrend } from '../components/LearningTrend'
 import { ManagerRecordCard } from '../components/ManagerRecordCard'
 import { RoutingRecord } from '../components/RoutingRecord'
 import { GateRefutations } from '../components/GateRefutations'
+import { MissingModuleMentions } from '../components/MissingModuleMentions'
 import { CountPill, EmptyState, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
 
 /** Each status as an icon, a word and a tone: never the colour alone. */
@@ -148,6 +149,7 @@ export default function Sprints() {
           <LearningTrend sprints={trend} />
           <RoutingRecord companyId={companyId} />
           <GateRefutations companyId={companyId} />
+          <MissingModuleMentions companyId={companyId} />
           <ManagerRecordCard companyId={companyId} />
           <Panel title={t('sprints.listTitle')}
             count={<CountPill count={sprints.length} label={t('sprints.count', { count: sprints.length })} />}>

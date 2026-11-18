@@ -21,8 +21,7 @@ import { useAgentStore } from '../store/agentStore'
 import { useSprintBoard, useAnalyticsSummary, useQuotas } from '../hooks/useQueries'
 import { QuickLaunch, ROLE_DISPLAY, SCOPE_META } from '../components/QuickLaunch'
 import { SprintHealthChart } from '../components/SprintHealthChart'
-import { CountPill, EmptyState, Panel, StatusBadge } from '../components/ui'
-import { SprintStatusBadge } from './sprint/SprintStatusBadge'
+import { CountPill, EmptyState, Panel, SprintStatusBadge, StatusBadge } from '../components/ui'
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 
