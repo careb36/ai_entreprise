@@ -11,8 +11,16 @@ Factory leaves local or cloud execution of its Droids to the operator.
 
 1. Copy `.env.example` to `.env` and set at least `POSTGRES_PASSWORD`,
    `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and the model
-   keys (`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`), or plan a provider connection
-   per company. `docs/CONFIGURATION.md` lists every variable.
+   keys, or plan a provider connection per company. The default team
+   (`ROLE_MODEL_MAP` in `backend/app/services/models/model_factory.py`) runs
+   on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter, Designer) and
+   DeepSeek (Developer, QA and the other coding roles, the EngramProcessor),
+   so it needs `QWEN_API_KEY` and `DEEPSEEK_API_KEY`. `AGENT_MODEL` set to one
+   provider's model needs only that provider's key. Optional:
+   `GEMINI_API_KEY` (no default role uses it; Gemini model ids and the
+   proxy's embeddings, which fall back to a local vector without it) and
+   `NEBIUS_API_KEY` (only for `NEMOTRON_ROLES` or `nvidia/…` ids). The keys
+   go to the LLM proxy only. `docs/CONFIGURATION.md` lists every variable.
 2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
    the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
    on by default: the backend does not wait for it and connects once it
@@ -25,8 +33,51 @@ Factory leaves local or cloud execution of its Droids to the operator.
    `DELIVERY_SANDBOX=container` and `FABRIQUE_SANDBOX_REQUIRED=container`
    there. Keep `NATS_BIND=127.0.0.1` unless the daemon is on another
    machine: anyone who reaches NATS can ask the daemon to run commands.
-4. Check `GET /health` (below), register the first user in the frontend and
-   create a company.
+4. Check `GET /health` (below), check the model keys (next section),
+   register the first user in the frontend and create a company.
+
+### Check the model keys
+
+The proxy's own checks do not prove a key can pay for an answer:
+
+- At startup the proxy asks each provider whose key is set to authenticate
+  (`llm-proxy/provider_keys.py`): a 1-token chat completion for DeepSeek and
+  Qwen, a model listing for Gemini and Nebius. Only a 401 or 403, or a body
+  that says `invalid_api_key`, counts as invalid; any other answer logs
+  `<provider> API key validated successfully`. A key whose account is out of
+  credit usually answers 402 (or another non-401/403 status), so it looks
+  validated, and a listing succeeds without credit too. Even an invalid key only logs `API KEY VALIDATION FAILED`: the
+  proxy starts anyway. A network failure logs `Could not validate …`.
+- The proxy's `GET /health` is not a provider check: it always answers
+  `"status": "healthy", "database": "connected"` (both fixed strings) and
+  lists only the Gemini catalogue. The backend's `/health/deep` only checks
+  that the proxy answers.
+- `GET /v1/models` lists the ids the chat endpoint routes. A provider other
+  than Gemini is listed only when its key is set and its catalogue was
+  fetched (at startup, then hourly), so a missing provider here means a
+  missing or refused key, or a fetch that failed (the proxy logs
+  `<provider> model refresh failed`).
+
+To know that a role's model answers, send one 1-token request through the
+proxy and compare what it served with what was asked:
+
+```bash
+curl -s localhost:5100/v1/models | jq -r '.models[] | "\(.provider) \(.id)"'
+curl -s localhost:5100/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model": "<a role model id from the list>", "max_tokens": 1,
+       "messages": [{"role": "user", "content": "ping"}]}' \
+  | jq '{requested_model, served_model, provider, fallback_from, error, status, message}'
+```
+
+The key works when `provider` is the provider you meant, `served_model` is
+the model you asked for (`requested_model`) and there is no `fallback_from`. A 429, a 5xx or a refusal for lack of credit (a 402, or a
+message about balance or quota, `llm-proxy/upstream.py`) makes the proxy try
+one model of each other provider: the answer then has another
+`served_model` and `provider`, and `fallback_from` holds the failed call's
+`provider`, `model`, `status` and `message`. With no fallback left the proxy
+answers 429 or 502 with `"error": "upstream_error"` and the same fields. Do
+it once per provider the team uses (one Qwen and one DeepSeek id for the
+default team).
 
 The browser's session lives in `HttpOnly; Secure; SameSite=Strict` cookies
 (issue #524): serve the frontend and the API over https (a browser accepts
@@ -429,7 +480,7 @@ both.
 | `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
 | `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. Anchors (issue #542) are not affected by the rotation: they cover the statement, not the key, and their tokens and customer signatures still verify. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
-| Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
+| Model keys (`QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `NEBIUS_API_KEY`) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
 
 `docs/CONFIGURATION.md` (Required Environment Variables) has the command that generates
 each key.
@@ -650,6 +701,15 @@ balance), and puts the task back to `todo` instead of blocking it. Add
 credit, or change the role's model on the company's Models page, then call
 `POST /v1/sprints/{id}/resume`. The company gets no follow-up sprint of its
 own while one is paused.
+On the default team the provider is Qwen (`QWEN_API_KEY`: PO, Architect,
+ScrumMaster, SecOps, TechWriter, Designer) or DeepSeek (`DEEPSEEK_API_KEY`:
+Developer, QA and the other coding roles); Gemini or Nebius only where a
+role, an agent or `AGENT_MODEL` names one of their models. Before resuming,
+check the key with the 1-token request in Deploy, Check the model keys: the
+proxy's startup log says "validated successfully" for a key without credit,
+and its `/health` says nothing about providers. While another provider still
+has credit, the proxy falls back to it and the sprint does not pause; the
+answers then carry `fallback_from` with the 402.
 
 **The nightly real-model bench spends too much.** The job `bench-real` in
 `.github/workflows/bench.yml` runs only while the repository variable
