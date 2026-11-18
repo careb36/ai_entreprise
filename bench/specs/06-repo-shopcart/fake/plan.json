@@ -1,0 +1,38 @@
+{
+  "sprint_name": "Shopping cart discount codes 1",
+  "goal": "Fix removing from the cart, then add discount codes to the library and the command line",
+  "tasks": [
+    {
+      "title": "Fix removing from the cart",
+      "description": "Cart.remove in the existing shopcart/cart.py refuses more than a line holds (ValueError, cart unchanged) and drops a line removed in full, with its unit test.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-1.1", "REQ-1.2"],
+      "depends_on": [],
+      "files": ["shopcart/cart.py", "tests/test_remove.py"]
+    },
+    {
+      "title": "Discount codes table and discounted total",
+      "description": "shopcart/discounts.py with CODES (SAVE10, FIVEOFF) and discounted_total(cart, code), exported from shopcart/__init__.py, with its unit test.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-2.1", "REQ-2.2", "REQ-2.3"],
+      "depends_on": [],
+      "files": ["shopcart/discounts.py", "shopcart/__init__.py", "tests/test_discounts.py"]
+    },
+    {
+      "title": "Discount code option on the cart command line",
+      "description": "python -m shopcart CART.json --code CODE in the existing shopcart/__main__.py, exit 2 for an unknown code, with its test.",
+      "priority": "medium",
+      "assignee": "Developer",
+      "covers": ["REQ-3.1", "REQ-3.2"],
+      "depends_on": ["Discount codes table and discounted total"],
+      "files": ["shopcart/__main__.py", "tests/test_cli_code.py"]
+    }
+  ],
+  "acceptance": {
+    "REQ-1": "tests/test_req_1.py",
+    "REQ-2": "tests/test_req_2.py",
+    "REQ-3": "tests/test_req_3.py"
+  }
+}

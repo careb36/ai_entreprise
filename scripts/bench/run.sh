@@ -19,7 +19,11 @@
 # Per specification:
 #
 #   1. a company (autonomy 2, Sprint 0 left planned so it costs nothing) with
-#      a PO, a Developer, QA and a ScrumMaster, writing to its own folder;
+#      a PO, a Developer, QA and a ScrumMaster, writing to its own folder:
+#      empty but for a README, or, when the spec has a seed/ folder, that
+#      existing repository, copied and committed as the base before the sprint
+#      (scripts/bench/seed.py), with the Git workflow off so the deliveries
+#      land in the folder the grade reads;
 #   2. the specification posted as data (POST /v1/specifications, the
 #      spec.json) and approved, which the check must allow;
 #   3. the PO plans the sprint from it (QA's acceptance-test tasks first),
@@ -254,12 +258,20 @@ print($1)"; }
 run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   local dir=$1 name status=error error="" cid=0 spec_id=0 sid=0 wall started
   name=$(basename "$dir")
-  local project="$WORK/projects/$name" company body spec approved plan="" new
-  rm -rf "$project"; mkdir -p "$project"; echo "# $name" > "$project/README.md"
+  local project="$WORK/projects/$name" company body spec approved plan="" new seeded git_flag=""
   # Nothing of an earlier run in the same BENCH_WORKDIR can stand in for this one.
   rm -f "$WORK/$name.grade.json" "$WORK/entries/$name.json"
   echo "== $name"
-  company=$(post /v1/init_company "{\"company_name\": \"Bench $name\", \"project_path\": \"$project\",
+  # An empty folder holding a README, or, with <spec>/seed/, the seed committed
+  # as the base of a repository (scripts/bench/seed.py).
+  seeded=$("$PY" "$REPO/scripts/bench/seed.py" --spec "$dir" --project "$project") \
+    || fail "the project of $name could not be prepared"
+  if [ "$(echo "$seeded" | json "d.get('seeded') is True")" = True ]; then
+    echo "   seed: $(echo "$seeded" | json "d.get('files'), 'files, base', d.get('base')")"
+    # Deliveries land in the folder the grade reads, not on task branches.
+    git_flag='"git_workflow": false,'
+  fi
+  company=$(post /v1/init_company "{\"company_name\": \"Bench $name\", \"project_path\": \"$project\", $git_flag
     \"autonomy_level\": 2, \"start_now\": false, \"default_scope_size\": \"M\",
     \"agents\": [{\"role\": \"PO\", \"name\": \"Pat\"}, {\"role\": \"Developer\", \"name\": \"Dev\"},
                  {\"role\": \"QA\", \"name\": \"Quinn\"}, {\"role\": \"ScrumMaster\", \"name\": \"Sam\"}]}")
