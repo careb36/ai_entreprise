@@ -57,10 +57,13 @@ PLACEMENT: dict[str, tuple[str, str]] = {
     "charter": ("Governance", "Initiating"),
     "scope": ("Scope", "Planning"),
     "wbs": ("Scope", "Planning"),
+    # Quality is planned in Scope; communications in Stakeholders.
+    "quality_plan": ("Scope", "Planning"),
     "traceability": ("Scope", "Monitoring and Controlling"),
     "schedule": ("Schedule", "Planning"),
     "release_plan": ("Schedule", "Planning"),
     "raci": ("Resources", "Planning"),
+    "communications_plan": ("Stakeholders", "Planning"),
     "risks": ("Risk", "Planning"),
     "issues": ("Governance", "Executing"),
     "changes": ("Governance", "Monitoring and Controlling"),

@@ -2911,6 +2911,18 @@
       "historyError": "No se pudo cargar el historial: {{message}}",
       "historyEmpty": "Todavía no hay revisiones.",
       "sections": {
+        "quality_plan_objectives": {
+          "title": "Objetivos de calidad y umbrales de aceptación",
+          "what": "Los objetivos de calidad con los que se compromete el proyecto y los umbrales que deciden la aceptación (por ejemplo, una tasa de aceptación a la primera, una proporción de entregas verificadas o de pruebas WSTG superadas), leídos frente a los resultados medidos del plan de calidad; la fábrica informa las cifras y nunca fija el umbral."
+        },
+        "communications_plan_stakeholders": {
+          "title": "Interesados ajenos a la empresa y qué necesitan saber",
+          "what": "Quién fuera de la empresa debe mantenerse informado (patrocinador, usuarios, proveedores, reguladores), qué necesita saber cada uno y por cuál de los canales de la plataforma o por qué canal ajeno a ella."
+        },
+        "communications_plan_cadence": {
+          "title": "Reuniones, informes y frecuencia acordados entre personas",
+          "what": "Las reuniones, revisiones e informes acordados entre personas, con qué frecuencia se hacen y quién participa, además de lo que la plataforma envía por sí sola."
+        },
         "charter_justification": {
           "title": "Justificación de negocio",
           "what": "Por qué vale la pena la inversión, y para quién."

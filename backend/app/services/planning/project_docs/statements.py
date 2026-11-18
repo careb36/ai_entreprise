@@ -11,7 +11,8 @@ A statement is a **claim** by the person who wrote it, never an observation:
 
 - it lives in its own snapshot key per document (``statements_charter``,
   ``statements_risks``, ``statements_checks``,
-  ``statements_status_report``, ``statements_release_plan``), never inside a compiled field, so a builder
+  ``statements_status_report``, ``statements_release_plan``,
+  ``statements_quality_plan``, ``statements_communications_plan``), never inside a compiled field, so a builder
   cannot mistake it for a record and a check result never reads it;
 - the pack quotes it under its section with the author's company role and the
   time it was recorded, says it is a claim, and cites it as a ``statement``
@@ -62,8 +63,31 @@ SECTIONS: dict[str, tuple[str, str, str]] = {
         "person.targets",
         "person.targets_what",
     ),
+    "quality_plan.objectives": (
+        "quality_plan",
+        "person.quality_objectives",
+        "person.quality_objectives_what",
+    ),
+    "communications_plan.stakeholders": (
+        "communications_plan",
+        "person.comms_stakeholders",
+        "person.comms_stakeholders_what",
+    ),
+    "communications_plan.cadence": (
+        "communications_plan",
+        "person.comms_cadence",
+        "person.comms_cadence_what",
+    ),
 }
-DOCUMENTS = ("charter", "risks", "checks", "status_report", "release_plan")
+DOCUMENTS = (
+    "charter",
+    "risks",
+    "checks",
+    "status_report",
+    "release_plan",
+    "quality_plan",
+    "communications_plan",
+)
 
 
 def key_of(document: str) -> str:
