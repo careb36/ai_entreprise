@@ -3704,5 +3704,43 @@
     "listTitle": "Todos los hallazgos",
     "countLabel_one": "{{count}} hallazgo",
     "countLabel_other": "{{count}} hallazgos"
+  },
+  "runLogs": {
+    "title": "Registros completos",
+    "count_one": "{{count}} registro completo",
+    "count_other": "{{count}} registros completos",
+    "empty": "No se guardó ningún registro completo",
+    "emptyHint": "Una ejecución guarda sus registros completos cuando están activados y el almacén de objetos está disponible.",
+    "loadError": "No se pudieron cargar los registros completos de la ejecución.",
+    "noStream": "sin flujo",
+    "size": "{{size}} bytes registrados",
+    "truncated": "cortado en el límite del daemon",
+    "open": "Abrir",
+    "close": "Cerrar",
+    "notKept": "No se guardó: {{reason}}",
+    "reading": "Leyendo el registro y calculando su sha256…",
+    "observedBy": "{{size}} bytes servidos, hash calculado por {{by}}",
+    "download": "Descargar",
+    "recordedSha": "sha256 registrado",
+    "observedSha": "sha256 de los bytes servidos",
+    "notRecorded": "no registrado",
+    "search": "Buscar en el registro",
+    "lines_one": "{{count}} de {{total}} líneas",
+    "lines_other": "{{count}} de {{total}} líneas",
+    "page": "Página {{page}} de {{pages}}",
+    "previous": "Página anterior",
+    "next": "Página siguiente",
+    "integrity": {
+      "matched": "El hash coincide con el registro",
+      "mismatched": "El hash no coincide con el registro",
+      "missing": "Registro ausente",
+      "unavailable": "Integridad desconocida"
+    },
+    "refused": {
+      "matched": "No se pudo servir el registro.",
+      "mismatched": "No se pudo servir el registro.",
+      "missing": "El almacén de objetos ya no guarda este registro.",
+      "unavailable": "No se pudo leer el registro, así que su integridad es desconocida."
+    }
   }
 }

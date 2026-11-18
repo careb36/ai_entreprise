@@ -20,6 +20,12 @@ vi.mock('../services/reviewChanges', () => ({
   useRunChanges: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
 }))
 
+vi.mock('../services/runLogs', () => ({
+  useRunLogs: vi.fn(() => ({ data: { logs: [] }, isLoading: false, isError: false })),
+  useRunLog: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  refusalOf: vi.fn(),
+}))
+
 vi.mock('../services/cost', async importOriginal => ({
   ...(await importOriginal<typeof import('../services/cost')>()),
   useRunCost: vi.fn(() => ({ data: undefined })),
