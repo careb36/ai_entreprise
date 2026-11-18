@@ -27,7 +27,6 @@ import secrets
 
 import auth_tokens
 import session_cookies
-from auth_deps import get_current_user
 from auth_policy import current_user_if_required
 from config import settings
 from database import get_session
@@ -55,8 +54,10 @@ class LinkStart(RequestModel):
     company_id: int
 
 
-def _person(user: User) -> User:
-    """A signed-in person, not an API token."""
+def _person(user: User | None) -> User:
+    """A signed-in person, not an API token (always, even without AUTH_REQUIRED)."""
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     if getattr(user, "_api_token_company_id", None) is not None:
         raise HTTPException(
             status_code=403, detail="SSO identities belong to a person, not a token"
@@ -74,9 +75,9 @@ def link_start(
     request: Request,
     req: LinkStart,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    _person(user)
+    user = _person(user)
     # The state is bound to the browser session: a Bearer token has none.
     raw = request.cookies.get(session_cookies.SESSION_COOKIE)
     session_id = (
@@ -102,7 +103,7 @@ def link_start(
 @router.get("/auth/sso/identities")
 def my_identities(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     return sso_link.mine(session, _person(user))
 
@@ -113,7 +114,7 @@ def unlink_mine(
     request: Request,
     identity_id: int,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     try:
         return sso_link.unlink(session, _person(user), identity_id)
