@@ -34,7 +34,8 @@ const components: Components = {
 
 export function PackMarkdown({ markdown }: { markdown: string }) {
   return (
-    <div className="prose prose-invert prose-sm max-w-none break-words" data-testid="pack-markdown">
+    <div data-testid="pack-markdown"
+      className="prose prose-invert prose-sm max-w-[72ch] break-words leading-relaxed prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-gray-50 prose-h1:text-xl prose-h2:mt-8 prose-h2:border-b prose-h2:border-surface-700 prose-h2:pb-1.5 prose-h2:text-base prose-h3:text-sm prose-p:text-gray-300 prose-li:text-gray-300 prose-a:text-brand-300 prose-strong:text-gray-100 prose-code:text-gray-200 prose-th:text-gray-200 prose-td:text-gray-300 prose-table:text-xs">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         skipHtml

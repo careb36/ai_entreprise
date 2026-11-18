@@ -19,7 +19,9 @@ never share a field):
   heartbeat (an older daemon, or none yet since this process started) the
   request-based check (``workspace_daemon.daemon_presence``) is the fallback.
 
-Everything the daemon says about itself is kept under ``reported_by_daemon``.
+Everything the daemon says about itself is kept under ``reported_by_daemon``,
+including the ``abilities`` it announces (``daemon_abilities``, #315), which
+``announces`` reads instead of guessing from replies.
 The state is this process's memory: each backend replica observes the
 heartbeats itself (a plain subscription, not a queue group).
 """
@@ -32,6 +34,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from config import settings
+
+from services.workspace import daemon_abilities
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +83,9 @@ def _reported(payload: dict[str, Any]) -> dict[str, Any]:
             reported[key] = value
     if _text(payload.get("sent_at")):
         reported["sent_at"] = _text(payload.get("sent_at"))
+    abilities = daemon_abilities.parse(payload.get("abilities"))
+    if abilities is not None:
+        reported["abilities"] = abilities
     return reported
 
 
@@ -256,12 +263,7 @@ def incompatibility(now: float | None = None) -> str | None:
     among them is enough to keep serving.
     """
     clock = time.monotonic() if now is None else now
-    recent = [
-        entry
-        for entry in _daemons.values()
-        if clock - entry.get("observed_monotonic", clock)
-        <= settings.DAEMON_HEARTBEAT_OFFLINE_SECONDS
-    ]
+    recent = _recent(clock)
     if not recent:
         return None
     verdicts = [
@@ -271,6 +273,34 @@ def incompatibility(now: float | None = None) -> str | None:
     if any(v["state"] != "incompatible" for _, v in verdicts):
         return None
     return max(verdicts, key=lambda item: item[0])[1]["reason"]
+
+
+def _recent(clock: float) -> list[dict[str, Any]]:
+    return [
+        entry
+        for entry in _daemons.values()
+        if clock - entry.get("observed_monotonic", clock)
+        <= settings.DAEMON_HEARTBEAT_OFFLINE_SECONDS
+    ]
+
+
+def announces(
+    subject: str, feature: str | None = None, now: float | None = None
+) -> bool | None:
+    """Whether the daemons heard within the offline window announce *subject*
+    (and *feature* on it): ``True``, ``False``, or ``None`` when that is not
+    announced (none heard, an older daemon among them, or they disagree), in
+    which case the caller keeps its fallback. A claim, never an observation."""
+    clock = time.monotonic() if now is None else now
+    return daemon_abilities.announces(
+        [(e.get("reported") or {}).get("abilities") for e in _recent(clock)],
+        subject,
+        feature,
+    )
+
+
+# The reason a caller records when the daemons announce they cannot serve it.
+not_announced_reason = daemon_abilities.not_announced_reason
 
 
 async def listen(nats_client: Any) -> None:

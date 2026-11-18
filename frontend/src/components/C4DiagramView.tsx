@@ -29,12 +29,12 @@ export function C4DiagramView({ diagram }: { diagram: C4Diagram }) {
   const layout = layoutC4(diagram)
   const groups = new Map(diagram.groups.map(g => [g.id, g.label]))
   return (
-    <figure className="card p-4 space-y-3" aria-label={diagram.title}>
+    <figure className="panel space-y-3 p-4" aria-label={diagram.title}>
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-white">
-          {diagram.title} <span className="text-xs text-gray-400">({t(`documentation.levels.${diagram.level}`)})</span>
+        <span className="text-[13px] font-semibold text-gray-100">
+          {diagram.title} <span className="chip ml-1 font-normal">{t(`documentation.levels.${diagram.level}`)}</span>
         </span>
-        <button type="button" className="text-xs underline text-gray-300" onClick={() => setShowSource(v => !v)}>
+        <button type="button" className={`btn-tool ${showSource ? 'btn-tool-on' : ''}`} aria-expanded={showSource} onClick={() => setShowSource(v => !v)}>
           {showSource ? t('documentation.hideSource') : t('documentation.showSource')}
         </button>
       </figcaption>
@@ -72,7 +72,7 @@ export function C4DiagramView({ diagram }: { diagram: C4Diagram }) {
           {diagram.notes.map(note => <li key={note}>{note}</li>)}
         </ul>
       )}
-      {showSource && <pre className="overflow-x-auto rounded bg-surface-900 p-3 text-xs text-gray-300" data-testid="mermaid-source">{diagram.mermaid}</pre>}
+      {showSource && <pre className="overflow-x-auto rounded-md border border-surface-700 bg-surface-950/60 p-3 font-mono text-xs text-gray-300" data-testid="mermaid-source">{diagram.mermaid}</pre>}
     </figure>
   )
 }

@@ -7,6 +7,8 @@
 
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { BarChart3 } from 'lucide-react'
+import { EmptyState, Panel } from './ui'
 
 interface SprintHealthChartProps {
   total: number
@@ -44,29 +46,27 @@ export function SprintHealthChart({
 
   if (total === 0) {
     return (
-      <div className="rounded-xl border border-surface-700 bg-surface-900 p-4">
-        <p className="text-xs text-gray-500 text-center">{t('dashboard.noData', { defaultValue: 'No sprint data available' })}</p>
-      </div>
+      <Panel>
+        <EmptyState icon={BarChart3} title={t('dashboard.noData', { defaultValue: 'No sprint data available' })} />
+      </Panel>
     )
   }
 
   return (
-    <div className="rounded-xl border border-surface-700 bg-surface-900 p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-200">{t('dashboard.sprintHealth', { defaultValue: 'Sprint Health' })}</h3>
-        {healthScore !== null && (
-          <span className={`text-lg font-bold tabular-nums ${healthColor}`}>
-            {healthScore}
-          </span>
-        )}
-      </div>
+    <Panel headingLevel={3} title={t('dashboard.sprintHealth', { defaultValue: 'Sprint Health' })}
+      actions={healthScore !== null && (
+        <span className={`text-base font-semibold tabular-nums ${healthColor}`}>
+          {healthScore}
+        </span>
+      )}>
+    <div className="space-y-4 p-3">
 
       {/* Stacked progress bar */}
       <div className="space-y-2">
-        <div className="flex h-3 rounded-full overflow-hidden bg-surface-700">
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-700">
           {percentages.done > 0 && (
             <div
-              className="bg-emerald-500 transition-all duration-500"
+              className="bg-emerald-500 transition-all duration-500 motion-reduce:transition-none"
               style={{ width: `${percentages.done}%` }}
               title={t('dashboard.chartTooltip', {
                 defaultValue: '{{label}}: {{percent}}%',
@@ -77,7 +77,7 @@ export function SprintHealthChart({
           )}
           {percentages.inProgress > 0 && (
             <div
-              className="bg-brand-500 transition-all duration-500"
+              className="bg-brand-500 transition-all duration-500 motion-reduce:transition-none"
               style={{ width: `${percentages.inProgress}%` }}
               title={t('dashboard.chartTooltip', {
                 defaultValue: '{{label}}: {{percent}}%',
@@ -88,7 +88,7 @@ export function SprintHealthChart({
           )}
           {percentages.blocked > 0 && (
             <div
-              className="bg-red-500 transition-all duration-500"
+              className="bg-red-500 transition-all duration-500 motion-reduce:transition-none"
               style={{ width: `${percentages.blocked}%` }}
               title={t('dashboard.chartTooltip', {
                 defaultValue: '{{label}}: {{percent}}%',
@@ -99,7 +99,7 @@ export function SprintHealthChart({
           )}
           {percentages.remaining > 0 && (
             <div
-              className="bg-surface-600 transition-all duration-500"
+              className="bg-surface-600 transition-all duration-500 motion-reduce:transition-none"
               style={{ width: `${percentages.remaining}%` }}
               title={t('dashboard.chartTooltip', {
                 defaultValue: '{{label}}: {{percent}}%',
@@ -111,22 +111,22 @@ export function SprintHealthChart({
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-between text-[11px]">
-          <div className="flex items-center gap-3">
+        <div className="text-meta flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-gray-400">{t('dashboard.done', { defaultValue: 'Done' })} ({done})</span>
+              <span aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="tabular-nums">{t('dashboard.done', { defaultValue: 'Done' })} ({done})</span>
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-gray-400">{t('dashboard.inProgress', { defaultValue: 'In Progress' })} ({inProgress})</span>
+              <span aria-hidden="true" className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="tabular-nums">{t('dashboard.inProgress', { defaultValue: 'In Progress' })} ({inProgress})</span>
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-gray-400">{t('dashboard.blocked', { defaultValue: 'Blocked' })} ({blocked})</span>
+              <span aria-hidden="true" className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="tabular-nums">{t('dashboard.blocked', { defaultValue: 'Blocked' })} ({blocked})</span>
             </span>
           </div>
-          <span className="text-gray-500 tabular-nums">
+          <span className="tabular-nums">
             {done}/{total} {t('dashboard.tasks', { defaultValue: 'tasks' })}
           </span>
         </div>
@@ -135,13 +135,13 @@ export function SprintHealthChart({
       {/* Health score indicator */}
       {healthScore !== null && (
         <div className="space-y-1">
-          <div className="flex justify-between text-[11px] text-gray-500">
+          <div className="text-meta flex justify-between">
             <span>{t('dashboard.healthScore', { defaultValue: 'Health Score' })}</span>
             <span className="tabular-nums">{healthScore}/100</span>
           </div>
-          <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-700" aria-hidden="true">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
+              className={`h-full rounded-full transition-all duration-500 motion-reduce:transition-none ${
                 healthScore >= 80
                   ? 'bg-emerald-500'
                   : healthScore >= 60
@@ -154,5 +154,6 @@ export function SprintHealthChart({
         </div>
       )}
     </div>
+    </Panel>
   )
 }

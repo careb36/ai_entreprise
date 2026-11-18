@@ -177,7 +177,13 @@
     "manageQuotas": "Gestionar cuotas",
     "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites.",
     "tokenUsage": "{{used}} / {{limit}} tokens",
-    "goalLabel": "Objetivo del sprint"
+    "goalLabel": "Objetivo del sprint",
+    "agentState": {
+      "active": "Trabajando",
+      "error": "Con error",
+      "waiting": "En espera",
+      "idle": "Sin actividad"
+    }
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -550,8 +556,12 @@
       "version": "Versión {{version}}",
       "claimedFiles": "Archivos que el agente afirma haber escrito",
       "noFiles": "No afirma ningún archivo.",
-      "view": "Ver evidencia"
-    }
+      "view": "Ver evidencia",
+      "observed": "Observado",
+      "reported": "Declarado"
+    },
+    "commentCount_one": "{{count}} entrada",
+    "commentCount_other": "{{count}} entradas"
   },
   "controlPanel": {
     "title": "Panel de Control",
@@ -1062,7 +1072,9 @@
     "summary": {
       "aria": "Evidencia por veredicto",
       "all": "Todas"
-    }
+    },
+    "claimedHint": "Lo que el productor informó sobre su propia ejecución: una afirmación, no una comprobación.",
+    "observedHint": "Lo que el Verificador observó por sí mismo, a partir de lo que entregó la ejecución."
   },
   "analytics": {
     "title": "Analíticas",
@@ -1389,7 +1401,9 @@
     "integrationBranch": "Rama de integración",
     "integrationError": "No se pudo cargar el plan de integración.",
     "integrationHint": "Mergeá estas ramas en orden, corré la suite completa sobre el resultado y publicá un único PR.",
-    "unmetDeps": "Dependencias sin resolver"
+    "unmetDeps": "Dependencias sin resolver",
+    "messageCount_one": "{{count}} mensaje",
+    "messageCount_other": "{{count}} mensajes"
   },
   "sprints": {
     "subtitle": "Todos los sprints de esta empresa, primero los activos.",
@@ -1571,7 +1585,9 @@
     "legacy": "sin empresa",
     "legacyHint": "Registrada antes de que las decisiones llevaran empresa.",
     "noSummary": "Sin resumen registrado.",
-    "open": "Ver las decisiones registradas sobre este archivo"
+    "open": "Ver las decisiones registradas sobre este archivo",
+    "count_one": "{{count}} decisión",
+    "count_other": "{{count}} decisiones"
   },
   "helpDesk": {
     "title": "Mesa de ayuda",
@@ -1729,7 +1745,9 @@
       "edit": "Editar respuesta",
       "answerLabel": "Respuesta a la pregunta {{n}}",
       "save": "Guardar respuesta",
-      "error": "No se pudo guardar la respuesta: {{message}}"
+      "error": "No se pudo guardar la respuesta: {{message}}",
+      "countLabel_one": "{{count}} pregunta",
+      "countLabel_other": "{{count}} preguntas"
     },
     "requirements": {
       "title": "Requisitos",
@@ -1738,7 +1756,9 @@
       "criteriaOf": "Criterios de aceptación de {{id}}",
       "given": "Dado",
       "when": "Cuando",
-      "then": "Entonces"
+      "then": "Entonces",
+      "countLabel_one": "{{count}} requisito",
+      "countLabel_other": "{{count}} requisitos"
     },
     "coverage": {
       "uncovered": "Sin cubrir",
@@ -1823,7 +1843,10 @@
       "after": "Después de: {{titles}}",
       "uncovered_one": "{{count}} criterio queda sin cubrir: {{ids}}. El sprint igual puede empezar.",
       "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
-    }
+    },
+    "listTitle": "Todas las especificaciones",
+    "countLabel_one": "{{count}} especificación",
+    "countLabel_other": "{{count}} especificaciones"
   },
   "architectures": {
     "title": "Arquitectura",
@@ -1861,20 +1884,26 @@
       "none": "Sin módulos.",
       "dependsOn": "Depende de",
       "covers": "Cubre",
-      "coversIn": "Cubre en {{title}}"
+      "coversIn": "Cubre en {{title}}",
+      "countLabel_one": "{{count}} módulo",
+      "countLabel_other": "{{count}} módulos"
     },
     "interfaces": {
       "title": "Interfaces",
       "none": "Sin interfaces.",
       "providedBy": "Provista por",
-      "consumers": "Consumida por"
+      "consumers": "Consumida por",
+      "countLabel_one": "{{count}} interfaz",
+      "countLabel_other": "{{count}} interfaces"
     },
     "decisions": {
       "title": "Decisiones",
       "none": "Sin decisiones.",
       "context": "Contexto",
       "decision": "Decisión",
-      "consequences": "Consecuencias"
+      "consequences": "Consecuencias",
+      "countLabel_one": "{{count}} decisión",
+      "countLabel_other": "{{count}} decisiones"
     },
     "conventions": {
       "title": "Convenciones",
@@ -1951,7 +1980,9 @@
       "forSpecification": "redactada para {{title}}",
       "covers_one": "cubre {{count}} especificación",
       "covers_other": "cubre {{count}} especificaciones",
-      "approvedOn": "aprobada el {{date}}"
+      "approvedOn": "aprobada el {{date}}",
+      "countLabel_one": "{{count}} versión",
+      "countLabel_other": "{{count}} versiones"
     }
   },
   "procedures": {
@@ -1995,7 +2026,9 @@
     "body": "La regla",
     "create": "Poner en vigor",
     "duplicate": "Ese procedimiento ya está vigente o propuesto.",
-    "createError": "No se pudo guardar: {{message}}"
+    "createError": "No se pudo guardar: {{message}}",
+    "countLabel_one": "{{count}} procedimiento",
+    "countLabel_other": "{{count}} procedimientos"
   },
   "inbox": {
     "subtitle": "Lo que la empresa necesita de vos. El resto lo hacen los agentes.",
@@ -2788,7 +2821,8 @@
       "Executing": "Ejecución",
       "Monitoring and Controlling": "Monitoreo y control",
       "Closing": "Cierre"
-    }
+    },
+    "compileOptions": "Opciones de compilación"
   },
   "chat": {
     "title": "Aprobaciones por chat",
@@ -3075,7 +3109,9 @@
     "noTeam": "Sin equipo",
     "empty": "No hay nada registrado en este rango.",
     "generated": "Generado {{at}} a partir de los registros.",
-    "costNote": "El coste cuenta solo los turnos que informó el proxy y que el catálogo tiene con precio; los demás se cuentan aparte, nunca como cero. Una persona en dos equipos cuenta en ambos."
+    "costNote": "El coste cuenta solo los turnos que informó el proxy y que el catálogo tiene con precio; los demás se cuentan aparte, nunca como cero. Una persona en dos equipos cuenta en ambos.",
+    "rowCount_one": "{{count}} fila",
+    "rowCount_other": "{{count}} filas"
   },
   "wiki": {
     "title": "Wiki",
@@ -3151,7 +3187,9 @@
     "runLint": "Revisar las páginas ahora",
     "lintDone_one": "{{count}} página marcada como desactualizada.",
     "lintDone_other": "{{count}} páginas marcadas como desactualizadas.",
-    "version": "v{{number}}"
+    "version": "v{{number}}",
+    "countLabel_one": "{{count}} página",
+    "countLabel_other": "{{count}} páginas"
   },
   "duties": {
     "title": "Funciones y accesos",
@@ -3536,6 +3574,9 @@
       "outcomesHint": "Cada ciclo mide la base (B) y el candidato (C) con los mismos evaluadores; la función de aptitud decide y nombra cada control que evaluó.",
       "specification": "Especificación",
       "noSpecificationText": "El texto de la especificación no se guardó; su sha256 está arriba."
-    }
+    },
+    "listTitle": "Todos los hallazgos",
+    "countLabel_one": "{{count}} hallazgo",
+    "countLabel_other": "{{count}} hallazgos"
   }
 }

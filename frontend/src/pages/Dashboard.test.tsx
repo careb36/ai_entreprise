@@ -160,7 +160,7 @@ describe('Dashboard Spanish localization', () => {
     expect(screen.getByTitle('Restante: 25%')).toBeInTheDocument()
     expect(screen.getByText('Necesita atención')).toBeInTheDocument()
     expect(screen.getByText('Revisión necesaria')).toBeInTheDocument()
-    expect(screen.getByText('2 agentes')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '2 agentes' })).toHaveTextContent('2')
     expect(screen.getByText('Desarrollador')).toBeInTheDocument()
     expect(screen.getByText('inactivo')).toBeInTheDocument()
     expect(screen.getByText('custom-agent')).toBeInTheDocument()

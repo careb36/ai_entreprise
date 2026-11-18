@@ -29,7 +29,7 @@ For support: from the address a person reports to the file to read. The routes a
 | `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete`, each one centred card in `pages/auth/AuthCard` (the product name, the page's `<h1>`, the line under the card) |
 | `/` | redirects to `/evidence` |
 | `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
-| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`) |
+| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
 | `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` |
 | `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
 | `/companies/new`, `/companies/select` | `CompanyNew` (shows the person's pending invitations above the wizard, `components/PendingInvitations`), `CompanySelect` |
@@ -132,6 +132,8 @@ The company and administration pages (Select company, New company, Invitations, 
 - **Observed and claimed never mix.** What the platform observed (a verdict, a check, a file the daemon read) and what a producer or agent reported (its messages, its test run, its declared paths) are separate groups with their own heading, as the board's card signals are (**Observed**: solid chips under a shield; **Reported**: dashed chips). A claim is never styled as an observation.
 - **Contrast.** Secondary text on a dark surface is `text-gray-400` or lighter; `text-gray-500` and below only for decoration or a disabled control.
 - **Motion.** Every animation and transition has `motion-reduce:` off (`motion-reduce:animate-none`, `motion-reduce:transition-none`).
+
+**The specification and knowledge pages** (`Specifications`, `SpecificationDetail`, `ArchitectureDetail`, `EvidenceDetail`, `Documentation`, `Wiki`, `MemorySearch`, `Procedures`, `CompanyFindings`, `CompanyFindingDetail`) follow these rules. Each section is a titled `Panel` (so a screen reader reaches it as a region by its heading), its items `data-row`s; the statuses they show (a specification's, a criterion's coverage and its acceptance test, a finding's and a cycle's decision, a procedure's result, a wiki page's, a documentation pack's) are `StatusBadge`s or `status-badge` spans with an icon. Long text (a summary, a decision, a requirement, a procedure, a Markdown document in `PackMarkdown` or `WikiMarkdown`) keeps a readable line length (`max-w-prose`, `72ch` for a document). On a run's evidence the **Claimed** panel is dashed under a speech mark and the **Observed** panel solid under a shield, each a region named by its own heading, with the verdict at the foot of the observed one; the Reviewer agent's suggestion is dashed too, a claim. Their loading line, load error with Retry and readable-text class are local, in `components/knowledge/PageStates.tsx`, a candidate for `components/ui` once another group needs them.
 
 ## Text and accessibility in the views
 

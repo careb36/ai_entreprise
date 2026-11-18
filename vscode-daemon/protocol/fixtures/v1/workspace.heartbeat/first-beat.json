@@ -1,5 +1,5 @@
 {
-  "description": "The first heartbeat after the daemon starts: sequence 1, its id and protocol version. The daemon publishes it; nobody answers.",
+  "description": "The first heartbeat after the daemon starts: sequence 1, its id, protocol version and announced abilities. The daemon publishes it; nobody answers.",
   "subject": "workspace.heartbeat",
   "reply": {
     "daemon_id": "0123456789abcdef",
@@ -12,7 +12,52 @@
       "platform": "linux"
     },
     "interval_seconds": 20.0,
-    "sent_at": "2026-11-14T12:00:00+00:00"
+    "sent_at": "2026-11-14T12:00:00+00:00",
+    "abilities": {
+      "abilities_version": 1,
+      "subjects": [
+        "workspace.app.check",
+        "workspace.browse",
+        "workspace.capabilities",
+        "workspace.console.collect",
+        "workspace.console.prepare",
+        "workspace.edit",
+        "workspace.edit.finish",
+        "workspace.execute",
+        "workspace.find",
+        "workspace.generate",
+        "workspace.git.base_status",
+        "workspace.git.diff",
+        "workspace.git.integrate",
+        "workspace.git.merge",
+        "workspace.git.publish",
+        "workspace.git.reviews",
+        "workspace.hash",
+        "workspace.inspect",
+        "workspace.list",
+        "workspace.map",
+        "workspace.read",
+        "workspace.related",
+        "workspace.sandbox.reset",
+        "workspace.search",
+        "workspace.signatures",
+        "workspace.status",
+        "workspace.undo"
+      ],
+      "features": {
+        "workspace.app.check": [
+          "browser_probe",
+          "cache",
+          "full_log",
+          "security_probe"
+        ],
+        "workspace.execute": [
+          "full_log",
+          "purpose_assistant",
+          "sandbox_floor"
+        ]
+      }
+    }
   },
   "volatile": [
     "/daemon_id",

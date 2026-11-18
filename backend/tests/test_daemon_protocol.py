@@ -144,6 +144,14 @@ def replay(doc: dict[str, Any], root: Path) -> Any:
     with pytest.MonkeyPatch.context() as patch:
         for name in DAEMON_ENV:
             patch.delenv(name, raising=False)
+        # The daemon keeps state (the repository map's cache, the delivery
+        # journal) under the home directory by default. A runner reuses
+        # pytest's numbered temp paths across runs, so a fixture replayed
+        # in a path an earlier run used would find that run's cache and
+        # answer ``cached: true``. Each replay gets its own state.
+        state = root.parent / "daemon-state"
+        patch.setenv("FABRIQUE_MAP_STATE", str(state / "maps"))
+        patch.setenv("FABRIQUE_DAEMON_STATE", str(state))
         for name, value in (doc.get("daemon_env") or {}).items():
             assert name in DAEMON_ENV, f"not a daemon setting a fixture sets: {name}"
             patch.setenv(name, value)
@@ -400,3 +408,51 @@ def test_main_starts_the_heartbeat_and_cancels_it(monkeypatch):
         asyncio.run(daemon.main())
     assert set(subscribed) == {s for s, _ in daemon.subscriptions(_NC())}
     assert beats and set(beats) == {"workspace.heartbeat"}
+
+
+# ---------------------------------------------------------------------------
+# The abilities the daemon announces (#315, PROTOCOL.md §2.1)
+# ---------------------------------------------------------------------------
+
+
+def test_the_announced_subjects_are_the_subjects_the_daemon_serves():
+    """WHEN the daemon announces its abilities THEN the subjects it names are
+    exactly the request subjects it subscribes to: a claim kept true by a test."""
+    import abilities
+    import daemon
+
+    served = {subject for subject, _ in daemon.subscriptions(_NC())}
+    assert set(abilities.SUBJECTS) == served
+    assert set(abilities.FEATURES) <= served
+
+
+def test_status_and_every_heartbeat_announce_the_abilities():
+    """WHEN the daemon connects THEN its first heartbeat and its status carry
+    the versioned announcement."""
+    import abilities
+    import daemon
+    import daemon_status
+
+    nc = _NC()
+    handlers = dict(daemon.subscriptions(nc, lambda: False))
+    asyncio.run(handlers["workspace.status"](_Msg("workspace.status", {})))
+    asyncio.run(daemon_status.heartbeat_loop(nc, interval=5.0, beats=1))
+    status, beat = nc.published[0][1], nc.published[1][1]
+    for body in (status, beat):
+        announced = body["abilities"]
+        assert announced == abilities.announcement()
+        assert announced["abilities_version"] == abilities.ABILITIES_VERSION == 1
+        assert "full_log" in announced["features"]["workspace.execute"]
+        assert {"browser_probe", "security_probe"} <= set(
+            announced["features"]["workspace.app.check"]
+        )
+
+
+def test_the_announcement_never_carries_a_hash_or_a_run():
+    """The announcement is about the daemon, never about a run: no hash, no
+    exit code, no output (rule 6 of docs/POSITIONING.md)."""
+    import abilities
+
+    text = json.dumps(abilities.announcement())
+    for word in ("sha256", "digest", "exit_code", "stdout", "observed"):
+        assert word not in text

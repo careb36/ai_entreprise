@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BarChart3, Download, Loader2 } from 'lucide-react'
+import { BarChart3, CalendarDays, Download, Loader2, Lock } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useUsage, useUsageExport } from '../hooks/useTeams'
 import {
@@ -14,6 +14,7 @@ import {
 } from '../services/api'
 import { formatCostCents, formatTokens } from '../services/cost'
 import { useAppStore } from '../store/useAppStore'
+import { CountPill, EmptyState, PageHeader, Panel, Toolbar } from '../components/ui'
 
 const PERIODS: UsagePeriod[] = ['day', 'week', 'month']
 
@@ -61,67 +62,57 @@ export default function Usage() {
   }
 
   return (
-    <div className="page-container max-w-6xl">
-      <div className="page-header mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <BarChart3 className="text-brand-400" size={22} />
-            <h1 className="page-title">{t('usage.title')}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">{t('usage.subtitle')}</p>
-        </div>
-      </div>
+    <div className="page-container max-w-6xl space-y-4">
+      <PageHeader title={t('usage.title')} subtitle={t('usage.subtitle')} />
       {!canRead ? (
-        <div role="status" className="card p-4 text-sm text-gray-300">
-          {t('usage.managerOnly', { role: role ?? '—' })}
+        <div role="status">
+          <EmptyState icon={Lock} dashed title={t('usage.managerOnly', { role: role ?? '—' })} />
         </div>
       ) : (
-        <div className="space-y-4">
-          <form className="card p-4 flex flex-wrap items-end gap-3" aria-label={t('usage.filters')} onSubmit={e => e.preventDefault()}>
-            <label className="block">
-              <span className="input-label">{t('usage.since')}</span>
-              <input type="date" className="input" value={range.since}
-                onChange={e => setRange(r => ({ ...r, since: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="input-label">{t('usage.until')}</span>
-              <input type="date" className="input" value={range.until}
-                onChange={e => setRange(r => ({ ...r, until: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="input-label">{t('usage.period')}</span>
-              <select className="select" value={period} onChange={e => setPeriod(e.target.value as UsagePeriod)}>
-                {PERIODS.map(p => <option key={p} value={p}>{t(`usage.periods.${p}`)}</option>)}
-              </select>
-            </label>
-            <span className="text-xs text-gray-400">{t('usage.utc')}</span>
-            <button type="button" className="btn-secondary btn-sm ml-auto" onClick={download} disabled={exporter.isPending}>
-              <Download size={14} /> {t('usage.export')}
-            </button>
+        <>
+          <form onSubmit={e => e.preventDefault()}>
+            <Toolbar label={t('usage.filters')}>
+              <label className="flex items-center gap-1.5 text-xs text-gray-400">
+                {t('usage.since')}
+                <input type="date" className="input control-sm w-[8.5rem]" value={range.since}
+                  onChange={e => setRange(r => ({ ...r, since: e.target.value }))} />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-400">
+                {t('usage.until')}
+                <input type="date" className="input control-sm w-[8.5rem]" value={range.until}
+                  onChange={e => setRange(r => ({ ...r, until: e.target.value }))} />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-400">
+                {t('usage.period')}
+                <select className="select control-sm w-auto pr-7" value={period} onChange={e => setPeriod(e.target.value as UsagePeriod)}>
+                  {PERIODS.map(p => <option key={p} value={p}>{t(`usage.periods.${p}`)}</option>)}
+                </select>
+              </label>
+              <span className="text-meta flex items-center gap-1">
+                <CalendarDays size={11} aria-hidden="true" />{t('usage.utc')}
+              </span>
+              <button type="button" className="btn-tool ml-auto border border-surface-700" onClick={download} disabled={exporter.isPending}>
+                <Download size={13} aria-hidden="true" /> {t('usage.export')}
+              </button>
+            </Toolbar>
           </form>
-          {exporter.isError && <div role="alert" className="alert-error text-sm">{errorDetail(exporter.error)}</div>}
+          {exporter.isError && <div role="alert" className="alert-error text-[13px]">{errorDetail(exporter.error)}</div>}
           {usage.isLoading ? (
-            <Loader2 className="animate-spin text-brand-400" size={20} />
+            <div role="status" aria-label={t('common.loading', { defaultValue: 'Loading...' })} className="panel flex items-center justify-center p-6">
+              <Loader2 className="animate-spin text-brand-400 motion-reduce:animate-none" size={18} aria-hidden="true" />
+            </div>
           ) : usage.isError ? (
-            <div role="alert" className="alert-error text-sm">{errorDetail(usage.error)}</div>
+            <div role="alert" className="alert-error text-[13px]">{errorDetail(usage.error)}</div>
           ) : usage.data ? (
             <>
               <Totals totals={usage.data.totals} locale={i18n.language} />
-              <div role="tablist" aria-label={t('usage.groupBy')} className="flex flex-wrap gap-2">
-                {USAGE_DIMENSIONS.map(d => (
-                  <button key={d} type="button" role="tab" aria-selected={dimension === d}
-                    className={`btn-sm ${dimension === d ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setDimension(d)}>
-                    {t(`usage.dimensions.${d}`)}
-                  </button>
-                ))}
-              </div>
-              <UsageTable report={usage.data} dimension={dimension} locale={i18n.language} />
-              <p className="text-xs text-gray-400">
+              <UsageTable report={usage.data} dimension={dimension} onDimension={setDimension} locale={i18n.language} />
+              <p className="text-meta">
                 {t('usage.generated', { at: usage.data.generated_at })} {t('usage.costNote')}
               </p>
             </>
           ) : null}
-        </div>
+        </>
       )}
     </div>
   )
@@ -132,9 +123,9 @@ function Cost({ numbers, locale }: { numbers: UsageNumbers; locale: string }) {
   const shown = formatCostCents(numbers.cost_cents, locale)
   return (
     <span>
-      {shown ?? t('usage.costUnknown')}
+      {shown ?? <span className="text-gray-400">{t('usage.costUnknown')}</span>}
       {numbers.cost_unknown_turns > 0 && shown !== null && (
-        <span className="text-gray-400"> {t('usage.plusUnknown', { count: numbers.cost_unknown_turns })}</span>
+        <span className="text-[11px] font-normal text-gray-400"> {t('usage.plusUnknown', { count: numbers.cost_unknown_turns })}</span>
       )}
     </span>
   )
@@ -150,14 +141,14 @@ function Totals({ totals, locale }: { totals: UsageNumbers; locale: string }) {
     [t('usage.columns.cost'), <Cost key="cost" numbers={totals} locale={locale} />],
   ]
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
       {tiles.map(([label, value]) => (
-        <div key={label} className="card p-3">
-          <div className="text-xs text-gray-400">{label}</div>
-          <div className="text-lg text-gray-100">{value}</div>
+        <div key={label} className="panel flex flex-col-reverse px-3 py-2.5">
+          <dd className="mt-1 text-lg font-semibold leading-tight tabular-nums text-gray-100">{value}</dd>
+          <dt className="text-meta font-medium">{label}</dt>
         </div>
       ))}
-    </div>
+    </dl>
   )
 }
 
@@ -166,44 +157,69 @@ function rowLabel(row: UsageRow, dimension: UsageDimension, t: (key: string) => 
   return row.label ?? String(row.key)
 }
 
-function UsageTable({ report, dimension, locale }: { report: UsageReport; dimension: UsageDimension; locale: string }) {
+const TH = 'px-3 py-2 text-[11px] font-medium text-gray-400'
+const TD = 'px-3 py-2 text-right tabular-nums'
+
+function UsageTable({ report, dimension, onDimension, locale }: {
+  report: UsageReport
+  dimension: UsageDimension
+  onDimension: (dimension: UsageDimension) => void
+  locale: string
+}) {
   const { t } = useTranslation()
   const rows = report[`by_${dimension}`]
-  if (rows.length === 0) return <p className="text-sm text-gray-400">{t('usage.empty')}</p>
   return (
-    <div className="card p-0 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-gray-400">
-            <th className="px-3 py-2 font-normal">{t(`usage.dimensions.${dimension}`)}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.tasks')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.rework')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.runs')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.verifiedShort')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.refutedShort')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.decisions')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.tokens')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.estimated')}</th>
-            <th className="px-3 py-2 font-normal text-right">{t('usage.columns.cost')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(row => (
-            <tr key={String(row.key)} className="border-t border-surface-800">
-              <td className="px-3 py-2 text-gray-200">{rowLabel(row, dimension, t)}</td>
-              <td className="px-3 py-2 text-right">{row.tasks}</td>
-              <td className="px-3 py-2 text-right">{row.rework}</td>
-              <td className="px-3 py-2 text-right">{row.runs}</td>
-              <td className="px-3 py-2 text-right">{row.verified}</td>
-              <td className="px-3 py-2 text-right">{row.refuted}</td>
-              <td className="px-3 py-2 text-right">{row.approvals + row.changes_requested}</td>
-              <td className="px-3 py-2 text-right">{formatTokens(row.reported_tokens)}</td>
-              <td className="px-3 py-2 text-right">{formatTokens(row.estimated_tokens)}</td>
-              <td className="px-3 py-2 text-right"><Cost numbers={row} locale={locale} /></td>
-            </tr>
+    <Panel>
+      <div className="panel-header">
+        <div role="tablist" aria-label={t('usage.groupBy')} className="segmented">
+          {USAGE_DIMENSIONS.map(d => (
+            <button key={d} type="button" role="tab" aria-selected={dimension === d}
+              className={`segmented-item ${dimension === d ? 'bg-surface-700 text-white shadow-sm hover:bg-surface-700' : ''}`}
+              onClick={() => onDimension(d)}>
+              {t(`usage.dimensions.${d}`)}
+            </button>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </div>
+        <CountPill className="ml-auto" count={rows.length} label={t('usage.rowCount', { count: rows.length })} />
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState icon={BarChart3} title={t('usage.empty')} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className={`${TH} text-left`} scope="col">{t(`usage.dimensions.${dimension}`)}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.tasks')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.rework')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.runs')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.verifiedShort')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.refutedShort')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.decisions')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.tokens')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.estimated')}</th>
+                <th className={`${TH} text-right`} scope="col">{t('usage.columns.cost')}</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              {rows.map(row => (
+                <tr key={String(row.key)} className="border-t border-surface-700 transition-colors hover:bg-surface-800/40 motion-reduce:transition-none">
+                  <td className="px-3 py-2 text-[13px] text-gray-100">{rowLabel(row, dimension, t)}</td>
+                  <td className={TD}>{row.tasks}</td>
+                  <td className={TD}>{row.rework}</td>
+                  <td className={TD}>{row.runs}</td>
+                  <td className={TD}>{row.verified}</td>
+                  <td className={TD}>{row.refuted}</td>
+                  <td className={TD}>{row.approvals + row.changes_requested}</td>
+                  <td className={TD}>{formatTokens(row.reported_tokens)}</td>
+                  <td className={TD}>{formatTokens(row.estimated_tokens)}</td>
+                  <td className={TD}><Cost numbers={row} locale={locale} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   )
 }
