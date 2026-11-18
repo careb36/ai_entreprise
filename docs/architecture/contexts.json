@@ -27,6 +27,7 @@
         "memory_graph",
         "orchestration_metrics",
         "protected_paths_setting",
+        "rework_mentions",
         "rfc3161",
         "sod",
         "teams",
@@ -1001,6 +1002,9 @@
       ],
       "test_reviewer_agent.py": [
         "management"
+      ],
+      "test_rework_mentions.py": [
+        "loop"
       ],
       "test_rfc3161.py": [
         "platform"
