@@ -7,6 +7,7 @@ import { api, type SprintSummary } from '../services/api'
 import { specificationsApi } from '../services/specifications'
 import { managerApi, type ManagerRecord } from '../services/manager'
 import { routingApi } from '../services/routing'
+import { gateRefutationsApi } from '../services/gateRefutations'
 import { queryClient } from '../lib/queryClient'
 import type { CostSummary } from '../services/cost'
 import type { ManagedSprint } from '../services/sprintAdmin'
@@ -39,6 +40,9 @@ describe('Sprints list', () => {
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
     vi.spyOn(managerApi, 'record').mockResolvedValue(EMPTY_RECORD)
     vi.spyOn(routingApi, 'record').mockResolvedValue({ rows: [], tasks: 0, policy: null })
+    vi.spyOn(gateRefutationsApi, 'get').mockResolvedValue({
+      company_id: 42, sprint_id: null, since: '2026-11-02', until: '2026-11-15', by_problem: {}, refuted: 0, unconfirmed: 0, weeks: [],
+    })
   })
   afterEach(() => {
     queryClient.clear()
