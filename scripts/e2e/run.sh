@@ -62,6 +62,9 @@
 #      version 2 of the one architecture (#469's covers kept), planned with
 #      the acceptance tests first and run, the integration read by a person,
 #      the documentation pack compiled in English and Spanish.
+#  9e. A delivery naming a package no registry has is refuted by the
+#      Verifier's grounded check, the reason on the task's events and board
+#      (issue #549, scripts/e2e/invented_package_step.sh).
 #  10. Every task's history is legal, read by app/history_check.py, which
 #      shares no code with the readers it checks.
 #  11. QA only reviewed delivered work (the fake model's order check).
@@ -563,6 +566,7 @@ check "the unit tests still decided the greeting's criteria" test "$(web_check c
 
 # 9d. the factory builds itself (issue #329), in a file of its own.
 . "$REPO/scripts/e2e/self_host_step.sh"
+. "$REPO/scripts/e2e/invented_package_step.sh"  # 9e (issue #549)
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.

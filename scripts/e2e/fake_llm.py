@@ -24,6 +24,10 @@ prompt's section headers, so one run exercises the whole loop:
   revision);
 - the Developer of the counter reads the greeting's module through the
   workspace tools before delivering (one ``workspace__read`` call);
+- the first delivery of ``INVENTED_TASK`` also writes a requirements file
+  naming ``INVENTED_PACKAGE``, which the fake registry (``/pypi/<name>``)
+  answers 404 like any name but pytest's, so the Verifier refutes it; the
+  next delivery leaves the file out (issue #549);
 - QA, asked for browser checks (a project that serves pages), also writes
   one Playwright smoke test per criterion, ``e2e/req_1_1.spec.ts``;
 - it also plays a company's own provider: ``/provider/v1/models`` lists two
@@ -89,6 +93,14 @@ SELF_HOST_PLAN = {
     "team": ["Developer"],
     "team_reasons": {"Developer": "the filter and the views are code to write and test"},
 }
+
+# The task whose first delivery names a package no registry has (issue #549,
+# scripts/e2e/invented_package_step.sh). The file is not a requirements.txt
+# and the project has no stack marker, so no install runs for it: the refusal
+# is the Verifier's grounded check reading the backend's registry lookup.
+INVENTED_TASK = "Add retry helper"
+INVENTED_PACKAGE = "fabrique-e2e-invented-package"
+INVENTED_MANIFEST = "requirements-dev.txt"
 
 # Per task title: how many deliveries the fake wrote, how many reviews it was
 # asked for, and the paths of the last delivery.
@@ -293,6 +305,9 @@ def answer(prompt: str) -> str:
             edits_test = title == "Add greeting counter" and DELIVERED[title] == 1
             if edits_test:
                 LAST_PATHS[title].append("tests/test_req_2.py")
+            invents = title == INVENTED_TASK and DELIVERED[title] == 1
+            if invents:
+                LAST_PATHS[title].append(INVENTED_MANIFEST)
         return (
             f"Implemented {task.group(1)}.\n\n"
             f"```python path=src/{name}.py\n"
@@ -305,6 +320,7 @@ def answer(prompt: str) -> str:
                 if edits_test
                 else ""
             )
+            + (f"```text path={INVENTED_MANIFEST}\n{INVENTED_PACKAGE}\n```\n\n" if invents else "")
             + f"{PADDING}\n"
         )
     return "Keep the implementation minimal and covered by a unit test."
