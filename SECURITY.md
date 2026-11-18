@@ -184,7 +184,8 @@ OpenID Connect provider (single sign-on, below).
   role (`Viewer` by default, `Manager` at most, never above its creator's,
   when minted and on every use: a token above its creator's current effective
   role, or whose creator left the company, is a 401 audited
-  `api_token_refused` with the reason),
+  `api_token_refused` with the reason; the creator is matched by account
+  id, so a renamed or reused email address changes nothing),
   an expiry (90 days by default, at most 365), revocable. Only the token's
   sha256 is stored; the raw value (`fab_` + 32 random bytes) is shown once.
   A request made with one acts as `api-token:<id>`, so audit rows name it.
@@ -780,6 +781,13 @@ install, and quarantined after three failed installs in a row until a
 Manager resets it (`POST /v1/companies/{id}/sandbox/cache/reset`, audited).
 A same-named volume without the label is never used or removed, and
 `FABRIQUE_SANDBOX_CACHE=off` on the daemon's machine refuses the cache.
+With `DELIVERY_SANDBOX_ENV` (off by default) a second volume keeps what an
+install leaves outside the worktree (Python's user site, Go's module cache).
+It persists executable code between runs, so it is keyed by project, company,
+image and the sha256 of the manifests, written only by an install and mounted
+read-only by every other run (a test run cannot leave code for the next one),
+reset and quarantined as the cache, and refused with
+`FABRIQUE_SANDBOX_ENV=off`; its bin folders come after the image's on `PATH`.
 
 **The command policy is a first pass, not the boundary.** A blocklist screens
 a string; it cannot fence a process: `rm -rf`, `rm -r -f` and

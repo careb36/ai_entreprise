@@ -49,11 +49,13 @@
           "browser_probe",
           "cache",
           "full_log",
+          "sandbox_environment",
           "security_probe"
         ],
         "workspace.execute": [
           "full_log",
           "purpose_assistant",
+          "sandbox_environment",
           "sandbox_floor"
         ]
       }

@@ -914,6 +914,9 @@
       "test_project_docs_pmbok.py": [
         "planning"
       ],
+      "test_project_docs_status.py": [
+        "planning"
+      ],
       "test_project_wiki.py": [
         "loop"
       ],

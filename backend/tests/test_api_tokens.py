@@ -359,3 +359,156 @@ def test_a_demoted_creators_token_is_a_401_over_http(
     assert refused.json()["detail"] == "Invalid or expired token"
     # And the demoted creator cannot mint a Manager token any more.
     assert _mint(test_client, login, company.id, role="Manager").status_code == 403
+
+
+# The creator is recorded by account id, not only by email (issue #512, the
+# SDL review of PR #644): an address can change hands, an account cannot.
+
+
+def _rename(session, user, email):
+    user.email = email
+    session.add(user)
+    session.commit()
+
+
+def _mint_for(session, company_id, user, role):
+    return api_tokens.create_token(
+        session,
+        company_id,
+        "ci",
+        user.email,
+        role=role,
+        created_by_user_id=user.id,
+    )
+
+
+def test_a_renamed_creator_keeps_the_tokens_standing(sqlite_session):
+    company = _company(sqlite_session)
+    user, member = _member(sqlite_session, company.id, "Manager")
+    token, raw = _mint_for(sqlite_session, company.id, user, "Manager")
+    assert token.created_by_user_id == user.id
+
+    _rename(sqlite_session, user, f"renamed-{secrets.token_hex(4)}@x.com")
+    assert api_tokens.verify(sqlite_session, raw) is not None
+    assert _refusals(sqlite_session, token.id) == []
+    # Still tied to the same account: demoted, the token is refused.
+    _set_role(sqlite_session, member, "Viewer")
+    assert api_tokens.verify(sqlite_session, raw) is None
+
+
+def test_a_reused_email_does_not_inherit_a_token(sqlite_session):
+    company = _company(sqlite_session)
+    first, first_seat = _member(sqlite_session, company.id, "Manager")
+    token, raw = _mint_for(sqlite_session, company.id, first, "Manager")
+    address = first.email
+
+    # The creator moves to another address, and someone else, a Manager of
+    # the same company, takes the old one.
+    _rename(sqlite_session, first, f"moved-{secrets.token_hex(4)}@x.com")
+    second, _ = _member(sqlite_session, company.id, "Manager")
+    _rename(sqlite_session, second, address)
+
+    # The creator leaves: the token goes with them, not to the address.
+    sqlite_session.delete(first_seat)
+    sqlite_session.commit()
+    assert api_tokens.verify(sqlite_session, raw) is None
+    rows = _refusals(sqlite_session, token.id)
+    assert [r.result["reason"] for r in rows] == ["creator_not_a_member"]
+    assert rows[0].details["creator_user_id"] == first.id
+
+
+def test_a_creator_id_with_no_account_is_refused_without_reading_the_email(
+    sqlite_session,
+):
+    company = _company(sqlite_session)
+    holder, _ = _member(sqlite_session, company.id, "Manager")
+    _token, raw = api_tokens.create_token(
+        sqlite_session,
+        company.id,
+        "ci",
+        holder.email,
+        role="Viewer",
+        created_by_user_id=10_000_000,
+    )
+    assert api_tokens.verify(sqlite_session, raw) is None
+
+
+def test_a_token_with_no_creator_id_keeps_the_email_rule(sqlite_session):
+    # Rows the migration could not match (no account had the address then)
+    # are judged by email, as before.
+    company = _company(sqlite_session)
+    user, member = _member(sqlite_session, company.id, "Manager")
+    token, raw = api_tokens.create_token(
+        sqlite_session, company.id, "old", user.email, role="Manager"
+    )
+    assert token.created_by_user_id is None
+    assert api_tokens.verify(sqlite_session, raw) is not None
+    _set_role(sqlite_session, member, "Viewer")
+    assert api_tokens.verify(sqlite_session, raw) is None
+
+
+def test_minting_over_http_records_the_creators_id(
+    test_client, sqlite_session, signing_key, monkeypatch
+):
+    from models import ApiToken
+
+    monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(auth_tokens, "_configured_key", lambda: signing_key)
+    company = _company(sqlite_session)
+    user, _ = _member(sqlite_session, company.id, "Manager")
+    login = {
+        "Authorization": f"Bearer {create_access_token(user_id=user.id, email=user.email)}"
+    }
+    minted = _mint(test_client, login, company.id).json()
+    sqlite_session.expire_all()
+    assert sqlite_session.get(ApiToken, minted["id"]).created_by_user_id == user.id
+
+
+def test_the_migration_backfills_the_creator_id_from_the_email(tmp_path, monkeypatch):
+    import migrations
+    from sqlalchemy import text
+    from sqlmodel import Session, create_engine
+
+    from alembic import command
+
+    url = f"sqlite:///{tmp_path / 'tokens.sqlite'}"
+    monkeypatch.setenv("ALEMBIC_DATABASE_URL", url)
+    engine = create_engine(url)
+    config = migrations.alembic_config()
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0047")
+    with Session(engine) as session:
+        session.add(Company(company_name="Acme", autonomy_level=2))
+        session.commit()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (email, full_name, password_hash) "
+                "VALUES ('ana@example.com', 'x', '')"
+            )
+        )
+        ana = connection.execute(text("SELECT id FROM users")).scalar_one()
+        for name, creator in (
+            ("matched", "ana@example.com"),
+            ("spelled", " Ana@Example.com"),
+            ("unmatched", "gone@example.com"),
+            ("anonymous", None),
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO api_tokens (company_id, name, token_hash, "
+                    "created_by, scopes, created_at, role) VALUES "
+                    "(1, :n, :h, :c, '[]', CURRENT_TIMESTAMP, 'Viewer')"
+                ),
+                {"n": name, "h": "h-" + name, "c": creator},
+            )
+    migrations.upgrade_to_head(engine)
+    with engine.connect() as connection:
+        ids = dict(
+            connection.execute(
+                text("SELECT name, created_by_user_id FROM api_tokens")
+            ).fetchall()
+        )
+    assert ids == {"matched": ana, "spelled": ana, "unmatched": None, "anonymous": None}
+    assert migrations.schema_differences(engine) == []

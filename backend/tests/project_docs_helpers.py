@@ -248,6 +248,56 @@ def _snapshot():
                 "result": "kept",
             }
         ],
+        "effort": [
+            {
+                "event_id": 110,
+                "task_id": 41,
+                "sprint_id": 7,
+                "chain_hash": "unsigned:" + "4" * 64,
+                "created_at": "2026-11-04T12:30:00",
+                "observed": {
+                    "status": "done",
+                    "done": True,
+                    "tokens": 8000,
+                    "wall_seconds": 3600,
+                    "deliveries": 2,
+                    "rework_cycles": 1,
+                    "rework_requests": 1,
+                    "send_backs": 0,
+                    "review_failures": 0,
+                },
+            },
+            {
+                "event_id": 111,
+                "task_id": 42,
+                "sprint_id": 7,
+                "chain_hash": "unsigned:" + "5" * 64,
+                "created_at": "2026-11-04T12:30:01",
+                "observed": {
+                    "status": "blocked",
+                    "done": False,
+                    "tokens": None,
+                    "wall_seconds": None,
+                    "deliveries": 1,
+                    "rework_cycles": 0,
+                    "rework_requests": 0,
+                    "send_backs": 0,
+                    "review_failures": 1,
+                },
+            },
+        ],
+        "costs": [
+            {
+                "sprint_id": 7,
+                "turns": 5,
+                "reported_turns": 5,
+                "estimated_turns": 0,
+                "unavailable_turns": 0,
+                "reported_tokens": 12000,
+                "cost_cents": 34.5,
+                "reason": None,
+            }
+        ],
         "integrations": [
             {
                 "id": 4,
@@ -277,6 +327,8 @@ def _empty():
         "retrospectives": [],
         "procedures": [],
         "integrations": [],
+        "effort": [],
+        "costs": [],
     }
 
 

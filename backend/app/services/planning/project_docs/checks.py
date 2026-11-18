@@ -28,7 +28,13 @@ from collections.abc import Callable
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import specs, statements, texts, wstg_status
+from services.planning.project_docs import (
+    performance,
+    specs,
+    statements,
+    texts,
+    wstg_status,
+)
 from services.planning.project_docs.layout import DOMAINS, PMBOK, build, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_inline
@@ -274,6 +280,98 @@ def security_tests_run(snapshot: dict, src: Sources, tr: Tr) -> Result:
     )
 
 
+def _effort_marks(entries: list[dict], src: Sources, tr: Tr) -> str:
+    marks = [
+        src.cite(
+            ref(
+                "event",
+                e.get("event_id"),
+                sha256=e.get("chain_hash"),
+                label=tr("status.label_effort", task=e.get("task_id")),
+            )
+        )
+        for e in entries[:MAX_MARKS]
+    ]
+    more = f" (+{len(entries) - MAX_MARKS})" if len(entries) > MAX_MARKS else ""
+    return " ".join(marks) + more
+
+
+def carry_over(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Measured: how much carry-over is acceptable is the Owner's to set."""
+    rows = performance.sprint_rows(snapshot)
+    planned = sum(r["planned"] for r in rows)
+    if not planned:
+        return NOT_COMPUTABLE, tr("check.no_tasks"), ""
+    carried = sum(r["carried_out"] for r in rows)
+    return (
+        MEASURED,
+        tr("check.carry_over_obs", part=carried, whole=planned),
+        _sprint_marks([r["sprint"] for r in rows], src),
+    )
+
+
+def first_pass(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Measured from the backend's effort observations, never a producer's account."""
+    rows = performance.sprint_rows(snapshot)
+    whole = sum(r["done_observed"] for r in rows)
+    if not whole:
+        return NOT_COMPUTABLE, tr("check.no_effort"), ""
+    part = sum(r["first_pass"] for r in rows)
+    entries = [e for r in rows for e in r["efforts"]]
+    return (
+        MEASURED,
+        tr("check.first_pass_obs", part=part, whole=whole),
+        _effort_marks(entries, src, tr),
+    )
+
+
+def _completed(snapshot: dict) -> list[dict]:
+    return [
+        r
+        for r in performance.sprint_rows(snapshot)
+        if r["sprint"].get("status") == performance.COMPLETED
+    ]
+
+
+def spend_known(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    done = _completed(snapshot)
+    if not done:
+        return NOT_COMPUTABLE, tr("check.lessons_none"), ""
+    known = [r for r in done if performance.known_cost(r["cost"])]
+    marks = " ".join(
+        src.cite(
+            ref(
+                "cost",
+                r["cost"].get("sprint_id"),
+                sha256=digest(r["cost"]),
+                label=tr("status.label_cost", id=r["cost"].get("sprint_id")),
+            )
+        )
+        for r in done[:MAX_MARKS]
+        if r["cost"]
+    )
+    return (
+        (MET if len(known) == len(done) else NOT_MET),
+        tr("check.spend_obs", part=len(known), whole=len(done)),
+        marks or _sprint_marks([r["sprint"] for r in done], src),
+    )
+
+
+def effort_observed(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    done = _completed(snapshot)
+    whole = sum(r["planned"] for r in done)
+    if not whole:
+        return NOT_COMPUTABLE, tr("check.lessons_none"), ""
+    part = sum(r["observed"] for r in done)
+    entries = [e for r in done for e in r["efforts"]]
+    return (
+        (MET if part == whole else NOT_MET),
+        tr("check.effort_obs", part=part, whole=whole),
+        _effort_marks(entries, src, tr)
+        or _sprint_marks([r["sprint"] for r in done], src),
+    )
+
+
 def _person(_snapshot: dict, _src: Sources, tr: Tr) -> Result:
     return PERSON, tr("check.person_obs"), ""
 
@@ -284,11 +382,12 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("understood", requirements_understood),
         ("stability", requirements_stability),
         ("covered", requirements_covered),
+        ("first_pass", first_pass),
     ],
-    "Schedule": [("schedule", schedule_documented)],
-    "Finance": [("budget", _person)],
+    "Schedule": [("schedule", schedule_documented), ("carry_over", carry_over)],
+    "Finance": [("budget", _person), ("spend", spend_known)],
     "Stakeholders": [("people", people_recorded), ("external", _person)],
-    "Resources": [("team", work_to_hired_roles)],
+    "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
     "Risk": [("risk", risk_on_every_delivery), ("security", security_tests_run)],
 }
 CHECK_INPUTS = (
@@ -303,6 +402,9 @@ CHECK_INPUTS = (
     "members",
     "retrospectives",
     "verifications",
+    "events",
+    "effort",
+    "costs",
     statements.key_of("checks"),
 )
 
