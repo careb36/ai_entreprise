@@ -55,6 +55,13 @@ medians with their spread, a pair of runs served different models is void,
 and a metric with fewer than K complete runs is unmeasured (``repeated.py``,
 which says how). Then the exit status is 3 when nothing regressed but a
 judged metric is unmeasured.
+
+A card carrying a section ablation (schema v4, ``ablate.sh``,
+``ablation.py``) adds its table: per prompt section turned off, the arm's
+criteria passed, rework requests, estimated prompt tokens and reported tokens
+beside the baseline's, with the difference. It is printed even with no
+previous card and never judged: the exit status is the comparison's alone.
+The header names the sections either run turned off (``sections_off``).
 """
 
 import argparse
@@ -64,7 +71,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import budget  # the sibling modules, by path
+import ablation  # the sibling modules, by path
+import budget
 import graders
 import prompt_weight
 import repeated
@@ -318,6 +326,7 @@ def render(
             f"Commits `{previous['commit'][:12]}` → `{current['commit'][:12]}`; models `{previous['llm']}` → `{current['llm']}`; "
             f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`; "
             f"graders {graders.label(previous)} → {graders.label(current)}."
+            + _sections_off(previous, current)
         ),
         "",
         *render_cut(previous, current, result),
@@ -337,6 +346,7 @@ def render(
     lines += routing_split.render(previous, current, "band")
     lines += routing_split.render(previous, current, "model")
     lines += prompt_weight.render_table(previous, current)
+    lines += ablation.render_lines(current, level="###")
     if result["new_specs"]:
         lines += [
             "",
@@ -355,6 +365,16 @@ def render(
     ]
     lines += [f"- {r}" for r in result["regressions"]]
     return "\n".join(lines) + "\n"
+
+
+def _sections_off(previous: dict[str, Any], current: dict[str, Any]) -> str:
+    """The header's prompt sections turned off, when either run turned some off."""
+    if not previous.get("sections_off") and not current.get("sections_off"):
+        return ""
+    off = [
+        ", ".join(c.get("sections_off") or []) or "none" for c in (previous, current)
+    ]
+    return f" Prompt sections off: {off[0]} → {off[1]}."
 
 
 def _load(path: Path) -> dict[str, Any] | None:
@@ -431,6 +451,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"No previous scorecard in {args.dir}: {args.current[0].name} is the first reference."
         )
+        if current.get("ablation"):
+            print("\n".join(ablation.render_lines(current, level="###")))
         return 0
     previous = _load(previous_path)
     if previous is None:

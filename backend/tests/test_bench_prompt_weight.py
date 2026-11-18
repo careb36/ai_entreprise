@@ -146,7 +146,7 @@ def test_a_v3_card_carries_the_weight_per_spec_and_in_total():
     with_measures = _entry("01-a", prompt_weight.weigh(MEASURES))
     older_backend = _entry("02-b", prompt_weight.weigh([None, None]))
     card = _card(with_measures, older_backend)
-    assert card["schema_version"] == 3
+    assert card["schema_version"] == scorecard.SCHEMA_VERSION
     assert scorecard.validate(card) == []
     total = card["totals"]["prompt"]
     assert (total["prompts"], total["prompt_sections_missing"]) == (3, 3)
