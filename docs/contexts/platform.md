@@ -60,7 +60,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 - `agent_service` (`AgentService`): publishes `workspace.generate` to NATS and writes the audit entries, to the JSONL file and the `audit_log` table.
 - `idempotency` (`claim_event`, `prune_expired`): one claim per NATS event in `processed_events`, so a redelivered message is skipped; a database failure lets the work proceed.
-- `orchestration_metrics`: writes each agent turn in the shape `GET /v1/analytics/orchestration_health` reads (QA rework rate, Developer tokens, Architect consults).
+- `orchestration_metrics`: writes each agent turn in the shape `GET /v1/analytics/orchestration_health` reads (QA rework rate, Developer tokens, Architect consults). It also counts the deliveries the gate before QA sent back, by the problem `delivery_gate` named (`count_gate_refutations`, issue #549), parsed from the Verifier's `NEEDS WORK: <problem> —` text since platform may not import the evidence; `tests/test_gate_refutations.py` pins that text to what the loop writes, and `GET /v1/analytics/gate_refutations` serves the count. It never mixes with `count_qa_rework_requests`.
 - `run_secrets`: values that live only for one task run (issue #357), stored encrypted and handed to the run's environment (`env_for_task`); the routes are `routers/run_secrets.py`.
 - `egress` (`pin`): where an outgoing request may go. It resolves a company-chosen URL's host once and refuses a private address (SSRF); the webhook, the OIDC client and the research fetches use it.
 - `sessions`: browser sessions as refresh-token families, each token rotated exactly once (issue #524, `docs/design/SESSIONS.md`).

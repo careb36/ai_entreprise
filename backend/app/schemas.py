@@ -495,6 +495,24 @@ class OrchestrationHealthResponse(BaseModel):
     summary: OrchestrationHealthSummaries
 
 
+class GateRefutationWeek(BaseModel):
+    week: str  # ISO week, e.g. 2026-W46
+    by_problem: dict[str, int]
+
+
+class GateRefutationsResponse(BaseModel):
+    """Response shape for ``GET /v1/analytics/gate_refutations``."""
+
+    company_id: int
+    sprint_id: int | None
+    since: str  # ISO-8601 date, inclusive
+    until: str  # ISO-8601 date, inclusive
+    by_problem: dict[str, int]
+    refuted: int  # every send-back but ``delivery unconfirmed``
+    unconfirmed: int
+    weeks: list[GateRefutationWeek]
+
+
 class AgentCreateRequest(RequestModel):
     """Payload for POST /v1/agents — create an agent for a company."""
 
