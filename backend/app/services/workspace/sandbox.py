@@ -52,7 +52,18 @@ def request_for(company: Any) -> dict[str, Any]:
         # Container mode: the project's dependency cache volume (the daemon's
         # ``sandbox_cache.py``); its report comes back as ``sandbox.cache``.
         "cache": bool(settings.DELIVERY_SANDBOX_CACHE),
+        # Container mode: the environment volume of the project for this
+        # company (``sandbox_cache.prepare_env``), reported as
+        # ``sandbox.environment``; the scope keeps companies apart.
+        "environment": bool(settings.DELIVERY_SANDBOX_ENV),
+        "scope": scope_for(getattr(company, "id", None)),
     }
+
+
+def scope_for(company_id: Any) -> str:
+    """What keeps one company's environment volume apart from another's on
+    the same folder; empty for the deployment's default."""
+    return f"company:{company_id}" if isinstance(company_id, int) else ""
 
 
 def request_for_company_id(
@@ -144,7 +155,7 @@ async def reset_cache(
         reply = await daemon_request(
             nats_client,
             "workspace.sandbox.reset",
-            {"workspace_root": path},
+            {"workspace_root": path, "scope": scope_for(company_id)},
             CACHE_RESET_TIMEOUT_SECONDS,
         )
     except DaemonError as e:
@@ -152,13 +163,24 @@ async def reset_cache(
     volume = reply.get("volume_reset")
     if not isinstance(volume, dict):
         raise CacheResetRefused(502, "The workspace daemon sent an unreadable answer")
+    environment = reply.get("environment_reset")
     result = {
         "volume": reply.get("volume"),
         "volume_reset": volume,
         "quarantine_cleared": bool(reply.get("quarantine_cleared")),
         "quarantined": reply.get("quarantined"),
         "failed_installs_before": reply.get("failed_installs_before"),
+        "environment_reset": environment if isinstance(environment, dict) else None,
     }
+    if isinstance(environment, dict) and all(
+        isinstance(v, dict) and (v.get("removed") or v.get("absent"))
+        for v in environment.get("volumes") or []
+    ):
+        # The environments are gone: what the container installs left is
+        # gone with them, so the next delivery installs again.
+        result["install_records_cleared"] = _forget_container_installs(
+            session, company_id
+        )
     audit = AgentService().audit_interaction(
         session=session,
         company_id=company_id,
@@ -172,6 +194,23 @@ async def reset_cache(
     )
     session.commit()
     return {"company_id": company_id, "path": path, **result, "audit_log_id": audit.id}
+
+
+def _forget_container_installs(session: Any, company_id: int) -> list[str]:
+    """Drop the company's install records for container mode
+    (``dependency_install.install_key``: ``container:<root>``); the keys
+    dropped."""
+    from models.company import Company
+
+    company = session.get(Company, company_id)
+    installs = dict(getattr(company, "dependency_installs", None) or {})
+    dropped = sorted(k for k in installs if str(k).startswith("container:"))
+    if dropped:
+        company.dependency_installs = {
+            k: v for k, v in installs.items() if k not in dropped
+        }
+        session.add(company)
+    return dropped
 
 
 def valid_env_name(name: str) -> bool:
