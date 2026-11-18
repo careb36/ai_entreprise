@@ -332,6 +332,16 @@ class Settings(BaseSettings):
     SSO_ALLOW_PRIVATE_ISSUERS: bool = False
     SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
     SSO_CLOCK_SKEW_SECONDS: int = 60
+    # DNS verification of the allowed domains (docs/design/SSO.md). Domains
+    # listed before verification existed keep creating and linking accounts
+    # for SSO_LEGACY_DOMAIN_GRACE_DAYS after the upgrade while the grace is on.
+    SSO_LEGACY_DOMAIN_GRACE: bool = True
+    SSO_LEGACY_DOMAIN_GRACE_DAYS: int = 30
+    # How often each domain's TXT record is looked up again; 0 turns it off.
+    SSO_DOMAIN_RECHECK_HOURS: int = 24
+    SSO_DNS_TIMEOUT_SECONDS: float = 5.0
+    # Resolvers to ask (comma-separated IP addresses); empty: the system's.
+    SSO_DNS_NAMESERVERS: str = ""
 
     # Approving from Slack or Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
     # The frontend address the chat messages link to (the run's evidence, the

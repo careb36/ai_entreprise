@@ -59,7 +59,7 @@ Primary trust boundaries:
 5. **Services ↔ PostgreSQL/Neo4j** — database compromise, unauthorized queries, data leakage.
 6. **CI/CD ↔ Kubernetes/Registry** — malicious images, leaked secrets, supply chain compromise.
 7. **Backend ↔ NATS ↔ workspace daemon ↔ the user's disk** — anything that can publish a request can ask the daemon to write files and run commands on the machine that holds the projects (§8.3, §8.6).
-8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`).
+8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`); and **backend ↔ DNS** (B14), where the TXT record proving a company's allowed domain is read: a forged or stale answer, a domain that changed hands, lookups of names the company does not list.
 9. **Backend ↔ Slack and Microsoft Teams** — a public inbound endpoint that can accept a held delivery: forged or replayed interactions, a chat user acting as someone else, a role read from the payload, a stale click deciding a changed task, leaked bot tokens or signing secrets. Each request is verified by the platform's HMAC (Slack v0 with a five-minute timestamp; the Teams outgoing webhook's HMAC with the activity's timestamp), its id is stored once, the chat user must be linked by a one-time code to a La Fabrique account, the role comes from that account's membership exactly as on the web, and the decision is the web's own function, audited with `via` (`docs/design/CHAT_APPROVALS.md`).
 10. **Other software on the user's computer ↔ the desktop app's local server** — the packaged Electron app serves its page and forwards `/v1/*` to the backend from `http://127.0.0.1:<port>` so the session cookies are first-party; any local process or browser page can reach that port. It refuses a foreign `Host` (DNS rebinding), another `Origin`, a request `Sec-Fetch-Site` marks as from another site and an unsafe method without its own `Origin`, forwards only `/v1/*` to the configured backend, never reflects a CORS grant, and keeps the identity provider's pages away from the app's IPC (`docs/design/SESSIONS.md`, Desktop app).
 
@@ -222,8 +222,19 @@ OpenID Connect provider (single sign-on, below).
   such sign-in is audited. Every sign-in and every configuration change
   writes an audit row (never the secret); the public routes are limited by
   `SSO_RATE_LIMIT`.
-- **Known gaps.** Allowed domains are not verified by DNS (the first company
-  to list one holds it); someone removed only at the provider keeps a session
+  Allowed domains are verified by DNS: the backend issues a random token per
+  company and domain, the Owner publishes it as a TXT record at
+  `_la-fabrique-verify.<domain>`, and SSO creates or links accounts only in a
+  verified domain (or a domain listed before the upgrade, during the grace
+  set by `SSO_LEGACY_DOMAIN_GRACE`). Each lookup, by the Owner or the daily
+  re-check, is recorded with the time and the strings seen, and each status
+  change is audited; a domain verified by one company cannot be listed by
+  another (`services/platform/sso_domains.py`, `dns_client.py`).
+- **Known gaps.** The DNS verification trusts the resolver's answer (no
+  DNSSEC validation by the backend; `SSO_DNS_NAMESERVERS` can name a
+  validating resolver), a domain that changes hands stays verified for its
+  previous company until the next re-check, and legacy domains carry the old
+  risk until their grace ends; someone removed only at the provider keeps a session
   until it reaches its absolute expiry or an Owner removes them here; a Bearer
   access token from `"token_delivery": "bearer"` has no family, so logout and
   revocation do not reach it (it lives `ACCESS_TOKEN_EXPIRE_MINUTES`); the

@@ -250,6 +250,17 @@ async def startup(app):
     _background_tasks.add(intake_task)
     intake_task.add_done_callback(_on_task_done)
 
+    # SSO domains are looked up in DNS again every SSO_DOMAIN_RECHECK_HOURS.
+    from services.platform.sso_domains import nameserver_warning, run_rechecks
+
+    if dns_warning := nameserver_warning():
+        logger.warning(dns_warning)
+    recheck_task = asyncio.create_task(
+        run_rechecks(intake_engine), name="sso_domain_recheck"
+    )
+    _background_tasks.add(recheck_task)
+    recheck_task.add_done_callback(_on_task_done)
+
     # The Support agent needs only the database and the LLM proxy.
     if settings.SUPPORT_AGENT_ENABLED:
         from database import engine

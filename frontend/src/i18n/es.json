@@ -2732,10 +2732,33 @@
       "invalid_handoff": "El código de inicio de sesión no es válido o caducó. Empieza de nuevo.",
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
-      "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
+      "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario.",
+      "domain_unverified": "El dominio de tu correo todavía no está verificado para esta empresa. Pide a un propietario que publique su registro DNS y lo compruebe."
     },
     "connectionTitle": "Proveedor de identidad",
-    "accessTitle": "Miembros e inicio de sesión"
+    "accessTitle": "Miembros e inicio de sesión",
+    "domainCheck": {
+      "title": "Verificación de dominios",
+      "intro": "El inicio de sesión único crea o vincula cuentas solo en un dominio que hayas demostrado controlar. Publica cada registro TXT de abajo en tu proveedor de DNS y compruébalo. Mantén el registro: se vuelve a comprobar cada día.",
+      "check": "Comprobar",
+      "recordName": "Nombre TXT",
+      "recordValue": "Valor TXT",
+      "graceUntil": "Funciona sin verificar hasta",
+      "lastChecked": "Última comprobación",
+      "seen": "El DNS respondió: {{values}}",
+      "status": {
+        "verified": "Verificado",
+        "grace": "Período de gracia",
+        "unverified": "Sin verificar"
+      },
+      "outcome": {
+        "verified": "El registro contiene el token: el dominio está verificado.",
+        "no_match": "El nombre existe, pero ningún valor TXT coincide con el token.",
+        "not_found": "No se encontró ningún registro con ese nombre.",
+        "unavailable": "El DNS no respondió; no cambió nada. Vuelve a intentarlo más tarde.",
+        "verified_elsewhere": "El registro verificado de otra empresa para este dominio sigue publicado."
+      }
+    }
   },
   "documentation": {
     "title": "Documentación",
