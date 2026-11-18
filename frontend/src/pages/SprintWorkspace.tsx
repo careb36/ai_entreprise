@@ -191,7 +191,7 @@ export const SprintWorkspace: React.FC = () => {
         <PageHeader
           breadcrumbs={[{ label: sprintsLabel, to: '/sprints' }, { label: sprintName }]}
           title={<span className="block truncate">{sprintName}</span>}
-          subtitle={board?.sprint.status ? <SprintStatusBadge status={board.sprint.status} /> : undefined}
+          subtitle={board?.sprint.status ? <SprintStatusBadge status={board.sprint.status} integrationState={board.sprint.integration_state} /> : undefined}
           actions={board && <AutonomyControl companyId={board.sprint.company_id} canManage={canManage} />}
         />
         {board && board.sprint.company_id !== companyId && (

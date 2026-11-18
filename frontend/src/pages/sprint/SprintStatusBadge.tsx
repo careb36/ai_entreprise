@@ -5,8 +5,10 @@
  * A candidate for `components/ui/` once a page outside the sprint needs it.
  */
 import { useTranslation } from 'react-i18next'
-import { CircleCheck, CircleDashed, CirclePause, CirclePlay, CircleX, Split, type LucideIcon } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, CirclePause, CirclePlay, CircleX, GitMerge, Split, type LucideIcon } from 'lucide-react'
 import { StatusBadge, type StatusTone } from '../../components/ui'
+import type { IntegrationState } from '../../services/api/sprints'
+import { shownSprintStatus } from '../../lib/sprintStatus'
 
 const STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
   active: { icon: CirclePlay, tone: 'success' },
@@ -14,12 +16,17 @@ const STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
   paused: { icon: CirclePause, tone: 'warning' },
   completed: { icon: CircleCheck, tone: 'neutral' },
   cancelled: { icon: CircleX, tone: 'danger' },
+  integrating: { icon: GitMerge, tone: 'warning' },
+  integration_failed: { icon: CircleAlert, tone: 'danger' },
 }
 
 const FALLBACK: { icon: LucideIcon; tone: StatusTone } = { icon: CircleDashed, tone: 'neutral' }
 
-export function SprintStatusBadge({ status, defaultLabel }: { status: string; defaultLabel?: string }) {
+export function SprintStatusBadge({ status: stored, integrationState, defaultLabel }: {
+  status: string; integrationState?: IntegrationState | null; defaultLabel?: string
+}) {
   const { t } = useTranslation()
+  const status = shownSprintStatus(stored, integrationState)
   const look = STATUS_LOOK[status] ?? FALLBACK
   return (
     <StatusBadge icon={look.icon} tone={look.tone}

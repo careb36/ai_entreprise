@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  Building2, CalendarDays, CircleCheck, CircleDashed, CirclePause, CirclePlay, CircleX, Layers, RefreshCw, Split,
+  Building2, CalendarDays, CircleAlert, CircleCheck, CircleDashed, CirclePause, CirclePlay, CircleX, GitMerge, Layers, RefreshCw, Split,
   type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -18,6 +18,7 @@ import { SprintPromptWeight } from '../components/PromptWeight'
 import { SprintAdminActions } from '../components/SprintAdminActions'
 import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
+import { shownSprintStatus } from '../lib/sprintStatus'
 import { LearningTrend } from '../components/LearningTrend'
 import { ManagerRecordCard } from '../components/ManagerRecordCard'
 import { RoutingRecord } from '../components/RoutingRecord'
@@ -31,6 +32,8 @@ const STATUS_LOOK: Record<string, { icon: LucideIcon; tone: StatusTone }> = {
   paused: { icon: CirclePause, tone: 'warning' },
   completed: { icon: CircleCheck, tone: 'neutral' },
   cancelled: { icon: CircleX, tone: 'danger' },
+  integrating: { icon: GitMerge, tone: 'warning' },
+  integration_failed: { icon: CircleAlert, tone: 'danger' },
 }
 
 function activeFirst<T extends SprintSummary>(sprints: T[]): T[] {
@@ -41,7 +44,8 @@ function activeFirst<T extends SprintSummary>(sprints: T[]): T[] {
 function SprintRow({ sprint, current, companyId, role }: { sprint: ManagedSprint; current: boolean; companyId: number; role: string | null }) {
   const { t } = useTranslation()
   const pct = sprint.total > 0 ? Math.round((sprint.done / sprint.total) * 100) : 0
-  const look: { icon: LucideIcon; tone: StatusTone } = STATUS_LOOK[sprint.status] ?? { icon: CircleDashed, tone: 'neutral' }
+  const shown = shownSprintStatus(sprint.status, sprint.integration_state)
+  const look: { icon: LucideIcon; tone: StatusTone } = STATUS_LOOK[shown] ?? { icon: CircleDashed, tone: 'neutral' }
   return (
     <li className="data-row grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_12rem_7rem] sm:items-center">
       <div className="min-w-0">
@@ -59,7 +63,7 @@ function SprintRow({ sprint, current, companyId, role }: { sprint: ManagedSprint
         )}
       </div>
       <StatusBadge icon={look.icon} tone={look.tone}
-        label={t(`dashboard.status.${sprint.status}`, { defaultValue: sprint.status })} />
+        label={t(`dashboard.status.${shown}`, { defaultValue: shown })} />
       <div>
         <div className="text-meta mb-1 flex justify-between tabular-nums">
           <span>{t('sprints.progress', { defaultValue: '{{done}} / {{total}} done', done: sprint.done, total: sprint.total })}</span>

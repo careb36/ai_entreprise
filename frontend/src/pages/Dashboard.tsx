@@ -165,7 +165,7 @@ function SprintCard({
 
   return (
     <Panel title={sprint.sprint_name} headingLevel={3}
-      actions={<SprintStatusBadge status={sprint.status ?? 'active'} />}>
+      actions={<SprintStatusBadge status={sprint.status ?? 'active'} integrationState={sprint.integration_state} />}>
       <div className="space-y-3 p-3">
         <div className="flex min-w-0 items-center gap-2">
           <ScopeBadge scope={sprint.scope_size} />

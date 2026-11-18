@@ -37,6 +37,7 @@ from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
 from services.planning import arch_author, spec_check, spec_planning, sprint_team
 from services.platform import sod
+from services.release import integration_state
 from services.tasks import dependencies, sprint_board, task_events, task_filter
 from services.tasks.board import (
     count_architect_advice,
@@ -280,7 +281,10 @@ async def list_sprints(
     briefs. ``contradiction_rework`` counts the rework requests that say
     they contradict another task of the same sprint
     (``sprint_board.contradiction_rework``, issue #439). ``cost`` is the
-    sprint's tokens and US cents (``run_cost``).
+    sprint's tokens and US cents (``run_cost``). ``integration_state`` is
+    where the sprint's latest integration stands, read from what the backend
+    recorded (``integration_state``): a ``completed`` sprint whose state is
+    ``integrating`` or ``failed`` is not finished.
     Archived sprints are left out unless ``include_archived``.
     """
     require_company_role(session, user, company_id, "Viewer")
@@ -340,11 +344,13 @@ async def list_sprints(
             for sid, items in tasks.items()
         }
     costs = run_cost.sprint_costs(session, company_id, sprint_ids)
+    integrations = integration_state.latest_statuses(session, sprint_ids)
     return [
         {
             "id": s.id,
             "sprint_name": s.sprint_name,
             "status": s.status,
+            **integration_state.fields(integrations.get(s.id)),
             "pause_reason": s.pause_reason,
             "goal": s.goal,
             "start_date": s.start_date,
@@ -418,6 +424,7 @@ async def get_sprint_board(
         "scope_size": sprint.scope_size,
         "item_limit": SCOPE_LIMITS.get(sprint.scope_size, 8),
         "status": sprint.status,
+        **integration_state.of_sprint(session, sprint.id),
         "pause_reason": sprint.pause_reason,
         "goal": sprint.goal,
         "specification_id": sprint.specification_id,
