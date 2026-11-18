@@ -268,6 +268,16 @@ pinned by sha256, re-checked in #529 against the origin's own object hash)
 and sets `DELIVERY_BROWSER_IMAGE` to the local image ID (`sha256:…`), until
 an arm64 variant has been run with its probe on arm64 hardware.
 
+Since #315 the browser sandbox is built once per Playwright release listed
+in `vscode-daemon/images/browser/playwright_versions.json`, each tagged
+`X.Y.Z-playwright-<release>` and signed and attested by its own digest; the
+default release also keeps `X.Y.Z` (and `latest`). Each release's summary
+prints its `<release>=…@sha256:…` entry for `DELIVERY_BROWSER_IMAGES`, and its
+`sbom-browser-sandbox-playwright-<release>` artifact keeps the SBOM and a
+`.digest.json` record of the image, digest, tag and commit. Paste the
+entries, never a tag: the backend refuses an entry without a digest. Each
+image is verified with the commands above, by its own digest.
+
 Check a release's component SBOMs against their checksums:
 
 ```bash
