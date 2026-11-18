@@ -146,13 +146,26 @@ def solo_eligible(session: Session, company_id: int) -> bool:
 
 
 def actor_of(session: Session, user: User | None) -> Person | None:
-    """The person behind *user*: an API token stands for its creator."""
+    """The person behind *user*: an API token stands for its creator.
+
+    The creator is the account ``created_by_user_id`` names (issue #512), as
+    in ``api_tokens.creator_role``: an address that changed or passed to
+    another account matters not. An id with no account stays that id and is
+    never resolved by email (``api_tokens.verify`` refuses such a token
+    before it gets here). Only a token without the id, one migration 0048
+    could not match, is found by its email."""
     if user is None:
         return None
     token_company = getattr(user, "_api_token_company_id", None)
     if token_company is None:
         return Person(user.id, user.email, user.full_name or user.email)
     token = session.get(ApiToken, -(user.id or 0))
+    if token is not None and token.created_by_user_id is not None:
+        label = f"API token {token.name}"
+        account = session.get(User, token.created_by_user_id)
+        if account is None:
+            return Person(token.created_by_user_id, None, label, token.id)
+        return Person(account.id, account.email, label, token.id)
     creator = (token.created_by or "") if token else ""
     owner = (
         session.exec(select(User).where(User.email == creator)).first()

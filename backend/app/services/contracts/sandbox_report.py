@@ -80,6 +80,9 @@ def check_sandbox(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     cache = cache_text(applied.get("cache"))
     if cache:
         parts.append(cache)
+    environment = cache_text(applied.get("environment"), "environment volume")
+    if environment:
+        parts.append(environment)
     out = {
         "name": "sandbox",
         "outcome": "pass",
@@ -141,15 +144,24 @@ def image_text(applied: dict[str, Any] | None) -> str:
     return f"content {seen['id']}, {digest}{when}"
 
 
-def cache_text(cache: Any) -> str | None:
-    """One phrase on the dependency cache the daemon reported, or ``None``."""
+def cache_text(cache: Any, what: str = "dependency cache") -> str | None:
+    """One phrase on the dependency cache (or, with *what*, the environment
+    volume) the daemon reported, or ``None``."""
     if not isinstance(cache, dict) or not cache.get("state"):
         return None
-    state, volume = cache["state"], cache.get("volume") or "the cache volume"
+    state, volume = (
+        cache["state"],
+        cache.get("volume")
+        or ("the cache volume" if what == "dependency cache" else "the volume"),
+    )
     if cache.get("mounted"):
-        text = f"dependency cache {volume} {state}"
+        text = f"{what} {volume} {state}"
+        if cache.get("writable") is False:
+            text += " (read-only)"
     else:
-        text = f"dependency cache not mounted ({state}: {cache.get('reason') or 'no reason given'})"
+        text = (
+            f"{what} not mounted ({state}: {cache.get('reason') or 'no reason given'})"
+        )
     after = cache.get("after")
     if after == "removed":
         text += "; reset (removed) after the failed install"

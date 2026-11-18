@@ -206,11 +206,10 @@ prints one machine-readable line.
 
 ## What remains for #315
 
-- **What an install leaves in a container.** The cache holds downloads, not
-  installed packages: in container mode an install keeps only what it writes
-  into the worktree (`node_modules` yes, a Python `site-packages` no). A
-  per-project environment volume (a virtualenv, `GOPATH`) with the same
-  lifecycle is next.
+- **What an install leaves in a container** — built in the third slice
+  (below). Left: an install that runs as root in the container (a daemon run
+  as root) still writes into the image's `site-packages`, outside the volume;
+  the dependency cache itself is keyed by project only, not by company.
 - **Publishing the browser image.** Published from the release workflow
   (#529): `images.yml` pushes `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z`
   for `linux/amd64` with buildx — outside the five-image matrix, signed by
@@ -231,3 +230,42 @@ prints one machine-readable line.
 - **A versioned daemon protocol with a heartbeat** (Flow's `PROTOCOL.md` §5.10
   and §7) is in place (`vscode-daemon/protocol/PROTOCOL.md`); the daemon's
   abilities are still learned from its replies' shape, not announced.
+
+## The third slice: the environment volume (2026-11-18)
+
+In container mode an install kept only what it wrote into the worktree:
+Node's `node_modules` survived, a Python user installation or Go's module
+cache did not. With `DELIVERY_SANDBOX_ENV` on, the daemon
+(`vscode-daemon/sandbox_cache.py`, `prepare_env` / `finish_env` /
+`reset_env`) mounts a second named volume, `fabrique-env-<key>`, at
+`/fabrique-env`, with `PYTHONUSERBASE`, `POETRY_VIRTUALENVS_PATH`,
+`WORKON_HOME`, `GOPATH` and `GOMODCACHE` pointing into it (and `GOCACHE` for
+an install), and its `bin` folders appended to `PATH`, after the image's own.
+
+- **Keyed like the cache, and narrower.** The key is the project (the main
+  checkout of a worktree, as for the cache), the request's `scope` (the
+  backend's `company:<id>`), the image the company asked for and the sha256
+  of the project's Python and Go manifests (`manifests_digest`: the root and
+  its direct folders, not dot folders). Two companies on one folder, two
+  projects, two images or two sets of manifests never share an environment.
+  The state, failure count and quarantine are per project and company, and
+  every volume of it carries `dev.fabrique.sandbox-env.project=<project
+  key>` beside its own `dev.fabrique.sandbox-env=<key>`.
+- **Written only by an install.** `purpose: install` mounts it read-write and
+  creates it; every other run (tests, the application check, an assistant)
+  mounts it read-only, and not at all before an install filled it
+  (`state: absent`).
+- **Reset and quarantine as the cache.** A failed install removes that
+  environment and counts; three in a row quarantine the project for that
+  company until `POST /v1/companies/{id}/sandbox/cache/reset`, which now also
+  removes every environment of the project and company (listed by the project
+  label and the daemon's own state, each removed only with its name and
+  label) and, once they are gone, drops the company's container-mode install
+  records so the next delivery installs again. At most three environments are
+  kept per project and company; a successful install evicts the least
+  recently installed.
+
+Taken as design: GitHub Actions' cache keyed on `hashFiles` of the lock files
+(what Copilot coding agent's `copilot-setup-steps.yml` uses), and Flow's
+ownership by name and label, already followed by the cache. No code was
+copied. The threat model is in the pull request.

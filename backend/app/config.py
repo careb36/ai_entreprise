@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     # managers' caches (vscode-daemon/sandbox_cache.py), kept after a run,
     # removed after a failed install, quarantined after three in a row.
     DELIVERY_SANDBOX_CACHE: bool = False
+    # Container mode: a volume per project, company, manifests and image for
+    # what an install leaves outside the worktree (Python's user site, Poetry
+    # and Pipenv virtualenvs, Go's GOPATH and caches), writable only by an
+    # install, with the cache's reset and quarantine (issue #315).
+    DELIVERY_SANDBOX_ENV: bool = False
     # Container mode: the image the application check runs in when its e2e
     # command is a browser test (QA's smoke tests, or a ``web`` profile's
     # e2e), e.g. one built from vscode-daemon/images/browser. Empty keeps

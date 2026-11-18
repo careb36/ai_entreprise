@@ -43,6 +43,7 @@ def test_the_same_records_give_the_same_bytes():
         "issues",
         "changes",
         "lessons",
+        "status_report",
         "checks",
         "wstg_checklist",
         "security_report",
