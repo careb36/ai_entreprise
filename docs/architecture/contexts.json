@@ -1134,6 +1134,9 @@
       "test_sessions.py": [
         "loop"
       ],
+      "test_shared_sqlite.py": [
+        "platform"
+      ],
       "test_sod.py": [
         "management"
       ],
