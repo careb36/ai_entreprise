@@ -116,3 +116,17 @@ def test_without_agent_model_the_defaults_stay(monkeypatch):
     _clear_model_env(monkeypatch)
     assert default_model_for_role("ScrumMaster") == "qwen3.7-plus"
     assert default_model_for_role("Developer") == "deepseek-v4-pro"
+
+
+def test_compose_passes_every_role_model_variable_to_the_backend():
+    """WHEN a deployment sets AGENT_MODEL_<ROLE> in .env THE backend container
+    SHALL receive it, for every role ``model_for_role`` reads."""
+    from pathlib import Path
+
+    import yaml
+
+    compose = Path(__file__).resolve().parents[2] / "docker-compose.yml"
+    env = yaml.safe_load(compose.read_text())["services"]["backend"]["environment"]
+    for role in AgentRole:
+        name = f"AGENT_MODEL_{role.name}"
+        assert env.get(name) == f"${{{name}:-}}", name

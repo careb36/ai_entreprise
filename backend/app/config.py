@@ -42,7 +42,6 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     OPENPROJECT_URL: str = "http://localhost:8080"
     OPENPROJECT_TOKEN_PO: str | None = None  # Product Owner API token
-    OPENPROJECT_TOKEN_DEV: str | None = None  # Developer API token
 
     # ---------------------------------------------------------------------------
     # LLM Proxy — internal gateway that routes requests to Gemini / DeepSeek
