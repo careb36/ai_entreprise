@@ -6,6 +6,7 @@ import { useDeleteSso, useSaveSso, useSsoSettings, useTestSso } from '../hooks/u
 import { errorDetail, type SsoConnection, type SsoConnectionInput, type SsoPreset } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader, Panel } from '../components/ui'
+import { SsoDomains } from '../components/SsoDomains'
 import { AccessNotice, ButtonSpinner, FormActions, LoadError, LoadingRows, SavedNote } from './admin/AdminParts'
 
 const PRESETS: SsoPreset[] = ['generic', 'google', 'entra']
@@ -49,6 +50,7 @@ export default function CompanySso() {
           ownerSignedIn={settings.data.owner_signed_in}
         />
       ) : null}
+      {role === 'Owner' && !!settings.data?.domains?.length && <SsoDomains companyId={companyId} domains={settings.data.domains} />}
     </div>
   )
 }

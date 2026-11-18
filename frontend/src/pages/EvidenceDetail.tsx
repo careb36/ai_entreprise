@@ -17,6 +17,7 @@ import { Verdict, VERDICT_PRESENTATION } from '../components/Verdict'
 import { ReviewChanges } from '../components/ReviewChanges'
 import { RunCostCard } from '../components/CostSummary'
 import { ReviewPanel } from '../components/ReviewPanel'
+import { RunLogViewer } from '../components/RunLogViewer'
 import { Spinner } from '../components/knowledge/PageStates'
 import { EmptyState, PageHeader, Panel } from '../components/ui'
 import { useRunChanges } from '../services/reviewChanges'
@@ -212,6 +213,8 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
           </Panel>
         </div>
       </section>
+
+      <RunLogViewer companyId={companyId} runId={runId} />
 
       <Panel title={t('evidence.verificationHistory')}
         actions={

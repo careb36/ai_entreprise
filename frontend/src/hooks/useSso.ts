@@ -28,6 +28,15 @@ export function useTestSso(companyId: number | null) {
   })
 }
 
+/** Look a domain's TXT record up now; the settings are read again after. */
+export function useCheckSsoDomain(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (domain: string) => api.checkSsoDomain(companyId as number, domain),
+    onSuccess: () => client.invalidateQueries({ queryKey: ssoKey(companyId) }),
+  })
+}
+
 export function useDeleteSso(companyId: number | null) {
   const client = useQueryClient()
   return useMutation({

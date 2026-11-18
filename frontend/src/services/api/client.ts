@@ -249,6 +249,19 @@ export async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filenam
 }
 
 /**
+ * GET a body with its response headers and the user's session (a run's full
+ * log, whose `X-Log-*` headers say what the backend observed). A refusal is an
+ * `ApiError` whose `data` is the body's `detail` as sent.
+ */
+export async function fetchWithHeaders(endpoint: string): Promise<{ blob: Blob; headers: Headers }> {
+  const response = await getWithSession(endpoint)
+  if (!response.ok) {
+    throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
+  }
+  return { blob: await response.blob(), headers: response.headers }
+}
+
+/**
  * GET a text body with the user's session (a Markdown document). A refusal is
  * an `ApiError` whose message is the body's `detail` when it has one.
  */
