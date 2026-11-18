@@ -2822,7 +2822,68 @@
       "Monitoring and Controlling": "Monitoring and Controlling",
       "Closing": "Closing"
     },
-    "compileOptions": "Compile options"
+    "compileOptions": "Compile options",
+    "personSections": {
+      "title": "Statements by a person",
+      "intro": "What only a person can write in this document. Each statement is a claim by its author, recorded with their role and time; the next compiled pack quotes it as a claim and no check reads it.",
+      "readOnly": "Only an Owner or a Manager can write or withdraw a statement.",
+      "filled": "{{count}} of {{total}} sections filled",
+      "loading": "Loading the person sections…",
+      "loadError": "Could not load the person sections: {{message}}",
+      "notFilled": "Not filled yet: the pack shows the template.",
+      "claimBy": "Claim by {{author}} ({{role}})",
+      "withdrawnBy": "Withdrawn by {{author}} ({{role}})",
+      "withdrawn": "The statement was withdrawn.",
+      "digest": "Digest the backend computed for this revision",
+      "write": "Write",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "withdraw": "Withdraw",
+      "confirmWithdraw": "Withdraw the statement for \"{{section}}\"? Its history keeps it.",
+      "textLabel": "Statement for {{section}}",
+      "characters": "{{count}} / {{limit}} characters",
+      "claimNote": "Saved under your name and role as a claim; the history keeps every revision.",
+      "saveError": "Could not save the statement: {{message}}",
+      "withdrawError": "Could not withdraw the statement: {{message}}",
+      "stale": "Recorded. A pack compiled before it is now stale: compile again to include it.",
+      "history": "History",
+      "hideHistory": "Hide history",
+      "historyTitle": "Revisions, newest first",
+      "historyLoading": "Loading the history…",
+      "historyError": "Could not load the history: {{message}}",
+      "historyEmpty": "No revision yet.",
+      "sections": {
+        "charter_justification": {
+          "title": "Business justification",
+          "what": "Why the investment is worth making, and for whom."
+        },
+        "charter_benefits": {
+          "title": "Expected benefits",
+          "what": "Which benefits are expected, when, and how they will be measured."
+        },
+        "charter_budget": {
+          "title": "Budget envelope",
+          "what": "The money and time the sponsor commits; model spend is only part of it."
+        },
+        "charter_sponsor": {
+          "title": "Sponsor",
+          "what": "Who sponsors the project and can stop it."
+        },
+        "risks_appetite": {
+          "title": "Risk appetite and project-level risks",
+          "what": "How much risk the sponsor accepts, the thresholds that call for a person, and the risks of the project as a whole, each with an owner and a response."
+        },
+        "checks_budget": {
+          "title": "The project delivers within its budget",
+          "what": "Whether the project delivers within the budget the sponsor committed, and on which figures."
+        },
+        "checks_external": {
+          "title": "Stakeholders outside the company are engaged",
+          "what": "Who the stakeholders outside the company are, and how they are kept informed and involved."
+        }
+      }
+    }
   },
   "chat": {
     "title": "Chat approvals",

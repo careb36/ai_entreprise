@@ -2822,7 +2822,68 @@
       "Monitoring and Controlling": "Monitoreo y control",
       "Closing": "Cierre"
     },
-    "compileOptions": "Opciones de compilación"
+    "compileOptions": "Opciones de compilación",
+    "personSections": {
+      "title": "Declaraciones de una persona",
+      "intro": "Lo que solo una persona puede escribir en este documento. Cada declaración es una afirmación de su autor, registrada con su rol y la hora; el próximo paquete compilado la cita como afirmación y ninguna comprobación la lee.",
+      "readOnly": "Solo un Owner o un Manager puede escribir o retirar una declaración.",
+      "filled": "{{count}} de {{total}} secciones completadas",
+      "loading": "Cargando las secciones de una persona…",
+      "loadError": "No se pudieron cargar las secciones de una persona: {{message}}",
+      "notFilled": "Sin completar: el paquete muestra la plantilla.",
+      "claimBy": "Afirmación de {{author}} ({{role}})",
+      "withdrawnBy": "Retirada por {{author}} ({{role}})",
+      "withdrawn": "La declaración fue retirada.",
+      "digest": "Resumen que calculó el backend para esta revisión",
+      "write": "Escribir",
+      "edit": "Editar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "withdraw": "Retirar",
+      "confirmWithdraw": "¿Retirar la declaración de «{{section}}»? Su historial la conserva.",
+      "textLabel": "Declaración de {{section}}",
+      "characters": "{{count}} / {{limit}} caracteres",
+      "claimNote": "Se guarda con tu nombre y tu rol como afirmación; el historial conserva cada revisión.",
+      "saveError": "No se pudo guardar la declaración: {{message}}",
+      "withdrawError": "No se pudo retirar la declaración: {{message}}",
+      "stale": "Registrada. Un paquete compilado antes quedó desactualizado: compilalo de nuevo para incluirla.",
+      "history": "Historial",
+      "hideHistory": "Ocultar historial",
+      "historyTitle": "Revisiones, de la más reciente a la más antigua",
+      "historyLoading": "Cargando el historial…",
+      "historyError": "No se pudo cargar el historial: {{message}}",
+      "historyEmpty": "Todavía no hay revisiones.",
+      "sections": {
+        "charter_justification": {
+          "title": "Justificación de negocio",
+          "what": "Por qué vale la pena la inversión, y para quién."
+        },
+        "charter_benefits": {
+          "title": "Beneficios esperados",
+          "what": "Qué beneficios se esperan, cuándo, y cómo se van a medir."
+        },
+        "charter_budget": {
+          "title": "Presupuesto asignado",
+          "what": "El dinero y el tiempo que compromete el patrocinador; el gasto en modelos es solo una parte."
+        },
+        "charter_sponsor": {
+          "title": "Patrocinador",
+          "what": "Quién patrocina el proyecto y puede detenerlo."
+        },
+        "risks_appetite": {
+          "title": "Apetito de riesgo y riesgos del proyecto",
+          "what": "Cuánto riesgo acepta el patrocinador, los umbrales que requieren a una persona y los riesgos del proyecto en su conjunto, cada uno con responsable y respuesta."
+        },
+        "checks_budget": {
+          "title": "El proyecto se entrega dentro de su presupuesto",
+          "what": "Si el proyecto se entrega dentro del presupuesto que comprometió el patrocinador, y con qué cifras."
+        },
+        "checks_external": {
+          "title": "Se involucra a los interesados de fuera de la empresa",
+          "what": "Quiénes son los interesados de fuera de la empresa, y cómo se los mantiene informados e involucrados."
+        }
+      }
+    }
   },
   "chat": {
     "title": "Aprobaciones por chat",
