@@ -184,7 +184,8 @@ OpenID Connect provider (single sign-on, below).
   role (`Viewer` by default, `Manager` at most, never above its creator's,
   when minted and on every use: a token above its creator's current effective
   role, or whose creator left the company, is a 401 audited
-  `api_token_refused` with the reason),
+  `api_token_refused` with the reason; the creator is matched by account
+  id, so a renamed or reused email address changes nothing),
   an expiry (90 days by default, at most 365), revocable. Only the token's
   sha256 is stored; the raw value (`fab_` + 32 random bytes) is shown once.
   A request made with one acts as `api-token:<id>`, so audit rows name it.

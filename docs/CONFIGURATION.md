@@ -146,7 +146,7 @@ Copy `.env.example` to `.env` and fill in:
   only its sha256 is stored and the raw token is shown once. A revoked or
   expired token is a 401, and so is one above its creator's current effective
   role in the company or whose creator is no longer a member (audited
-  `api_token_refused` with the reason, at most once per token and hour), a token cannot create tokens (403), and a request
+  `api_token_refused` with the reason, at most once per token and hour; the creator is matched by account id, `created_by_user_id`, migration `0048`), a token cannot create tokens (403), and a request
   made with one acts as `api-token:<id>`, the name its audit rows carry.
   Tokens from before roles (migration `0016`) act as a Manager and never
   expire.
