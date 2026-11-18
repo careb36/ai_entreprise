@@ -26,7 +26,10 @@ Verifier then judges, each reply kept on the run's evidence:
   test-writing task changes no application code: it is not started for it.
   A browser e2e command asks the daemon to probe for a browser first
   (``browser_probe``) and, in container mode with ``DELIVERY_BROWSER_IMAGE``,
-  runs in that image instead of ``DELIVERY_SANDBOX_IMAGE``.
+  runs in that image instead of ``DELIVERY_SANDBOX_IMAGE``; with
+  ``DELIVERY_BROWSER_IMAGES``, in the image of the Playwright release the
+  project pins (``workspace/browser_images.py``), the default one with the
+  mismatch recorded, and not at all when the version cannot be told.
 
 The install, the tests and the application check each ask for the whole
 output too (``workspace/run_logs.py``, through ``delivery_commands``): the
@@ -180,15 +183,32 @@ async def check_application(ctx: Context) -> None:
     if e2e and not profile.get("e2e"):
         base["e2e_source"] = browser_smoke.SOURCE_SMOKE
     browser = browser_smoke.is_browser_e2e(e2e, profile, base.get("e2e_source"))
-    if browser and box.get("mode") == "container" and settings.DELIVERY_BROWSER_IMAGE:
+    choice = None
+    if browser and box.get("mode") == "container":
+        # The image of the project's Playwright release when the deployment
+        # lists them (DELIVERY_BROWSER_IMAGES), else the one browser image.
+        choice = await delivery_commands.browser_image(ctx)
+    if choice is not None:
+        base["browser_image"] = choice
+        if choice.get("image"):
+            box = {**box, "image": choice["image"]}
+            base["image_source"] = choice["source"]
+    elif browser and box.get("mode") == "container" and settings.DELIVERY_BROWSER_IMAGE:
         # The pinned browser image (vscode-daemon/images/browser); the
         # daemon records which image ran (its content ID and digest).
         box = {**box, "image": settings.DELIVERY_BROWSER_IMAGE.strip()}
         base["image_source"] = "DELIVERY_BROWSER_IMAGE"
-    record, replied = await delivery_commands.check_app(ctx, profile, box, e2e, browser)
+    # No image is known to match a version nobody could tell: the application
+    # is still started and probed, the browser suite is not run.
+    unknown = choice is not None and choice["match"] == "unknown"
+    record, replied = await delivery_commands.check_app(
+        ctx, profile, box, None if unknown else e2e, browser and not unknown
+    )
     evidence["app_run"] = {**base, **record}
     if replied:
         browser_smoke.read_back(evidence)
+    if unknown and e2e:
+        evidence["app_run"]["e2e"] = delivery_commands.unverifiable_e2e(e2e, choice)
 
 
 async def guard_test_files(
