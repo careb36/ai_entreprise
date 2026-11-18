@@ -77,6 +77,9 @@
             "enabled",
             "quarantined"
           ]
+        },
+        "abilities": {
+          "$ref": "#/$defs/abilities"
         }
       },
       "required": [
@@ -86,6 +89,40 @@
         "protocol_min",
         "daemon_id",
         "jetstream"
+      ]
+    },
+    "abilities": {
+      "type": "object",
+      "description": "What the daemon announces it can do (abilities.py, PROTOCOL.md §2.1): its claim about itself, never an observation of a run.",
+      "properties": {
+        "abilities_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "subjects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "required": [
+        "abilities_version",
+        "subjects",
+        "features"
       ]
     }
   }

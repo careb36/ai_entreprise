@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Link2 } from 'lucide-react'
+import { CircleCheck, CircleDashed, Link2, RefreshCw } from 'lucide-react'
 import {
   useAddTaskRelation, useConfirmTaskRelation, useRejectTaskRelation, useRemoveTaskRelation, useTaskRelations,
 } from '../hooks/useTaskRelations'
 import { useCurrentRole } from '../hooks/useQueries'
 import { TASK_RELATION_NAMES, errorDetail, type TaskRelation, type TaskRelationName } from '../services/api'
 import { SkeletonBlock } from './Skeleton'
+import { Panel, StatusBadge } from './ui'
 
 /**
  * A task's typed relations to other tasks, across sprints (issue #533): each
@@ -23,31 +24,31 @@ export function TaskRelations({ taskId }: { taskId: number }) {
   const rows = query.data?.relations ?? []
 
   return (
-    <section aria-labelledby="task-relations-title" className="card p-4 mb-4 space-y-3">
-      <div>
-        <h2 id="task-relations-title" className="text-xs text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
-          <Link2 size={10} aria-hidden="true" /> {t('taskRelations.title')}
-        </h2>
-        <p className="text-xs text-gray-500 mt-1">{t('taskRelations.claimsNote')}</p>
-      </div>
+    <Panel
+      title={<span className="flex items-center gap-1.5"><Link2 size={13} aria-hidden="true" className="text-gray-400" />{t('taskRelations.title')}</span>}>
+      <p className="text-meta border-b border-surface-700 px-3 py-2">{t('taskRelations.claimsNote')}</p>
       {query.isLoading ? (
-        <div role="status" aria-label={t('taskRelations.loading')}>
-          <SkeletonBlock className="h-10" />
+        <div role="status" aria-label={t('taskRelations.loading')} className="p-3">
+          <SkeletonBlock className="h-10 motion-reduce:animate-none" />
         </div>
       ) : query.isError ? (
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('taskRelations.error')}</span>
-          <button type="button" onClick={() => query.refetch()} className="underline">{t('common.retry')}</button>
+        <div className="p-3">
+          <div role="alert" className="alert-error items-center p-3 text-[13px]">
+            <span>{t('taskRelations.error')}</span>
+            <button type="button" onClick={() => query.refetch()} className="btn-tool ml-auto">
+              <RefreshCw size={13} aria-hidden="true" />{t('common.retry')}
+            </button>
+          </div>
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-400">{t('taskRelations.empty')}</p>
+        <p className="px-3 py-3 text-xs text-gray-400">{t('taskRelations.empty')}</p>
       ) : (
-        <ul className="space-y-2" aria-label={t('taskRelations.listLabel')}>
+        <ul className="data-list" aria-label={t('taskRelations.listLabel')}>
           {rows.map(row => <RelationItem key={row.id} relation={row} canManage={canManage} />)}
         </ul>
       )}
       {canManage && <AddRelationForm taskId={taskId} />}
-    </section>
+    </Panel>
   )
 }
 
@@ -64,40 +65,39 @@ function RelationItem({ relation, canManage }: { relation: TaskRelation; canMana
   const target = other.sprint_id !== null ? `/sprints/${other.sprint_id}/tasks/${other.id}` : `/task/${other.id}`
 
   return (
-    <li className="rounded border border-surface-700 p-2 text-xs">
+    <li className="data-row text-xs">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-semibold text-gray-200">{t(`taskRelations.names.${relation.relation}`, { defaultValue: relation.relation })}</span>
-        <Link to={target} className="text-brand-300 hover:underline">
+        <Link to={target} className="rounded-sm text-brand-300 hover:underline">
           {other.title
             ? t('taskRelations.taskWithTitle', { id: other.id, title: other.title })
             : t('taskRelations.task', { id: other.id })}
         </Link>
-        {other.sprint_name && <span className="text-gray-500">{t('taskRelations.inSprint', { sprint: other.sprint_name })}</span>}
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${relation.state === 'confirmed'
-          ? 'border-emerald-700/60 text-emerald-300' : 'border-amber-700/60 text-amber-300'}`}>
-          {t(`taskRelations.states.${relation.state}`)}
-        </span>
+        {other.sprint_name && <span className="text-gray-400">{t('taskRelations.inSprint', { sprint: other.sprint_name })}</span>}
+        <StatusBadge icon={relation.state === 'confirmed' ? CircleCheck : CircleDashed}
+          tone={relation.state === 'confirmed' ? 'success' : 'warning'}
+          label={t(`taskRelations.states.${relation.state}`)} />
         {relation.drives_dispatch && relation.relation === 'blocked_by' && <span className="text-amber-300">{t('taskRelations.drivesDispatch')}</span>}
       </div>
-      <p className="mt-1 text-gray-500">
+      <p className="text-meta mt-1">
         {t('taskRelations.proposedBy', { by: proposer })}
         {relation.confirmed_by ? ` · ${t('taskRelations.confirmedBy', { by: relation.confirmed_by.startsWith('rule:')
           ? t('taskRelations.aRule', { rule: relation.confirmed_by.slice(5) }) : relation.confirmed_by })}` : ''}
       </p>
       {canManage && (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-1.5 flex flex-wrap gap-1">
           {relation.state === 'proposed' && (
             <>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => confirm.mutate(relation.id)}>
+              <button type="button" className="btn-tool border border-surface-700" disabled={busy} onClick={() => confirm.mutate(relation.id)}>
                 {t('taskRelations.confirm')}
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => reject.mutate(relation.id)}>
+              <button type="button" className="btn-tool border border-surface-700" disabled={busy} onClick={() => reject.mutate(relation.id)}>
                 {t('taskRelations.reject')}
               </button>
             </>
           )}
           {relation.state === 'confirmed' && (
-            <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => remove.mutate(relation.id)}>
+            <button type="button" className="btn-tool border border-surface-700" disabled={busy} onClick={() => remove.mutate(relation.id)}>
               {t('taskRelations.remove')}
             </button>
           )}
@@ -126,10 +126,10 @@ function AddRelationForm({ taskId }: { taskId: number }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2" aria-label={t('taskRelations.addTitle')}>
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 border-t border-surface-700 px-3 py-2.5" aria-label={t('taskRelations.addTitle')}>
       <label className="text-xs text-gray-400">
         <span className="input-label">{t('taskRelations.relationLabel')}</span>
-        <select value={relation} onChange={e => setRelation(e.target.value as TaskRelationName)} className="select py-1 text-xs">
+        <select value={relation} onChange={e => setRelation(e.target.value as TaskRelationName)} className="select control-sm w-auto pr-7">
           {TASK_RELATION_NAMES.map(name => (
             <option key={name} value={name}>{t(`taskRelations.names.${name}`)}</option>
           ))}
@@ -137,14 +137,14 @@ function AddRelationForm({ taskId }: { taskId: number }) {
       </label>
       <label className="text-xs text-gray-400">
         <span className="input-label">{t('taskRelations.otherLabel')}</span>
-        <input value={other} onChange={e => setOther(e.target.value)} inputMode="numeric" className="input w-28 text-xs"
+        <input value={other} onChange={e => setOther(e.target.value)} inputMode="numeric" className="input control-sm w-28"
           placeholder={t('taskRelations.otherPlaceholder')} />
       </label>
-      <label className="flex items-center gap-1 text-xs text-gray-400">
+      <label className="flex h-8 items-center gap-1.5 text-xs text-gray-300">
         <input type="checkbox" checked={confirmNow} onChange={e => setConfirmNow(e.target.checked)} />
         {t('taskRelations.confirmNow')}
       </label>
-      <button type="submit" className="btn btn-primary btn-sm" disabled={add.isPending || otherId === null}>
+      <button type="submit" className="btn btn-primary btn-sm h-8" disabled={add.isPending || otherId === null}>
         {t('taskRelations.add')}
       </button>
       {add.isError && <div role="alert" className="alert-error w-full text-xs">{errorDetail(add.error)}</div>}

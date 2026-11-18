@@ -107,6 +107,7 @@ from models.integration_review import IntegrationReview, IntegrationReviewCommen
 from models.invitation import CompanyInvitation
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
+from models.person_statement import PersonStatement
 from models.procedure import Procedure
 from models.progress import SprintProgressSnapshot
 from models.provider import ProviderConnection
@@ -425,6 +426,7 @@ SQLModel.metadata.create_all(
         WikiSettings.__table__,
         IntakeItem.__table__,
         WstgReview.__table__,
+        PersonStatement.__table__,
     ],
 )
 

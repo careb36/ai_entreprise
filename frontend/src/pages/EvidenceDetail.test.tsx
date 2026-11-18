@@ -163,9 +163,12 @@ describe('Evidence detail', () => {
   it('shows a claim beside the concrete observation', () => {
     setup()
     expect(mockedUseAuditVerification).toHaveBeenCalledWith('issue-27-run', 42)
-    expect(screen.getByText('Adds backend/app/crypto.py with Fernet encryption')).toBeInTheDocument()
-    const observedPanel = screen.getByText(i18n.t('evidence.observed')).closest('.card') as HTMLElement
+    // The claim and the observation are separate regions, each named by its own heading.
+    const claimedPanel = screen.getByRole('region', { name: i18n.t('evidence.claimed') })
+    expect(within(claimedPanel).getByText('Adds backend/app/crypto.py with Fernet encryption')).toBeInTheDocument()
+    const observedPanel = screen.getByRole('region', { name: i18n.t('evidence.observed') })
     expect(within(observedPanel).getByText('claims present but artifact is empty (0 bytes)')).toBeInTheDocument()
+    expect(within(observedPanel).queryByText('Adds backend/app/crypto.py with Fernet encryption')).not.toBeInTheDocument()
     expect(screen.getByText('artifact_nonempty')).toBeInTheDocument()
   })
 

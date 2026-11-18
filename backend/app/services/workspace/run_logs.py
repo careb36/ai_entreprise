@@ -15,7 +15,11 @@ reply (rule 6 of ``docs/POSITIONING.md``); the daemon's own counts
 (``daemon_bytes``, ``total_bytes``, ``truncated``: it cut the stream at its
 cap) are kept as what it said. Anything that prevents it (the setting off,
 no JetStream, a daemon from before full logs, an upload or a read that
-failed) is ``{observed: false, reason}``: never a hash of nothing.
+failed) is ``{observed: false, reason}``: never a hash of nothing. A reply
+without ``full_log`` is worded from what the daemons announce
+(``daemon_liveness.announces``, their claim): "does not announce full logs",
+"announced full logs but sent none", or, when nothing was announced, the guess
+"a daemon from before full logs".
 
 Retention is the bucket's: objects expire after ``FULL_LOG_RETENTION_DAYS``
 and the oldest go first beyond ``FULL_LOG_BUCKET_MAX_MB``. The sha256 on the
@@ -31,6 +35,8 @@ import uuid
 from typing import Any
 
 from config import settings
+
+from services.workspace import daemon_liveness
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +88,31 @@ def _not_observed(reason: str) -> dict[str, Any]:
     return {"observed": False, "reason": reason}
 
 
-async def observe(nats_client: Any, spec: dict[str, Any], reply: Any) -> dict[str, Any]:
+def _missing_reason(subject: str) -> str:
+    """Why a reply to *subject* carries no ``full_log``, from the announcement."""
+    announced = daemon_liveness.announces(subject, "full_log")
+    if announced is None:
+        return OLDER_DAEMON
+    if announced is False:
+        return daemon_liveness.not_announced_reason(subject, "full_log")
+    return (
+        f"the daemon reported no full log, although it announces full_log on {subject}"
+    )
+
+
+async def observe(
+    nats_client: Any,
+    spec: dict[str, Any],
+    reply: Any,
+    subject: str = "workspace.execute",
+) -> dict[str, Any]:
     """The full log's record for the evidence: every object the daemon says it
     wrote for this run, read back and hashed here."""
     if not spec.get("bucket"):
         return _not_observed(spec.get("reason") or "no full log was asked for")
     full = reply.get("full_log") if isinstance(reply, dict) else None
     if not isinstance(full, dict):
-        return _not_observed(OLDER_DAEMON)
+        return _not_observed(_missing_reason(subject))
     if full.get("error"):
         return _not_observed(f"the daemon could not upload it: {full['error']}")
     entries = [e for e in full.get("objects") or [] if isinstance(e, dict)]

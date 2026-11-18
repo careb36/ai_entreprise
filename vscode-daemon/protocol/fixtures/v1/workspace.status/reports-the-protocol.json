@@ -1,5 +1,5 @@
 {
-  "description": "The daemon says which machine it is and which protocol it speaks: version 1, and the oldest it serves.",
+  "description": "The daemon says which machine it is and which protocol it speaks: version 1, and the oldest it serves, and announces its abilities.",
   "subject": "workspace.status",
   "request": {},
   "reply": {
@@ -18,6 +18,51 @@
     "sandbox_cache": {
       "enabled": true,
       "quarantined": []
+    },
+    "abilities": {
+      "abilities_version": 1,
+      "subjects": [
+        "workspace.app.check",
+        "workspace.browse",
+        "workspace.capabilities",
+        "workspace.console.collect",
+        "workspace.console.prepare",
+        "workspace.edit",
+        "workspace.edit.finish",
+        "workspace.execute",
+        "workspace.find",
+        "workspace.generate",
+        "workspace.git.base_status",
+        "workspace.git.diff",
+        "workspace.git.integrate",
+        "workspace.git.merge",
+        "workspace.git.publish",
+        "workspace.git.reviews",
+        "workspace.hash",
+        "workspace.inspect",
+        "workspace.list",
+        "workspace.map",
+        "workspace.read",
+        "workspace.related",
+        "workspace.sandbox.reset",
+        "workspace.search",
+        "workspace.signatures",
+        "workspace.status",
+        "workspace.undo"
+      ],
+      "features": {
+        "workspace.app.check": [
+          "browser_probe",
+          "cache",
+          "full_log",
+          "security_probe"
+        ],
+        "workspace.execute": [
+          "full_log",
+          "purpose_assistant",
+          "sandbox_floor"
+        ]
+      }
     }
   },
   "volatile": [

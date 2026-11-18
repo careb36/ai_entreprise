@@ -41,10 +41,10 @@ export function BoardNotes({ sprintId, canManage, live = false }: {
     <section aria-labelledby="board-notes-title" className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
-          <h2 id="board-notes-title" className="flex items-center gap-2 text-sm font-semibold text-white">
-            <StickyNote size={15} aria-hidden="true" /> {t('boardNotes.title')}
+          <h2 id="board-notes-title" className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-100">
+            <StickyNote size={13} aria-hidden="true" /> {t('boardNotes.title')}
           </h2>
-          <p className="text-xs text-gray-500">{t('boardNotes.claimsNote')}</p>
+          <p className="text-xs text-gray-400">{t('boardNotes.claimsNote')}</p>
         </div>
         <label className="flex items-center gap-2 text-xs text-gray-400">
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
@@ -105,11 +105,11 @@ function AddNoteForm({ sprintId }: { sprintId: number }) {
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-2 p-3" aria-label={t('boardNotes.addTitle')}>
+    <form onSubmit={submit} className="panel space-y-2 p-3" aria-label={t('boardNotes.addTitle')}>
       <div className="flex flex-wrap gap-2">
         <label className="text-xs text-gray-400">
           <span className="input-label">{t('boardNotes.kindLabel')}</span>
-          <select value={kind} onChange={e => setKind(e.target.value as BoardNoteKind)} className="select py-1 text-xs">
+          <select value={kind} onChange={e => setKind(e.target.value as BoardNoteKind)} className="select control-sm w-auto pr-7">
             {BOARD_NOTE_KINDS.map(value => (
               <option key={value} value={value}>{t(`boardNotes.kinds.${value}`)}</option>
             ))}
@@ -149,9 +149,9 @@ function NoteItem({ note, sprintId, canManage }: { note: BoardNote; sprintId: nu
   const otherLinks = (['symbols', 'requirements', 'modules'] as const).filter(kind => note.links[kind].length > 0)
 
   return (
-    <li className={`card p-3 ${note.status === 'active' ? '' : 'opacity-70'}`}>
+    <li className={`panel border-dashed p-3 ${note.status === 'active' ? '' : 'opacity-70'}`}>
       <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span className="text-gray-500">#{note.id}</span>
+        <span className="text-gray-400">#{note.id}</span>
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${KIND_STYLES[note.kind] ?? KIND_STYLES.question}`}>
           {t(`boardNotes.kinds.${note.kind}`, { defaultValue: note.kind })}
         </span>
@@ -167,7 +167,7 @@ function NoteItem({ note, sprintId, canManage }: { note: BoardNote; sprintId: nu
           </span>
         )}
         {note.created_at && (
-          <time dateTime={note.created_at} className="ml-auto text-gray-500">
+          <time dateTime={note.created_at} className="ml-auto text-gray-400">
             {new Date(note.created_at).toLocaleString()}
           </time>
         )}
@@ -180,7 +180,7 @@ function NoteItem({ note, sprintId, canManage }: { note: BoardNote; sprintId: nu
             return (
               <li key={path} className="flex flex-wrap gap-x-2">
                 <code className="text-gray-300">{path}</code>
-                <span className={seen ? 'text-emerald-300' : 'text-gray-500'}>
+                <span className={seen ? 'text-emerald-300' : 'text-gray-400'}>
                   {seen
                     ? t('boardNotes.observed', { run: seen.run_id })
                     : t('boardNotes.notObserved')}
@@ -196,7 +196,7 @@ function NoteItem({ note, sprintId, canManage }: { note: BoardNote; sprintId: nu
         </p>
       )}
       {note.supersedes_id !== null && (
-        <p className="mt-1 text-xs text-gray-500">{t('boardNotes.supersedes', { id: note.supersedes_id })}</p>
+        <p className="mt-1 text-xs text-gray-400">{t('boardNotes.supersedes', { id: note.supersedes_id })}</p>
       )}
       {note.status === 'marked_wrong' && (
         <p className="mt-1 text-xs text-red-300">

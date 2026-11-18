@@ -212,5 +212,7 @@ async def check_app(
     record["security_probe_requested"] = True
     if browser:
         record["browser_probe_requested"] = True
-    record["full_log"] = await run_logs.observe(ctx.nats, full_log, reply)
+    record["full_log"] = await run_logs.observe(
+        ctx.nats, full_log, reply, "workspace.app.check"
+    )
     return record, True
