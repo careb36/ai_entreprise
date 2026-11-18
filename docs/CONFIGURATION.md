@@ -959,9 +959,10 @@ the backend where it says so:
   appended; `llm-proxy/telemetry.py`). `OTEL_EXPORTER_OTLP_ENABLED` truthy with
   no endpoint exports to `http://localhost:4318`; `OTEL_SDK_DISABLED` truthy
   turns export off whatever else is set. Unset, nothing is exported, and the
-  `traceparent` header is still propagated. Compose also sets
-  `OTEL_EXPORTER_OTLP_ENDPOINT` on the backend and the daemon container, where
-  no code reads it today.
+  `traceparent` header is still propagated. The backend reads the same
+  variables the same way (`backend/telemetry.py`, loaded at startup), so the
+  compose value sends its spans to Jaeger too; the daemon has no telemetry
+  code and ignores it.
 
 ## Set by docker-compose.yml for third-party containers
 
