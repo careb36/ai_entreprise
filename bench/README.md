@@ -49,6 +49,10 @@ bench/
   (`scripts/bench/repeated.py`, see "Repeated runs, medians and spread").
 - `scripts/bench/graders.py` takes the graders from a commit for
   `run.sh --graders` (see "Graders from a commit").
+- `scripts/bench/ablate.sh` runs the bench once as it is and once per prompt
+  section with that section off, and `scripts/bench/ablation.py` writes each
+  section's deltas onto the baseline's card (see "What each prompt section is
+  worth").
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
   self-hosted runner, with the fake, and on real models behind a kill switch
   (see "The nightly real-model run").
@@ -255,6 +259,64 @@ into `bench/scorecards/` in a pull request. A run that adds specifications
 moves the totals (more tasks, more tokens), so it is kept as the reference
 in the pull request that adds them: `20261114T201804Z` is the first v3 card,
 the five specifications with the fake.
+
+## What each prompt section is worth
+
+Issues #443 and #438 ask whether each section of the Developer's task prompt
+earns its tokens: the repository tree, the related code (#438's
+`related_code`), lessons, memory and the rest. The backend turns named
+optional sections off with `PROMPT_SECTIONS_OFF` (PR #648); the bench
+measures what changes without each one.
+
+```bash
+scripts/bench/ablate.sh each                                    # every section the baseline sent
+scripts/bench/ablate.sh related_code,memory bench/specs/02-lib-roman --out /tmp/ablation
+python3 scripts/bench/compare.py /tmp/ablation/<stamp>.json --previous bench/scorecards/<stamp>.json
+```
+
+`ablate.sh SECTIONS [SPEC_DIR...]` runs `run.sh` once as it is (the
+baseline), then once per section with `BENCH_SECTIONS_OFF=<section>` (an
+arm), which `run.sh` passes to the backend as `PROMPT_SECTIONS_OFF` and
+records on that run's card as `sections_off`. `SECTIONS` is `each` (the
+optional sections the baseline's prompts carried, estimated tokens above
+zero; the others are listed as not run) or names, comma-separated. An
+unknown or required name (`output_format`, `task`, `architect_brief`,
+`review_feedback`) stops it with exit 2 before anything starts, where the
+backend would only warn and ignore it: an arm that turned nothing off would
+otherwise be measured as if it had. Every run is a whole `run.sh` with the
+same environment (models, policy, `--graders`, specifications; the token
+budget applies per run), and a run that fails, or with the fake does not run
+green, stops the ablation (exit 1).
+
+The result is the baseline's card with an `ablation` block (schema v4,
+`scripts/bench/ablation.py`), in `bench/scorecards/ablation/` by default;
+each run's own card is kept under `arms/<run id>/<arm>/`. Per section, over
+the specifications both the baseline and the arm ran in full (one the token
+budget stopped, or run on one side only, is left out):
+
+| Field | What it is |
+|---|---|
+| `criteria_passed` | Criteria passed, graded by the acceptance tests a person wrote, never the factory's own verified criteria. When either side's grade could not run (`criteria.unmeasured`), the delta is `null` and the specifications are named in `criteria_unmeasured`, never a drop to zero. |
+| `rework_requests`, `rework_per_task` | The board's rework requests, in all and per task. |
+| `prompt_tokens`, `prompt_tokens_mean` | The estimated tokens (characters / 4) of the Developer prompts the backend sent, in all and per prompt. |
+| `tokens_reported` | The tokens the provider reported; `turns_unreported` counts the turns it did not report, apart. |
+| `section_tokens`, `applied` | The section's estimated tokens on each side; `applied` is true when the baseline sent the section and the arm sent none of it. An arm not applied does not measure the section, and the table says so. |
+| `same_models` | Whether the same models served both runs. |
+
+`delta` is the arm's value less the baseline's. The card's Markdown and
+`compare.py` print a table per section (`baseline → arm (delta)`), even with
+no previous card; it is shown, never judged, and the exit status is the
+comparison's alone.
+
+The numbers inform a decision the owner makes (#443): the bench chooses no
+default budget and recommends turning no section off. One run per arm is
+one sample; with real models, repeat the ablation and read the spread
+(see "Repeated runs, medians and spread") before reading a delta as a
+section's worth. With the fake models every arm passes every criterion (the
+fake answers from each specification's `fake/` folder whatever the prompt
+says), so a fake ablation only checks the plumbing: the section's estimated
+tokens fall to zero in the arm and the prompt tokens drop by that much,
+while the criteria and rework deltas stay at zero.
 
 ## The project wiki against vector memory alone
 

@@ -87,6 +87,14 @@
 #                                    Python and pytest; docs/OPERATIONS.md. Without
 #                                    a sandbox every criterion is missing
 #                                    (unmeasured), never passed.
+#   BENCH_SECTIONS_OFF [empty]       optional Developer prompt sections to turn
+#                                    off for the whole run (memory,lessons):
+#                                    passed to the backend as PROMPT_SECTIONS_OFF
+#                                    and recorded on the card (sections_off). An
+#                                    unknown or required name stops the run (exit
+#                                    2). scripts/bench/ablate.sh sets it, one
+#                                    section per run. Empty: nothing is off,
+#                                    whatever PROMPT_SECTIONS_OFF says outside.
 #   BENCH_GRADE_IN_PROCESS [empty]   1: grade on BENCH_PYTHON itself, the
 #                                    project's code in the runner's Python, for
 #                                    local development only; the card's criteria
@@ -131,6 +139,12 @@ PY=${BENCH_PYTHON:-${E2E_PYTHON:-python}}
 TIMEOUT=${BENCH_TIMEOUT:-600}
 POLICY_LABEL=${BENCH_POLICY:-${AGENT_MODEL_POLICY:-default}}
 LLM_URL=${BENCH_LLM_URL:-}
+SECTIONS_OFF=${BENCH_SECTIONS_OFF:-}
+if [ -n "$SECTIONS_OFF" ]; then
+  SECTIONS_OFF=$("$PY" "$REPO/scripts/bench/ablation.py" parse --names "$SECTIONS_OFF") \
+    || { echo "BENCH_SECTIONS_OFF names a section the backend would not turn off"; exit 2; }
+  echo "prompt sections off: $SECTIONS_OFF"
+fi
 BUDGET=${BENCH_TOKEN_BUDGET:-}
 case "$BUDGET" in ''|*[!0-9]*|0) [ -z "$BUDGET" ] || { echo "BENCH_TOKEN_BUDGET must be a positive integer of tokens, or empty"; exit 2; } ;; esac
 WORK=${BENCH_WORKDIR:-$(mktemp -d -t fabrique-bench-XXXXXX)}
@@ -240,7 +254,7 @@ PGENV=(POSTGRES_HOST="$PG_HOST" POSTGRES_PORT="$PG_PORT" POSTGRES_USER="$PG_USER
     CONSOLE_ASSISTANTS_ENABLED=false SUPPORT_AGENT_ENABLED=false REVIEWER_AGENT_ENABLED=false \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_SANDBOX=host \
     RESEARCH_TOOLS_ENABLED="$RESEARCH" AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false \
-    AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
+    AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" PROMPT_SECTIONS_OFF="$SECTIONS_OFF" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
 for _ in $(seq 1 60); do healthy && break; sleep 1; done
 healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
@@ -353,7 +367,7 @@ ENTRIES=("$WORK"/entries/*.json)
   || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
 CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
-  --budget "$BUDGET" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} "${ENTRIES[@]}") \
+  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"
