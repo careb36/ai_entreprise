@@ -30,6 +30,31 @@ export interface SsoSettings {
   presets: SsoPreset[]
   redirect_uri: string
   owner_signed_in: boolean
+  /** Each allowed domain's DNS verification (absent from older backends). */
+  domains?: SsoDomain[]
+}
+
+/** An allowed domain's DNS verification: the TXT record to publish and the last check. */
+export interface SsoDomain {
+  domain: string
+  status: 'verified' | 'grace' | 'unverified'
+  record_name: string
+  record_value: string
+  legacy: boolean
+  grace_until: string | null
+  verified_at: string | null
+  last_checked_at: string | null
+  last_outcome: SsoDomainOutcome | null
+}
+
+export type SsoDomainOutcome = 'verified' | 'no_match' | 'not_found' | 'unavailable' | 'verified_elsewhere'
+
+/** What one DNS check observed. */
+export interface SsoDomainCheck {
+  outcome: SsoDomainOutcome
+  answer: string[]
+  detail: string | null
+  domain: SsoDomain
 }
 
 export interface SsoConnectionInput {
@@ -80,4 +105,7 @@ export const ssoEndpoints = (http: Http) => ({
   testSso: (companyId: number) => http.post<SsoTestResult>(`/v1/companies/${companyId}/sso/test`),
 
   deleteSso: (companyId: number) => http.delete<void>(`/v1/companies/${companyId}/sso`),
+
+  checkSsoDomain: (companyId: number, domain: string) =>
+    http.post<SsoDomainCheck>(`/v1/companies/${companyId}/sso/domains/${encodeURIComponent(domain)}/check`),
 })

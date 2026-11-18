@@ -2766,10 +2766,33 @@
       "invalid_handoff": "The sign-in code is invalid or expired. Start again.",
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
-      "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
+      "account_missing": "The account linked to this identity no longer exists. Ask an owner for help.",
+      "domain_unverified": "Your email domain has not been verified for this company yet. Ask an owner to publish its DNS record and check it."
     },
     "connectionTitle": "Identity provider",
-    "accessTitle": "Members and sign-in"
+    "accessTitle": "Members and sign-in",
+    "domainCheck": {
+      "title": "Domain verification",
+      "intro": "Single sign-on creates or links accounts only in a domain you have proved you hold. Publish each TXT record below at your DNS host, then check it. Keep the record: it is checked again every day.",
+      "check": "Check",
+      "recordName": "TXT name",
+      "recordValue": "TXT value",
+      "graceUntil": "Works unverified until",
+      "lastChecked": "Last checked",
+      "seen": "DNS answered: {{values}}",
+      "status": {
+        "verified": "Verified",
+        "grace": "Grace period",
+        "unverified": "Not verified"
+      },
+      "outcome": {
+        "verified": "The record holds the token: the domain is verified.",
+        "no_match": "The name exists but no TXT value matches the token.",
+        "not_found": "No record was found at that name.",
+        "unavailable": "DNS did not answer; nothing changed. Try again later.",
+        "verified_elsewhere": "Another company's verified record of this domain is still published."
+      }
+    }
   },
   "documentation": {
     "title": "Documentation",
@@ -2919,6 +2942,10 @@
         "status_report_forecast": {
           "title": "Forecast and decisions requested",
           "what": "What the sponsor should expect next (scope, dates, spend) and which decisions are asked of them, read against the figures above."
+        },
+        "release_plan_targets": {
+          "title": "Target release dates and scope ahead",
+          "what": "The dates the project commits to for its coming releases, what each coming release and iteration is to contain, and the scope decisions taken ahead, read against the plan above."
         }
       }
     }
@@ -3677,5 +3704,43 @@
     "listTitle": "All findings",
     "countLabel_one": "{{count}} finding",
     "countLabel_other": "{{count}} findings"
+  },
+  "runLogs": {
+    "title": "Full logs",
+    "count_one": "{{count}} full log",
+    "count_other": "{{count}} full logs",
+    "empty": "No full log was recorded",
+    "emptyHint": "A run records its full logs when full logs are on and the object store is available.",
+    "loadError": "The run's full logs could not be loaded.",
+    "noStream": "no stream",
+    "size": "{{size}} bytes recorded",
+    "truncated": "cut at the daemon's cap",
+    "open": "Open",
+    "close": "Close",
+    "notKept": "Not kept: {{reason}}",
+    "reading": "Reading the log back and computing its sha256…",
+    "observedBy": "{{size}} bytes served, hashed by {{by}}",
+    "download": "Download",
+    "recordedSha": "sha256 recorded",
+    "observedSha": "sha256 of the bytes served",
+    "notRecorded": "not recorded",
+    "search": "Search the log",
+    "lines_one": "{{count}} of {{total}} lines",
+    "lines_other": "{{count}} of {{total}} lines",
+    "page": "Page {{page}} of {{pages}}",
+    "previous": "Previous page",
+    "next": "Next page",
+    "integrity": {
+      "matched": "Hash matches the record",
+      "mismatched": "Hash does not match the record",
+      "missing": "Log missing",
+      "unavailable": "Integrity unknown"
+    },
+    "refused": {
+      "matched": "The log could not be served.",
+      "mismatched": "The log could not be served.",
+      "missing": "The object store no longer holds this log.",
+      "unavailable": "The log could not be read, so its integrity is unknown."
+    }
   }
 }

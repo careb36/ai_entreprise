@@ -120,7 +120,13 @@ from models.session import RefreshToken, SessionFamily
 from models.sod import AccessReview, SodPolicy
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
-from models.sso import SsoConnection, SsoFlowState, SsoIdentity
+from models.sso import (
+    SsoConnection,
+    SsoDomain,
+    SsoDomainCheck,
+    SsoFlowState,
+    SsoIdentity,
+)
 from models.support import BugReport
 from models.task_relation import TaskRelation
 from models.team import Team, TeamMember
@@ -401,6 +407,8 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        SsoDomain.__table__,
+        SsoDomainCheck.__table__,
         DocumentationPack.__table__,
         SessionFamily.__table__,
         RefreshToken.__table__,

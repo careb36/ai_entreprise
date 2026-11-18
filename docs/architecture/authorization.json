@@ -116,6 +116,12 @@
     "GET /v1/agent_runs/{run_id}/cost": {
       "access": "Viewer"
     },
+    "GET /v1/agent_runs/{run_id}/logs": {
+      "access": "Viewer"
+    },
+    "GET /v1/agent_runs/{run_id}/logs/{log_id}": {
+      "access": "Viewer"
+    },
     "GET /v1/agent_runs/{run_id}/publications": {
       "access": "Viewer"
     },
@@ -300,6 +306,9 @@
       "access": "Manager"
     },
     "GET /v1/companies/{company_id}/sso": {
+      "access": "Owner"
+    },
+    "GET /v1/companies/{company_id}/sso/domains": {
       "access": "Owner"
     },
     "GET /v1/companies/{company_id}/stack_profile": {
@@ -693,6 +702,9 @@
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/sso/test": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/domains/{domain}/check": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/teams": {

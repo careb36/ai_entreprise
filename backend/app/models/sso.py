@@ -9,6 +9,12 @@
   ``state`` (with its PKCE verifier, nonce and browser binding) and the
   handoff code the frontend exchanges for an access token. Only sha256 of
   the values the browser carries is stored.
+- ``SsoDomain``      — an allowed domain's DNS verification: the token the
+  backend issued for the company to publish, and the status the last
+  definite DNS answer left (``services/platform/sso_domains.py``).
+- ``SsoDomainCheck`` — each DNS check, append-only: when, why (the Owner, the
+  re-check, a newer claim), the outcome and the TXT strings seen. The
+  observation; the Owner's listing of a domain is only the claim.
 """
 
 from datetime import UTC, datetime
@@ -76,3 +82,38 @@ class SsoFlowState(SQLModel, table=True):
     binding_hash: str | None = None
     expires_at: datetime
     created_at: datetime | None = Field(default_factory=_utcnow)
+
+
+class SsoDomain(SQLModel, table=True):
+    __tablename__ = "sso_domains"
+    __table_args__ = (UniqueConstraint("company_id", "domain"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    domain: str = Field(index=True)
+    # Issued by the backend (secrets.token_urlsafe), never chosen by the Owner.
+    token: str
+    # Listed before verification existed (migration 0049): usable during
+    # the grace period (SSO_LEGACY_DOMAIN_GRACE, SSO_LEGACY_DOMAIN_GRACE_DAYS).
+    legacy: bool = False
+    status: str = "unverified"  # "unverified" | "verified"
+    verified_at: datetime | None = None  # the check that found the token
+    last_checked_at: datetime | None = None
+    last_outcome: str | None = None
+    created_at: datetime | None = Field(default_factory=_utcnow)
+
+
+class SsoDomainCheck(SQLModel, table=True):
+    __tablename__ = "sso_domain_checks"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # No foreign key to sso_domains: the history outlives a removed domain.
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    domain: str = Field(index=True)
+    checked_at: datetime = Field(default_factory=_utcnow)
+    trigger: str  # "owner" | "recheck" | "conflict"
+    requested_by: str | None = None  # the Owner's email, for "owner"
+    # "verified" | "no_match" | "not_found" | "unavailable" | "verified_elsewhere"
+    outcome: str
+    answer: list[Any] = Field(default_factory=list, sa_column=Column(JSON))
+    detail: str | None = None

@@ -8,6 +8,10 @@ since who may sign in is a person's decision):
 - ``POST   /v1/companies/{id}/sso/test`` — fetch discovery and the JWKS; report what was observed.
 - ``DELETE /v1/companies/{id}/sso``      — remove it (password sign-in applies again).
 
+Each allowed domain gets a DNS verification record (``sso_domains.sync``);
+its check is ``routers/sso_domains.py``. A domain another company verified
+cannot be listed.
+
 Requiring SSO is refused until the connection is enabled and an Owner of the
 company has signed in through it, so a company cannot lock itself out with a
 connection that never worked. Every change writes an audit row naming the
@@ -23,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import SsoConnection, User
 from pydantic import Field
 from schemas import RequestModel
-from services.platform import sessions, sso_flow
+from services.platform import sessions, sso_domains, sso_flow
 from services.platform import sso_connections as conns
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, select
@@ -102,6 +106,10 @@ async def get_sso(
         "presets": list(conns.PRESETS),
         "redirect_uri": conns.redirect_uri(),
         "owner_signed_in": bool(row) and sso_flow.owner_has_signed_in(session, row),
+        "domains": [
+            sso_domains.serialize(session, d)
+            for d in sso_domains.rows(session, company_id)
+        ],
     }
 
 
@@ -138,18 +146,14 @@ async def put_sso(
     ).first()
     if taken is not None and taken.company_id != company_id:
         raise HTTPException(status_code=409, detail="slug: already in use")
-    # A domain names one company's connection: the login page finds it by
-    # domain, and a second claimant could only be a mistake or a squatter.
-    for other in session.exec(
-        select(SsoConnection).where(SsoConnection.company_id != company_id)
-    ).all():
-        clash = sorted(
-            set(other.allowed_domains or []) & set(values["allowed_domains"])
-        )
-        if clash:
+    # A domain another company verified by DNS is held by it. An unverified
+    # listing holds nothing, so a squatter cannot keep the real company out
+    # (docs/design/SSO.md, T19).
+    for domain in values["allowed_domains"]:
+        if sso_domains.verified_elsewhere(session, company_id, domain) is not None:
             raise HTTPException(
                 status_code=409,
-                detail=f"allowed_domains: {clash[0]} is claimed by another company",
+                detail=f"allowed_domains: {domain} is verified by another company",
             )
     if row is None:
         row = SsoConnection(company_id=company_id, created_by=actor.email, **values)
@@ -160,6 +164,7 @@ async def put_sso(
         row.tested_at = row.test_ok = row.test_detail = None
     secret_changed = req.client_secret is not None
     conns.set_secret(row, req.client_secret)
+    sso_domains.sync(session, company_id, values["allowed_domains"])
     session.add(row)
     session.flush()
     if row.require_sso and not (
@@ -233,4 +238,5 @@ async def delete_sso(
         raise HTTPException(status_code=404, detail="no SSO connection")
     issuer = row.issuer
     session.delete(row)
+    sso_domains.drop_all(session, company_id)
     _audit(session, company_id, actor, "sso_connection_deleted", issuer=issuer)

@@ -16,7 +16,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
  Slack and Microsoft Teams (approvals in chat) are B9; the desktop app's
  local server on 127.0.0.1, which other local software can reach, is B10; an
  RFC 3161 timestamping authority (audit anchors) is B11; the
- self-improvement runner and the container that grades candidate code is B13.
+ self-improvement runner and the container that grades candidate code is B13;
+ the backend and DNS, where a company's allowed SSO domains are verified, is B14.
 ```
 
 ## B1 — Browser ↔ backend
@@ -266,3 +267,19 @@ Integrity of the evidence: HMAC-SHA256 per row and a per-company hash chain
 (`backend/app/audit_signing.py`, `backend/app/audit_chain.py`,
 `AUDIT_SIGNING_KEY`, `GET /v1/audit/chain`). Retention by the janitor
 (`backend/janitor/`); backups in `docs/OPERATIONS.md`.
+
+## B14 — The backend and DNS (SSO domain verification)
+
+- **Crosses:** TXT lookups of `_la-fabrique-verify.<domain>` for the domains
+  a company's Owner listed, on the Owner's request and by the daily re-check,
+  through the system's resolver or `SSO_DNS_NAMESERVERS`.
+- **Threats:** a forged or poisoned answer verifying a domain the company does
+  not hold; a domain that changed hands staying verified; the check used to
+  query arbitrary names; DNS failure locking people out.
+- **Controls:** a 256-bit token the backend issues per company and domain,
+  compared exactly; only listed domains at the fixed prefix are looked up,
+  by an Owner, rate-limited; every answer recorded in `sso_domain_checks`,
+  status changes audited; a transient failure changes nothing, a definite
+  negative unverifies; only creating and linking accounts are gated
+  (`services/platform/sso_domains.py`, `dns_client.py`, `docs/design/SSO.md`
+  T16–T24). No DNSSEC validation in the backend.

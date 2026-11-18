@@ -45,6 +45,7 @@ MANAGER_BRIEF = "manager-brief"
 SPRINT_INTEGRATION = "sprint-integration"
 INTAKE_WAKE = "intake-wake"
 RSI_CYCLE_START = "rsi-cycle-start"
+SSO_DOMAIN_RECHECK = "sso-domain-recheck"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()
