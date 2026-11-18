@@ -1,0 +1,76 @@
+{
+  "title": "Shopping cart discount codes",
+  "summary": "A change to an existing shopping cart library and its command line: removing more than the cart holds is refused, and a discount code can be applied to the total, from the library and from the command line.",
+  "requirements": [
+    {
+      "title": "Remove items from the cart safely",
+      "description": "shopcart.Cart.remove(sku: str, quantity: int = 1) in the existing shopcart/cart.py lowers a line's quantity. Today it lowers it below zero and keeps a line whose quantity reaches zero. Removing more than the line holds must raise ValueError and leave the cart as it was; removing all of a line must remove the line. Removing a SKU that is not in the cart still raises KeyError, and removing part of a line still lowers its quantity.",
+      "criteria": [
+        {
+          "given": "a cart holding 2 of the SKU tea at 2.50",
+          "when": "remove(\"tea\", 3) is called",
+          "then": "it raises ValueError and the cart still holds 2 of tea, with a total of 5.00"
+        },
+        {
+          "given": "a cart holding 2 of tea at 2.50 and 1 of cake at 3.10",
+          "when": "remove(\"tea\", 2) is called",
+          "then": "lines() returns only the cake line and the total is 3.10"
+        }
+      ]
+    },
+    {
+      "title": "Apply a discount code to the total",
+      "description": "A new module shopcart/discounts.py defines CODES, the known codes: SAVE10 takes 10 percent off the subtotal and FIVEOFF takes 5.00 off. shopcart.discounts.discounted_total(cart: Cart, code: str | None) -> Decimal returns the cart's subtotal less the code's discount, never below 0.00, rounded to the cent; a percent discount is rounded to the cent half up before it is taken off. With code None it returns the subtotal. An unknown code raises ValueError whose message is \"unknown discount code: <code>\". Codes are matched exactly, in upper case.",
+      "criteria": [
+        {
+          "given": "a cart with a subtotal of 50.00, and another with a subtotal of 33.35",
+          "when": "discounted_total is called with the code SAVE10, and with None",
+          "then": "it returns 45.00 and 30.01 with SAVE10 (a discount of 3.335 is rounded to 3.34), and 50.00 and 33.35 with None"
+        },
+        {
+          "given": "a cart with a subtotal of 12.00, and another with a subtotal of 3.00",
+          "when": "discounted_total is called with the code FIVEOFF",
+          "then": "it returns 7.00 and 0.00: the total is never below zero"
+        },
+        {
+          "given": "a cart with a subtotal of 50.00",
+          "when": "discounted_total is called with the code NOPE, or with save10 in lower case",
+          "then": "it raises ValueError whose message is \"unknown discount code: NOPE\" (or save10)"
+        }
+      ]
+    },
+    {
+      "title": "Apply a discount code from the command line",
+      "description": "The existing command line, python -m shopcart CART.json (shopcart/__main__.py), takes an optional --code CODE and prints \"Total: <amount>\" with the code's discount taken off. An unknown code exits with status 2, writes \"unknown discount code: <code>\" to stderr and prints nothing on stdout. Without --code it behaves as before.",
+      "criteria": [
+        {
+          "given": "a cart file whose lines total 50.00",
+          "when": "python -m shopcart cart.json --code SAVE10 runs, and python -m shopcart cart.json runs",
+          "then": "the first prints \"Total: 45.00\" and the second \"Total: 50.00\", both with exit status 0"
+        },
+        {
+          "given": "a cart file whose lines total 50.00",
+          "when": "python -m shopcart cart.json --code NOPE runs",
+          "then": "it exits with status 2, prints nothing on stdout and writes \"unknown discount code: NOPE\" to stderr"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "the discounted total of a cart of 10000 lines is computed in under 1 second"
+    },
+    {
+      "attribute": "maintainability",
+      "target": "0 of the project's existing tests in tests/ fail after the change"
+    }
+  ],
+  "constraints": [
+    "This is an existing project: the package shopcart/ at the project root (shopcart/__init__.py, shopcart/cart.py, shopcart/__main__.py) and its tests in tests/. Change it in place; do not start it over.",
+    "Keep the existing public names working: Cart, Cart.add, Cart.remove, Cart.lines, Cart.subtotal, Cart.total and shopcart.__main__.main.",
+    "Python 3.11 or later, standard library only. Prices are decimal.Decimal values.",
+    "The new module is shopcart/discounts.py, defining CODES and discounted_total.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}

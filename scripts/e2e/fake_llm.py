@@ -28,6 +28,9 @@ prompt's section headers, so one run exercises the whole loop:
   naming ``INVENTED_PACKAGE``, which the fake registry (``/pypi/<name>``)
   answers 404 like any name but pytest's, so the Verifier refutes it; the
   next delivery leaves the file out (issue #549);
+- asked to compile a wiki page, it cites the first verified run the request
+  lists and adds one statement without a source (``WIKI_UNCITED``), so the
+  page waits for a person as a proposal (issue #445);
 - QA, asked for browser checks (a project that serves pages), also writes
   one Playwright smoke test per criterion, ``e2e/req_1_1.spec.ts``;
 - it also plays a company's own provider: ``/provider/v1/models`` lists two
@@ -102,6 +105,13 @@ INVENTED_TASK = "Add retry helper"
 INVENTED_PACKAGE = "fabrique-e2e-invented-package"
 INVENTED_MANIFEST = "requirements-dev.txt"
 
+# The project wiki's compilation request (issue #445, services/learning/
+# wiki_compile.build_request; scripts/e2e/wiki_step.sh). The fake cites the
+# first verified run the request lists and adds one statement without a
+# source, so the page is only proposed to a person, never put in force.
+WIKI_PROMPT = "You maintain the project wiki."
+WIKI_UNCITED = "The team agreed this design is the best one."
+
 # Per task title: how many deliveries the fake wrote, how many reviews it was
 # asked for, and the paths of the last delivery.
 DELIVERED: dict[str, int] = {}
@@ -154,6 +164,11 @@ def answer(prompt: str) -> str:
     with open(PROMPT_LOG, "a") as log:
         # Long enough for a task prompt with every section the checks read.
         log.write(prompt.replace("\n", " ")[:20000] + "\n")
+    if prompt.startswith(WIKI_PROMPT):
+        title = re.search(r'page "(.+?)" from the records', prompt)
+        run = re.search(r"^- run (\d+) \(verified;", prompt, re.MULTILINE)
+        cited = f"- A verified run of the sprint delivered this [run:{run.group(1)}]\n\n" if run else ""
+        return f"# {title.group(1) if title else 'Page'}\n\n{cited}{WIKI_UNCITED}\n"
     if prompt.startswith("You are the Manager agent"):
         item = re.search(r"--- ITEM \((\w+)\) ---", prompt)
         category = item.group(1) if item else "unknown"

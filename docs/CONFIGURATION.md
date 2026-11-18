@@ -680,6 +680,19 @@ Copy `.env.example` to `.env` and fill in:
   Architect's brief and review feedback never are, and the prompt names what
   was left out. Unset or `0`: nothing is cut. Either way each section's weight
   is recorded on the run's evidence as `prompt_sections`.
+- `PROMPT_SECTIONS_OFF` — optional, empty by default (#443). Comma-separated
+  names of the Developer task prompt's sections to leave out of every prompt,
+  for a with/without comparison on the bench (`memory,lessons`). The names:
+  `standards_and_procedures`, `lessons`, `requirements`, `repository`,
+  `related_code`, `wiki`, `memory`, `previous_attempt`, `completed_tasks`,
+  `sprint_board`, `console_assistant_notes` (case does not matter). They are
+  left out before `PROMPT_BUDGET` applies and the prompt does not name them;
+  the run's `prompt_sections` records `off` (the names set) and `off_dropped`
+  (those the prompt would have carried), so a scorecard can tell the runs
+  apart. An unknown name, or a required section's (`output_format`, `task`,
+  `architect_brief`, `review_feedback`), is ignored with a warning at startup
+  that lists the known names; the startup log also says what is off. Empty:
+  nothing is off and the prompt is unchanged.
 - `AGENT_MODEL_POLICY` — optional, empty by default (issue #319). The
   deployment's routing policy by task difficulty, JSON:
   `{"bands": {"low": "<model>", "medium": "fast", "high": "<model>"}, "label": "cheap-easy"}`.

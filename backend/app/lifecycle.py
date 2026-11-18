@@ -198,6 +198,14 @@ async def _connect_graph_later(app, has_vector_memory: bool) -> bool:
     return False
 
 
+def log_prompt_sections_off() -> None:
+    """Warn about ``PROMPT_SECTIONS_OFF``: unknown or required names, and what is off (#443)."""
+    from services.loop.worker.prompt_budget import startup_warnings
+
+    for warning in startup_warnings():
+        logger.warning(warning)
+
+
 async def startup(app):
     """
     Application startup handler.
@@ -232,6 +240,7 @@ async def startup(app):
     bind_warning = exposed_bind_warning()
     if bind_warning:
         logger.warning(bind_warning)
+    log_prompt_sections_off()
     client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
     connect_task = asyncio.create_task(
         _connect_nats_and_start_workers(app, client), name="nats_connector"
