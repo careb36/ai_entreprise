@@ -285,7 +285,11 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     run_box, identity = sandbox_image.pinned(runtime, box)
     # The project's dependency cache, as a test run mounts it (``sandbox_cache``).
     cache = sandbox_cache.prepare(runtime, run_box["image"], req["cwd"]) if box["cache"] else None
-    argv = sandbox.container_command(runtime, run_box, req["start"], req["cwd"], name, (cache or {}).get("args"))
+    # The project's environment volume, read-only (``sandbox_cache.prepare_env``).
+    env = sandbox_cache.prepare_env(runtime, box["image"], req["cwd"], "check", box["scope"], sandbox.BASE_ENV["PATH"],
+                                    run_box["image"]) if box["environment"] else None
+    extra = [*(cache or {}).get("args", []), *(env or {}).get("args", [])]
+    argv = sandbox.container_command(runtime, run_box, req["start"], req["cwd"], name, extra)
     argv.remove("--rm")  # Kept until its log is read; removed below.
     argv[2:2] = ["-d", "-e", f"PORT={req['port']}", "-e", f"APP_URL={req['app_url']}"]
     out: Dict[str, Any] = {"sandbox": sandbox.report(box, runtime)}
@@ -319,6 +323,8 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
             out["stopped"] = _remove(runtime, name)
             if cache is not None:
                 out["sandbox"]["cache"] = sandbox_cache.finish(runtime, cache, "check", bool(out.get("listening")), req["cwd"])
+            if env is not None:
+                out["sandbox"]["environment"] = sandbox_cache.finish_env(runtime, env, "check", bool(out.get("listening")))
     return out
 
 

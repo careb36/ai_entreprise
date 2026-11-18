@@ -16,7 +16,9 @@ the specifications and architectures), ``roles``, ``members``,
 ``retrospectives``, ``procedures``, ``integrations`` (with the commit each
 task was merged at), ``wstg_observations`` (the WSTG items the Verifier's
 checks observed), ``wstg_reviews`` (a person's recorded reviews, without
-the reviewer's name) and ``statements_<document>`` (a person's current
+the reviewer's name), ``effort`` and ``costs`` (the backend's effort
+observation per task and each sprint's reported model usage,
+``collect_status``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -50,7 +52,7 @@ from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
-from services.planning.project_docs import statements, texts
+from services.planning.project_docs import collect_status, statements, texts
 from services.planning.project_docs.refs import digest
 from services.platform import wstg_catalogue
 
@@ -542,6 +544,7 @@ def _person_statements(session: Session, company_id: int) -> dict[str, Any]:
 def snapshot(session: Session, company: Company) -> dict[str, Any]:
     """Everything a pack reads about *company*, as plain data."""
     spec = current_specification(session, company.id)
+    sprints = _sprints(session, company.id)
     return {
         "project": {"company_id": company.id, "name": company.company_name},
         # Not an input of any document's digest: the lint compares it apart.
@@ -552,7 +555,7 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         ][-LIMIT:],
         "architecture": _architecture(current_architecture(session, company.id)),
         "stack": _stack(session, company.id),
-        "sprints": _sprints(session, company.id),
+        "sprints": sprints,
         "events": _events(session, company.id),
         "verifications": _verifications(session, company.id),
         "history": _history(session, company.id),
@@ -563,5 +566,7 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "integrations": _integrations(session, company.id),
         "wstg_observations": _wstg_observations(session, company.id),
         "wstg_reviews": _wstg_reviews(session, company.id),
+        "effort": collect_status.effort(session, company.id),
+        "costs": collect_status.costs(session, company.id, [s["id"] for s in sprints]),
         **_person_statements(session, company.id),
     }

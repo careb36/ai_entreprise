@@ -78,6 +78,7 @@ def status_body(jetstream: bool) -> Dict[str, Any]:
         "heartbeat_seconds": heartbeat_seconds(),
         "jetstream": bool(jetstream),
         "sandbox_cache": sandbox_cache.status(),
+        "sandbox_environment": sandbox_cache.env_status(),
         "abilities": abilities.announcement(),
     }
 

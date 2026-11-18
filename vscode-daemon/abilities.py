@@ -63,8 +63,8 @@ SUBJECTS = (
 # The optional request fields added within protocol version 1 (PROTOCOL.md
 # §5.1, §5.1.1, §5.2), per subject: an older daemon ignores them silently.
 FEATURES = {
-    "workspace.execute": ("full_log", "purpose_assistant", "sandbox_floor"),
-    "workspace.app.check": ("browser_probe", "cache", "full_log", "security_probe"),
+    "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
+    "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }
 
 
