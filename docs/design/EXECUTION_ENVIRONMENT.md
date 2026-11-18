@@ -221,9 +221,9 @@ prints one machine-readable line.
   `DELIVERY_BROWSER_IMAGE` to the digest the run printed
   (`docs/CONFIGURATION.md`, `docs/OPERATIONS.md`); pinning it in the compose
   file is left to the deployment. A project whose own `@playwright/test` is
-  not 1.64.1 looks for its own browser revision and is reported
-  `runtime_missing`; a matrix of images per Playwright release, or the probe
-  naming the version the project wants, is open.
+  not one of the built releases looks for its own browser revision; since
+  the fourth slice (below) it runs in the image of its release when one is
+  built, and the mismatch is recorded when none is.
 - **The full log in the UI.** The evidence records each object and its sha256;
   a view that streams an object back and checks it against the sha256 is not
   built.
@@ -269,3 +269,83 @@ Taken as design: GitHub Actions' cache keyed on `hashFiles` of the lock files
 (what Copilot coding agent's `copilot-setup-steps.yml` uses), and Flow's
 ownership by name and label, already followed by the cache. No code was
 copied. The threat model is in the pull request.
+
+## The fourth slice: a browser image per Playwright release (2026-11-18)
+
+A browser build matches one Playwright release. A project that pins another
+`@playwright/test` than the image's looks for its own browser revision and
+fails (`runtime_missing`) or, worse, runs against a build its tests were not
+written for. One image cannot serve every project, so there is one per
+release, and the check picks the one the project pins.
+
+- **The releases are data.** `vscode-daemon/images/browser/playwright_versions.json`
+  lists each release with its lockfile folder (the default's is the image's
+  own `package-lock.json`, the others' `playwright/<release>/`) and the
+  Chrome Headless Shell its `playwright-core`'s `browsers.json` names (the
+  revision, the version and the sha256 of each architecture's archive).
+  Today: 1.63.0 (revision 1243, Chrome 153.0.8010.12) and 1.64.1 (revision
+  1248, Chrome 156.0.8078.4, the default). The Dockerfile's `ARG` defaults
+  build the default release (a test keeps them equal), and
+  `PLAYWRIGHT_LOCK_DIR` selects the lockfile.
+- **Built per release, recorded by digest.** The version job of `images.yml`
+  runs `playwright_matrix.py`, which checks every value's shape (an exact
+  version, a lockfile folder next to the list that pins that version, digits,
+  a browser version, sha256 values) and prints the matrix; `publish-browser`
+  builds each release with its values passed through the environment as
+  build arguments (never pasted into a script), tags it
+  `X.Y.Z-playwright-<release>` (the default also `X.Y.Z` and `latest`),
+  signs and attests it by the digest buildx reported, and keeps a
+  `.digest.json` record beside its SBOM. Only the amd64 sha256 is passed, as
+  only `linux/amd64` is published. Nothing changed about when it runs: a
+  `v*` tag, as before.
+- **The version the project pins is the daemon's observation.**
+  `vscode-daemon/playwright_pin.py` reads `package.json` and the first
+  lockfile that names the package (`package-lock.json`,
+  `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`), with the
+  standard library, at the project's root, never through a symlink and never
+  past 16 MiB, and reports only a value that is a version.
+  `workspace.inspect`'s snapshot carries it. The backend asks for a fresh
+  snapshot right before the application check, after the install (which may
+  have written the lockfile), and never reads the version from the
+  producer's report.
+- **Exact, fallback, unknown.** `services/workspace/browser_images.py`
+  reads `DELIVERY_BROWSER_IMAGES` (each image by digest; a tag is refused and
+  recorded) and chooses: the release's image; a release not listed runs in
+  `DELIVERY_BROWSER_IMAGE` with the mismatch on the evidence
+  (`app_run.browser_image.mismatch`); a project with no Playwright runs the
+  image's own; a version nobody could tell is `unknown`, and the loop starts
+  the application without the browser suite and records the suite as not
+  run with the reason as `runtime_missing`, which the Verifier's `e2e_run`
+  check already reads as unverifiable. The evidence code is unchanged.
+- **Without the list, nothing changes.** `DELIVERY_BROWSER_IMAGES` empty keeps
+  the single `DELIVERY_BROWSER_IMAGE`, and no extra inspection is made.
+
+The 1.63.0 values were read from `playwright-core@1.63.0`'s `browsers.json`
+on the npm registry; both archives were downloaded and hashed, and each
+archive's MD5 matched the `x-goog-hash` the origin bucket
+(`storage.googleapis.com/chrome-for-testing-public/153.0.8010.12/…`) stores
+for it (`mo62E1sc2lbej1R3dikeNQ==` for `linux64`,
+`iryuNu+qLajWde8Piw6NGw==` for `linux-arm64`), behind the session's
+TLS-intercepting proxy as in #529. The 1.63.0 lockfile was made with `npm
+install --package-lock-only --ignore-scripts`. The 1.63.0 image itself was not
+built here (no Docker daemon in the session): its build-time probe on the
+first `v*` tag is the first time its browser launches, and a failure there
+fails that release's job alone (`fail-fast: false`). 1.62.1 was left out
+because its arm64 archive is not on the chrome-for-testing bucket; 1.65.x
+was less than two weeks old.
+
+**Adding a release:** read `revision` and `browserVersion` of
+`chromium-headless-shell` from that release's `playwright-core`
+`browsers.json`; download both archives from
+`cdn.playwright.dev/builds/cft/<version>/{linux64,linux-arm64}/` and hash
+them, checking each against the origin's `x-goog-hash`; write
+`playwright/<release>/package.json` pinning `@playwright/test` exactly and
+its lockfile with `npm install --package-lock-only --ignore-scripts`; add the
+entry. `test_browser_images_playwright.py` and `playwright_matrix.py` check
+it. Moving the default also moves the Dockerfile's `ARG` defaults and the
+image's own `package.json` and lockfile.
+
+Taken as design: GitHub Actions' matrix from a JSON output
+(`fromJSON(needs.<job>.outputs.<name>)`), and Microsoft's own Playwright
+images, which are published one tag per release (`v1.64.1-noble`) for the
+same reason. No code was copied. The threat model is in the pull request.
