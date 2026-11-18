@@ -61,6 +61,25 @@ be under a licence on the allowlist in `scripts/licence_scan.py` (the
 `.github/licence-exceptions.txt` with a reason and a review date, and the pull
 request says who accepted it.
 
+### Security onboarding
+
+Before your first pull request, person or agent, read:
+
+1. `SECURITY.md` §10 (the review checklist) and §11 (the secure coding rules).
+2. The design rules in `docs/POSITIONING.md`: a claim and an observation never
+   share a field, an agent's report of its own test run is a claim, and a hash
+   or signature is never accepted from the party being recorded.
+3. The skills in `.claude/skills/`: `threat-model` before a design that adds
+   an endpoint, a NATS subject, a role, a tool or anything else that crosses a
+   trust boundary; `sdl-review` before a pull request that touches
+   authentication, secrets, the daemon, CI or dependencies.
+4. The lessons this repository has already paid for, in `SECURITY.md` §17.3
+   (for example #39: a hash that proved a decision was taken from the request
+   body, so the caller wrote its own proof).
+
+Accepted risks are in the exception register, `SECURITY.md` §17.1; a new one
+is added there, and the owner accepts it in the pull request.
+
 ---
 
 ## 3. Local setup
