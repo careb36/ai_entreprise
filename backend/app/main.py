@@ -55,6 +55,7 @@ from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.rsi_cycles import router as rsi_cycles_router
+from routers.run_logs import router as run_logs_router
 from routers.run_secrets import router as run_secrets_router
 from routers.security_tests import router as security_tests_router
 from routers.sod import router as sod_router
@@ -129,8 +130,17 @@ app.add_middleware(
     allow_credentials=cors_allows_credentials(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
-    # The support logs download names its file in this header.
-    expose_headers=["Content-Disposition", "X-Fabrique-CSRF"],
+    # The support logs download names its file in this header; the run log
+    # view reads its integrity observation from the X-Log-* ones.
+    expose_headers=[
+        "Content-Disposition",
+        "X-Fabrique-CSRF",
+        "X-Log-Integrity",
+        "X-Log-Sha256-Recorded",
+        "X-Log-Sha256-Observed",
+        "X-Log-Size",
+        "X-Log-Observed-By",
+    ],
 )
 
 # Setup security (rate limiting + security headers)
@@ -157,6 +167,7 @@ app.include_router(costs_router)
 app.include_router(agents_router)
 app.include_router(audit_anchors_router)
 app.include_router(agent_runs_router)
+app.include_router(run_logs_router)
 app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)

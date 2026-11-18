@@ -1080,6 +1080,9 @@
       "test_run_cost.py": [
         "loop"
       ],
+      "test_run_log_view.py": [
+        "workspace"
+      ],
       "test_run_logs.py": [
         "loop"
       ],
@@ -1142,6 +1145,9 @@
       ],
       "test_sessions.py": [
         "loop"
+      ],
+      "test_shared_sqlite.py": [
+        "platform"
       ],
       "test_sod.py": [
         "management"
