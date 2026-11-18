@@ -199,6 +199,10 @@
     "GET /v1/backlog/{item_id}/carry_targets": {
       "access": "Viewer"
     },
+    "GET /v1/bench/scorecards": {
+      "access": "authenticated",
+      "why": "The bench's committed scorecards describe the factory, not a company; read-only."
+    },
     "GET /v1/capabilities": {
       "access": "public",
       "why": "What this deployment offers; no company data."

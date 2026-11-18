@@ -37,7 +37,8 @@
     "duties": "Duties and access",
     "auditAnchors": "Audit anchors",
     "invitations": "Invitations",
-    "findings": "Findings"
+    "findings": "Findings",
+    "bench": "Bench"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3741,6 +3742,99 @@
       "mismatched": "The log could not be served.",
       "missing": "The object store no longer holds this log.",
       "unavailable": "The log could not be read, so its integrity is unknown."
+    }
+  },
+  "bench": {
+    "title": "Bench",
+    "subtitle": "The committed scorecards: each reference specification run through the factory and graded by acceptance tests a person wrote, never by the model under test. Every number is what the scorer observed.",
+    "loading": "Loading the scorecards…",
+    "loadError": "The scorecards could not be loaded: {{message}}",
+    "unavailable": "No scorecards are available",
+    "unavailableHint": "The backend finds no bench/scorecards folder. Set BENCH_REPOSITORY_DIR to a checkout of the repository (see docs/CONFIGURATION.md).",
+    "empty": "No scorecard has been committed yet",
+    "noValidCard": "No committed scorecard matches the schema",
+    "notMeasured": "Not measured",
+    "notMeasuredBecause": "Not measured: {{reason}}",
+    "reasons": {
+      "grade_unmeasured": "the acceptance tests could not run, so no criterion was graded",
+      "no_criteria": "the specification has no graded criterion",
+      "no_reported_turns": "no turn reported its token usage",
+      "cost_unknown": "the cost of some tasks is unknown; the bench prices no turn",
+      "not_in_card": "this card's schema version does not record it",
+      "no_prompt_measure": "no prompt was measured"
+    },
+    "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
+    "seconds": "{{value}} s",
+    "unreportedTurns_one": "+{{count}} turn unreported",
+    "unreportedTurns_other": "+{{count}} turns unreported",
+    "cols": {
+      "spec": "Specification",
+      "status": "Status",
+      "criteria": "Criteria passed",
+      "firstAttempt": "First attempt",
+      "reworkPerTask": "Rework per task",
+      "blocked": "Blocked",
+      "wallClock": "Wall-clock",
+      "tokens": "Reported tokens",
+      "cost": "Cost",
+      "promptPerTask": "Prompt tokens per task (est.)",
+      "stamp": "Run",
+      "source": "Kind",
+      "card": "Card",
+      "specs": "Specifications completed"
+    },
+    "specStatus": {
+      "completed": "Completed",
+      "timeout": "Timed out",
+      "error": "Error",
+      "budget_exceeded": "Budget exceeded"
+    },
+    "cardStatus": {
+      "valid": "Matches the schema",
+      "invalid": "Off the schema",
+      "unreadable": "Unreadable"
+    },
+    "folder": {
+      "fake": "Fake models",
+      "real": "Real models",
+      "ablation": "Section ablation"
+    },
+    "latest": {
+      "title": "Latest scorecard: {{stamp}}",
+      "llm": "Models served",
+      "policy": "Routing policy",
+      "noPolicy": "Not recorded",
+      "commit": "Factory commit",
+      "schema": "Schema version",
+      "graders": "Graders",
+      "buildGraders": "The build's own",
+      "run": "Run",
+      "runComplete": "Complete",
+      "budgetCut": "Cut by the token budget ({{skipped}} skipped)",
+      "sectionsOff": "Prompt sections turned off: {{sections}}",
+      "totals": "Totals",
+      "specsCaption": "Each specification of the latest scorecard"
+    },
+    "history": {
+      "title": "History",
+      "caption": "Every committed scorecard, newest first",
+      "countLabel_one": "{{count}} scorecard",
+      "countLabel_other": "{{count}} scorecards",
+      "specsCompleted": "{{completed}}/{{total}}"
+    },
+    "specHistory": {
+      "title": "By specification",
+      "caption": "Each specification across the scorecards that match the schema, newest first"
+    },
+    "sections": {
+      "title": "Prompt weight by section",
+      "note": "The latest card's Developer prompts: estimated tokens (characters / 4, the backend's measure, not the provider's count). A section the budget cut was not sent and is counted under Cut.",
+      "caption": "The estimated tokens of each prompt section, heaviest first",
+      "section": "Section",
+      "tokens": "Estimated tokens",
+      "share": "Share",
+      "prompts": "Prompts",
+      "cut": "Cut"
     }
   }
 }

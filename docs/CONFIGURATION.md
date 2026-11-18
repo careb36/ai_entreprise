@@ -244,6 +244,15 @@ Copy `.env.example` to `.env` and fill in:
   (`POST /v1/companies/{id}/rsi/cycles/import`); empty, every hash stays the
   runner's claim. A kept cycle is merged by a person (`merge_self_change` is
   in `ALWAYS_ESCALATE`), recorded by a signed-in Owner at C's sha.
+- `BENCH_REPOSITORY_DIR` — optional, default empty. The checkout whose
+  `bench/scorecards` (and its `real/` and `ablation/` folders) the /bench page
+  reads, read-only, through `GET /v1/bench/scorecards`
+  (`services/models/bench_scorecards.py`, issue #685). Empty is the backend's
+  own checkout when it runs from one; in the backend's image there is none, so
+  the page says no scorecards are available until this names a folder holding
+  a checkout's `bench/scorecards` (for example a read-only mount of it). Only
+  `*.json` files directly in those folders are read, a symbolic link or a file
+  over 2 MB is reported unreadable, and nothing is written.
 - `MANAGER_AGENT_ENABLED` — optional, default `false`. The Manager agent
   (`services/management/manager_agent.py`) reads the inbox every
   `MANAGER_AGENT_INTERVAL_SECONDS` (60): each task blocked for a person or
