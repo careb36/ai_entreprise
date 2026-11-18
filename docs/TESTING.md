@@ -669,7 +669,7 @@ step's `FILTERS` block scalar; the script reads them and prints one
 | End to end, host and container (`e2e.yml`) | `backend/**`, `vscode-daemon/**`, `llm-proxy/**`, `nats/**`, `scripts/e2e/**`, `scripts/self_host/**`, `scripts/backup.sh`, `scripts/nats_config.py`, `docs/architecture/specification.json` and `architecture.json` (the self-hosting step reads them), `docker-compose*.yml` |
 | File sizes (`file-sizes.yml`) | `backend/**`, `frontend/src/**`, `vscode-daemon/**`, `llm-proxy/**`, `scripts/**` |
 | actionlint (`workflows.yml`) | `.github/workflows/**`, `.github/actionlint.yaml` |
-| Bench, fake model (`bench-pr.yml`; its own filter, see below) | `bench/**`, `scripts/bench/**`, `backend/app/**`, `backend/alembic/**`, `backend/alembic.ini`, `backend/pyproject.toml`, `backend/poetry.lock`, `vscode-daemon/**`, `bench.yml`, `bench-pr.yml` |
+| Bench, fake model (`bench-pr.yml`; its own filter, see below) | `bench/**`, `scripts/bench/**`, `bench.yml`, `bench-pr.yml` |
 | Security scans (`security-scan.yml`) | always |
 
 A change under `.github/workflows/` or to `.github/actionlint.yaml` runs every
@@ -694,8 +694,10 @@ skip their steps, ending in seconds as a success. When the `changes` job
 itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
 
 **The bench on a pull request** (`bench-pr.yml`, issue #316) is the nightly
-fake-model run of `bench.yml` on a pull request that changes what the bench
-drives or grades: the same steps (held equal by `test_ci_paths.py`), the same
+fake-model run of `bench.yml` on a pull request that changes the bench
+itself (`bench/`, `scripts/bench/`, either bench workflow; a backend change
+alone does not start it, since the runners are one machine and the nightly
+run covers the backend): the same steps (held equal by `test_ci_paths.py`), the same
 comparison with the newest card in `bench/scorecards/` and the same
 thresholds, so a regression fails the check. Its filter is its own `changes`
 job (the same `scripts/changed_paths.py`), not an output of `changes.yml`,

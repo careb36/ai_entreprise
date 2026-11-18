@@ -449,15 +449,11 @@ def test_every_action_in_the_bench_workflows_is_pinned_by_sha():
         "bench/specs/01-cli-wordcount/spec.json",
         "bench/scorecards/20261114T201804Z.json",
         "scripts/bench/compare.py",
-        "backend/app/services/loop/task_worker.py",
-        "backend/alembic/versions/x.py",
-        "backend/poetry.lock",
-        "vscode-daemon/daemon.py",
         ".github/workflows/bench.yml",
         ".github/workflows/bench-pr.yml",
     ],
 )
-def test_a_change_to_what_the_bench_drives_or_grades_runs_it(path):
+def test_a_change_to_the_bench_itself_runs_it(path):
     assert _bench_runs_for([path])
 
 
@@ -467,6 +463,10 @@ def test_a_change_to_what_the_bench_drives_or_grades_runs_it(path):
         "CHANGELOG.md",
         "docs/TESTING.md",
         "frontend/src/App.tsx",
+        "backend/app/services/loop/task_worker.py",
+        "backend/alembic/versions/x.py",
+        "backend/poetry.lock",
+        "vscode-daemon/daemon.py",
         "backend/tests/test_ci_paths.py",
         "llm-proxy/app.py",
         "scripts/e2e/run.sh",

@@ -2,7 +2,7 @@ name: Bench (pull request)
 
 # The fake-model bench on a pull request (issue #316): the job `bench` of
 # bench.yml, the nightly fake run, on a pull request into main that changes
-# what the bench drives or grades (the filter in the job `changes` below).
+# the bench itself (the filter in the job `changes` below; the nightly run covers the backend).
 # scripts/bench/run.sh drives every reference specification in bench/specs/
 # through the factory with the fake LLM (scripts/bench/fake_llm.py), grades
 # each produced project with the acceptance tests a person wrote, and
@@ -63,12 +63,6 @@ jobs:
             bench:
               - 'bench/**'
               - 'scripts/bench/**'
-              - 'backend/app/**'
-              - 'backend/alembic/**'
-              - 'backend/alembic.ini'
-              - 'backend/pyproject.toml'
-              - 'backend/poetry.lock'
-              - 'vscode-daemon/**'
               - '.github/workflows/bench.yml'
               - '.github/workflows/bench-pr.yml'
         # A failure here fails the job, and `bench` then runs rather than not.
