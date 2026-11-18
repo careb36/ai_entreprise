@@ -384,3 +384,49 @@ def test_the_gitleaks_hook_runs_the_version_ci_runs():
     version = re.search(r"# frozen: (v[\d.]+)", text).group(1)
     ci = (WORKFLOWS / "security-scan.yml").read_text()
     assert f"/releases/download/{version}/gitleaks_{version[1:]}_linux_x64" in ci
+
+
+# ---------------------------------------------------------------------------
+# gitleaks exceptions stay narrow (issue #522, SECURITY.md §17.1 E-15)
+# ---------------------------------------------------------------------------
+
+
+def _gitleaks_rule_allowlists():
+    import tomllib
+
+    config = tomllib.loads((REPO / ".gitleaks.toml").read_text(encoding="utf-8"))
+    return [
+        (rule.get("id"), rule.get("allowlist") or {})
+        for rule in config.get("rules", [])
+    ]
+
+
+def test_every_gitleaks_rule_exception_names_one_path_and_one_exact_value():
+    """A live exception allows one fake value in one file, never a pattern."""
+    for rule_id, allowlist in _gitleaks_rule_allowlists():
+        if not allowlist:
+            continue
+        paths, regexes = allowlist.get("paths", []), allowlist.get("regexes", [])
+        assert len(paths) == 1 and len(regexes) == 1, rule_id
+        assert paths[0].startswith("^") and paths[0].endswith("$"), rule_id
+        assert regexes[0].startswith("^") and regexes[0].endswith("$"), rule_id
+        body = regexes[0][1:-1]
+        assert not re.search(
+            r"(?<!\\)[.*+?\[\]{}|]", body.replace("(", "").replace(")", "")
+        ), (
+            rule_id,
+            "an exception must match one exact value, not a pattern",
+        )
+
+
+def test_every_gitleaksignore_line_is_one_fingerprint():
+    """Each ignored finding is one commit, one file, one rule, one line."""
+    fingerprint = re.compile(r"^[0-9a-f]{40}:[^:\s]+:[a-z0-9-]+:[0-9]+$")
+    lines = [
+        line.strip()
+        for line in (REPO / ".gitleaksignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert lines, "the ignore file should list the triaged findings"
+    for line in lines:
+        assert fingerprint.match(line), line
