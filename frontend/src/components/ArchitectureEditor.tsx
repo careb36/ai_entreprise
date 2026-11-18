@@ -223,7 +223,7 @@ export function ArchitectureEditor({ initial, requirements, onSave, onCancel, sa
 
   return (
     <form aria-label={t('architectures.editor.formLabel')} onSubmit={e => { e.preventDefault(); if (complete) onSave(clean(body)) }}
-      className="card p-4 space-y-4">
+      className="panel p-4 space-y-4">
       <p className="text-xs text-gray-500">{t('architectures.editor.idsNote')}</p>
       <label className="block">
         <span className="input-label">{t('architectures.editor.title')}</span>

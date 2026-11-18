@@ -136,8 +136,8 @@ export function SpecificationEditor({ initial, onSave, onCancel, saving, error }
 
   return (
     <form aria-label={t('specifications.editor.formLabel')} onSubmit={e => { e.preventDefault(); if (complete) onSave(clean(body)) }}
-      className="card p-4 space-y-4">
-      <p className="text-xs text-gray-500">{t('specifications.editor.idsNote')}</p>
+      className="panel p-4 space-y-4">
+      <p className="text-xs text-gray-400">{t('specifications.editor.idsNote')}</p>
       <label className="block">
         <span className="input-label">{t('specifications.editor.title')}</span>
         <input value={body.title} onChange={e => setBody({ ...body, title: e.target.value })} required maxLength={200} className="input w-full" />

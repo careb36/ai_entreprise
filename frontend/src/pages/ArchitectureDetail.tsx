@@ -10,16 +10,17 @@
  * is the company's: the page names the version, whether it is the current
  * one, and lists every version of it (`ArchitectureHistory`).
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, Loader2, Pencil, Send, Sparkles } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, Pencil, Send, Sparkles } from 'lucide-react'
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
 import { ArchitectureHistory, ArchitectureVersionLine } from '../components/ArchitectureHistory'
-import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
+import { LoadErrorAlert, LoadingLine, READABLE_TEXT, Spinner } from '../components/knowledge/PageStates'
 import { SourcesConsulted } from '../components/SourcesConsulted'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
+import { CountPill, PageHeader, Panel } from '../components/ui'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
 import { ApiError, errorDetail } from '../services/api'
@@ -61,23 +62,45 @@ function toBody(architecture: Architecture): ArchitectureBody {
 
 function ModuleChip({ id, architecture }: { id: string; architecture: Architecture }) {
   const name = architecture.modules.find(m => m.id === id)?.name
-  return <span className="inline-flex items-center gap-1"><Where where={id} />{name && <span className="text-xs text-gray-400">{name}</span>}</span>
+  return <span className="inline-flex items-center gap-1"><Where where={id} />{name && <span className="text-xs text-gray-300">{name}</span>}</span>
+}
+
+/** A labelled line of chips under a module or an interface ("Depends on", "Covers"). */
+function ChipLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+      <span className="text-meta font-medium uppercase tracking-wider">{label}</span>
+      {children}
+    </p>
+  )
+}
+
+/** A section of the architecture: a titled panel with its count and its empty line. */
+function Section({ title, count, countLabel, empty, children }: {
+  title: string; count: number; countLabel: string; empty: string; children: ReactNode
+}) {
+  return (
+    <Panel title={title} count={count > 0 ? <CountPill count={count} label={countLabel} /> : undefined}>
+      {count === 0 ? <p className="px-3 py-2.5 text-[13px] text-gray-400">{empty}</p> : children}
+    </Panel>
+  )
 }
 
 function CheckPanel({ architecture }: { architecture: Architecture }) {
   const { t } = useTranslation()
   const { check } = architecture
   return (
-    <section aria-labelledby="architecture-check" className="card p-4 space-y-3">
-      <h2 id="architecture-check" className="text-sm font-semibold text-white">{t('specifications.check.title')}</h2>
-      {check.ok && (
-        <p className="flex items-center gap-2 text-sm text-emerald-300">
-          <CheckCircle size={15} aria-hidden="true" /> {t('architectures.check.ok')}
-        </p>
-      )}
-      <FindingList findings={check.findings} severity="blocking" />
-      <FindingList findings={check.findings} severity="warning" />
-    </section>
+    <Panel title={t('specifications.check.title')}>
+      <div className="space-y-3 p-3">
+        {check.ok && (
+          <p className="flex items-center gap-2 text-[13px] text-emerald-300">
+            <CheckCircle size={14} aria-hidden="true" /> {t('architectures.check.ok')}
+          </p>
+        )}
+        <FindingList findings={check.findings} severity="blocking" />
+        <FindingList findings={check.findings} severity="warning" />
+      </div>
+    </Panel>
   )
 }
 
@@ -94,25 +117,25 @@ function QuestionRow({ architecture, index, canAnswer }: { architecture: Archite
   }
 
   return (
-    <li className="space-y-1">
-      <p className="text-sm text-gray-200"><Where where={`Q${n}`} /> {question.question}</p>
+    <li className="data-row space-y-1.5">
+      <p className="text-[13px] text-gray-100"><Where where={`Q${n}`} /> {question.question}</p>
       {editing ? (
         <form onSubmit={e => { e.preventDefault(); save() }} className="flex flex-wrap items-center gap-2">
-          <input value={draft} onChange={e => setDraft(e.target.value)} className="input flex-1" aria-label={t('specifications.questions.answerLabel', { n })} />
+          <input value={draft} onChange={e => setDraft(e.target.value)} className="input control-sm flex-1" aria-label={t('specifications.questions.answerLabel', { n })} />
           <button type="submit" disabled={answer.isPending} className="btn btn-primary btn-sm">
-            {answer.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
+            {answer.isPending ? <Spinner /> : <Send size={13} aria-hidden="true" />}
             {t('specifications.questions.save')}
           </button>
-          <button type="button" onClick={() => { setEditing(false); setDraft(question.answer ?? '') }} className="btn btn-ghost btn-sm">{t('common.cancel')}</button>
+          <button type="button" onClick={() => { setEditing(false); setDraft(question.answer ?? '') }} className="btn-tool">{t('common.cancel')}</button>
           {answer.isError && <span role="alert" className="text-xs text-red-300">{t('specifications.questions.error', { message: errorDetail(answer.error) })}</span>}
         </form>
       ) : (
-        <p className="flex flex-wrap items-center gap-2 text-sm">
+        <p className="flex flex-wrap items-center gap-2 text-xs">
           {question.answer
             ? <span className="text-gray-300">{t('specifications.questions.answered', { answer: question.answer })}</span>
             : <span className="text-amber-300">{t('specifications.questions.unanswered')}</span>}
           {canAnswer && (
-            <button type="button" onClick={() => setEditing(true)} className="btn btn-ghost btn-sm">
+            <button type="button" onClick={() => setEditing(true)} className="btn-tool h-7">
               <Pencil size={12} aria-hidden="true" /> {question.answer ? t('specifications.questions.edit') : t('specifications.questions.answer')}
             </button>
           )}
@@ -129,101 +152,102 @@ function earlierTitle(architecture: Architecture, specId: string): string {
 
 function Modules({ architecture }: { architecture: Architecture }) {
   const { t } = useTranslation()
+  const count = architecture.modules.length
   return (
-    <section aria-labelledby="architecture-modules" className="space-y-2">
-      <h2 id="architecture-modules" className="text-sm font-semibold text-white">{t('architectures.modules.title')}</h2>
-      {architecture.modules.length === 0 && <p className="text-sm text-gray-500">{t('architectures.modules.none')}</p>}
-      <ul className="space-y-2">
+    <Section title={t('architectures.modules.title')} count={count} countLabel={t('architectures.modules.countLabel', { count })}
+      empty={t('architectures.modules.none')}>
+      <ul className="data-list">
         {architecture.modules.map(module => (
-          <li key={module.id} className="card p-4 space-y-2" aria-label={module.id}>
+          <li key={module.id} className="data-row space-y-2 py-3" aria-label={module.id}>
             <div className="flex flex-wrap items-center gap-2">
               <Where where={module.id} />
-              <h3 className="text-sm font-semibold text-white">{module.name}</h3>
-              <code className="font-mono text-xs text-gray-400">{module.path}</code>
+              <h3 className="text-[13px] font-semibold text-gray-100">{module.name}</h3>
+              <code className="chip font-mono">{module.path}</code>
             </div>
-            {module.responsibility && <p className="text-sm text-gray-300 whitespace-pre-wrap">{module.responsibility}</p>}
+            {module.responsibility && <p className={READABLE_TEXT}>{module.responsibility}</p>}
             {module.depends_on.length > 0 && (
-              <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                <span>{t('architectures.modules.dependsOn')}</span>
+              <ChipLine label={t('architectures.modules.dependsOn')}>
                 {module.depends_on.map(id => <ModuleChip key={id} id={id} architecture={architecture} />)}
-              </p>
+              </ChipLine>
             )}
             {module.covers.length > 0 && (
-              <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                <span>{t('architectures.modules.covers')}</span>
+              <ChipLine label={t('architectures.modules.covers')}>
                 {module.covers.map(id => (
-                  <Link key={id} to={specificationPath(architecture.specification_id)} className="hover:underline"><Where where={id} /></Link>
+                  <Link key={id} to={specificationPath(architecture.specification_id)} className="rounded-md hover:underline"><Where where={id} /></Link>
                 ))}
-              </p>
+              </ChipLine>
             )}
             {Object.entries(module.earlier_covers ?? {}).map(([specId, ids]) => (
-              <p key={specId} className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                <span>{t('architectures.modules.coversIn', { title: earlierTitle(architecture, specId) })}</span>
+              <ChipLine key={specId} label={t('architectures.modules.coversIn', { title: earlierTitle(architecture, specId) })}>
                 {ids.map(id => (
-                  <Link key={id} to={specificationPath(Number(specId))} className="hover:underline"><Where where={id} /></Link>
+                  <Link key={id} to={specificationPath(Number(specId))} className="rounded-md hover:underline"><Where where={id} /></Link>
                 ))}
-              </p>
+              </ChipLine>
             ))}
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   )
 }
 
 function Interfaces({ architecture }: { architecture: Architecture }) {
   const { t } = useTranslation()
+  const count = architecture.interfaces.length
   return (
-    <section aria-labelledby="architecture-interfaces" className="space-y-2">
-      <h2 id="architecture-interfaces" className="text-sm font-semibold text-white">{t('architectures.interfaces.title')}</h2>
-      {architecture.interfaces.length === 0 && <p className="text-sm text-gray-500">{t('architectures.interfaces.none')}</p>}
-      <ul className="space-y-2">
+    <Section title={t('architectures.interfaces.title')} count={count} countLabel={t('architectures.interfaces.countLabel', { count })}
+      empty={t('architectures.interfaces.none')}>
+      <ul className="data-list">
         {architecture.interfaces.map(iface => (
-          <li key={iface.id} className="card p-4 space-y-2" aria-label={iface.id}>
+          <li key={iface.id} className="data-row space-y-2 py-3" aria-label={iface.id}>
             <div className="flex flex-wrap items-center gap-2">
               <Where where={iface.id} />
-              <h3 className="text-sm font-semibold text-white">{iface.name}</h3>
-              <span className="badge bg-sky-900/60 text-sky-300">{t(`architectures.kinds.${iface.kind}`, { defaultValue: iface.kind })}</span>
+              <h3 className="text-[13px] font-semibold text-gray-100">{iface.name}</h3>
+              <span className="chip">{t(`architectures.kinds.${iface.kind}`, { defaultValue: iface.kind })}</span>
             </div>
-            <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-              <span>{t('architectures.interfaces.providedBy')}</span>
+            <ChipLine label={t('architectures.interfaces.providedBy')}>
               <ModuleChip id={iface.module_id} architecture={architecture} />
-              {iface.consumers.length > 0 && <span>{t('architectures.interfaces.consumers')}</span>}
-              {iface.consumers.map(id => <ModuleChip key={id} id={id} architecture={architecture} />)}
-            </p>
-            {iface.contract && <pre className="overflow-x-auto rounded bg-surface-900/80 p-2 font-mono text-xs text-gray-200 whitespace-pre-wrap">{iface.contract}</pre>}
+            </ChipLine>
+            {iface.consumers.length > 0 && (
+              <ChipLine label={t('architectures.interfaces.consumers')}>
+                {iface.consumers.map(id => <ModuleChip key={id} id={id} architecture={architecture} />)}
+              </ChipLine>
+            )}
+            {iface.contract && (
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-surface-700 bg-surface-950/60 p-2.5 font-mono text-xs leading-relaxed text-gray-200">{iface.contract}</pre>
+            )}
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   )
 }
 
 function Decisions({ architecture }: { architecture: Architecture }) {
   const { t } = useTranslation()
+  const count = architecture.decisions.length
   return (
-    <section aria-labelledby="architecture-decisions" className="space-y-2">
-      <h2 id="architecture-decisions" className="text-sm font-semibold text-white">{t('architectures.decisions.title')}</h2>
-      {architecture.decisions.length === 0 && <p className="text-sm text-gray-500">{t('architectures.decisions.none')}</p>}
-      <ul className="space-y-2">
+    <Section title={t('architectures.decisions.title')} count={count} countLabel={t('architectures.decisions.countLabel', { count })}
+      empty={t('architectures.decisions.none')}>
+      <ul className="data-list">
         {architecture.decisions.map(decision => (
-          <li key={decision.id} className="card p-4 space-y-2" aria-label={decision.id}>
+          <li key={decision.id} className="data-row space-y-2 py-3" aria-label={decision.id}>
             <div className="flex flex-wrap items-center gap-2">
               <Where where={decision.id} />
-              <h3 className="text-sm font-semibold text-white">{decision.title}</h3>
+              <h3 className="text-[13px] font-semibold text-gray-100">{decision.title}</h3>
             </div>
-            <dl className="space-y-1 text-sm">
+            <dl className="space-y-2">
               {DECISION_FIELDS.map(field => decision[field] && (
                 <div key={field}>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t(`architectures.decisions.${field}`, { defaultValue: field })}</dt>
-                  <dd className="text-gray-300 whitespace-pre-wrap">{decision[field]}</dd>
+                  <dt className="text-meta font-medium uppercase tracking-wider">{t(`architectures.decisions.${field}`, { defaultValue: field })}</dt>
+                  <dd className={`${READABLE_TEXT} mt-0.5 text-gray-300`}>{decision[field]}</dd>
                 </div>
               ))}
             </dl>
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   )
 }
 
@@ -252,13 +276,15 @@ function MarkdownView({ architecture }: { architecture: Architecture }) {
 
   return (
     <section aria-label={t('architectures.markdown.title')} className="space-y-2">
-      <button type="button" onClick={show} aria-expanded={open} className="btn btn-ghost btn-sm">
-        {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-        <FileText size={14} aria-hidden="true" /> {t('architectures.markdown.view')}
+      <button type="button" onClick={show} aria-expanded={open} className={`btn-tool ${open ? 'btn-tool-on' : ''}`}>
+        {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+        <FileText size={13} aria-hidden="true" /> {t('architectures.markdown.view')}
       </button>
-      {open && loading && <p role="status" className="text-xs text-gray-400">{t('architectures.markdown.loading')}</p>}
-      {open && error && <p role="alert" className="text-sm text-red-300">{t('architectures.markdown.error', { message: error })}</p>}
-      {open && text !== null && <pre className="overflow-x-auto rounded bg-surface-900/80 p-3 font-mono text-xs text-gray-200 whitespace-pre-wrap">{text}</pre>}
+      {open && loading && <LoadingLine>{t('architectures.markdown.loading')}</LoadingLine>}
+      {open && error && <p role="alert" className="text-[13px] text-red-300">{t('architectures.markdown.error', { message: error })}</p>}
+      {open && text !== null && (
+        <pre className="panel overflow-x-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-gray-200">{text}</pre>
+      )}
     </section>
   )
 }
@@ -287,54 +313,54 @@ function Actions({ architecture, onEdit }: { architecture: Architecture; onEdit:
   if (architecture.status === 'approved') {
     const daemonDown = write.error instanceof ApiError && write.error.status === 503 ? write.error : null
     return (
-      <section aria-label={t('specifications.actions.title')} className="card p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => write.mutate(architecture.id)} disabled={write.isPending} className="btn btn-primary">
-            {write.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <FolderOutput size={15} aria-hidden="true" />}
+      <section aria-label={t('specifications.actions.title')} className="panel space-y-3 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => write.mutate(architecture.id)} disabled={write.isPending} className="btn btn-primary btn-sm">
+            {write.isPending ? <Spinner /> : <FolderOutput size={14} aria-hidden="true" />}
             {write.isPending ? t('architectures.actions.writing') : t('architectures.actions.write')}
           </button>
-          <button type="button" onClick={reviseApproved} disabled={revise.isPending} className="btn btn-secondary">
-            {revise.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Pencil size={15} aria-hidden="true" />}
+          <button type="button" onClick={reviseApproved} disabled={revise.isPending} className="btn-tool">
+            {revise.isPending ? <Spinner /> : <Pencil size={13} aria-hidden="true" />}
             {t('specifications.actions.revise')}
           </button>
-          <span className="text-xs text-gray-500">{t('architectures.actions.reviseHint')}</span>
+          <span className="text-xs text-gray-400">{t('architectures.actions.reviseHint')}</span>
           {revise.isError && !(revise.error instanceof ArchitectureConflict && revise.error.architectureId !== null) && (
-            <span role="alert" className="text-sm text-red-300">{t('specifications.actions.reviseError', { message: errorDetail(revise.error) })}</span>
+            <span role="alert" className="text-[13px] text-red-300">{t('specifications.actions.reviseError', { message: errorDetail(revise.error) })}</span>
           )}
         </div>
         {write.isSuccess && write.data.written_path && (
-          <p role="status" className="flex items-center gap-2 text-sm text-emerald-300">
-            <CheckCircle size={15} aria-hidden="true" />
+          <p role="status" className="flex items-center gap-2 text-[13px] text-emerald-300">
+            <CheckCircle size={14} aria-hidden="true" />
             {t('architectures.actions.written', { path: write.data.written_path, hash: (write.data.written_sha256 ?? '').slice(0, 12) })}
           </p>
         )}
         {write.isError && (daemonDown
           ? <WorkspaceDaemonHelp detail={daemonDown.detail} />
-          : <p role="alert" className="text-sm text-red-300">{t('architectures.actions.writeError', { message: errorDetail(write.error) })}</p>)}
+          : <p role="alert" className="text-[13px] text-red-300">{t('architectures.actions.writeError', { message: errorDetail(write.error) })}</p>)}
       </section>
     )
   }
   return (
-    <section aria-label={t('specifications.actions.title')} className="card p-4 space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onEdit} className="btn btn-secondary">
-          <Pencil size={15} aria-hidden="true" /> {t('specifications.actions.edit')}
+    <section aria-label={t('specifications.actions.title')} className="panel space-y-3 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onEdit} className="btn-tool">
+          <Pencil size={13} aria-hidden="true" /> {t('specifications.actions.edit')}
         </button>
-        <button type="button" disabled={redraft.isPending} className="btn btn-secondary"
+        <button type="button" disabled={redraft.isPending} className="btn-tool"
           onClick={() => redraft.mutate({ specification_id: specId, architecture_id: architecture.id })}>
-          {redraft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
+          {redraft.isPending ? <Spinner /> : <Sparkles size={13} aria-hidden="true" />}
           {redraft.isPending ? t('architectures.drafting') : t('architectures.actions.reviseArchitect')}
         </button>
         <button type="button" onClick={() => approve.mutate(architecture.id)} disabled={!architecture.check.ok || approve.isPending}
-          title={architecture.check.ok ? undefined : t('specifications.actions.approveBlocked')} className="btn btn-primary">
-          {approve.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Check size={15} aria-hidden="true" />}
+          title={architecture.check.ok ? undefined : t('specifications.actions.approveBlocked')} className="btn btn-primary btn-sm">
+          {approve.isPending ? <Spinner /> : <Check size={14} aria-hidden="true" />}
           {t('specifications.actions.approve')}
         </button>
-        {!architecture.check.ok && <span className="text-xs text-gray-500">{t('specifications.actions.approveBlocked')}</span>}
+        {!architecture.check.ok && <span className="text-xs text-gray-400">{t('specifications.actions.approveBlocked')}</span>}
         {approve.isError && (
-          <span role="alert" className="text-sm text-red-300">{t('specifications.actions.approveError', { message: errorDetail(approve.error) })}</span>
+          <span role="alert" className="text-[13px] text-red-300">{t('specifications.actions.approveError', { message: errorDetail(approve.error) })}</span>
         )}
-        {redraft.isError && <span role="alert" className="text-sm text-red-300">{t('architectures.draftError', { message: errorDetail(redraft.error) })}</span>}
+        {redraft.isError && <span role="alert" className="text-[13px] text-red-300">{t('architectures.draftError', { message: errorDetail(redraft.error) })}</span>}
       </div>
       {unanswered > 0 && <p className="text-xs text-amber-300">{t('specifications.actions.answerFirst', { count: unanswered })}</p>}
       {conflictFindings.length > 0 && (
@@ -352,13 +378,15 @@ function NewArchitecture({ specification }: { specification: Specification }) {
   const navigate = useNavigate()
   const create = useCreateArchitecture()
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <Breadcrumbs items={[
-        { label: t('specifications.title'), to: '/company/specifications' },
-        { label: specification.title, to: specificationPath(specification.id) },
-        { label: t('architectures.editor.newTitle') },
-      ]} />
-      <h1 className="page-title">{t('architectures.editor.newTitle')}</h1>
+    <div className="page-container max-w-4xl space-y-4">
+      <PageHeader
+        breadcrumbs={[
+          { label: t('specifications.title'), to: '/company/specifications' },
+          { label: specification.title, to: specificationPath(specification.id) },
+          { label: t('architectures.editor.newTitle') },
+        ]}
+        title={t('architectures.editor.newTitle')}
+      />
       <ArchitectureEditor
         requirements={specification.requirements}
         saving={create.isPending}
@@ -387,66 +415,62 @@ export default function ArchitectureDetail() {
   const canWrite = (role === 'Owner' || role === 'Manager') && specification?.company_id === companyId
   const invalidId = specificationId === null || (!isNew && architectureId === null)
   if (invalidId) {
-    return <div className="page-container max-w-4xl"><p role="alert" className="alert-error text-sm">{t('architectures.invalidId', { id: id ?? specId })}</p></div>
+    return <div className="page-container max-w-4xl"><p role="alert" className="alert-error">{t('architectures.invalidId', { id: id ?? specId })}</p></div>
   }
   if (specQuery.isLoading || (!isNew && query.isLoading)) {
-    return (
-      <div className="page-container max-w-4xl" role="status">
-        <p className="flex items-center gap-2 text-sm text-gray-400"><Loader2 size={15} className="animate-spin" aria-hidden="true" /> {t('architectures.loadingOne')}</p>
-      </div>
-    )
+    return <div className="page-container max-w-4xl"><LoadingLine>{t('architectures.loadingOne')}</LoadingLine></div>
   }
   const failed = specQuery.isError ? specQuery : query.isError ? query : null
   if (failed || !specification || (!isNew && !architecture)) {
     return (
       <div className="page-container max-w-4xl space-y-3">
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('architectures.loadOneError', { message: failed?.error ? errorDetail(failed.error) : '' })}</span>
-          <button type="button" onClick={() => { specQuery.refetch(); query.refetch() }} className="underline">{t('common.retry')}</button>
-        </div>
-        <Link to={specificationPath(specificationId)} className="btn btn-ghost btn-sm">{t('architectures.back')}</Link>
+        <LoadErrorAlert onRetry={() => { specQuery.refetch(); query.refetch() }}>
+          {t('architectures.loadOneError', { message: failed?.error ? errorDetail(failed.error) : '' })}
+        </LoadErrorAlert>
+        <Link to={specificationPath(specificationId)} className="btn-tool">{t('architectures.back')}</Link>
       </div>
     )
   }
   if (isNew || !architecture) {
-    if (!canWrite) return <div className="page-container max-w-4xl"><p role="alert" className="alert-error text-sm">{t('architectures.managerOnly')}</p></div>
+    if (!canWrite) return <div className="page-container max-w-4xl"><p role="alert" className="alert-error">{t('architectures.managerOnly')}</p></div>
     return <NewArchitecture specification={specification} />
   }
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <Breadcrumbs items={[
-        { label: t('specifications.title'), to: '/company/specifications' },
-        { label: specification.title, to: specificationPath(specification.id) },
-        { label: architecture.title },
-      ]} />
-      <div className="page-header">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="page-title">{architecture.title}</h1>
-            <span className="text-sm text-gray-400">{t('specifications.version', { version: architecture.version })}</span>
-            <StatusBadge status={architecture.status} />
-          </div>
-          <ArchitectureVersionLine architecture={architecture} />
-          <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-            {architecture.drafted_by && <span>{t('specifications.draftedBy', { who: architecture.drafted_by })}</span>}
-            {architecture.approved_by && architecture.approved_at && (
-              <span>{t('specifications.approvedBy', { who: architecture.approved_by, date: formatDate(architecture.approved_at) })}</span>
+    <div className="page-container max-w-4xl space-y-4">
+      <PageHeader
+        breadcrumbs={[
+          { label: t('specifications.title'), to: '/company/specifications' },
+          { label: specification.title, to: specificationPath(specification.id) },
+          { label: architecture.title },
+        ]}
+        title={architecture.title}
+        subtitle={(
+          <span className="block space-y-1.5">
+            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
+              <span className="tabular-nums text-gray-300">{t('specifications.version', { version: architecture.version })}</span>
+              <StatusBadge status={architecture.status} />
+              {architecture.drafted_by && <span>{t('specifications.draftedBy', { who: architecture.drafted_by })}</span>}
+              {architecture.approved_by && architecture.approved_at && (
+                <span>{t('specifications.approvedBy', { who: architecture.approved_by, date: formatDate(architecture.approved_at) })}</span>
+              )}
+              {architecture.supersedes_id !== null && (
+                <Link to={architecturePath(specification.id, architecture.supersedes_id)} className="text-brand-300 hover:underline">
+                  {t('specifications.supersedes', { id: architecture.supersedes_id })}
+                </Link>
+              )}
+              <CheckSummary check={architecture.check} />
+            </span>
+            <ArchitectureVersionLine architecture={architecture} />
+            {architecture.written_path && architecture.written_at && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-300">
+                <FolderOutput size={12} aria-hidden="true" />
+                {t('architectures.writtenTo', { path: architecture.written_path, date: formatDate(architecture.written_at), hash: (architecture.written_sha256 ?? '').slice(0, 12) })}
+              </span>
             )}
-            {architecture.supersedes_id !== null && (
-              <Link to={architecturePath(specification.id, architecture.supersedes_id)} className="text-brand-300 hover:underline">
-                {t('specifications.supersedes', { id: architecture.supersedes_id })}
-              </Link>
-            )}
-            <CheckSummary check={architecture.check} />
-          </p>
-          {architecture.written_path && architecture.written_at && (
-            <p className="text-xs text-emerald-300">
-              {t('architectures.writtenTo', { path: architecture.written_path, date: formatDate(architecture.written_at), hash: (architecture.written_sha256 ?? '').slice(0, 12) })}
-            </p>
-          )}
-        </div>
-      </div>
+          </span>
+        )}
+      />
 
       {editing ? (
         <ArchitectureEditor
@@ -461,38 +485,38 @@ export default function ArchitectureDetail() {
         <>
           <SourcesConsulted sources={architecture.sources ?? []} headingId="architecture-sources" />
           {architecture.overview && (
-            <section aria-labelledby="architecture-overview" className="card p-4">
-              <h2 id="architecture-overview" className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">{t('architectures.overview')}</h2>
-              <p className="text-sm text-gray-200 whitespace-pre-wrap">{architecture.overview}</p>
-            </section>
+            <Panel title={t('architectures.overview')}>
+              <p className={`${READABLE_TEXT} p-3`}>{architecture.overview}</p>
+            </Panel>
           )}
           {canWrite && <Actions architecture={architecture} onEdit={() => setEditing(true)} />}
           <CheckPanel architecture={architecture} />
-          <section aria-labelledby="architecture-questions" className="card p-4 space-y-2">
-            <h2 id="architecture-questions" className="text-sm font-semibold text-white">{t('specifications.questions.title')}</h2>
+          <Panel title={t('specifications.questions.title')}
+            count={architecture.questions.length > 0
+              ? <CountPill count={architecture.questions.length} label={t('specifications.questions.countLabel', { count: architecture.questions.length })} />
+              : undefined}>
             {architecture.questions.length === 0 ? (
-              <p className="text-sm text-gray-500">{t('architectures.questions.none')}</p>
+              <p className="px-3 py-2.5 text-[13px] text-gray-400">{t('architectures.questions.none')}</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="data-list">
                 {architecture.questions.map((_, index) => (
                   <QuestionRow key={index} architecture={architecture} index={index} canAnswer={canWrite && architecture.status === 'draft'} />
                 ))}
               </ul>
             )}
-          </section>
+          </Panel>
           <Modules architecture={architecture} />
           <Interfaces architecture={architecture} />
           <Decisions architecture={architecture} />
-          <section aria-labelledby="architecture-conventions" className="card p-4 space-y-2">
-            <h2 id="architecture-conventions" className="text-sm font-semibold text-white">{t('architectures.conventions.title')}</h2>
+          <Panel title={t('architectures.conventions.title')}>
             {architecture.conventions.length === 0 ? (
-              <p className="text-sm text-gray-500">{t('architectures.conventions.none')}</p>
+              <p className="px-3 py-2.5 text-[13px] text-gray-400">{t('architectures.conventions.none')}</p>
             ) : (
-              <ul className="list-disc space-y-1 pl-5 text-sm text-gray-200">
+              <ul className="max-w-prose list-disc space-y-1 py-2.5 pl-8 pr-3 text-[13px] leading-relaxed text-gray-200">
                 {architecture.conventions.map((convention, i) => <li key={i}>{convention}</li>)}
               </ul>
             )}
-          </section>
+          </Panel>
           <ArchitectureHistory architecture={architecture} />
           <MarkdownView architecture={architecture} />
         </>

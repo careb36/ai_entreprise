@@ -1,39 +1,43 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { FlaskConical, Loader2 } from 'lucide-react'
+import { Building2, FlaskConical } from 'lucide-react'
 import { FindingOutcomes, FindingStatusBadge } from '../components/FindingOutcomes'
+import { LoadErrorAlert, LoadingLine } from '../components/knowledge/PageStates'
+import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
 import { useFindings } from '../hooks/useFindings'
 import { errorDetail, type LoopFinding } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 
 const findingPath = (id: number) => `/company/findings/${id}`
 
-function FindingCard({ finding }: { finding: LoopFinding }) {
+function FindingRow({ finding }: { finding: LoopFinding }) {
   const { t } = useTranslation()
   const headingId = `finding-${finding.id}`
   return (
-    <article aria-labelledby={headingId} className="card p-4 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h2 id={headingId} className="text-base font-semibold text-gray-100">
-          <Link to={findingPath(finding.id)} className="hover:text-white hover:underline">{finding.title}</Link>
-        </h2>
-        <FindingStatusBadge status={finding.status} />
-      </div>
-      <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
-        <dt className="text-gray-400">{t('findings.source')}</dt>
-        <dd className="text-gray-200">
-          {finding.source ?? t('findings.noSource')}
-          {finding.source_ref && <> · <code className="text-gray-300">{finding.source_ref}</code></>}
-        </dd>
-        <dt className="text-gray-400">{t('findings.targetMeasure')}</dt>
-        <dd className="text-gray-200">
-          {finding.target_measure
-            ? <code className="whitespace-pre-wrap break-words">{finding.target_measure}</code>
-            : t('findings.noTargetMeasure')}
-        </dd>
-      </dl>
-      <FindingOutcomes outcomes={finding.outcomes} label={t('findings.outcomes.caption', { title: finding.title })} />
-    </article>
+    <li className="data-row py-3">
+      <article aria-labelledby={headingId} className="space-y-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h3 id={headingId} className="min-w-0 text-[13px] font-semibold text-gray-100">
+            <Link to={findingPath(finding.id)} className="rounded-sm hover:text-brand-300 hover:underline">{finding.title}</Link>
+          </h3>
+          <FindingStatusBadge status={finding.status} />
+        </div>
+        <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
+          <dt className="text-meta sm:leading-[1.125rem]">{t('findings.source')}</dt>
+          <dd className="min-w-0 break-words text-gray-200">
+            {finding.source ?? t('findings.noSource')}
+            {finding.source_ref && <> · <code className="text-gray-300">{finding.source_ref}</code></>}
+          </dd>
+          <dt className="text-meta sm:leading-[1.125rem]">{t('findings.targetMeasure')}</dt>
+          <dd className="min-w-0 text-gray-200">
+            {finding.target_measure
+              ? <code className="whitespace-pre-wrap break-words">{finding.target_measure}</code>
+              : t('findings.noTargetMeasure')}
+          </dd>
+        </dl>
+        <FindingOutcomes outcomes={finding.outcomes} label={t('findings.outcomes.caption', { title: finding.title })} />
+      </article>
+    </li>
   )
 }
 
@@ -50,34 +54,24 @@ export default function CompanyFindings() {
   const findings = query.data?.findings ?? []
 
   return (
-    <div className="page-container max-w-5xl space-y-6">
-      <div className="page-header">
-        <div>
-          <div className="flex items-center gap-2">
-            <FlaskConical className="text-brand-400" size={22} aria-hidden="true" />
-            <h1 className="page-title">{t('findings.title')}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">{t('findings.subtitle')}</p>
-        </div>
-      </div>
+    <div className="page-container max-w-5xl space-y-4">
+      <PageHeader title={t('findings.title')} subtitle={t('findings.subtitle')} />
 
       {companyId === null ? (
-        <p role="status" className="card p-4 text-sm text-gray-300">{t('findings.noCompany')}</p>
+        <EmptyState icon={Building2} title={t('findings.noCompany')} dashed />
       ) : query.isPending ? (
-        <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-          <Loader2 size={15} className="animate-spin" aria-hidden="true" /> {t('findings.loading')}
-        </div>
+        <LoadingLine>{t('findings.loading')}</LoadingLine>
       ) : query.isError ? (
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('findings.loadError', { message: errorDetail(query.error) })}</span>
-          <button type="button" onClick={() => query.refetch()} className="underline">{t('common.retry')}</button>
-        </div>
+        <LoadErrorAlert onRetry={() => query.refetch()}>{t('findings.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
       ) : findings.length === 0 ? (
-        <p role="status" className="card p-4 text-sm text-gray-300">{t('findings.empty')}</p>
+        <EmptyState icon={FlaskConical} title={t('findings.empty')} dashed />
       ) : (
-        <div className="space-y-4">
-          {findings.map(finding => <FindingCard key={finding.id} finding={finding} />)}
-        </div>
+        <Panel title={t('findings.listTitle')}
+          count={<CountPill count={findings.length} label={t('findings.countLabel', { count: findings.length })} />}>
+          <ul className="data-list">
+            {findings.map(finding => <FindingRow key={finding.id} finding={finding} />)}
+          </ul>
+        </Panel>
       )}
     </div>
   )

@@ -7,12 +7,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ClipboardList, Loader2, Pencil, Sparkles } from 'lucide-react'
+import { Building2, ClipboardList, Pencil, Sparkles } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail } from '../services/api'
 import { type Specification, useCreateSpecification, useDraftSpecification, useSpecifications } from '../services/specifications'
 import { SpecificationEditor } from '../components/SpecificationEditor'
 import { CheckSummary, StatusBadge } from '../components/SpecificationBadges'
+import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
+import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
 import { useAppStore } from '../store/useAppStore'
 
 // Re-exported for the pages that import them from here.
@@ -25,14 +27,18 @@ export function specificationPath(id: number) {
 function SpecificationRow({ specification }: { specification: Specification }) {
   const { t } = useTranslation()
   return (
-    <li className="card flex flex-wrap items-center gap-2 p-4 text-xs text-gray-400">
-      <Link to={specificationPath(specification.id)} className="text-sm font-semibold text-white hover:text-brand-300">
-        {specification.title}
-      </Link>
-      <span>{t('specifications.version', { version: specification.version })}</span>
+    <li className="data-row grid gap-x-4 gap-y-1.5 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center">
+      <div className="min-w-0">
+        <Link to={specificationPath(specification.id)} className="block truncate rounded-sm text-[13px] font-semibold text-gray-100 hover:text-brand-300">
+          {specification.title}
+        </Link>
+        <p className="text-meta mt-0.5 flex flex-wrap gap-x-2">
+          <span className="tabular-nums">{t('specifications.version', { version: specification.version })}</span>
+          {specification.drafted_by && <span>{t('specifications.draftedBy', { who: specification.drafted_by })}</span>}
+        </p>
+      </div>
       <StatusBadge status={specification.status} />
-      {specification.drafted_by && <span>{t('specifications.draftedBy', { who: specification.drafted_by })}</span>}
-      <span className="ml-auto"><CheckSummary check={specification.check} /></span>
+      <span className="sm:text-right"><CheckSummary check={specification.check} /></span>
     </li>
   )
 }
@@ -49,49 +55,39 @@ function AskThePO({ companyId }: { companyId: number }) {
   }
 
   return (
-    <section aria-labelledby="specifications-ask" className="card p-4 space-y-3">
-      <h2 id="specifications-ask" className="text-sm font-semibold text-white">{t('specifications.askPO')}</h2>
-      <p className="text-xs text-gray-500">{t('specifications.briefHint')}</p>
-      <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3">
+    <Panel title={t('specifications.askPO')}>
+      <form onSubmit={e => { e.preventDefault(); submit() }} className="space-y-3 p-3">
+        <p className="max-w-prose text-xs text-gray-400">{t('specifications.briefHint')}</p>
         <label className="block">
           <span className="input-label">{t('specifications.briefLabel')}</span>
           <textarea value={brief} onChange={e => setBrief(e.target.value)} rows={4} maxLength={4000} required className="input w-full"
             placeholder={t('specifications.briefPlaceholder')} />
         </label>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={draft.isPending || !brief.trim()} className="btn btn-primary">
-            {draft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
+          <button type="submit" disabled={draft.isPending || !brief.trim()} className="btn btn-primary btn-sm">
+            {draft.isPending ? <Spinner /> : <Sparkles size={14} aria-hidden="true" />}
             {draft.isPending ? t('specifications.drafting') : t('specifications.askPO')}
           </button>
           {draft.isError && (
-            <span role="alert" className="text-sm text-red-300">{t('specifications.draftError', { message: errorDetail(draft.error) })}</span>
+            <span role="alert" className="text-[13px] text-red-300">{t('specifications.draftError', { message: errorDetail(draft.error) })}</span>
           )}
         </div>
       </form>
-    </section>
+    </Panel>
   )
 }
 
-function WriteYourself({ companyId }: { companyId: number }) {
+function WriteYourself({ companyId, onClose }: { companyId: number; onClose: () => void }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const create = useCreateSpecification()
-  const [writing, setWriting] = useState(false)
-
-  if (!writing) {
-    return (
-      <button type="button" onClick={() => setWriting(true)} className="btn btn-secondary">
-        <Pencil size={15} aria-hidden="true" /> {t('specifications.writeYourself')}
-      </button>
-    )
-  }
   return (
     <section aria-labelledby="specifications-write" className="space-y-2">
-      <h2 id="specifications-write" className="text-sm font-semibold text-white">{t('specifications.editor.newTitle')}</h2>
+      <h2 id="specifications-write" className="panel-title">{t('specifications.editor.newTitle')}</h2>
       <SpecificationEditor
         saving={create.isPending}
         error={create.isError ? errorDetail(create.error) : null}
-        onCancel={() => { create.reset(); setWriting(false) }}
+        onCancel={() => { create.reset(); onClose() }}
         onSave={body => create.mutate({ company_id: companyId, ...body }, { onSuccess: specification => navigate(specificationPath(specification.id)) })}
       />
     </section>
@@ -105,52 +101,40 @@ export default function Specifications() {
   const canWrite = role === 'Owner' || role === 'Manager'
   const query = useSpecifications(companyId)
   const specifications = query.data?.specifications ?? []
+  const [writing, setWriting] = useState(false)
+  const ready = companyId !== null && !query.isLoading && !query.isError
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <div className="page-header">
-        <div>
-          <div className="flex items-center gap-2">
-            <ClipboardList className="text-brand-400" size={22} aria-hidden="true" />
-            <h1 className="page-title">{t('specifications.title')}</h1>
-          </div>
-          <p className="text-gray-400 mt-1">{t('specifications.subtitle')}</p>
-        </div>
-      </div>
+    <div className="page-container max-w-5xl space-y-4">
+      <PageHeader title={t('specifications.title')} subtitle={t('specifications.subtitle')}
+        actions={ready && canWrite && !writing ? (
+          <button type="button" onClick={() => setWriting(true)} className="btn-tool">
+            <Pencil size={13} aria-hidden="true" /> {t('specifications.writeYourself')}
+          </button>
+        ) : undefined} />
 
       {companyId === null ? (
-        <div className="empty-state">
-          <p className="empty-state-title">{t('specifications.selectCompany')}</p>
-          <Link to="/companies/select" className="btn btn-ghost">{t('workspace.selectCompany', { defaultValue: 'Select company' })}</Link>
-        </div>
+        <EmptyState icon={Building2} title={t('specifications.selectCompany')} dashed
+          actions={<Link to="/companies/select" className="btn-tool">{t('workspace.selectCompany', { defaultValue: 'Select company' })}</Link>} />
       ) : query.isLoading ? (
-        <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
-          <Loader2 size={15} className="animate-spin" aria-hidden="true" /> {t('specifications.loading')}
-        </div>
+        <LoadingLine>{t('specifications.loading')}</LoadingLine>
       ) : query.isError ? (
-        <div role="alert" className="alert-error flex flex-wrap items-center gap-2 text-sm">
-          <span>{t('specifications.loadError', { message: errorDetail(query.error) })}</span>
-          <button type="button" onClick={() => query.refetch()} className="underline">{t('common.retry')}</button>
-        </div>
+        <LoadErrorAlert onRetry={() => query.refetch()}>{t('specifications.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
       ) : (
         <>
+          {canWrite && writing && <WriteYourself companyId={companyId} onClose={() => setWriting(false)} />}
           {specifications.length === 0 ? (
-            <div className="empty-state rounded-card border border-dashed border-surface-700">
-              <ClipboardList size={28} className="empty-state-icon" aria-hidden="true" />
-              <p className="empty-state-title">{t('specifications.empty')}</p>
-              <p className="empty-state-desc">{canWrite ? t('specifications.emptyHint') : t('specifications.emptyViewer')}</p>
-            </div>
+            <EmptyState icon={ClipboardList} title={t('specifications.empty')} dashed
+              description={canWrite ? t('specifications.emptyHint') : t('specifications.emptyViewer')} />
           ) : (
-            <ul className="space-y-2" aria-label={t('specifications.title')}>
-              {specifications.map(specification => <SpecificationRow key={specification.id} specification={specification} />)}
-            </ul>
+            <Panel title={t('specifications.listTitle')}
+              count={<CountPill count={specifications.length} label={t('specifications.countLabel', { count: specifications.length })} />}>
+              <ul className="data-list" aria-label={t('specifications.title')}>
+                {specifications.map(specification => <SpecificationRow key={specification.id} specification={specification} />)}
+              </ul>
+            </Panel>
           )}
-          {canWrite && (
-            <>
-              <AskThePO companyId={companyId} />
-              <WriteYourself companyId={companyId} />
-            </>
-          )}
+          {canWrite && <AskThePO companyId={companyId} />}
         </>
       )}
     </div>
