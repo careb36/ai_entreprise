@@ -1,0 +1,30 @@
+{
+  "$comment": "The Playwright releases images.yml builds the browser sandbox image for (issue #315), each tagged <release>-playwright-<version> and recorded by digest. Each release names its lockfile folder (npm ci checks every package against its integrity hash) and the Chrome Headless Shell its playwright-core's browsers.json names, with the sha256 of each architecture's archive (checked by the Dockerfile with sha256sum -c). The default is the one the Dockerfile's ARG defaults build; it is also tagged <release> and, for a stable release, latest. playwright_matrix.py checks this file and prints the workflow's matrix. Adding a release: docs/design/EXECUTION_ENVIRONMENT.md.",
+  "default": "1.64.1",
+  "releases": [
+    {
+      "playwright": "1.63.0",
+      "lockfile_dir": "playwright/1.63.0",
+      "headless_shell": {
+        "revision": "1243",
+        "version": "153.0.8010.12",
+        "sha256": {
+          "amd64": "a9da028861a0cf789ff25c2fed45f5f1aaf969ed9247835b6a7821a4f7af9d1d",
+          "arm64": "d433c45172c7836e38124fe545f767b02210bfb43a6262f08a297473a8e91c99"
+        }
+      }
+    },
+    {
+      "playwright": "1.64.1",
+      "lockfile_dir": ".",
+      "headless_shell": {
+        "revision": "1248",
+        "version": "156.0.8078.4",
+        "sha256": {
+          "amd64": "c3e50596aef52c58f8fda3c6b3411c33d34c88b177b3ed1c2243359fd3b8ba20",
+          "arm64": "81ab9d4d3c301dc5fdfb6c541b9e6632b16fc819a6a854460f40a76fe2b2c476"
+        }
+      }
+    }
+  ]
+}

@@ -95,6 +95,14 @@ class Settings(BaseSettings):
     # e2e), e.g. one built from vscode-daemon/images/browser. Empty keeps
     # DELIVERY_SANDBOX_IMAGE for it, as before.
     DELIVERY_BROWSER_IMAGE: str = ""
+    # Container mode: the browser image of each Playwright release, as
+    # "1.63.0=ghcr.io/…@sha256:…,1.64.1=ghcr.io/…@sha256:…" (the digests
+    # images.yml prints). A browser e2e command runs in the image of the
+    # project's pinned release (read by the daemon from its lockfile), falls
+    # back to DELIVERY_BROWSER_IMAGE with the mismatch recorded, and is not
+    # run (unverifiable) when the version cannot be told. An entry without a
+    # digest is refused. Empty keeps one image for every project, as before.
+    DELIVERY_BROWSER_IMAGES: str = ""
     # The whole output of the install, the tests and the application check,
     # uploaded by the daemon to the JetStream object store FABRIQUE_RUN_LOGS
     # and hashed here on receipt (services/workspace/run_logs.py). Objects
