@@ -3,7 +3,7 @@
 **Version:** 1.1
 **Owner:** the repository owner (accepts risk); every contributor and agent meets it
 **Applies to:** FastAPI control plane, React/Vite frontend, LangGraph agents, the workspace daemon and NATS, PostgreSQL, Neo4j, the LLM proxy, Kubernetes deployments
-**Last reviewed:** 2026-11-15 — checked against the code and against Microsoft SDL practices with the `sdl-program` skill (`.claude/skills/sdl-program/`), issue #522
+**Last reviewed:** 2026-11-15 — checked against the code and against Microsoft SDL practices with the `sdl-program` skill (`.claude/skills/sdl-program/`), issue #522. 2026-11-18 — §5.4 and §17 (the exception register, the security metrics and the training notes) brought up to date by a programme reviewer with the same skill; the other sections were not re-checked on that date
 
 **How to read this document.** Each section mixes *what is built* (it cites
 the file that does it) and *requirements and targets* (rules every change is
@@ -537,62 +537,51 @@ workflow's own token does not start it. Commits and tags are not required to
 be signed. `.github/CODEOWNERS` names an owner for CI, the locks, the daemon,
 the bus, authentication, migrations and the architecture rules, but GitHub
 enforces it only once "Require review from Code Owners" is on for `main`
-(#182). The self-hosted runner is not ephemeral and shares its machine with
+(#182); on 2026-11-18 the repository's settings disagree on whether it is,
+and the intended state is an open owner decision (§17.1). The self-hosted runner is not ephemeral and shares its machine with
 the daemon; the decision record is `docs/design/SELF_HOSTED_RUNNER.md`.
 
 ### 5.4 Open advisories and their triage
 
-*Snapshot taken on 2026-10-29 (commit `6f343f7`); the counts were not re-read
-in the 2026-11-15 review, since the Dependabot API was not reachable from it.
-Re-read them with the commands in `.claude/skills/sdl-program/SKILL.md`, step 1.*
+*Read on 2026-11-18 at commit `8ddbe9f`; the commands are in §17.2. The
+previous snapshot (2026-10-29, commit `6f343f7`: 64 open Dependabot alerts,
+1 of them shipped to the browser) is in this file's history.*
 
-Dependabot reported 64 open alerts on `main`. That number mixes what reaches a
-browser with what only runs on a build machine, so it is worth separating:
+**What could be read.** `npm audit --omit=dev` (the surface a browser
+receives) and `npm audit` with the build tooling both report 0 advisories over
+`frontend/package-lock.json`. The dependency audit on `main`
+(`security-scan.yml`, job `dependencies`: `pip-audit` over the backend, proxy
+and daemon locks, `npm audit --omit=dev --audit-level=high`) passed on the
+same commit, and `.github/pip-audit-ignore.txt` holds no entry. The weekly
+Trivy scan of 2026-11-16 found no critical or high finding.
 
-| Surface | Advisories | Manifest |
-|---|---|---|
-| Shipped to the browser | 1 (`react-router`, moderate) | `frontend/package-lock.json` |
-| Build and test only | 62 — 2 critical, 15 high, 35 medium, 10 low | `frontend/package-lock.json` |
-| Test tooling | 1 (`pytest`, medium) | `backend/poetry.lock` |
+**What could not.** The Dependabot alerts API answered 403 to the session that
+read these numbers, so the number of open Dependabot alerts is **not known**
+on this date. Code scanning is not enabled on the repository (the API says
+so), so the Trivy SARIF that every pull request produces is not stored
+anywhere it can be counted (§17.1, entry E-08).
 
-`npm audit --omit=dev`, which is the surface a user actually receives, returns
-two entries for a single advisory.
+**What changed since the snapshot.** The advisories the snapshot discussed
+are closed by upgrades rather than by exceptions:
 
-**Build-only.** `vitest` and its worker pool `tinypool` (the two criticals),
-`vite`, `esbuild`, `electron` and `extract-zip` do not appear in the `dist/`
-bundle: the frontend is a Vite SPA built to static assets. The `frontend`
-service in `docker-compose.yml` runs the Vite dev server with bind mounts — it
-is a development container, not a deployment artifact, and it is the only place
-where these packages execute. They matter for a compromised build agent, not for
-a visitor.
+- `react-router-dom` is at 7.18.5 (`frontend/package.json`), the version that
+  patches GHSA-wrjc-x8rr-h8h6 and GHSA-337j-9hxr-rhxg. `safeReturnPath()` in
+  `frontend/src/lib/returnPath.ts` stays as defence in depth on every
+  user-controlled destination; it is no longer an exception (§17.1, E-12).
+- `pytest` is at 9.2.0 in `backend/poetry.lock`, past the 9.0.3 fix of
+  GHSA-6w46-j5rx-g56g.
+- `vite` 8.3.8, `vitest` 5.1.0 and `electron` 45.3.1 are in the lockfile, the
+  majors the snapshot said were held back.
 
-**`react-router` — GHSA-wrjc-x8rr-h8h6 (open redirect via a backslash in
-`<Link>` / `useNavigate`) and GHSA-337j-9hxr-rhxg (constructor injection in
-`deserializeErrors()`).** Neither is fixed inside v6; both are patched in
-`react-router-dom` 7.18.5, a major migration.
+**Build-only versus shipped.** The distinction still holds for whatever is
+reported next: `vitest`, `vite`, `esbuild` and `electron` do not appear in the
+`dist/` bundle (a Vite SPA built to static assets); the `frontend` service in
+`docker-compose.yml` runs the dev server and is a development container, not
+a deployment artifact. An advisory there matters for a compromised build
+agent, not for a visitor, and is triaged by that surface.
 
-- The `deserializeErrors()` advisory requires **SSR hydration**. This frontend
-  mounts with `createRoot`; there is no `hydrateRoot` and no `renderToString`,
-  so the vulnerable path does not exist here.
-- The open-redirect advisory needs a user-controlled destination reaching
-  `<Link>` or `useNavigate`. Every such call site — `Login`, `Register`,
-  `CompanySelect` — passes through `safeReturnPath()` in
-  `frontend/src/lib/returnPath.ts`, which accepts only a path starting with a
-  single `/` and rejects `//`, `/\`, any backslash, control characters, their
-  percent-encoded forms, and the auth-loop paths. Ten unit tests cover it, and
-  the advisory's own vector, a backslash, is one of the rejected cases.
-
-That is a compensating control, not a fix: the v7 migration stays on the
-roadmap.
-
-**`pytest` — GHSA-6w46-j5rx-g56g (temporary directory handling).** Patched in
-9.0.3, and the pin is `^8.1.1`. This one is worth taking: it is test tooling
-only.
-
-**Why the majors are not taken blind.** `vite` 5→8, `vitest` 3→5, `electron`
-→45 and `react-router` 6→7 each change APIs the build depends on. Each `ignore`
-in `.github/dependabot.yml` carries its reason next to it, so an upgrade is a
-planned piece of work with its own tests instead of a red PR every Monday.
+**Majors still held back.** Each `ignore` in `.github/dependabot.yml` is an
+entry of the exception register (§17.1), with whether its reason still holds.
 
 ---
 
@@ -1162,6 +1151,7 @@ These are non-negotiable rules. Apply them in every task.
 8. **Encode output.** Escape or sanitize before inserting into HTML, JSON, SQL, logs.
 9. **Keep dependencies up to date.** Pin, scan, and patch.
 10. **Design for auditability.** Every agent and service action must be traceable to a user and tool call.
+11. **A claim is not an observation.** Follow the design rules of `docs/POSITIONING.md`: a claim and an observation never share a field, an agent's report of its own test run is a claim, and a hash or signature is never accepted from the party being recorded.
 
 ---
 
@@ -1302,3 +1292,128 @@ configuration tested), and findings, each with its WSTG id, severity by §9.2,
 the steps to reproduce, the evidence, and a fix; plus the tests that were not
 run and why. Findings are filed as issues; each fix ships with a test that
 reproduces it, added to the suite for its area.
+
+
+## 17. Security Programme: Exceptions, Metrics and Training
+
+This section is kept by the `sdl-program` skill (`.claude/skills/sdl-program/`,
+Microsoft SDL practices 1, 9 and 10). The repository owner accepts risk; every
+contributor and every agent meets the standard (`CLAUDE.md`, `AGENTS.md`); a
+programme reviewer, person or agent, keeps this section current once a
+quarter and before a release tag. Entries written by an agent are proposals
+until the owner accepts them in the pull request that adds them.
+
+### 17.1 Exception register
+
+Every accepted or pending risk: why it exists, what limits it meanwhile, how
+it ends, when it is looked at again and who accepted it. An entry whose date
+has passed goes back to the owner. "Not recorded" means the repository does
+not say who accepted it; the owner confirms or removes the entry.
+
+*Read on 2026-11-18 at commit `8ddbe9f`.*
+
+| Id | Exception | Why | Interim mitigation | How it ends | Review by | Accepted by |
+|---|---|---|---|---|---|---|
+| E-01 | `pypi:cffi`, licence MIT-0 (`.github/licence-exceptions.txt`) | MIT-0 is not on the allowlist of `scripts/licence_scan.py`; it comes in through `pynacl` and `cryptography` (backend, daemon) | The scan matches only this licence for this package; a licence change stops the match | The owner adds MIT-0 to `ALLOWED`, or keeps the exception | 2026-12-31 | **Open owner decision**, not accepted |
+| E-02 | `pypi:psycopg2-binary`, LGPL | LGPL with the OpenSSL linking exception; imported unmodified and dynamically by the backend and the proxy | Unmodified use; the obligation is the LGPL source on request when an image ships it | The owner accepts LGPL for an unmodified database driver, or the code moves to another driver | 2026-12-31 | **Open owner decision**, not accepted |
+| E-03 | `pypi:regex`, Apache-2.0 AND CNRI-Python | CNRI-Python (the parts derived from CPython's `sre`) is not on the allowlist; it comes in through `tiktoken` | As E-01 | The owner adds CNRI-Python to `ALLOWED`, or keeps the exception | 2026-12-31 | **Open owner decision**, not accepted |
+| E-04 | `npm:caniuse-lite`, CC-BY-4.0 | Browser-support data reaching the runtime set through `autoprefixer`, which `frontend/package.json` lists in `dependencies`; none of it is in the built bundle | Build-time only | Move `autoprefixer`, `postcss` and `tailwindcss` to `devDependencies`, or accept CC-BY-4.0 for data | 2026-12-31 | **Open owner decision**, not accepted |
+| E-05 | `npm:cldrjs`, UNKNOWN | The package declares MIT in the deprecated `licenses` array, which `package-lock.json` does not record; it comes in through `globalize` | The package's own `LICENSE-MIT` | The owner confirms MIT, or the scan learns to read the legacy field | 2026-12-31 | **Open owner decision**, not accepted |
+| E-06 | Dependabot `ignore`: `sqlmodel` minor and patch (backend) | 0.0.48 and later require timezone-aware datetimes; `backend/app` still calls `datetime.utcnow()` (74 calls on this date, `grep -rn utcnow backend/app`). Locked 0.0.38, latest 0.0.50 | Dependabot still opens security updates; the pip-audit job fails on a known vulnerability | A migration of the data model to aware datetimes, then remove the ignore | Not set | Not recorded |
+| E-07 | Dependabot `ignore`: `react`, `react-dom`, `@types/react`, `@types/react-dom` majors | React 19 breaks `tsc` and the frontend tests while the pair is on 18. Locked 18.3.1, latest 19.3.1 (`npm outdated`) | As E-06 (`npm audit --omit=dev` gates pull requests) | A React 19 migration with its own tests | Not set | Not recorded |
+| E-08 | The Trivy file scan on pull requests does not gate, and its SARIF goes nowhere | The `security` job of `security-scan.yml` sets no `exit-code`, its upload step has `continue-on-error: true`, and code scanning is not enabled on the repository, so the results are not stored. That job is also the one status check `main` requires | The weekly baseline (`security-baseline.yml`) runs Trivy failing on CRITICAL and HIGH; pull requests are gated by pip-audit, npm audit, the licence scan, gitleaks and Semgrep | Enable code scanning, or make the pull-request scan fail on CRITICAL and HIGH, and decide which check `main` requires | Not set | Not recorded |
+| E-09 | Dependabot `ignore`: `tailwindcss` majors | Tailwind 4 moves its PostCSS plugin and needs a config migration; #463 broke the build. Locked 3.4.19, latest 4.3.5 | As E-07 | A Tailwind 4 migration | Not set | Not recorded |
+| E-10 | Dependabot `ignore`: `vite`, `vitest`, `@vitejs/plugin-react` majors | The reason written next to it ("the project is on vite ^5") **no longer holds**: the lock has `vite` 8.3.8 and `@vitejs/plugin-react` 6. No newer major exists on this date, so it holds nothing back yet | None needed today | The owner rewrites the reason or removes the ignore | Not set | Not recorded |
+| E-11 | Dependabot `ignore`: `python` base image minor and major (the five Python images and compose) | The backend's dependencies publish no wheels for newer Pythons and the slim image has no compiler; not re-verified on this date | 3.12.x patch updates still arrive | Move when the wheels exist | Not set | Not recorded |
+| E-13 | `slsa-framework/slsa-github-generator` referenced by tag `@v2.1.0`, not by sha | The generator runs only when called by a release tag | `backend/tests/test_workflow_pinning.py` allows that one reference and no other; Dependabot updates it | Upstream support for sha calls | Not set | Not recorded |
+
+Closed entries, kept for the history:
+
+| Id | Exception | Closed on | How |
+|---|---|---|---|
+| E-12 | `safeReturnPath()` as the compensating control for GHSA-wrjc-x8rr-h8h6 and GHSA-337j-9hxr-rhxg (`react-router` 6) | 2026-11-18 (read) | `react-router-dom` 7.18.5 carries the fix; the function stays as defence in depth |
+| E-14 | `safety check \|\| true`, a dependency check that never failed | 2026-11-15 | PR #523: `pip-audit` and `npm audit` fail the job, exceptions only in `.github/pip-audit-ignore.txt` (empty on 2026-11-18) |
+
+**Open owner decisions.** Nothing in this list is decided by the reviewer:
+
+1. E-01 to E-05, the five licence exceptions, before 2026-12-31.
+2. "Require review from Code Owners" on `main` (#182), and how it fits
+   `CONTRIBUTING.md` rule 5 (agents merge pull requests). The settings read
+   on 2026-11-18 (`gh api repos/{owner}/{repo}/branches/main/protection` and
+   `.../rulesets`) disagree with each other: the classic branch protection
+   has `require_code_owner_reviews: true` with 0 required approvals, and both
+   active rulesets (`main`, `factory-status-gates`) have
+   `require_code_owner_review: false`. The owner says which state is meant,
+   and §5.3 is corrected to it.
+3. E-06 to E-11 and E-13 have no review date and no recorded acceptor: the
+   owner sets both, or removes the entry.
+
+### 17.2 Security metrics
+
+Every number names its source and the date it was read. A number the reviewer
+could not read is marked **not read**, never estimated.
+
+*Read on 2026-11-18 at commit `8ddbe9f`, unless the row says otherwise.*
+
+| Metric | Value | Source |
+|---|---|---|
+| Open security issues | 0 | `gh api "repos/{owner}/{repo}/issues?labels=security&state=open"` |
+| Open security issues by severity | **Not measurable**: the repository has no severity labels from §9.2 (the `risk:*` labels are the task risk tier, not the bug bar) | `gh api repos/{owner}/{repo}/labels` |
+| Open Dependabot alerts | **Not read**: the API answered 403 to the reviewing session. Last known: 64 on 2026-10-29 (§5.4) | `gh api repos/{owner}/{repo}/dependabot/alerts` |
+| Advisories in the shipped frontend | 0 (0 with the build tooling too) | `cd frontend && npm audit --omit=dev`; `npm audit` |
+| Python advisories (backend, proxy and daemon locks) | 0: the `dependencies` job passed on `8ddbe9f`; no ignore entries | `security-scan.yml` run 44364348276; `.github/pip-audit-ignore.txt` |
+| Code-scanning alerts | **Not available**: code scanning is not enabled (E-08) | `gh api repos/{owner}/{repo}/code-scanning/alerts` |
+| Weekly baseline | Failed on 2026-11-02, 2026-11-09 and 2026-11-16. On 2026-11-16 only gitleaks failed; Semgrep and Trivy passed | `gh run list --workflow security-baseline.yml`, run 43798024603 |
+| gitleaks findings in the history | 22 on 2026-11-16 (22 on 2026-11-09, 2 on 2026-11-02): 11 `generic-api-key`, 8 `aws-access-token`, 2 `private-key`, 1 `curl-auth-header`, in `backend/tests/test_standards.py`, `test_developer_tools.py`, `test_agent_tools.py`, `AGENTS.md` and `docs/threat_model.json`. **Not triaged**: the paths suggest test fixtures and examples, which nobody has confirmed | The job log of run 43798024603 (values redacted by `--redact`) |
+| Time to fix | 9 issues labelled `security` closed from 2026-10-30 to 2026-11-18: median 12.7 h, worst 26.6 h (#327). The two filed as vulnerabilities, #524 and #525, closed in 2.3 h and 1.2 h. Measured from opened to closed, not to a release; **not comparable with the bug bar**, since none carries a severity | `gh api "repos/{owner}/{repo}/issues?labels=security&state=all"` |
+| Dependency age, backend | 10 top-level packages behind: 1 major (`bcrypt` 4.3.0 → 5.0.0), 1 held by E-06 (`sqlmodel`), `sqlalchemy` 2.0.57 → 2.1.9, 7 minor or patch | `cd backend && poetry show --outdated --top-level` |
+| Dependency age, LLM proxy | 1 patch behind (`sqlalchemy` 2.1.8 → 2.1.9) | `cd llm-proxy && poetry show --outdated --top-level` |
+| Dependency age, daemon | **Not read** | — |
+| Dependency age, frontend | 17 behind: 6 majors (`react`, `react-dom`, `@types/react`, `@types/react-dom` held by E-07; `tailwindcss` held by E-09; `typescript` 5.9.3 → 7.0.2, not held), 11 minor or patch | `cd frontend && npm outdated` |
+| Dependabot pull requests | 0 open; the last merged was #607 on 2026-11-16 | `gh api "repos/{owner}/{repo}/pulls"` |
+| Third-party actions not pinned by sha | 1, the SLSA generator (E-13); the local reusable workflow `./.github/workflows/changes.yml` is not counted | `grep -rn "uses: " .github/workflows \| grep -v "@[0-9a-f]\{40\}"` |
+| Audit chain health | **Not read**: no staging deployment was reachable | `GET /v1/audit/chain` |
+| Person-led penetration test (§16) | **None on file**: no report has been filed since §16 was written | §16 |
+| Threat models (practice 10) | 11 of the 15 design documents added under `docs/design/` since 2026-10-29 have a threats section; `CODE_GRAPH.md`, `EXECUTION_ENVIRONMENT.md`, `SAVED_VIEWS.md` and `SELF_HOSTED_RUNNER.md` do not | `grep -nE "^#+.*(Threat\|STRIDE)" docs/design/*.md` |
+
+Compared with the previous review (§5.4 of 2026-10-29): the advisories in the
+shipped frontend went from 1 to 0; the weekly gitleaks findings rose from 2 to
+22 and are not triaged.
+
+### 17.3 Training notes
+
+The project's contributors are people and agents; both need the why, the what
+and the how for their role (SDL practice 10).
+
+**Agents.** The rules an agent follows are stated in `CLAUDE.md`, `AGENTS.md`,
+`.github/copilot-instructions.md` and §11 of this file. On 2026-11-18 the first
+three state the design rules of `docs/POSITIONING.md` (a claim and an
+observation never share a field; an agent's report of its own test run is a
+claim; hashes and signatures are never accepted from the party being
+recorded); §11 now points to them too (rule 11). The repository's skills give
+an agent the procedure: `threat-model` before a design that crosses a trust
+boundary, `sdl-review` before a pull request that touches a sensitive area,
+`sdl-program` for this section.
+
+**People.** `CONTRIBUTING.md`, Security onboarding, is the short path for a new
+contributor: §10 and §11 here, the design rules, the two skills and the
+lessons below.
+
+**Lessons from this repository.** Update this list when an incident or a near
+miss teaches something new.
+
+- **#39, `decision_signature` taken from the request body.** The hash that
+  proved a decision was supplied by the caller, so the party being recorded
+  could write its own proof. It is now computed by the server. The rule it
+  taught is rule 6 of the positioning: hashes and signatures are never
+  accepted from the party being recorded.
+- **#524, the access token in `localStorage`.** Any script in the page, an
+  XSS through agent output included, could read it. Browser sessions moved
+  to HttpOnly cookies with rotated refresh tokens (`docs/design/SESSIONS.md`).
+  Agent output is untrusted input wherever it is rendered.
+- **#525, console assistants outside the sandbox.** Their commands ran on the
+  host, past the daemon's sandbox floor and command policy. A new path that
+  runs a command goes through the same policy as the old ones.
+
+**Practice.** Threat modeling is learned by doing it: the count of design
+documents with a threats section is a row of §17.2.
