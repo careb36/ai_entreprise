@@ -138,6 +138,7 @@ Test files:
 | `test_orchestration_metrics.py` | Orchestration metric helpers |
 | `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
 | `test_gate_refutations.py` | The count of deliveries the gate before QA sent back, by problem (issue #549): every problem `delivery_gate` names, written by the real review cycle, parsed back to that name (platform parses the text, since it may not import the evidence); an unconfirmed delivery under its own key; the block at the rework limit counted with its problem; a reviewer's, a person's, the Quality gate's and the system's `NEEDS WORK:` left out, and the count kept apart from `count_qa_rework_requests`; `GET /v1/analytics/gate_refutations` per company, per sprint and over a period, another company's sprint 404, a reversed period 400 |
+| `test_rework_mentions.py` | Rework requests whose text names a missing module, package or import, before and after the grounded check (issue #549): the matching rule on real-shaped texts (the gate's send-back as the real review cycle writes it, `ModuleNotFoundError`, `No module named`, `cannot find package`, npm, pip, Rust, Java) and on texts that must not match; which task events are rework requests and from whom (the system's notes and a review's paired send-back left out); `GET /v1/analytics/missing_module_mentions` split at #503's merge by default and at a given cutoff, per sprint, another company's sprint 404, a reversed period 400 |
 | `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
@@ -363,7 +364,7 @@ Test files:
 | `test_sandbox_grading.py` | Grading candidate code in the sandbox (rsi-loop PR 12): the target measure and the bench's acceptance tests run in the daemon's container sandbox (faked at its boundary: a `docker` that records its arguments and runs the command on the host with only the `-e` variables) with the network off, the root, the build and the graders read-only and the image's content ID; a candidate `conftest.py`, `pytest.ini`, `pyproject.toml`, `sitecustomize.py`, `usercustomize.py`, a `pytest.py` shadow, the runner's `PYTHONPATH`/`PYTEST_ADDOPTS`/`PYTEST_PLUGINS`, a test the candidate adds that writes a result file, code that rewrites the report at exit, exits 0 before it or prints a forged frame never turn a failing measure into a pass; a long sleep, a kill by a limit, no runtime, a runtime that cannot start, no image named, an image not on the machine (never pulled), `bwrap` and a missing daemon module are `unmeasured`; the in-process path only with its flag, saying so. The network, the read-only mounts, a fork bomb and a memory hog run against a real runtime with `FABRIQUE_GRADING_TEST_IMAGE`, skipped otherwise |
 | `test_bench_grading.py` | The bench's grade: it reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass) with `scripts/bench/junit_xml.py`, which refuses a document type, an entity declaration or an external entity before anything is expanded or read (a report rewritten by the produced project's conftest leaves every criterion missing; issue #522), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read |
 | `test_bench_scorecard.py` | The bench's scorecard: first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; a failed collection is an `error` entry; the committed scorecards keep to the schema |
-| `test_bench_compare.py` | The bench's `compare.py`: it finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed reference compares clean with itself |
+| `test_bench_compare.py` | The bench's `compare.py`: it finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed reference compares clean with itself. The section ablation (`scripts/bench/ablation.py`, `ablate.sh`, issues #443 and #438): the section names are the backend's `prompt_budget` ones; a request is `each` or known optional names (prompt order, trimmed, case-insensitive), and an empty, unknown, required or mixed request is refused naming the known sections (`ablate.sh` exits 2 before starting anything); `each` runs the optional sections the baseline sent; each arm's delta is the arm less the baseline over the specs both ran in full (criteria from the person-written grade, rework requests, estimated prompt tokens, reported tokens), a spec stopped by the budget or run on one side only is left out, an unmeasured grade leaves the criteria delta null, an arm that still sent the section is not applied; cards of another commit, model, policy or sections off are refused, as are arms that do not match the plan; schema v4 checks the block and `sections_off` and still reads a v3 card; `scorecard.py write --sections-off` records them; the Markdown and `compare.py` print the deltas without judging them, even with no previous card; `run.sh` passes `BENCH_SECTIONS_OFF` to the backend as `PROMPT_SECTIONS_OFF` and to the card |
 | `test_bench_routing.py` | The bench by difficulty and model (issue #319): each entry splits its tasks by difficulty and model (`routing`, from `services/models/routing_record.py`), the card names its routing policy (`--policy`), schema v2 checks the split (and the optional band and cost) and still reads a v1 card, and two runs under different policies compare band by band and by model |
 | `test_bench_broker.py` | The bench's broker: `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached, and accepts a quiet broker of its own |
 | `test_bench_prompt_weight.py` | The bench's prompt weight (schema v3, issue #316 after #443): each task's latest run's `prompt_sections` weighed per section (estimated tokens sent and share, a cut section counted under the cut ones and not in the weight, the prompts with related code), a run without a measure counted apart (`prompt_sections_missing`), never as zero; the totals merge the specs' sums; `collect` reads the measures beside the board; the Markdown labels them estimated tokens apart from the provider's; the schema checks the object and still reads v1 and v2 cards; `compare.py` shows the sections before → after without judging them and judges the mean only with `--prompt-tokens`, never against a side with nothing measured; the five reference specifications keep task, requirement and specification titles unique, each fake plan covers every criterion once with its dependencies first, and each new fake producer passes every criterion of its specification while an empty project passes none |
@@ -575,12 +576,23 @@ plan; the optional row fields `difficulty_band`, `cost_cents` and
 per section, the prompts with sections cut and with related code, a run
 without a measure counted apart; `compare.py` shows it before → after and
 judges the mean per task only with `--prompt-tokens`.
+Schema v4 adds two optional fields for the section ablation (issues #443 and
+#438): `sections_off`, the prompt sections a run turned off
+(`BENCH_SECTIONS_OFF`, which `run.sh` passes to the backend as
+`PROMPT_SECTIONS_OFF`; empty by default), and `ablation`, which
+`scripts/bench/ablate.sh` writes onto a baseline's card after running the
+specifications once per section with it off (`scripts/bench/ablation.py`):
+per section, the criteria passed by the person-written tests, the rework
+requests and the estimated prompt and reported tokens of the arm beside the
+baseline's and their difference, over the specifications both ran in full.
+`compare.py` prints that table, never judging it.
 By default the models are `scripts/bench/fake_llm.py`, which answers each
 spec from its `fake/` folder (the PO's plan, QA's tests, the Developer's
 files, every review approved), and the run fails unless every spec completes
 with every criterion passed; `BENCH_LLM_URL` points it at a real proxy
 instead. `.github/workflows/bench.yml` runs the fake circuit on demand and
-nightly on the self-hosted runner, compares with the committed reference,
+nightly on the self-hosted runner (and `bench-pr.yml` on a pull request that
+touches the bench, CI below), compares with the committed reference,
 puts both in the job summary (also when the run failed, if a scorecard was written), opens an issue on a nightly regression and
 removes its containers. Its second job, `bench-real`, runs the bench on real
 models nightly and on demand (input `models: real`), only while the
@@ -674,10 +686,12 @@ step's `FILTERS` block scalar; the script reads them and prints one
 | End to end, host and container (`e2e.yml`) | `backend/**`, `vscode-daemon/**`, `llm-proxy/**`, `nats/**`, `scripts/e2e/**`, `scripts/self_host/**`, `scripts/backup.sh`, `scripts/nats_config.py`, `docs/architecture/specification.json` and `architecture.json` (the self-hosting step reads them), `docker-compose*.yml` |
 | File sizes (`file-sizes.yml`) | `backend/**`, `frontend/src/**`, `vscode-daemon/**`, `llm-proxy/**`, `scripts/**` |
 | actionlint (`workflows.yml`) | `.github/workflows/**`, `.github/actionlint.yaml` |
+| Bench, fake model (`bench-pr.yml`; its own filter, see below) | `bench/**`, `scripts/bench/**`, `bench.yml`, `bench-pr.yml` |
 | Security scans (`security-scan.yml`) | always |
 
 A change under `.github/workflows/` or to `.github/actionlint.yaml` runs every
-job, and so does every push to `main`, every schedule and every manual run.
+job, and so does every push to `main`, every schedule and every manual run;
+the bench is the exception (only its own two workflows start it).
 The backend list is everything the backend suite reads outside `backend/`:
 `backend/tests/test_ci_paths.py` fails when a test reads a path the filter
 leaves out. So a docs-only pull request (`README.md`, `docs/TESTING.md`, a
@@ -695,6 +709,21 @@ jobs cannot be skipped that way (a skipped matrix job reports once under its
 bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
 skip their steps, ending in seconds as a success. When the `changes` job
 itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
+
+**The bench on a pull request** (`bench-pr.yml`, issue #316) is the nightly
+fake-model run of `bench.yml` on a pull request that changes the bench
+itself (`bench/`, `scripts/bench/`, either bench workflow; a backend change
+alone does not start it, since the runners are one machine and the nightly
+run covers the backend): the same steps (held equal by `test_ci_paths.py`), the same
+comparison with the newest card in `bench/scorecards/` and the same
+thresholds, so a regression fails the check. Its filter is its own `changes`
+job (the same `scripts/changed_paths.py`), not an output of `changes.yml`,
+whose backend filter also holds `CHANGELOG.md` and would start the bench on
+nearly every pull request. It leaves out the nightly extras (the strict
+performance budgets, the regression issue), holds no secret and no token that
+writes, and takes an e2e slot once `E2E_RUNS_ON` names the label. The
+real-model job, the watch and the revert stay in `bench.yml`, which a pull
+request never starts.
 
 The `changes` job runs only steps GitHub provides and `git`: this repository's
 Actions policy allows GitHub-owned and Marketplace-verified actions only, and a

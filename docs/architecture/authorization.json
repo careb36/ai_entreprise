@@ -144,6 +144,9 @@
     "GET /v1/analytics/gate_refutations": {
       "access": "Viewer"
     },
+    "GET /v1/analytics/missing_module_mentions": {
+      "access": "Viewer"
+    },
     "GET /v1/analytics/orchestration_health": {
       "access": "Viewer"
     },

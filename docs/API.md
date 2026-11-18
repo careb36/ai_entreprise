@@ -171,6 +171,7 @@ the OpenAPI tags do not follow the module boundaries.
 | `GET` | `/v1/analytics/summary` | |
 | `GET` | `/v1/analytics/orchestration_health` | |
 | `GET` | `/v1/analytics/gate_refutations` | Deliveries the gate before QA sent back, per problem and ISO week, for a company or one sprint over `since`..`until` (Viewer) |
+| `GET` | `/v1/analytics/missing_module_mentions` | Rework requests whose text names a missing module, package or import, before and after `cutoff` (default: the grounded check's merge, #503), per source (`gate`, `person`, `agent_reviewer`) and ISO week (Viewer). It counts what reviewers wrote, not whether a module was missing; the matching rule is `MISSING_MODULE_RULES` in `services/platform/rework_mentions.py` |
 | `GET` | `/v1/capabilities` | Which features are configured, no company data |
 | `GET` | `/v1/models` | Models the proxy exposes, by tier |
 | `POST` | `/v1/company/invite` | A pending invitation (Manager, up to their role; `routers/invitations.py`): 202 with the same body whatever the address. The invitee accepts at `POST /v1/invitations/{id}/accept` or with the link's token at `POST /v1/invitations/accept`, declines at `.../decline`, lists at `GET /v1/invitations`; Managers list and revoke at `GET`/`DELETE /v1/companies/{id}/invitations` |
