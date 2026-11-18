@@ -5,9 +5,7 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { useTeamChange, useTeams } from '../hooks/useTeams'
 import { errorDetail, type Team, type TeamCandidate, type TeamRole } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
-import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
-import { AccessNotice, FormActions, LoadError, LoadingRows } from './admin/AdminParts'
-import { TABLE, TD, TH, TR } from '../components/adminTable'
+import { AccessNotice, CountPill, EmptyState, FormActions, LoadError, LoadingRows, PageHeader, Panel, TABLE, TD, TH, TR } from '../components/ui'
 
 const ROLES: TeamRole[] = ['Viewer', 'Manager']
 
@@ -32,7 +30,7 @@ export default function CompanyTeams() {
       ) : teams.isLoading ? (
         <LoadingRows rows={3} />
       ) : teams.isError ? (
-        <LoadError message={errorDetail(teams.error)} onRetry={() => teams.refetch()} />
+        <LoadError onRetry={() => teams.refetch()}>{errorDetail(teams.error)}</LoadError>
       ) : teams.data ? (
         <div className="space-y-4">
           {change.isError && <div role="alert" className="alert-error text-sm">{errorDetail(change.error)}</div>}

@@ -2,8 +2,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { FindingOutcomes, FindingStatusBadge, formatFindingDate } from '../components/FindingOutcomes'
-import { LoadErrorAlert, LoadingLine } from '../components/knowledge/PageStates'
-import { PageHeader, Panel } from '../components/ui'
+import { LoadError, LoadingLine, PageHeader, Panel } from '../components/ui'
 import { useFinding } from '../hooks/useFindings'
 import { parseRouteId } from '../lib/routeId'
 import { ApiError, errorDetail } from '../services/api'
@@ -45,7 +44,7 @@ export default function CompanyFindingDetail() {
       ) : query.isPending ? (
         <LoadingLine>{t('findings.detail.loading')}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('findings.detail.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('findings.detail.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : finding && (
         <>
           <Panel title={t('findings.detail.record')}>
