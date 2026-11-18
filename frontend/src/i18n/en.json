@@ -177,7 +177,13 @@
     "manageQuotas": "Manage quotas",
     "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits.",
     "tokenUsage": "{{used}} / {{limit}} tokens",
-    "goalLabel": "Sprint goal"
+    "goalLabel": "Sprint goal",
+    "agentState": {
+      "active": "Working",
+      "error": "Error",
+      "waiting": "Waiting",
+      "idle": "Idle"
+    }
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -550,8 +556,12 @@
       "version": "Version {{version}}",
       "claimedFiles": "Files the agent claims to have written",
       "noFiles": "No files claimed.",
-      "view": "View evidence"
-    }
+      "view": "View evidence",
+      "observed": "Observed",
+      "reported": "Reported"
+    },
+    "commentCount_one": "{{count}} entry",
+    "commentCount_other": "{{count}} entries"
   },
   "controlPanel": {
     "title": "Control Panel",
@@ -1391,7 +1401,9 @@
     "integrationBranch": "Integration branch",
     "integrationError": "Could not load the integration plan.",
     "integrationHint": "Merge these branches in order, run the full suite on the result, then publish one PR.",
-    "unmetDeps": "Unmet dependencies"
+    "unmetDeps": "Unmet dependencies",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages"
   },
   "sprints": {
     "subtitle": "Every sprint of this company, active ones first.",
@@ -1573,7 +1585,9 @@
     "legacy": "no company",
     "legacyHint": "Recorded before decisions carried a company.",
     "noSummary": "No summary recorded.",
-    "open": "See the decisions recorded on this file"
+    "open": "See the decisions recorded on this file",
+    "count_one": "{{count}} decision",
+    "count_other": "{{count}} decisions"
   },
   "helpDesk": {
     "title": "Help desk",
@@ -3095,7 +3109,9 @@
     "noTeam": "No team",
     "empty": "Nothing recorded in this range.",
     "generated": "Generated {{at}} from the records.",
-    "costNote": "The cost counts only turns the proxy reported and the catalogue prices; the others are counted apart, never as zero. A person in two teams counts in both."
+    "costNote": "The cost counts only turns the proxy reported and the catalogue prices; the others are counted apart, never as zero. A person in two teams counts in both.",
+    "rowCount_one": "{{count}} row",
+    "rowCount_other": "{{count}} rows"
   },
   "wiki": {
     "title": "Wiki",
