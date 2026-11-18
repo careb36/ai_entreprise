@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAccessReview, useCompleteAccessReview } from '../hooks/useDuties'
 import { CalendarClock, Clock } from 'lucide-react'
 import { errorDetail, type AccessDecision, type AccessReviewListing } from '../services/api'
-import { Panel } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, TABLE, TD, TH, TR } from './ui'
 
 type Key = `${'member' | 'token'}:${number}`
 const CHOICES: AccessDecision['decision'][] = ['confirm', 'remove']

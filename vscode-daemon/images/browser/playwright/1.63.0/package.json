@@ -1,0 +1,10 @@
+{
+  "name": "fabrique-browser-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Playwright the browser sandbox image runs, pinned with its lockfile: npm ci checks each package against its integrity hash.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

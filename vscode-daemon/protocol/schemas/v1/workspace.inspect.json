@@ -83,6 +83,45 @@
             },
             "truncated": {
               "type": "boolean"
+            },
+            "playwright": {
+              "type": "object",
+              "description": "The Playwright the project pins, read by the daemon from its package.json and lockfile (playwright_pin.py, issue #315): `version` and the file it came `from`, or `null` with the `reason`; `declared` false when the project lists no Playwright. The backend picks the browser image from it.",
+              "properties": {
+                "declared": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "package": {
+                  "type": "string"
+                },
+                "spec": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.]+)?$"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "observed_by": {
+                  "const": "daemon"
+                }
+              },
+              "required": [
+                "declared",
+                "version",
+                "observed_by"
+              ]
             }
           },
           "required": [
