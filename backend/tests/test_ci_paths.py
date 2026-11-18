@@ -16,7 +16,10 @@ in place:
 - what a docs-only, a frontend-only and a backend-only change runs;
 - a superseded run is cancelled (#559) and the e2e job asks for the ``e2e``
   runner label, which bounds how many run at once (docs/OPERATIONS.md,
-  Runner capacity).
+  Runner capacity);
+- the fake-model bench runs on a pull request only when it touches what the
+  bench drives or grades (``bench-pr.yml``, with its own filter), as the
+  nightly fake run, and the real-model jobs never run on one (#316).
 """
 
 from __future__ import annotations
@@ -288,7 +291,9 @@ def test_the_glob_reads_like_the_filter():
 
 
 @pytest.mark.parametrize(
-    "name", [*sorted(GATED), "security-scan.yml"], ids=lambda n: n.removesuffix(".yml")
+    "name",
+    [*sorted(GATED), "security-scan.yml", "bench-pr.yml"],
+    ids=lambda n: n.removesuffix(".yml"),
 )
 def test_a_new_push_cancels_the_superseded_run(name):
     # #559: per ref, so another pull request's run is never cancelled.
@@ -329,3 +334,144 @@ def test_the_backend_suite_runs_four_workers_unless_told_otherwise():
     step = next(s for s in job["steps"] if s.get("name") == "Run tests")
     assert step["env"]["WORKERS"] == "${{ vars.BACKEND_TEST_WORKERS || '4' }}"
     assert '-n "$WORKERS" --dist loadgroup' in step["run"]
+
+
+# --- the bench on pull requests (#316) ---------------------------------------------
+
+BENCH_GATE = (
+    "${{ !cancelled() && (needs.changes.result != 'success' "
+    "|| needs.changes.outputs.bench == 'true') }}"
+)
+# The steps bench-pr.yml shares with bench.yml's fake job, held equal.
+BENCH_SHARED_STEPS = [
+    "Start Postgres, NATS and pick free ports",
+    "Set up Python 3.12 (uv)",
+    "Install the backend",
+    "Run the bench (fake LLM)",
+    "Compare with the previous scorecard",
+    "Stop the containers",
+]
+
+
+def _bench_filter() -> list[str]:
+    job = _workflow("bench-pr.yml")["jobs"]["changes"]
+    step = next(s for s in job["steps"] if s.get("id") == "filter")
+    filters = changed_paths.parse_filters(step["env"]["FILTERS"])
+    assert set(filters) == {"bench"}
+    return filters["bench"]
+
+
+def _bench_runs_for(files: list[str]) -> bool:
+    globs = _bench_filter()
+    return any(changed_paths.glob_regex(g).match(f) for g in globs for f in files)
+
+
+def _named_steps(job: dict) -> dict[str, dict]:
+    return {s["name"]: s for s in job["steps"] if "name" in s}
+
+
+def test_the_pull_request_bench_runs_only_on_pull_requests_into_main():
+    data = _workflow("bench-pr.yml")
+    assert data["on"] == {"pull_request": {"branches": ["main"]}}
+    assert set(data["jobs"]) == {"changes", "bench"}
+
+
+def test_the_bench_filter_is_a_pinned_checkout_and_the_changes_script():
+    job = _workflow("bench-pr.yml")["jobs"]["changes"]
+    assert job["runs-on"] == RUNNER
+    assert job["permissions"] == {"contents": "read"}
+    assert job["outputs"] == {"bench": "${{ steps.filter.outputs.bench }}"}
+    checkout, step = job["steps"]
+    assert re.match(r"^actions/checkout@[0-9a-f]{40}$", checkout["uses"])
+    assert checkout["with"]["fetch-depth"] == 0
+    assert checkout["with"]["persist-credentials"] is False
+    assert step["env"]["BASE_SHA"] == "${{ github.event.pull_request.base.sha }}"
+    assert step["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    assert "scripts/changed_paths.py" in step["run"]
+    assert '"$GITHUB_OUTPUT"' in step["run"]
+
+
+def test_the_pull_request_bench_is_gated_on_the_filter_and_fails_open():
+    job = _workflow("bench-pr.yml")["jobs"]["bench"]
+    assert job["needs"] == "changes"
+    assert job["if"] == BENCH_GATE
+    assert FAIL_OPEN in job["if"]
+    # It runs a pull request's code: no token that writes, no secret.
+    assert job["permissions"] == {"contents": "read", "actions": "write"}
+    assert "secrets." not in str(_workflow("bench-pr.yml"))
+    # It takes an e2e slot once the variable names the label.
+    assert job["runs-on"] == (
+        "${{ fromJSON(vars.E2E_RUNS_ON || "
+        """'["self-hosted","linux","x64","lafabrique"]') }}"""
+    )
+
+
+def test_the_pull_request_bench_is_the_nightly_fake_run():
+    nightly = _workflow("bench.yml")["jobs"]["bench"]
+    pr = _workflow("bench-pr.yml")["jobs"]["bench"]
+    assert pr["env"] == nightly["env"]
+    assert pr["timeout-minutes"] == nightly["timeout-minutes"]
+    assert pr["steps"][0]["uses"] == nightly["steps"][0]["uses"]
+    ours, theirs = _named_steps(pr), _named_steps(nightly)
+    for name in BENCH_SHARED_STEPS:
+        for key in ("run", "env", "if", "working-directory"):
+            assert ours[name].get(key) == theirs[name].get(key), (name, key)
+    # Compared with the same committed reference cards, on the same thresholds.
+    compare = ours["Compare with the previous scorecard"]
+    assert "scripts/bench/compare.py" in compare["run"]
+    assert "--dir bench/scorecards " in compare["run"]
+    # None of the nightly extras (the strict budgets, the issue), no real model.
+    assert set(ours) == {*BENCH_SHARED_STEPS, "Keep the scorecard and the logs"}
+    assert "BENCH_LLM_URL" not in str(pr) and "BENCH_TOKEN_BUDGET" not in str(pr)
+
+
+def test_real_model_jobs_never_run_on_a_pull_request():
+    data = _workflow("bench.yml")
+    assert set(data["on"]) == {"workflow_dispatch", "schedule"}
+    jobs = data["jobs"]
+    assert "vars.BENCH_REAL_MODELS == 'true'" in jobs["bench-real"]["if"]
+    for name in ("watch", "revert"):
+        assert "github.ref == 'refs/heads/main'" in jobs[name]["if"], name
+
+
+def test_every_action_in_the_bench_workflows_is_pinned_by_sha():
+    pinned = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+    for workflow in ("bench.yml", "bench-pr.yml"):
+        for name, job in _workflow(workflow)["jobs"].items():
+            for step in job.get("steps", []):
+                if "uses" in step:
+                    assert pinned.match(step["uses"]), (workflow, name)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "bench/specs/01-cli-wordcount/spec.json",
+        "bench/scorecards/20261114T201804Z.json",
+        "scripts/bench/compare.py",
+        ".github/workflows/bench.yml",
+        ".github/workflows/bench-pr.yml",
+    ],
+)
+def test_a_change_to_the_bench_itself_runs_it(path):
+    assert _bench_runs_for([path])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "CHANGELOG.md",
+        "docs/TESTING.md",
+        "frontend/src/App.tsx",
+        "backend/app/services/loop/task_worker.py",
+        "backend/alembic/versions/x.py",
+        "backend/poetry.lock",
+        "vscode-daemon/daemon.py",
+        "backend/tests/test_ci_paths.py",
+        "llm-proxy/app.py",
+        "scripts/e2e/run.sh",
+        ".github/workflows/e2e.yml",
+    ],
+)
+def test_other_changes_skip_the_bench(path):
+    assert not _bench_runs_for([path])

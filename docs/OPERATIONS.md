@@ -821,7 +821,9 @@ has the design):
   **first** add the label `e2e` to two runners, **then** set the repository
   variable `E2E_RUNS_ON` to `["self-hosted","linux","x64","lafabrique","e2e"]`
   (`gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique","e2e"]'`).
-  The number of runners with the label is then the limit. In the other order
+  The number of runners with the label is then the limit; the fake-model
+  bench on a pull request (`bench-pr.yml`), which starts the same stack, asks
+  for the same label. In the other order
   every e2e job waits for a runner until GitHub cancels it after 24 hours. In
   Settings > Actions > Runners, open a runner and add the label, or:
 
