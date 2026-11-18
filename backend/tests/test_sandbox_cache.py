@@ -432,6 +432,24 @@ def test_the_backend_asks_for_the_cache_and_the_install_check_says_what_it_did(
     assert sandbox.request_for(Company(company_name="x"))["cache"] is True
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX_CACHE", False)
     assert sandbox.request_for(Company(company_name="x"))["cache"] is False
+    # The environment volume (#315), scoped to the company.
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_ENV", True)
+    request = sandbox.request_for(Company(id=7, company_name="x"))
+    assert request["environment"] is True and request["scope"] == "company:7"
+    assert sandbox.request_for(None)["scope"] == ""
+    env = {
+        "state": "reused",
+        "mounted": True,
+        "writable": False,
+        "volume": "fabrique-env-1",
+    }
+    run = {
+        "command": "pytest",
+        "exit_code": 0,
+        "sandbox": {"mode": "container", "isolated": True, "environment": env},
+    }
+    seen = sandbox_report.check_sandbox({"test_run": run})["observation"]
+    assert "environment volume fabrique-env-1 reused (read-only)" in seen
     check = app_check.check_install(
         {
             "dependency_install": {
@@ -495,9 +513,15 @@ def test_a_manager_resets_the_cache_through_the_daemon_and_it_is_audited(
             "volume_reset": {"removed": True},
             "quarantine_cleared": True,
             "failed_installs_before": 3,
+            "environment_reset": {
+                "volumes": [{"volume": "fabrique-env-1", "removed": True}]
+            },
         }
     )
     test_client.app.state.nats_client = nats
+    company.dependency_installs = {"/srv/app": {}, "container:/srv/app": {"a": "b"}}
+    sqlite_session.add(company)
+    sqlite_session.commit()
     assert test_client.post(url, headers=manager).status_code == 409  # no folder yet
     sqlite_session.add(ProjectDiscovery(company_id=company.id, project_path="/srv/app"))
     sqlite_session.commit()
@@ -510,8 +534,15 @@ def test_a_manager_resets_the_cache_through_the_daemon_and_it_is_audited(
     }
     assert body["audit_log_id"] is not None and body["path"] == "/srv/app"
     assert nats.subjects == [
-        ("workspace.sandbox.reset", {"workspace_root": "/srv/app"})
+        (
+            "workspace.sandbox.reset",
+            {"workspace_root": "/srv/app", "scope": f"company:{company.id}"},
+        )
     ]
+    # The environments are gone, so container mode installs again.
+    assert body["install_records_cleared"] == ["container:/srv/app"]
+    sqlite_session.refresh(company)
+    assert company.dependency_installs == {"/srv/app": {}}
     test_client.app.state.nats_client = _ResetNATS({"volume": "v"})
     assert test_client.post(url, headers=manager).status_code == 502
     test_client.app.state.nats_client = None

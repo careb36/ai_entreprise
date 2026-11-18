@@ -781,6 +781,13 @@ install, and quarantined after three failed installs in a row until a
 Manager resets it (`POST /v1/companies/{id}/sandbox/cache/reset`, audited).
 A same-named volume without the label is never used or removed, and
 `FABRIQUE_SANDBOX_CACHE=off` on the daemon's machine refuses the cache.
+With `DELIVERY_SANDBOX_ENV` (off by default) a second volume keeps what an
+install leaves outside the worktree (Python's user site, Go's module cache).
+It persists executable code between runs, so it is keyed by project, company,
+image and the sha256 of the manifests, written only by an install and mounted
+read-only by every other run (a test run cannot leave code for the next one),
+reset and quarantined as the cache, and refused with
+`FABRIQUE_SANDBOX_ENV=off`; its bin folders come after the image's on `PATH`.
 
 **The command policy is a first pass, not the boundary.** A blocklist screens
 a string; it cannot fence a process: `rm -rf`, `rm -r -f` and

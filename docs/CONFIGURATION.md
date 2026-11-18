@@ -369,6 +369,21 @@ Copy `.env.example` to `.env` and fill in:
   cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
   `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
   quarantine. The application check's container mounts the same cache.
+  `DELIVERY_SANDBOX_ENV` (default `false`) adds an **environment volume** in
+  container mode (#315): what an install leaves outside the worktree (pip's
+  user installation through `PYTHONUSERBASE`, Poetry's and Pipenv's
+  virtualenvs, Go's `GOPATH`, module and build caches) kept at
+  `/fabrique-env` in `fabrique-env-<key>`, keyed by the project, the company,
+  the image and the sha256 of the Python and Go manifests, so it is never
+  shared between projects or companies. Only an install writes it; every other
+  run mounts it read-only. A failed install removes it, three in a row
+  quarantine the project for that company, and the cache's reset above removes
+  every environment of the project and company and makes the next delivery
+  install again; at most three are kept per project and company. Daemon side,
+  `FABRIQUE_SANDBOX_ENV=off` refuses it; its state sits beside the cache's in
+  `FABRIQUE_SANDBOX_CACHE_STATE`. An install run as root inside the container
+  (a daemon run as root) writes the image's own `site-packages`, which is not
+  kept.
 - `DELIVERY_BROWSER_IMAGE` — optional, default empty (the application check
   runs in `DELIVERY_SANDBOX_IMAGE`, as before). In container mode, the image the
   application check runs in when its e2e command drives a browser (QA's smoke
