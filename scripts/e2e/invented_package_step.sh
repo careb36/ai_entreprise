@@ -33,7 +33,7 @@ GATE=$(api "$API/v1/tasks/$RETRY/events" | json "next((e['payload'].get('text', 
 check "the grounded check's observation names the package" contains "$OBSERVED" "no registry has pypi:$INVENTED"
 gate_reason() { [ -n "$OBSERVED" ] && contains "$GATE" "NEEDS WORK: invented dependency or import" && contains "$GATE" "$OBSERVED"; }
 check "the task's events carry the gate's send-back, by the Verifier, with that observation as the reason" gate_reason
-check "the board reads the task from its events, whose chain is intact" test "$(api "$API/v1/tasks/$RETRY/events" | json "d['source'], d['chain']['status']")" = "('events', 'intact')"
+check "the board reads the task from its events, whose chain is intact" test "$(api "$API/v1/tasks/$RETRY/events" | json "d['source'], d['chain']['status']")" = "events intact"
 check "the board shows the reason on the task" test "$(api "$API/v1/sprints/$S7/board" | json "sum(1 for c in d['columns'].values() for i in c if i['id'] == $RETRY for m in i['comments'] if m.get('author') == 'Verifier' and m['text'].startswith('NEEDS WORK: invented dependency or import') and 'no registry has pypi:$INVENTED' in m['text'])")" -ge 1
 check "QA never reviewed the refuted delivery" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add retry helper'.*requirements-dev.txt")" = no
 check "the next delivery names no package, and the same check passes it" test "$RETRY_LAST" != "$RETRY_FIRST" -a "$(grounded "$RETRY_LAST" "c.get('outcome'), c.get('missing_packages')")" = "('pass', [])"

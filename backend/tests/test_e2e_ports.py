@@ -157,3 +157,26 @@ def test_the_step_reads_the_verifiers_observations_not_the_producers_claims():
     # A claim never decides a check: no run's claims, no artifact text.
     for claim in ("claims", "artifact_text", "Implemented "):
         assert claim not in text, claim
+
+
+def _top_level_comma(expression: str) -> bool:
+    depth = 0
+    for char in expression:
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            return True
+    return False
+
+
+def test_a_json_check_of_several_values_expects_them_space_separated():
+    # run.sh's json() is print($1): "a, b" prints "a b", never a tuple. Step
+    # 9e's chain check expected "('events', 'intact')" and failed on a task
+    # whose events covered its thread and whose chain was intact (PR #652).
+    compared = re.compile(r'json "([^"]*)"\)" = "([^"]*)"')
+    for script in sorted(RUN_SH.parent.glob("*.sh")):
+        for expression, expected in compared.findall(script.read_text()):
+            if _top_level_comma(expression):
+                assert not expected.startswith("("), (script.name, expression)
