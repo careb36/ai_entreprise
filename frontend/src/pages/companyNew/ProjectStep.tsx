@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { CircleCheck, Code2, Database, FolderOpen, FolderSearch, Gauge, ListChecks, Puzzle, Search, Server, Sparkles } from 'lucide-react'
 import type { DetectedStack } from '../../services/api'
-import { EmptyState, StatusBadge, type StatusTone } from '../../components/ui'
-import { ButtonSpinner } from '../admin/AdminParts'
+import { EmptyState, Spinner, StatusBadge, type StatusTone } from '../../components/ui'
 import { FolderPicker } from '../../components/FolderPicker'
 import { WorkspaceDaemonHelp } from '../../components/WorkspaceDaemonHelp'
 import { DaemonStatusLine } from './DaemonStatusLine'
@@ -78,7 +77,7 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
 
     {inspecting && (
       <p role="status" className="flex items-center gap-2 text-xs text-gray-400">
-        <ButtonSpinner />
+        <Spinner size={13} />
         {t('projectFolder.checking')}
       </p>
     )}
@@ -98,7 +97,7 @@ export function ProjectStep({ folder, discoveryResult, discoverPending, handleDi
       <button type="button" onClick={handleDiscover}
         disabled={discoverPending || !projectPath.trim() || folderMissing}
         className="btn-primary min-w-28 flex-shrink-0">
-        {discoverPending ? <ButtonSpinner /> : <Search size={14} aria-hidden="true" />}
+        {discoverPending ? <Spinner size={13} /> : <Search size={14} aria-hidden="true" />}
         {discoverPending ? t('companyNew.scanning') : t('companyNew.scan')}
       </button>
     </div>

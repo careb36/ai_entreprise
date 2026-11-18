@@ -4,8 +4,7 @@ import { Archive, Check, CircleCheck, CircleHelp, Gauge, Plus, RotateCcw, Shield
 import { useAgents, useCreateProcedure, useCurrentRole, useDecideProcedure, useProcedures, useStandards } from '../hooks/useQueries'
 import { ALL_ROLES, ApiError, errorDetail, type Procedure, type ProcedureMetrics } from '../services/api'
 import type { Standard } from '../services/standards'
-import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
-import { CountPill, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
+import { CountPill, LoadError, LoadingLine, PageHeader, Panel, Spinner, StatusBadge, type StatusTone } from '../components/ui'
 import { useAppStore } from '../store/useAppStore'
 
 /** What the board's numbers decided, as an icon and a word: never the colour alone. */
@@ -49,9 +48,9 @@ export default function Procedures() {
       {query.isLoading ? (
         <LoadingLine>{t('procedures.loading', { defaultValue: 'Loading procedures…' })}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>
+        <LoadError onRetry={() => query.refetch()}>
           {t('procedures.loadError', { message: errorDetail(query.error), defaultValue: 'Could not load the procedures: {{message}}' })}
-        </LoadErrorAlert>
+        </LoadError>
       ) : (
         <>
           <Section title={t('procedures.proposed', { defaultValue: 'Waiting for a decision' })}
@@ -83,7 +82,7 @@ function Standards() {
     <Panel title={<span className="inline-flex items-center gap-2"><ShieldCheck size={14} className="text-brand-300" aria-hidden="true" />{t('standards.title')}</span>}>
       <p className="text-meta max-w-prose px-3 pt-2">{t('standards.subtitle')}</p>
       {query.isLoading && <div className="px-3"><LoadingLine>{t('standards.loading')}</LoadingLine></div>}
-      {query.isError && <div className="p-3"><LoadErrorAlert>{t('standards.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert></div>}
+      {query.isError && <div className="p-3"><LoadError>{t('standards.loadError', { message: errorDetail(query.error) })}</LoadError></div>}
       {[...byArea.entries()].map(([area, items]) => (
         <div key={area} className="mt-2 border-t border-surface-700 first-of-type:border-t-0">
           <h3 className="px-3 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{t(`standards.areas.${area}`, { defaultValue: area })}</h3>

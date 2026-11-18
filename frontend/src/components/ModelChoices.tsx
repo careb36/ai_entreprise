@@ -10,8 +10,7 @@ import {
   type ModelSettings,
   type ModelSuggestion,
 } from '../services/models'
-import { Panel } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, TABLE, TD, TH, TR } from './ui'
 
 type Option = ModelOption
 

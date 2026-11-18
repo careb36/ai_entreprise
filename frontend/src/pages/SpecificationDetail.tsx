@@ -14,10 +14,9 @@ import {
 } from 'lucide-react'
 import { ArchitectureSummary } from '../components/ArchitectureSummary'
 import { FindingList, Where } from '../components/Findings'
-import { LoadErrorAlert, LoadingLine, READABLE_TEXT, Spinner } from '../components/knowledge/PageStates'
 import { SourcesConsulted } from '../components/SourcesConsulted'
 import { SpecificationEditor } from '../components/SpecificationEditor'
-import { CountPill, PageHeader, Panel, StatusBadge as Badge, type StatusTone } from '../components/ui'
+import { CountPill, LoadError, LoadingLine, PageHeader, Panel, READABLE_TEXT, Spinner, StatusBadge as Badge, type StatusTone } from '../components/ui'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
 import { errorDetail } from '../services/api'
@@ -319,7 +318,7 @@ export default function SpecificationDetail() {
   if (query.isError || !specification) {
     return (
       <div className="page-container max-w-4xl space-y-3">
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('specifications.loadOneError', { message: query.error ? errorDetail(query.error) : '' })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('specifications.loadOneError', { message: query.error ? errorDetail(query.error) : '' })}</LoadError>
         <Link to="/company/specifications" className="btn-tool">{t('specifications.back')}</Link>
       </div>
     )

@@ -5,8 +5,7 @@ import { useChatLinkCode, useChatLinks, useChatSettings, useUnlinkChat } from '.
 import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail, type ChatProvider } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
-import { EmptyState, PageHeader, Panel, StatusBadge } from '../components/ui'
-import { LoadError, LoadingRows } from './admin/AdminParts'
+import { EmptyState, LoadError, LoadingRows, PageHeader, Panel, StatusBadge } from '../components/ui'
 
 const PROVIDERS: ChatProvider[] = ['slack', 'teams']
 
@@ -30,7 +29,7 @@ export default function ChatApprovals() {
         settings.isLoading ? (
           <LoadingRows rows={2} />
         ) : settings.isError ? (
-          <LoadError message={errorDetail(settings.error)} onRetry={() => settings.refetch()} />
+          <LoadError onRetry={() => settings.refetch()}>{errorDetail(settings.error)}</LoadError>
         ) : settings.data ? (
           PROVIDERS.map(provider => (
             <ChatConnectionForm
@@ -53,7 +52,7 @@ function ChatLinksPanel({ companyId }: { companyId: number }) {
   const unlink = useUnlinkChat(companyId)
 
   if (links.isLoading) return <LoadingRows rows={1} />
-  if (links.isError) return <LoadError message={errorDetail(links.error)} onRetry={() => links.refetch()} />
+  if (links.isError) return <LoadError onRetry={() => links.refetch()}>{errorDetail(links.error)}</LoadError>
   const data = links.data
   if (!data) return null
   return (
