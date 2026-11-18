@@ -22,6 +22,12 @@ from .chat import (
     ChatInteraction,
     ChatLinkCode,
 )
+from .code_graph import (
+    CodeGraphDefinition,
+    CodeGraphEdge,
+    CodeGraphFile,
+    CodeGraphReference,
+)
 from .company import (
     Agent,
     BusinessUnit,
@@ -88,6 +94,10 @@ __all__ = [
     "ChatIdentity",
     "ChatInteraction",
     "ChatLinkCode",
+    "CodeGraphDefinition",
+    "CodeGraphEdge",
+    "CodeGraphFile",
+    "CodeGraphReference",
     "Company",
     "CompanyInvitation",
     "CompanyMember",

@@ -567,6 +567,9 @@
         "evidence",
         "loop"
       ],
+      "test_code_graph_store.py": [
+        "loop"
+      ],
       "test_command_policy.py": [
         "workspace"
       ],
