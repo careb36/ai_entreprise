@@ -8,6 +8,8 @@
 # network off and reaches only the application under test, inside it.
 #
 #   docker build -t fabrique-browser-sandbox vscode-daemon/images/browser
+#   (another release of playwright_versions.json: its values as --build-arg,
+#   e.g. PLAYWRIGHT_VERSION=1.63.0 PLAYWRIGHT_LOCK_DIR=playwright/1.63.0 …)
 #   docker buildx build --platform linux/amd64,linux/arm64 vscode-daemon/images/browser
 #
 # Portions adapted from AixleHQ/flow, docker/base/Dockerfile at commit f9efa22
@@ -30,7 +32,13 @@ FROM ${NODE_IMAGE}
 
 # Keep in step with package.json / package-lock.json: playwright-core's
 # browsers.json names the revision and the Chrome version of each release.
+# These defaults build the default release of playwright_versions.json;
+# images.yml builds every listed release by passing that release's values
+# and its lockfile folder (PLAYWRIGHT_LOCK_DIR, `playwright/<version>`) as
+# build arguments (issue #315). backend/tests/test_browser_images_playwright.py
+# keeps the defaults equal to the default release.
 ARG PLAYWRIGHT_VERSION=1.64.1
+ARG PLAYWRIGHT_LOCK_DIR=.
 ARG HEADLESS_SHELL_REVISION=1248
 ARG HEADLESS_SHELL_VERSION=156.0.8078.4
 ARG HEADLESS_SHELL_SHA256_AMD64=c3e50596aef52c58f8fda3c6b3411c33d34c88b177b3ed1c2243359fd3b8ba20
@@ -63,7 +71,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #
 # Playwright from the lockfile: npm ci checks each tarball against its
 # integrity hash and fails on a mismatch; no install script runs.
-COPY package.json package-lock.json /opt/fabrique/playwright/
+COPY ${PLAYWRIGHT_LOCK_DIR}/package.json ${PLAYWRIGHT_LOCK_DIR}/package-lock.json /opt/fabrique/playwright/
 RUN --mount=type=secret,id=extra_ca,required=false \
     cd /opt/fabrique/playwright \
     && if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi \

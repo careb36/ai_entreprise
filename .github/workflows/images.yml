@@ -5,7 +5,9 @@
 # the main-ancestry check, and no cancelling of an in-flight publish. Changed
 # here: the same five images docker-build.yml builds, with plain `docker build`
 # and `docker push` on the self-hosted runner, linux/amd64 only, plus the
-# browser sandbox (issue #529) built with buildx for linux/amd64 only: its
+# browser sandbox (issue #529), once per Playwright release of
+# vscode-daemon/images/browser/playwright_versions.json (issue #315), built
+# with buildx for linux/amd64 only: its
 # arm64 variant builds under QEMU but its browser aborts under emulation
 # (browser-image-probe.yml, run 43746887213), so it is not published until it
 # has been run on arm64 hardware; no canary.
@@ -43,6 +45,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       stable: ${{ steps.version.outputs.stable }}
+      browser_matrix: ${{ steps.browser.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,6 +69,17 @@ jobs:
           stable=false
           if [[ "$version" != *-* ]]; then stable=true; fi
           { echo "version=${version}"; echo "stable=${stable}"; } >> "$GITHUB_OUTPUT"
+
+      # The Playwright releases the browser sandbox is built for (issue #315),
+      # checked by the script (exact versions, lockfile folders that pin them,
+      # digits, sha256 values) before any of them reaches a build argument.
+      - name: Resolve Browser Releases
+        id: browser
+        run: |
+          set -euo pipefail
+          matrix="$(python3 -I vscode-daemon/images/browser/playwright_matrix.py \
+            vscode-daemon/images/browser/playwright_versions.json)"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   publish:
     name: Publish ${{ matrix.name }}
@@ -210,16 +224,21 @@ jobs:
           if [ "$STABLE" = "true" ]; then docker rmi -f "${image}:latest" 2>/dev/null || true; fi
 
   # The browser sandbox (issue #529): the sixth published image, outside the
-  # five-image matrix above — that matrix is the list docker-build.yml builds
-  # per pull request (backend/tests/test_release_notes.py holds the two
-  # equal), and docker-build.yml does not build this one. Built with buildx
-  # for linux/amd64 only; browser-image-probe.yml (a manual workflow_dispatch
-  # run) is where an arm64 variant is checked before it is ever published.
-  # Same tags, same SBOM, same keyless signature as the five others; the only
+  # five-image matrix above, built once per Playwright release listed in
+  # vscode-daemon/images/browser/playwright_versions.json (issue #315): each
+  # tagged X.Y.Z-playwright-<release>, the default release also X.Y.Z (and
+  # latest), each recorded by the digest the registry stored. The five-image
+  # matrix is the list docker-build.yml builds per pull request
+  # (backend/tests/test_release_notes.py holds the two equal), and
+  # docker-build.yml does not build this one. Built with buildx for
+  # linux/amd64 only, so only the amd64 sha256 is passed; browser-image-probe.yml
+  # (a manual workflow_dispatch run) is where another architecture is checked
+  # before it is ever published. The same SBOM and keyless signature as the
+  # five others, per release; the only
   # difference at signing is that the digest comes from buildx's metadata
   # file, the image never reaching the Docker daemon.
   publish-browser:
-    name: Publish browser-sandbox
+    name: Publish browser-sandbox (Playwright ${{ matrix.playwright }})
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 120
     needs: version
@@ -227,10 +246,23 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      # Each release stands alone: one broken build must not cancel the others.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.browser_matrix) }}
+    # Every value reaches the scripts through the environment, never pasted
+    # into them; playwright_matrix.py checked each one's shape.
     env:
       VERSION: ${{ needs.version.outputs.version }}
       STABLE: ${{ needs.version.outputs.stable }}
       NAME: browser-sandbox
+      PLAYWRIGHT: ${{ matrix.playwright }}
+      LOCK_DIR: ${{ matrix.lockfile_dir }}
+      SHELL_REVISION: ${{ matrix.revision }}
+      SHELL_VERSION: ${{ matrix.browser_version }}
+      SHELL_SHA256_AMD64: ${{ matrix.sha256_amd64 }}
+      DEFAULT_RELEASE: ${{ matrix.default }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -247,13 +279,18 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}"
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}-${PLAYWRIGHT}"
           mkdir -p "$DOCKER_CONFIG"
           # GHCR rejects uppercase path segments.
           image="ghcr.io/${GITHUB_REPOSITORY,,}/${NAME}"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          tags=(--tag "${image}:${VERSION}")
-          if [ "$STABLE" = "true" ]; then tags+=(--tag "${image}:latest"); fi
+          # Every release carries its Playwright in its tag; the default one
+          # also keeps the plain tags the single image had.
+          tags=(--tag "${image}:${VERSION}-playwright-${PLAYWRIGHT}")
+          if [ "$DEFAULT_RELEASE" = "true" ]; then
+            tags+=(--tag "${image}:${VERSION}")
+            if [ "$STABLE" = "true" ]; then tags+=(--tag "${image}:latest"); fi
+          fi
           # --provenance=false keeps the pushed artifact the shape of the
           # other five (plain images): the SLSA elements here are the keyless
           # signature and the signed SBOM attestation below, as in #551.
@@ -263,8 +300,14 @@ jobs:
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.version=${VERSION}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "dev.fabrique.playwright=${PLAYWRIGHT}" \
+            --build-arg "PLAYWRIGHT_VERSION=${PLAYWRIGHT}" \
+            --build-arg "PLAYWRIGHT_LOCK_DIR=${LOCK_DIR}" \
+            --build-arg "HEADLESS_SHELL_REVISION=${SHELL_REVISION}" \
+            --build-arg "HEADLESS_SHELL_VERSION=${SHELL_VERSION}" \
+            --build-arg "HEADLESS_SHELL_SHA256_AMD64=${SHELL_SHA256_AMD64}" \
             --provenance=false \
-            --metadata-file "$RUNNER_TEMP/buildx-metadata.json" \
+            --metadata-file "$RUNNER_TEMP/buildx-metadata-${PLAYWRIGHT}.json" \
             --push \
             ./vscode-daemon/images/browser
           # What the registry stored, by content: the signature and the SBOM
@@ -272,15 +315,24 @@ jobs:
           # moved. buildx reports it in its metadata file.
           digest="$(python3 -c \
             'import json, sys; print(json.load(open(sys.argv[1]))["containerimage.digest"])' \
-            "$RUNNER_TEMP/buildx-metadata.json")"
+            "$RUNNER_TEMP/buildx-metadata-${PLAYWRIGHT}.json")"
           if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::buildx reported no image digest for ${image}:${VERSION}"
+            echo "::error::buildx reported no image digest for ${image}:${VERSION}-playwright-${PLAYWRIGHT}"
             exit 1
           fi
           echo "IMAGE_REF=${image}@${digest}" >> "$GITHUB_ENV"
+          # The record of this release: what was built and the digest the
+          # registry stored, kept as an artifact beside its SBOM.
+          mkdir -p "$RUNNER_TEMP/sbom"
+          python3 -I -c 'import json, sys; json.dump(dict(zip(("playwright", "image", "digest", "tag", "revision"), sys.argv[1:6])), open(sys.argv[6], "w"), indent=2)' \
+            "$PLAYWRIGHT" "${image}@${digest}" "$digest" "${VERSION}-playwright-${PLAYWRIGHT}" \
+            "$GITHUB_SHA" "$RUNNER_TEMP/sbom/${NAME}-${VERSION}-playwright-${PLAYWRIGHT}.digest.json"
           {
-            echo "Published \`${image}:${VERSION}\` (linux/amd64) as \`${image}@${digest}\`"
-            echo "Operators: \`DELIVERY_BROWSER_IMAGE=${image}@${digest}\` (docs/CONFIGURATION.md)."
+            echo "Published \`${image}:${VERSION}-playwright-${PLAYWRIGHT}\` (linux/amd64) as \`${image}@${digest}\`"
+            echo "Operators: \`${PLAYWRIGHT}=${image}@${digest}\` in \`DELIVERY_BROWSER_IMAGES\` (docs/CONFIGURATION.md)."
+            if [ "$DEFAULT_RELEASE" = "true" ]; then
+              echo "The default release: \`DELIVERY_BROWSER_IMAGE=${image}@${digest}\`."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install syft (pinned + checksum)
@@ -301,13 +353,13 @@ jobs:
           SYFT_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
-          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}"
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}-${PLAYWRIGHT}"
           mkdir -p "$RUNNER_TEMP/sbom"
           # buildx pushes without loading into the Docker daemon, so syft
           # reads the registry by digest with this job's login.
           syft scan "registry:${IMAGE_REF}" \
-            --source-name "${NAME}" --source-version "${VERSION}" \
-            -o "cyclonedx-json=$RUNNER_TEMP/sbom/${NAME}-${VERSION}.cdx.json"
+            --source-name "${NAME}" --source-version "${VERSION}-playwright-${PLAYWRIGHT}" \
+            -o "cyclonedx-json=$RUNNER_TEMP/sbom/${NAME}-${VERSION}-playwright-${PLAYWRIGHT}.cdx.json"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
@@ -319,16 +371,17 @@ jobs:
       - name: Sign browser-sandbox and attest its SBOM
         run: |
           set -euo pipefail
-          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}"
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-${NAME}-${PLAYWRIGHT}"
           cosign sign --yes "$IMAGE_REF"
           cosign attest --yes --type cyclonedx \
-            --predicate "$RUNNER_TEMP/sbom/${NAME}-${VERSION}.cdx.json" "$IMAGE_REF"
+            --predicate "$RUNNER_TEMP/sbom/${NAME}-${VERSION}-playwright-${PLAYWRIGHT}.cdx.json" "$IMAGE_REF"
           echo "Signed \`${IMAGE_REF}\` and attested its CycloneDX SBOM" >> "$GITHUB_STEP_SUMMARY"
 
+      # The SBOM and the digest record of this release, one artifact per release.
       - name: Keep the SBOM of browser-sandbox
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sbom-browser-sandbox
+          name: sbom-browser-sandbox-playwright-${{ matrix.playwright }}
           path: ${{ runner.temp }}/sbom/
           if-no-files-found: error
           retention-days: 90
@@ -336,5 +389,5 @@ jobs:
       - name: Clean up browser-sandbox
         if: always()
         run: |
-          rm -rf "$RUNNER_TEMP/docker-config-${NAME}" "$RUNNER_TEMP/sbom" \
-            "$RUNNER_TEMP/buildx-metadata.json"
+          rm -rf "$RUNNER_TEMP/docker-config-${NAME}-${PLAYWRIGHT}" "$RUNNER_TEMP/sbom" \
+            "$RUNNER_TEMP/buildx-metadata-${PLAYWRIGHT}.json"

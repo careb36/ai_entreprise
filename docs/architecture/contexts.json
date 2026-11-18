@@ -27,6 +27,7 @@
         "memory_graph",
         "orchestration_metrics",
         "protected_paths_setting",
+        "rework_mentions",
         "rfc3161",
         "sod",
         "teams",
@@ -521,6 +522,9 @@
         "evidence",
         "loop"
       ],
+      "test_browser_images_playwright.py": [
+        "loop"
+      ],
       "test_browser_smoke.py": [
         "evidence",
         "loop"
@@ -899,6 +903,9 @@
       "test_passwords.py": [
         "platform"
       ],
+      "test_playwright_pin.py": [
+        "workspace"
+      ],
       "test_procedures.py": [
         "loop"
       ],
@@ -1001,6 +1008,9 @@
       ],
       "test_reviewer_agent.py": [
         "management"
+      ],
+      "test_rework_mentions.py": [
+        "loop"
       ],
       "test_rfc3161.py": [
         "platform"
