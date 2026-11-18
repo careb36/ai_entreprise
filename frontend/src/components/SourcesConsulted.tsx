@@ -6,8 +6,9 @@
  * its claim; this list is the record.
  */
 import { useTranslation } from 'react-i18next'
-import { BookOpenCheck, ShieldAlert } from 'lucide-react'
+import { BookOpenCheck, CircleX, ShieldAlert } from 'lucide-react'
 import type { Source } from '../services/specifications'
+import { Panel } from './ui'
 
 export type { Source }
 
@@ -20,33 +21,28 @@ export function SourcesConsulted({ sources, headingId }: { sources: Source[]; he
   const { t } = useTranslation()
   if (sources.length === 0) return null
   return (
-    <section aria-labelledby={headingId} className="card p-4 space-y-2">
-      <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-white">
-        <BookOpenCheck size={16} aria-hidden="true" />
-        {t('sources.title', { count: sources.length })}
-      </h2>
-      <p className="text-xs text-gray-500">{t('sources.hint')}</p>
-      <ul className="space-y-1 text-xs">
+    <Panel title={<span id={headingId} className="inline-flex items-center gap-2"><BookOpenCheck size={14} aria-hidden="true" />{t('sources.title', { count: sources.length })}</span>}>
+      <p className="text-meta px-3 pt-2">{t('sources.hint')}</p>
+      <ul className="data-list text-xs">
         {sources.map((source, index) => {
           const refused = source.allowed === false
           const label = source.package
             ? `${source.ecosystem ?? ''}:${source.package}${source.version ? `@${source.version}` : ''}`
             : source.url ?? source.host ?? ''
           return (
-            <li key={`${source.url ?? label}-${index}`} className="flex flex-wrap items-center gap-2 text-gray-300">
-              {refused ? <ShieldAlert size={12} aria-hidden="true" className="text-amber-300" /> : null}
-              <span className="font-mono text-gray-400">{source.tool}</span>
+            <li key={`${source.url ?? label}-${index}`} className="data-row flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-gray-300">
+              <span className="chip font-mono">{source.tool}</span>
               {source.url && !refused ? (
-                <a href={source.url} target="_blank" rel="noreferrer" className="break-all text-brand-300 hover:underline">{label}</a>
+                <a href={source.url} target="_blank" rel="noreferrer" className="min-w-0 break-all text-brand-300 hover:underline">{label}</a>
               ) : (
-                <span className="break-all">{label}</span>
+                <span className="min-w-0 break-all">{label}</span>
               )}
               {refused
-                ? <span className="text-amber-300">{t('sources.refused', { host: source.host ?? '' })}</span>
+                ? <span className="inline-flex items-center gap-1 text-amber-300"><ShieldAlert size={12} aria-hidden="true" />{t('sources.refused', { host: source.host ?? '' })}</span>
                 : source.is_error
-                  ? <span className="text-red-300">{t('sources.failed', { status: source.status ?? '' })}</span>
+                  ? <span className="inline-flex items-center gap-1 text-red-300"><CircleX size={12} aria-hidden="true" />{t('sources.failed', { status: source.status ?? '' })}</span>
                   : (
-                    <span className="text-gray-500">
+                    <span className="text-meta tabular-nums">
                       {t('sources.fetched', { status: source.status ?? '', hash: (source.sha256 ?? '').slice(0, 12), date: source.fetched_at ? formatDate(source.fetched_at) : '' })}
                     </span>
                   )}
@@ -54,6 +50,6 @@ export function SourcesConsulted({ sources, headingId }: { sources: Source[]; he
           )
         })}
       </ul>
-    </section>
+    </Panel>
   )
 }
