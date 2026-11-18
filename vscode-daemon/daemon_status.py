@@ -9,6 +9,9 @@ The daemon's identity, its protocol version and its heartbeat.
   (default 20, at most 25): the ``daemon_id``, a ``sequence`` that starts at 1
   when this process starts and grows by one per beat, also for a beat that could
   not be sent, and the protocol version.
+- Both carry ``abilities``, the subjects and optional fields this daemon
+  announces (``abilities.py``), so the backend need not guess them from
+  replies.
 
 Everything here is the daemon's report about itself, a claim. The backend
 decides whether a daemon is online from when it observed a heartbeat, on its
@@ -28,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+import abilities
 import sandbox_cache
 
 logger = logging.getLogger("fabrique-daemon")
@@ -74,6 +78,7 @@ def status_body(jetstream: bool) -> Dict[str, Any]:
         "heartbeat_seconds": heartbeat_seconds(),
         "jetstream": bool(jetstream),
         "sandbox_cache": sandbox_cache.status(),
+        "abilities": abilities.announcement(),
     }
 
 
@@ -89,6 +94,7 @@ def heartbeat_body(sequence: int, interval: float) -> Dict[str, Any]:
         "host": {"hostname": host["hostname"], "platform": host["platform"]},
         "interval_seconds": interval,
         "sent_at": datetime.now(timezone.utc).isoformat(),
+        "abilities": abilities.announcement(),
     }
 
 

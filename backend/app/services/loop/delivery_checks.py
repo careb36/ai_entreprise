@@ -61,7 +61,12 @@ from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
 from services.loop import delivery_suites
-from services.workspace import delivery_commands, sandbox, workspace_daemon
+from services.workspace import (
+    daemon_liveness,
+    delivery_commands,
+    sandbox,
+    workspace_daemon,
+)
 from services.workspace.project_profile import Context
 
 logger = logging.getLogger(__name__)
@@ -209,6 +214,13 @@ async def guard_test_files(
     if (not hashes and not others) or acceptance.get("kind") == ACCEPTANCE_KIND:
         return
     root = evidence.get("workspace_root")
+    if daemon_liveness.announces("workspace.hash") is False:
+        # The daemons say they have no workspace.hash (their claim): not asked.
+        logger.warning(
+            "Acceptance test files not checked on disk: %s",
+            daemon_liveness.not_announced_reason("workspace.hash"),
+        )
+        return
     try:
         reply = await workspace_daemon.daemon_request(
             nats_client,

@@ -1,0 +1,77 @@
+"""
+What this daemon announces it can do (issue #315, protocol §2.1).
+
+Until now the backend guessed a daemon's abilities from its replies: a subject
+nobody answers ("no responders") was read as "an older daemon", a reply
+without ``full_log`` as "a daemon from before full logs". The daemon now says
+which subjects it serves and which optional request fields it honours, in
+``workspace.status`` and in every ``workspace.heartbeat`` (so from the moment
+it connects), under ``abilities``:
+
+    {"abilities_version": 1,
+     "subjects": ["workspace.app.check", ...],
+     "features": {"workspace.execute": ["full_log", ...], ...}}
+
+This is the daemon's claim about itself, never an observation of a run: the
+backend keeps it under ``reported_by_daemon`` and uses it only to choose
+whether to send a request and how to word a reply that lacks a field; what a
+run did is still read from that run's reply (``vscode-daemon/protocol/
+PROTOCOL.md`` §2.1). A daemon from before this module announces nothing, and
+the backend keeps guessing as before.
+
+``SUBJECTS`` is kept equal to the request subjects of ``daemon.subscriptions``
+by ``backend/tests/test_daemon_protocol.py``.
+"""
+
+from typing import Any, Dict
+
+# Raised when the announcement's shape changes in a way an older reader would
+# misread; adding a subject or a feature keeps it.
+ABILITIES_VERSION = 1
+
+# Every request subject this daemon serves.
+SUBJECTS = (
+    "workspace.app.check",
+    "workspace.browse",
+    "workspace.capabilities",
+    "workspace.console.collect",
+    "workspace.console.prepare",
+    "workspace.edit",
+    "workspace.edit.finish",
+    "workspace.execute",
+    "workspace.find",
+    "workspace.generate",
+    "workspace.git.base_status",
+    "workspace.git.diff",
+    "workspace.git.integrate",
+    "workspace.git.merge",
+    "workspace.git.publish",
+    "workspace.git.reviews",
+    "workspace.hash",
+    "workspace.inspect",
+    "workspace.list",
+    "workspace.map",
+    "workspace.read",
+    "workspace.related",
+    "workspace.sandbox.reset",
+    "workspace.search",
+    "workspace.signatures",
+    "workspace.status",
+    "workspace.undo",
+)
+
+# The optional request fields added within protocol version 1 (PROTOCOL.md
+# §5.1, §5.1.1, §5.2), per subject: an older daemon ignores them silently.
+FEATURES = {
+    "workspace.execute": ("full_log", "purpose_assistant", "sandbox_floor"),
+    "workspace.app.check": ("browser_probe", "cache", "full_log", "security_probe"),
+}
+
+
+def announcement() -> Dict[str, Any]:
+    """The ``abilities`` field of ``workspace.status`` and the heartbeat."""
+    return {
+        "abilities_version": ABILITIES_VERSION,
+        "subjects": list(SUBJECTS),
+        "features": {subject: list(names) for subject, names in sorted(FEATURES.items())},
+    }
