@@ -61,6 +61,7 @@ Brown, c4model.com, CC BY 4.0).
 | Governance | Executing | Lessons learned register (`lessons.md`) | retrospectives, procedures |
 | Governance | Monitoring and Controlling | Change log (`changes.md`) | specification and architecture versions, carry-over events |
 | Governance | Monitoring and Controlling | Check results by domain (`checks.md`) | all of the above |
+| Governance | Closing | Final report (`final_report.md`, phase 2) | specifications, sprints, task events, verifications, effort, model usage, carries, published integrations; three person sections |
 | Scope | Planning | Scope statement (`scope.md`) | specification, tasks |
 | Scope | Planning | Work breakdown structure (`wbs.md`) | specification, tasks |
 | Scope | Monitoring and Controlling | Requirements traceability matrix (`traceability.md`) | specification, tasks, verifications, integrations |
@@ -77,7 +78,7 @@ need (a budget, external stakeholders) is not recorded, and the check results
 say so per domain. The book's minimal adaptive set that phase 1 does not yet
 produce (status and work performance reports, the release and iteration plan
 as its own document, the final report, cost baselines) is listed under the
-next phases.
+next phases; phase 2 adds the first three.
 
 ### Fields only a person can fill
 
@@ -95,6 +96,7 @@ the index:
 | Risk register | Risk appetite and project-level risks (market, staffing, budget) |
 | Check results | Finance (within budget), Stakeholders (outside the company) |
 | Release and iteration plan | Target release dates and scope ahead (phase 2) |
+| Final report | Acceptance by the sponsor, benefits realisation outlook, handover notes (phase 2) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
 author recorded in the audit, is the first item of phase 2. The TechWriter's
@@ -129,6 +131,7 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Resources | The effort each task took is observed, not reported | every task of a completed sprint has an `effort_observed` event (phase 2) |
 | Scope | Requirements are delivered by the iterations | requirements a done task covers, over the documented specifications' requirements (measured; phase 2) |
 | Schedule | Completed iterations leave the factory as releases | completed sprints whose integration was published as a request (measured; phase 2) |
+| Risk | Nothing is left on hold when the project closes | holds and high-risk readings whose task is neither done nor carried: met / not met once every sprint is closed, measured while one runs (phase 2) |
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
@@ -295,6 +298,34 @@ are the ITIL release and deployment plan of phase 5. Retrospectives and agent
 messages are not inputs. A date ahead is never computed: the plan shows the
 dates the records hold (a sprint's start, its first and last event, a
 publication), and the dates the project commits to are the person section's.
+
+### Final report (`final_report.md`; Governance, Closing; inputs: specification, sprints, events, verifications, carries, releases, effort, costs, statements_final_report, and specifications when there are several)
+
+Phase 2. What the project delivered and what it leaves behind, compiled at
+closure from the records rather than written from memory. It needs no new
+snapshot key: `closure` counts from the keys the status report and the
+release plan already read, `final_docs` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| Requirement: delivered / not delivered | the tasks whose `covers` name it, in its own specification's sprints: delivered when one is done on the board; not delivered, planned (tasks cover it, none done) or not planned (none covers it) | requirement ref, task ref (digests) |
+| Requirement: latest reading | the Verifier's newest `Verification` of each done covering task, its verdict | verification ref (artifact digest) |
+| Iterations closed; interim | sprints completed or cancelled over all; while one is neither, the report says it is interim and names the sprints | sprint ref (digest) |
+| Measured outcomes | the status report's figures over the whole project (`performance`): tasks done, carried out, the Verifier's readings, first pass and rework from the backend's `effort_observed` events, the reported model spend (unknown with its reason, never 0) | sprint, event (chain hash), verification, `cost` refs |
+| Releases cut | the published sprint integrations (`releases`), the daemon's commit and how it was published | `release` ref (the audit row's chain hash) |
+| Holds left open | the newest `blocked` or `risk_hold` event per task whose task is still blocked, or `escalated` event with no later `decided`, on a task neither done nor carried to a later iteration by the platform (`carries`, actor `system`) | event ref (chain hash) |
+| High-risk readings left open | the Verifier's newest reading per task with tier `high`, on a task neither done nor carried | verification ref (artifact digest) |
+| Lessons learned | a pointer to `lessons.md`; nothing read | none |
+| Acceptance by the sponsor, benefits realisation outlook, handover notes | `final_report.acceptance`, `.benefits`, `.handover`, a person's statements | person, **claim** |
+
+Retrospectives, procedures and agent messages are not inputs. The lessons
+belong to their register, which quotes each retrospective as a claim and
+shows what the procedures that followed measured; the final report points
+there instead of repeating or counting what was said. A blocked task the
+platform carried to a later sprint is followed in that sprint (its new task),
+not counted as left open, and a carry reported by an agent is not read.
+Acceptance, the benefits after closure and the handover are what only a
+person can say at closure, so they are person sections, never computed.
 
 ### Architecture diagrams, C4 (`c4.md`; inputs: architecture, stack)
 
@@ -502,10 +533,11 @@ kept apart from the compiled fields and cited as the person's statement);
 then the status and work performance reports (board state, sprint progress
 against plan, holds, integrations: the book's chain of work performance data,
 information and report maps onto observation, analysis and claim) and the
-release and iteration plan as its own document (both done: `status_report.md`,
-`release_plan.md`). Then the final report from a
-completed project's integrations, the traceability matrix and the
-retrospectives, and more computed checks per domain (backlog rates, a
+release and iteration plan as its own document, and the final report from a
+completed project's requirements, readings, measurements, releases and open
+holds, with the lessons left to their register since retrospectives are
+claims (all done: `status_report.md`, `release_plan.md`, `final_report.md`).
+Then more computed checks per domain (backlog rates, a
 stakeholder register from members plus a person's external list). After that: communications and quality plans
 (phase 3, the quality plan from `docs/STANDARDS.md` and the Verifier's
 checks), DOCX/PDF export and organisation templates (phase 4, with a signed
