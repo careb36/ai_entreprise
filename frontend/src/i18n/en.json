@@ -3734,13 +3734,24 @@
       "matched": "Hash matches the record",
       "mismatched": "Hash does not match the record",
       "missing": "Log missing",
-      "unavailable": "Integrity unknown"
+      "unavailable": "Integrity unknown",
+      "unverified": "Not verified: part of the log"
     },
     "refused": {
       "matched": "The log could not be served.",
       "mismatched": "The log could not be served.",
       "missing": "The object store no longer holds this log.",
-      "unavailable": "The log could not be read, so its integrity is unknown."
+      "unavailable": "The log could not be read, so its integrity is unknown.",
+      "unverified": "This piece of the log could not be served."
+    },
+    "pieces": {
+      "reading": "Reading the end of the log…",
+      "showing": "Bytes {{start}}–{{end}} of {{total}}",
+      "partialHint": "A piece cannot be checked against the sha256 recorded for the whole log. Read the whole log to verify it.",
+      "readWhole": "Read and verify the whole log",
+      "earlier": "Load {{bytes}} earlier bytes",
+      "earlierError": "The earlier piece could not be read.",
+      "refused": "The end of the log could not be read."
     }
   }
 }

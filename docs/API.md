@@ -141,6 +141,28 @@ the OpenAPI tags do not follow the module boundaries.
 | `GET` | `/v1/agent_runs/{run_id}/approvals` | The decisions |
 | `GET` | `/v1/agent_runs/reviewer_record` | What the reviewer has ruled |
 
+### Run logs — `routers/run_logs.py`
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/agent_runs/{run_id}/logs` | The full logs the run's verifications recorded, with the recorded size and sha256 (Viewer) |
+| `GET` | `/v1/agent_runs/{run_id}/logs/{log_id}` | One log read back (Viewer); `download=true` as an attachment; one byte range with `Range` or `offset`/`limit` |
+
+The full read is hashed by the backend over the bytes it serves: `X-Log-Integrity: matched | mismatched`, `X-Log-Verified: true` only when matched, `X-Log-Sha256-Recorded`, `X-Log-Sha256-Observed`, `X-Log-Size`, `X-Log-Observed-By: backend`. A log the store no longer holds is a 410 (`missing`), one that cannot be read a 503 (`unavailable`), one never kept a 409.
+
+**Byte ranges.** Send one `Range: bytes=a-b` (or `bytes=a-`, `bytes=-n`), or `?offset=<first byte>&limit=<bytes>` (not both: 400). The answer is a `206` with `Content-Range: bytes a-b/<recorded size>` and `Accept-Ranges: bytes`. A range that starts at or past the end is a `416` with `Content-Range: bytes */<recorded size>`. A header that is not one byte range is ignored, and a range covering the whole log is the full read. A piece cannot be checked against the whole log's sha256, so it is never presented as verified:
+
+```
+HTTP/1.1 206 Partial Content
+Content-Range: bytes 1048576-1310719/5242880
+X-Log-Integrity: unverified
+X-Log-Verified: false
+X-Log-Unverified-Reason: partial
+X-Log-Sha256-Recorded: <the sha256 recorded for the whole log>
+```
+
+Only the chunks of the object store that the range touches are read. A store whose size differs from the record, or a record without a size, answers 409 for a range; read the whole log to check it.
+
 ### Agents — `routers/agents.py`
 
 | Method | Path | Notes |
