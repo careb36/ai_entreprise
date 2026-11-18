@@ -2881,6 +2881,10 @@
         "checks_external": {
           "title": "Se involucra a los interesados de fuera de la empresa",
           "what": "Quiénes son los interesados de fuera de la empresa, y cómo se los mantiene informados e involucrados."
+        },
+        "status_report_forecast": {
+          "title": "Pronóstico y decisiones solicitadas",
+          "what": "Qué debe esperar el patrocinador a continuación (alcance, fechas, gasto) y qué decisiones se le piden, leído frente a las cifras anteriores."
         }
       }
     }
