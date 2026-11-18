@@ -588,7 +588,8 @@ spec from its `fake/` folder (the PO's plan, QA's tests, the Developer's
 files, every review approved), and the run fails unless every spec completes
 with every criterion passed; `BENCH_LLM_URL` points it at a real proxy
 instead. `.github/workflows/bench.yml` runs the fake circuit on demand and
-nightly on the self-hosted runner, compares with the committed reference,
+nightly on the self-hosted runner (and `bench-pr.yml` on a pull request that
+touches the bench, CI below), compares with the committed reference,
 puts both in the job summary (also when the run failed, if a scorecard was written), opens an issue on a nightly regression and
 removes its containers. Its second job, `bench-real`, runs the bench on real
 models nightly and on demand (input `models: real`), only while the
@@ -682,10 +683,12 @@ step's `FILTERS` block scalar; the script reads them and prints one
 | End to end, host and container (`e2e.yml`) | `backend/**`, `vscode-daemon/**`, `llm-proxy/**`, `nats/**`, `scripts/e2e/**`, `scripts/self_host/**`, `scripts/backup.sh`, `scripts/nats_config.py`, `docs/architecture/specification.json` and `architecture.json` (the self-hosting step reads them), `docker-compose*.yml` |
 | File sizes (`file-sizes.yml`) | `backend/**`, `frontend/src/**`, `vscode-daemon/**`, `llm-proxy/**`, `scripts/**` |
 | actionlint (`workflows.yml`) | `.github/workflows/**`, `.github/actionlint.yaml` |
+| Bench, fake model (`bench-pr.yml`; its own filter, see below) | `bench/**`, `scripts/bench/**`, `bench.yml`, `bench-pr.yml` |
 | Security scans (`security-scan.yml`) | always |
 
 A change under `.github/workflows/` or to `.github/actionlint.yaml` runs every
-job, and so does every push to `main`, every schedule and every manual run.
+job, and so does every push to `main`, every schedule and every manual run;
+the bench is the exception (only its own two workflows start it).
 The backend list is everything the backend suite reads outside `backend/`:
 `backend/tests/test_ci_paths.py` fails when a test reads a path the filter
 leaves out. So a docs-only pull request (`README.md`, `docs/TESTING.md`, a
@@ -703,6 +706,21 @@ jobs cannot be skipped that way (a skipped matrix job reports once under its
 bare name, so `build (backend)` or `e2e (host)` would wait), so they start and
 skip their steps, ending in seconds as a success. When the `changes` job
 itself fails, every gated job runs. `test_ci_paths.py` holds all of this.
+
+**The bench on a pull request** (`bench-pr.yml`, issue #316) is the nightly
+fake-model run of `bench.yml` on a pull request that changes the bench
+itself (`bench/`, `scripts/bench/`, either bench workflow; a backend change
+alone does not start it, since the runners are one machine and the nightly
+run covers the backend): the same steps (held equal by `test_ci_paths.py`), the same
+comparison with the newest card in `bench/scorecards/` and the same
+thresholds, so a regression fails the check. Its filter is its own `changes`
+job (the same `scripts/changed_paths.py`), not an output of `changes.yml`,
+whose backend filter also holds `CHANGELOG.md` and would start the bench on
+nearly every pull request. It leaves out the nightly extras (the strict
+performance budgets, the regression issue), holds no secret and no token that
+writes, and takes an e2e slot once `E2E_RUNS_ON` names the label. The
+real-model job, the watch and the revert stay in `bench.yml`, which a pull
+request never starts.
 
 The `changes` job runs only steps GitHub provides and `git`: this repository's
 Actions policy allows GitHub-owned and Marketplace-verified actions only, and a

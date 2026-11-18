@@ -13,6 +13,11 @@ name: Bench
 # bench's alone: the daemon's request subjects are not namespaced, so the
 # bench never shares a broker (scripts/bench/broker.py refuses one).
 #
+# On a pull request the same fake run is bench-pr.yml, a workflow of its own
+# so that nothing here (the real models, the secrets, the issues, the
+# reverts) can start from one; backend/tests/test_ci_paths.py holds its steps
+# to this job's.
+#
 # The job `bench-real` runs the same bench on real models, nightly and on
 # demand (input `models: real`), and only when the repository variable
 # BENCH_REAL_MODELS is `true`: that variable is the kill switch, and unset
