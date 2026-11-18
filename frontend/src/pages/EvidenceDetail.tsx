@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
-import { Breadcrumbs } from '../components/Breadcrumbs'
+import { FileSearch, MessageSquareQuote, RefreshCw, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
 import { ApiError, type AgentRunStatus } from '../services/api'
 import {
   useAgentRun,
@@ -14,11 +13,13 @@ import {
   useVerifyAgentRun,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
-import { Verdict } from '../components/Verdict'
+import { Verdict, VERDICT_PRESENTATION } from '../components/Verdict'
 import { ReviewChanges } from '../components/ReviewChanges'
 import { RunCostCard } from '../components/CostSummary'
 import { ReviewPanel } from '../components/ReviewPanel'
 import { RunLogViewer } from '../components/RunLogViewer'
+import { Spinner } from '../components/knowledge/PageStates'
+import { EmptyState, PageHeader, Panel } from '../components/ui'
 import { useRunChanges } from '../services/reviewChanges'
 import { parseRouteId } from '../lib/routeId'
 import { taskOfRun } from '../lib/taskEvidence'
@@ -39,6 +40,23 @@ const SIGNATURE_STYLES = {
   unsigned: 'text-amber-300 bg-amber-950/60 border-amber-700/50',
   legacy: 'text-gray-300 bg-gray-800 border-gray-600',
 } as const
+
+const SIGNATURE_ICONS = { valid: ShieldCheck, invalid: ShieldAlert, unsigned: ShieldQuestion, legacy: ShieldQuestion } as const
+
+/** A check's outcome looks like the verdict it leads to: an icon and a word, never the colour alone. */
+const CHECK_OUTCOME_LOOK: Record<string, AgentRunStatus> = { pass: 'verified', refuted: 'refuted', unverifiable: 'unverifiable' }
+
+const SKELETON = 'skeleton motion-reduce:animate-none'
+
+function CheckOutcome({ outcome }: { outcome: string }) {
+  const { t } = useTranslation()
+  const { className, Icon } = VERDICT_PRESENTATION[CHECK_OUTCOME_LOOK[outcome] ?? 'unverifiable']
+  return (
+    <span data-testid={`check-outcome-${outcome}`} className={`status-badge ${className}`}>
+      <Icon size={11} aria-hidden="true" className="flex-shrink-0" />{t(`evidence.checkOutcome.${outcome}`)}
+    </span>
+  )
+}
 
 function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   const { t } = useTranslation()
@@ -86,15 +104,21 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   }
 
   if (runQuery.isLoading) {
-    return <div role="status" className="skeleton h-48 rounded-lg" aria-label={t('evidence.loading')} />
+    return <div role="status" className={`${SKELETON} h-48 rounded-xl`} aria-label={t('evidence.loading')} />
   }
   if (runQuery.isError || !run) {
     const notFound = runQuery.error instanceof ApiError && runQuery.error.status === 404
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div role="alert" className="alert-error">{t(notFound ? 'evidence.notFound' : 'evidence.loadError', { id: runId })}</div>
-        {!notFound && <button onClick={() => runQuery.refetch()} className="btn btn-ghost mr-3">{t('common.retry')}</button>}
-        <Link to="/evidence" className="btn btn-ghost">{t('evidence.backToRuns')}</Link>
+        <div className="flex flex-wrap gap-2">
+          {!notFound && (
+            <button onClick={() => runQuery.refetch()} className="btn-tool">
+              <RefreshCw size={13} aria-hidden="true" />{t('common.retry')}
+            </button>
+          )}
+          <Link to="/evidence" className="btn-tool">{t('evidence.backToRuns')}</Link>
+        </div>
       </div>
     )
   }
@@ -103,25 +127,26 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   const task = taskOfRun(run)
 
   return (
-    <div className="space-y-6">
-      <Breadcrumbs items={[
-        { label: t('nav.evidence', { defaultValue: 'Evidence' }), to: '/evidence' },
-        { label: t('evidence.runCrumb', { id: runId, defaultValue: 'Run #{{id}}' }) },
-      ]} />
-      <header className="page-header">
-        <h1 className="page-title">{t('evidence.detailTitle')}</h1>
-        <div className="min-w-0 sm:text-right">
-          <p className="mt-1 break-all font-mono text-sm text-gray-400">{run.external_ref} · {run.producer}</p>
+    <div className="space-y-4">
+      <PageHeader
+        breadcrumbs={[
+          { label: t('nav.evidence', { defaultValue: 'Evidence' }), to: '/evidence' },
+          { label: t('evidence.runCrumb', { id: runId, defaultValue: 'Run #{{id}}' }) },
+        ]}
+        title={t('evidence.detailTitle')}
+        subtitle={<>
+          <span className="block break-all font-mono text-xs text-gray-400">{run.external_ref} · {run.producer}</span>
           {task && (
-            <p className="mt-1 text-sm text-gray-400">
+            <span className="mt-1 block">
               {t('evidence.taskLabel', { defaultValue: 'Task' })}:{' '}
               <Link to={task.to} className="break-words font-medium text-brand-300 hover:underline">
                 {task.title ?? t('evidence.taskFallback', { id: task.itemId, defaultValue: 'Task #{{id}}' })}
               </Link>
-            </p>
+            </span>
           )}
-        </div>
-      </header>
+        </>}
+        actions={<Verdict status={verdict} />}
+      />
 
       <RunCostCard companyId={companyId} runId={runId} />
 
@@ -129,9 +154,10 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
         {RUN_TABS.map(name => (
           <button key={name} type="button" role="tab" aria-selected={tab === name}
             onClick={() => setSearchParams(name === 'files' ? { tab: 'files' } : {}, { replace: true })}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === name ? 'border-brand-400 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+            className={`focus-ring -mb-px inline-flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 text-[13px] font-medium transition-colors motion-reduce:transition-none ${
+              tab === name ? 'border-brand-400 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
             {t(`review.tabs.${name}`)}
-            {name === 'files' && changedFiles !== undefined && <span className="ml-1.5 rounded-full bg-surface-700 px-1.5 text-xs">{changedFiles}</span>}
+            {name === 'files' && changedFiles !== undefined && <span className="count-pill">{changedFiles}</span>}
           </button>
         ))}
       </div>
@@ -142,218 +168,221 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
           <ReviewChanges companyId={companyId} runId={runId} canComment={canReview} />
         </div>
       ) : <>
-      <section aria-labelledby="claim-observation-title">
-        <h2 id="claim-observation-title" className="mb-3 text-lg font-semibold text-white">{t('evidence.claimVsObservation')}</h2>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="card min-w-0 p-4">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-300">{t('evidence.claimed')}</h3>
+      {/* What the producer claimed and what the platform observed never share a surface: the claim is dashed
+          under a speech mark, the observation solid under a shield, as on the board's cards. */}
+      <section aria-labelledby="claim-observation-title" className="space-y-2">
+        <h2 id="claim-observation-title" className="text-[13px] font-semibold text-gray-100">{t('evidence.claimVsObservation')}</h2>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Panel headingLevel={3} className="min-w-0 border-dashed border-surface-600 bg-transparent"
+            title={<span className="inline-flex items-center gap-1.5"><MessageSquareQuote size={13} aria-hidden="true" className="text-gray-400" />{t('evidence.claimed')}</span>}>
+            <p className="text-meta px-3 pt-2">{t('evidence.claimedHint')}</p>
             {run.claims && Object.keys(run.claims).length > 0 ? (
-              <dl className="space-y-3">
+              <dl className="space-y-3 p-3">
                 {Object.entries(run.claims).map(([key, value]) => (
                   <div key={key}>
-                    <dt className="mb-1 text-xs font-semibold text-gray-500">{key}</dt>
-                    <dd className="whitespace-pre-wrap break-words text-sm text-gray-200">{claimValue(value)}</dd>
+                    <dt className="mb-0.5 font-mono text-[11px] text-gray-400">{key}</dt>
+                    <dd className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-gray-300">{claimValue(value)}</dd>
                   </div>
                 ))}
               </dl>
-            ) : <p className="text-sm text-gray-500">{t('evidence.noClaims')}</p>}
-          </div>
-          <div className="card min-w-0 p-4">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-300">{t('evidence.observed')}</h3>
+            ) : <p className="p-3 text-[13px] text-gray-400">{t('evidence.noClaims')}</p>}
+          </Panel>
+          <Panel headingLevel={3} className="min-w-0"
+            title={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} aria-hidden="true" className="text-emerald-300" />{t('evidence.observed')}</span>}>
+            <p className="text-meta px-3 pt-2">{t('evidence.observedHint')}</p>
             {verificationsQuery.isLoading ? (
-              <div className="skeleton h-20 rounded" />
+              <div className="p-3"><div className={`${SKELETON} h-20 rounded-md`} /></div>
             ) : latestVerification?.checks?.length ? (
-              <div className="space-y-4">
+              <ul className="data-list">
                 {latestVerification.checks.map((check, index) => (
-                  <article key={`${check.name}-${index}`} className="border-b border-surface-700 pb-3 last:border-0 last:pb-0">
+                  <li key={`${check.name}-${index}`} className="data-row">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-white">{check.name}</span>
-                      <span data-testid={`check-outcome-${check.outcome}`} className={`text-xs font-semibold ${
-                        check.outcome === 'pass' ? 'text-emerald-300' :
-                          check.outcome === 'refuted' ? 'text-red-300' : 'text-violet-300'
-                      }`}>{t(`evidence.checkOutcome.${check.outcome}`)}</span>
+                      <span className="font-mono text-[13px] font-semibold text-gray-100">{check.name}</span>
+                      <CheckOutcome outcome={check.outcome} />
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-sm text-gray-300">{check.observation}</p>
-                  </article>
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-gray-300">{check.observation}</p>
+                  </li>
                 ))}
-              </div>
-            ) : <p className="text-sm text-gray-500">{t('evidence.noObservations')}</p>}
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-semibold text-gray-400">{t('evidence.verdictLabel')}:</span>
-          <Verdict status={verdict} />
-          {latestVerification && <span className="text-xs text-gray-500">{new Date(latestVerification.observed_at).toLocaleString()}</span>}
+              </ul>
+            ) : <p className="p-3 text-[13px] text-gray-400">{t('evidence.noObservations')}</p>}
+            <div className="flex flex-wrap items-center gap-2 border-t border-surface-700 px-3 py-2">
+              <span className="text-meta font-medium">{t('evidence.verdictLabel')}:</span>
+              <Verdict status={verdict} compact />
+              {latestVerification && <span className="text-meta tabular-nums">{new Date(latestVerification.observed_at).toLocaleString()}</span>}
+            </div>
+          </Panel>
         </div>
       </section>
 
       <RunLogViewer companyId={companyId} runId={runId} />
 
-      <section className="card p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-white">{t('evidence.verificationHistory')}</h2>
-          <button
-            onClick={() => verifyMutation.mutate()}
-            disabled={verifyMutation.isPending}
-            className="btn btn-primary btn-sm inline-flex items-center gap-2"
-          >
-            {verifyMutation.isPending && <Loader2 size={14} className="animate-spin" />}
+      <Panel title={t('evidence.verificationHistory')}
+        actions={
+          <button onClick={() => verifyMutation.mutate()} disabled={verifyMutation.isPending} className="btn-tool">
+            {verifyMutation.isPending ? <Spinner size={13} /> : <ShieldCheck size={13} aria-hidden="true" />}
             {t('evidence.verify')}
           </button>
-        </div>
-        {verifyMutation.isError && <p role="alert" className="mb-3 text-sm text-red-300">{t('evidence.verifyError')}</p>}
-        {verificationsQuery.isError ? <p role="alert" className="text-sm text-red-300">{t('evidence.historyError')}</p> :
-          verifications.length === 0 ? <p className="text-sm text-gray-500">{t('evidence.noVerifications')}</p> : (
-            <ol className="space-y-3">
+        }>
+        {verifyMutation.isError && <p role="alert" className="px-3 pt-2.5 text-[13px] text-red-300">{t('evidence.verifyError')}</p>}
+        {verificationsQuery.isError ? <p role="alert" className="px-3 py-2.5 text-[13px] text-red-300">{t('evidence.historyError')}</p> :
+          verifications.length === 0 ? <p className="px-3 py-2.5 text-[13px] text-gray-400">{t('evidence.noVerifications')}</p> : (
+            <ol className="data-list">
               {verifications.map((verification, index) => (
-                <li key={verification.id} className="rounded-lg border border-surface-700 p-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-gray-500">#{index + 1}</span>
-                    <Verdict status={verification.verdict} />
-                    <time className="text-xs text-gray-500">{new Date(verification.observed_at).toLocaleString()}</time>
+                <li key={verification.id} className="data-row">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="text-meta tabular-nums">#{index + 1}</span>
+                    <Verdict status={verification.verdict} compact />
+                    <time className="text-meta tabular-nums">{new Date(verification.observed_at).toLocaleString()}</time>
                   </div>
                   {verification.checks?.map((check, checkIndex) => (
-                    <p key={`${check.name}-${checkIndex}`} className="text-sm text-gray-300">
-                      <span className="font-semibold">{check.name}:</span> {check.observation}
+                    <p key={`${check.name}-${checkIndex}`} className="text-xs leading-relaxed text-gray-300">
+                      <span className="font-mono font-semibold text-gray-200">{check.name}:</span> {check.observation}
                     </p>
                   ))}
                 </li>
               ))}
             </ol>
           )}
-      </section>
+      </Panel>
 
-      <section className="card p-4">
-        <h2 className="mb-3 text-lg font-semibold text-white">{t('evidence.approvalHistory')}</h2>
-        {approvalsQuery.isLoading ? <div className="skeleton h-16 rounded" /> :
-          approvalsQuery.isError ? <p role="alert" className="text-sm text-red-300">{t('evidence.historyError')}</p> :
-            (approvalsQuery.data?.approvals.length ?? 0) === 0 ? <p className="text-sm text-gray-500">{t('evidence.noApprovals')}</p> : (
-              <ol className="space-y-3">
+      <Panel title={t('evidence.approvalHistory')}>
+        {approvalsQuery.isLoading ? <div className="p-3"><div className={`${SKELETON} h-16 rounded-md`} /></div> :
+          approvalsQuery.isError ? <p role="alert" className="px-3 py-2.5 text-[13px] text-red-300">{t('evidence.historyError')}</p> :
+            (approvalsQuery.data?.approvals.length ?? 0) === 0 ? <p className="px-3 py-2.5 text-[13px] text-gray-400">{t('evidence.noApprovals')}</p> : (
+              <ol className="data-list">
                 {approvalsQuery.data!.approvals.map(approval => (
-                  <li key={approval.id} className="rounded-lg border border-surface-700 p-3">
-                    <p className="text-sm font-semibold text-gray-200">
+                  <li key={approval.id} className="data-row">
+                    <p className="text-[13px] font-semibold text-gray-100">
                       {t(`evidence.approval.${approval.decision}`)} · {approval.approver_name}
                     </p>
-                    <time className="text-xs text-gray-500">{new Date(approval.decided_at).toLocaleString()}</time>
-                    {approval.feedback && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-300">{approval.feedback}</p>}
-                    {approval.rejection_category && <p className="mt-1 text-xs text-gray-500">{t('evidence.category')}: {t(`evidence.categoryValues.${approval.rejection_category}`)}</p>}
+                    <time className="text-meta tabular-nums">{new Date(approval.decided_at).toLocaleString()}</time>
+                    {approval.feedback && <p className="mt-1.5 max-w-prose whitespace-pre-wrap text-[13px] leading-relaxed text-gray-300">{approval.feedback}</p>}
+                    {approval.rejection_category && <p className="text-meta mt-1">{t('evidence.category')}: {t(`evidence.categoryValues.${approval.rejection_category}`)}</p>}
                   </li>
                 ))}
               </ol>
             )}
-      </section>
+      </Panel>
 
-      <section className="card p-4">
-        <h2 className="mb-3 text-lg font-semibold text-white">{t('evidence.humanReview')}</h2>
-        {run.reviewed_by && (
-          <aside className="mb-4 rounded-lg border border-surface-700 p-3 text-sm" aria-label={t('evidence.suggestionTitle')}>
-            <p className="text-xs font-semibold text-gray-400">{t('evidence.suggestionTitle')} · {run.reviewed_by}</p>
-            {run.suggested_decision ? (
-              <>
-                <p className="mt-1 font-semibold text-gray-200">
-                  {t(`evidence.approval.${run.suggested_decision}`)}
-                  {run.suggested_category ? ` · ${t(`evidence.categoryValues.${run.suggested_category}`)}` : ''}
-                </p>
-                {run.suggested_reason && <p className="mt-1 whitespace-pre-wrap text-gray-300">{run.suggested_reason}</p>}
-              </>
-            ) : (
-              <p className="mt-1 text-gray-400">{t('evidence.suggestionUnusable')}</p>
-            )}
-            <p className="mt-2 text-xs text-gray-500">{t('evidence.suggestionNote')}</p>
-          </aside>
-        )}
-        <form onSubmit={submitApproval} className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm text-gray-400">
-            {t('evidence.approverName')}
-            <input className="input mt-1 w-full" value={approverName} onChange={event => setApproverName(event.target.value)} />
-          </label>
-          <label className="text-sm text-gray-400">
-            {t('evidence.decision')}
-            <select
-              className="input mt-1 w-full"
-              value={decision}
-              onChange={event => {
-                const nextDecision = event.target.value as 'approved' | 'rejected'
-                setDecision(nextDecision)
-                if (nextDecision === 'approved') setCategory('')
-                setFormError('')
-              }}
-            >
-              <option value="approved">{t('evidence.approval.approved')}</option>
-              <option value="rejected">{t('evidence.approval.rejected')}</option>
-            </select>
-          </label>
-          <label className="text-sm text-gray-400 md:col-span-2">
-            {t('evidence.feedback')}{decision === 'rejected' ? ' *' : ''}
-            <textarea className="textarea mt-1 w-full" rows={3} value={feedback} onChange={event => { setFeedback(event.target.value); setFormError('') }} />
-          </label>
-          {decision === 'rejected' && (
-            <label className="text-sm text-gray-400 md:col-span-2">
-              {t('evidence.rejectionCategory')}
-              <select className="input mt-1 w-full" value={category} onChange={event => setCategory(event.target.value)}>
-                <option value="">{t('evidence.noCategory')}</option>
-                {REJECTION_CATEGORIES.map(value => (
-                  <option key={value} value={value}>{t(`evidence.categoryValues.${value}`)}</option>
-                ))}
+      <Panel title={t('evidence.humanReview')}>
+        <div className="space-y-4 p-3">
+          {run.reviewed_by && (
+            <aside className="rounded-md border border-dashed border-surface-600 p-3 text-[13px]" aria-label={t('evidence.suggestionTitle')}>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+                <MessageSquareQuote size={12} aria-hidden="true" />{t('evidence.suggestionTitle')} · {run.reviewed_by}
+              </p>
+              {run.suggested_decision ? (
+                <>
+                  <p className="mt-1 font-semibold text-gray-200">
+                    {t(`evidence.approval.${run.suggested_decision}`)}
+                    {run.suggested_category ? ` · ${t(`evidence.categoryValues.${run.suggested_category}`)}` : ''}
+                  </p>
+                  {run.suggested_reason && <p className="mt-1 max-w-prose whitespace-pre-wrap leading-relaxed text-gray-300">{run.suggested_reason}</p>}
+                </>
+              ) : (
+                <p className="mt-1 text-gray-400">{t('evidence.suggestionUnusable')}</p>
+              )}
+              <p className="text-meta mt-2">{t('evidence.suggestionNote')}</p>
+            </aside>
+          )}
+          <form onSubmit={submitApproval} className="grid gap-3 md:grid-cols-2">
+            <label className="text-xs text-gray-400">
+              {t('evidence.approverName')}
+              <input className="input mt-1 w-full" value={approverName} onChange={event => setApproverName(event.target.value)} />
+            </label>
+            <label className="text-xs text-gray-400">
+              {t('evidence.decision')}
+              <select
+                className="input mt-1 w-full"
+                value={decision}
+                onChange={event => {
+                  const nextDecision = event.target.value as 'approved' | 'rejected'
+                  setDecision(nextDecision)
+                  if (nextDecision === 'approved') setCategory('')
+                  setFormError('')
+                }}
+              >
+                <option value="approved">{t('evidence.approval.approved')}</option>
+                <option value="rejected">{t('evidence.approval.rejected')}</option>
               </select>
             </label>
-          )}
-          {formError && <p role="alert" className="text-sm text-red-300 md:col-span-2">{formError}</p>}
-          {approveMutation.isError && <p role="alert" className="text-sm text-red-300 md:col-span-2">{t('evidence.approvalError')}</p>}
-          {approveMutation.isSuccess && <p role="status" className="text-sm text-emerald-300 md:col-span-2">{t('evidence.approvalSaved')}</p>}
-          <button type="submit" disabled={approveMutation.isPending} className="btn btn-primary md:col-span-2 md:justify-self-start">
-            {approveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-            {t('evidence.submitReview')}
-          </button>
-        </form>
-      </section>
-
-      <section className="card p-4">
-        <h2 className="mb-3 text-lg font-semibold text-white">{t('evidence.signatureStatus')}</h2>
-        {auditQuery.isLoading ? <div className="skeleton h-16 rounded" /> :
-          auditQuery.error instanceof ApiError && auditQuery.error.status === 404 ? (
-            <p className="text-sm text-gray-400">{t('evidence.noAuditRows')}</p>
-          ) : auditQuery.isError ? (
-            <p role="alert" className="text-sm text-red-300">{t('evidence.auditError')}</p>
-          ) : audit ? (
-            <>
-              <div className="mb-4 flex flex-wrap gap-2">
-                {SIGNATURE_STATUSES.map(status => {
-                  const Icon = status === 'valid' ? ShieldCheck : status === 'invalid' ? ShieldAlert : ShieldQuestion
-                  return (
-                    <span key={status} data-testid={`signature-${status}`} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${SIGNATURE_STYLES[status]}`}>
-                      <Icon size={13} aria-hidden="true" />
-                      {t(`evidence.signature.${status}`)}: {audit.summary[status]}
-                    </span>
-                  )
-                })}
-              </div>
-              <h3 className="mb-2 text-sm font-semibold text-gray-300">{t('evidence.auditLineage')}</h3>
-              {audit.rows.length === 0 ? <p className="text-sm text-gray-500">{t('evidence.noAuditRows')}</p> :
-                <ul className="space-y-2">
-                  {audit.rows.map(row => (
-                    <li key={row.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="font-mono text-gray-400">#{row.id}</span>
-                      <span className="text-gray-300">{row.action}</span>
-                      {row.legacy && (
-                        <span data-testid="legacy-company" className={`rounded border px-2 py-0.5 text-xs ${SIGNATURE_STYLES.legacy}`}>
-                          {t('evidence.legacyCompany')}
-                        </span>
-                      )}
-                      <span data-testid={`signature-row-${row.status}`} className={`rounded border px-2 py-0.5 text-xs ${SIGNATURE_STYLES[row.status]}`}>
-                        {t(`evidence.signature.${row.status}`)}
-                      </span>
-                    </li>
+            <label className="text-xs text-gray-400 md:col-span-2">
+              {t('evidence.feedback')}{decision === 'rejected' ? ' *' : ''}
+              <textarea className="textarea mt-1 w-full" rows={3} value={feedback} onChange={event => { setFeedback(event.target.value); setFormError('') }} />
+            </label>
+            {decision === 'rejected' && (
+              <label className="text-xs text-gray-400 md:col-span-2">
+                {t('evidence.rejectionCategory')}
+                <select className="input mt-1 w-full" value={category} onChange={event => setCategory(event.target.value)}>
+                  <option value="">{t('evidence.noCategory')}</option>
+                  {REJECTION_CATEGORIES.map(value => (
+                    <option key={value} value={value}>{t(`evidence.categoryValues.${value}`)}</option>
                   ))}
-                </ul>}
-            </>
-          ) : null}
-        <p className="mt-3 text-xs text-gray-500">
-          {t('evidence.runAuditId')}: {run.audit_log_id ?? t('evidence.notRecorded')}
-          {latestVerification?.audit_log_id !== undefined && latestVerification.audit_log_id !== null
-            ? ` · ${t('evidence.latestVerificationAuditId')}: ${latestVerification.audit_log_id}` : ''}
-        </p>
-      </section>
+                </select>
+              </label>
+            )}
+            {formError && <p role="alert" className="text-[13px] text-red-300 md:col-span-2">{formError}</p>}
+            {approveMutation.isError && <p role="alert" className="text-[13px] text-red-300 md:col-span-2">{t('evidence.approvalError')}</p>}
+            {approveMutation.isSuccess && <p role="status" className="text-[13px] text-emerald-300 md:col-span-2">{t('evidence.approvalSaved')}</p>}
+            <button type="submit" disabled={approveMutation.isPending} className="btn btn-primary btn-sm md:col-span-2 md:justify-self-start">
+              {approveMutation.isPending && <Spinner />}
+              {t('evidence.submitReview')}
+            </button>
+          </form>
+        </div>
+      </Panel>
+
+      <Panel title={t('evidence.signatureStatus')}>
+        <div className="space-y-3 p-3">
+          {auditQuery.isLoading ? <div className={`${SKELETON} h-16 rounded-md`} /> :
+            auditQuery.error instanceof ApiError && auditQuery.error.status === 404 ? (
+              <p className="text-[13px] text-gray-400">{t('evidence.noAuditRows')}</p>
+            ) : auditQuery.isError ? (
+              <p role="alert" className="text-[13px] text-red-300">{t('evidence.auditError')}</p>
+            ) : audit ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {SIGNATURE_STATUSES.map(status => {
+                    const Icon = SIGNATURE_ICONS[status]
+                    return (
+                      <span key={status} data-testid={`signature-${status}`} className={`status-badge tabular-nums ${SIGNATURE_STYLES[status]}`}>
+                        <Icon size={12} aria-hidden="true" />
+                        {t(`evidence.signature.${status}`)}: {audit.summary[status]}
+                      </span>
+                    )
+                  })}
+                </div>
+                <h3 className="text-meta font-medium uppercase tracking-wider">{t('evidence.auditLineage')}</h3>
+                {audit.rows.length === 0 ? <p className="text-[13px] text-gray-400">{t('evidence.noAuditRows')}</p> :
+                  <ul className="data-list -mx-3 border-t border-surface-700">
+                    {audit.rows.map(row => {
+                      const Icon = SIGNATURE_ICONS[row.status]
+                      return (
+                        <li key={row.id} className="data-row flex flex-wrap items-center gap-2 py-2 text-[13px]">
+                          <span className="font-mono text-xs tabular-nums text-gray-400">#{row.id}</span>
+                          <span className="text-gray-200">{row.action}</span>
+                          {row.legacy && (
+                            <span data-testid="legacy-company" className={`status-badge ${SIGNATURE_STYLES.legacy}`}>
+                              {t('evidence.legacyCompany')}
+                            </span>
+                          )}
+                          <span data-testid={`signature-row-${row.status}`} className={`status-badge ${SIGNATURE_STYLES[row.status]}`}>
+                            <Icon size={11} aria-hidden="true" />
+                            {t(`evidence.signature.${row.status}`)}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>}
+              </>
+            ) : null}
+          <p className="text-meta tabular-nums">
+            {t('evidence.runAuditId')}: {run.audit_log_id ?? t('evidence.notRecorded')}
+            {latestVerification?.audit_log_id !== undefined && latestVerification.audit_log_id !== null
+              ? ` · ${t('evidence.latestVerificationAuditId')}: ${latestVerification.audit_log_id}` : ''}
+          </p>
+        </div>
+      </Panel>
       </>}
     </div>
   )
@@ -372,12 +401,12 @@ export default function EvidenceDetail() {
   const runId = parseRouteId(rawRunId)
 
   if (companyId === null) {
-    return <div className="page-container"><div className="empty-state py-16"><p className="text-gray-400">{t('evidence.selectCompany')}</p></div></div>
+    return <div className="page-container max-w-6xl"><EmptyState icon={FileSearch} title={t('evidence.selectCompany')} dashed /></div>
   }
   if (runId === null) {
-    return <div className="page-container">
-      <p role="alert" className="alert-error mb-4">{t('evidence.invalidId', { id: rawRunId })}</p>
-      <Link to="/evidence" className="btn btn-ghost">{t('evidence.backToRuns')}</Link>
+    return <div className="page-container max-w-6xl space-y-3">
+      <p role="alert" className="alert-error">{t('evidence.invalidId', { id: rawRunId })}</p>
+      <Link to="/evidence" className="btn-tool">{t('evidence.backToRuns')}</Link>
     </div>
   }
 
