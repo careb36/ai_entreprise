@@ -5,7 +5,7 @@ import Documentation from './Documentation'
 import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
-import { pack } from '../test/documentationFixtures'
+import { pack, personSections } from '../test/documentationFixtures'
 
 function response(status: number, body: unknown = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
@@ -19,6 +19,7 @@ function stubApi(overrides: Record<string, () => Response> = {}) {
     if (key === 'GET /v1/companies/4/documentation') return response(200, { packs: [pack()] })
     if (key === 'GET /v1/documentation/11') return response(200, pack())
     if (key === 'GET /v1/companies/4/doc_language') return response(200, { company_id: 4, doc_language: 'en', chosen: false })
+    if (key === 'GET /v1/companies/4/documentation/person-sections') return response(200, personSections())
     return response(404)
   })
   vi.stubGlobal('fetch', fetch)
@@ -113,5 +114,15 @@ describe('Documentation', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(true))
     const put = fetch.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT')!
     expect(JSON.parse(String((put[1] as RequestInit).body))).toEqual({ doc_language: 'es' })
+  })
+
+  it('shows the person sections under the document they belong to, writable only by a manager', async () => {
+    stubApi()
+    renderAs('Viewer')
+    expect(await screen.findByRole('region', { name: 'Statements by a person' })).toHaveTextContent('Claim by sponsor@example.test (Owner)')
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Risk register' }))
+    expect(await screen.findByRole('heading', { name: 'Risk appetite and project-level risks' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Budget envelope' })).not.toBeInTheDocument()
   })
 })
