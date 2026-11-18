@@ -309,6 +309,35 @@ def _snapshot():
                 "tasks": [{"task_id": 41, "commit": "c" * 40}],
             }
         ],
+        "iteration_plans": [
+            {"sprint_id": 7, "scope_size": "M", "team_source": "suggested"}
+        ],
+        "carries": [
+            {
+                "event_id": 102,
+                "from_task_id": 42,
+                "from_sprint_id": 7,
+                "to_task_id": 43,
+                "to_sprint_id": 8,
+                "created_at": "2026-11-04T12:00:00",
+                "chain_hash": "unsigned:" + "3" * 64,
+            }
+        ],
+        "releases": [
+            {
+                "integration_id": 4,
+                "sprint_id": 7,
+                "status": "tests_passed",
+                "tested_commit": "b" * 40,
+                "published_commit": "b" * 40,
+                "how": "gh",
+                "provider": "github",
+                "base": "main",
+                "published_at": "2026-11-04T11:30:00",
+                "audit_log_id": 77,
+                "audit_chain_hash": "f0" * 32,
+            }
+        ],
     }
 
 
@@ -329,6 +358,9 @@ def _empty():
         "integrations": [],
         "effort": [],
         "costs": [],
+        "iteration_plans": [],
+        "carries": [],
+        "releases": [],
     }
 
 
