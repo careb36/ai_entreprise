@@ -30,6 +30,14 @@ Also in version 3, optional and additive (``run.sh --graders``, REQ-4 of
 and the grader were taken from (``graders.py``: ``sha``, git's ``trees`` per
 grading path, and the ``sha256`` of the files the runner wrote). A card
 without it was graded by the build's own copy.
+
+Version 4 (issues #443 and #438, the section ablation, ``ablation.py``)
+adds two optional top-level fields and nothing else: ``sections_off``, the
+prompt sections a run turned off (``run.sh`` with ``BENCH_SECTIONS_OFF``;
+absent when none were), and ``ablation``, on the baseline's card written by
+``ablate.sh``: per section, the run with it off beside the baseline and the
+difference in criteria passed, rework requests and prompt and reported
+tokens. Version 1 to 3 cards are still read, without either.
 """
 
 import math
@@ -38,11 +46,12 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import budget  # the sibling modules, by path
+import ablation  # the sibling modules, by path
+import budget
 import graders
 
-SCHEMA_VERSION = 3
-READABLE_VERSIONS = (1, 2, 3)
+SCHEMA_VERSION = 4
+READABLE_VERSIONS = (1, 2, 3, 4)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
 SPEC_STATUSES = ("completed", "timeout", "error", budget.BUDGET_EXCEEDED)
 
@@ -206,7 +215,7 @@ def validate(card: Any) -> list[str]:
         problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
     keys = (
         ("stamp", "commit", "llm", "policy")
-        if version in (2, 3)
+        if version in (2, 3, 4)
         else ("stamp", "commit", "llm")
     )
     for key in keys:
@@ -269,9 +278,9 @@ def validate(card: Any) -> list[str]:
             problems.append(
                 f"{where}.tasks: done_first_attempt <= done <= total does not hold"
             )
-        if version in (2, 3):
+        if version in (2, 3, 4):
             problems.extend(_routing_problems(where, spec.get("routing")))
-        if version == 3:
+        if version in (3, 4):
             problems.extend(_prompt_problems(where, spec.get("prompt")))
     totals = card.get("totals")
     if not isinstance(totals, dict):
@@ -285,9 +294,10 @@ def validate(card: Any) -> list[str]:
             for k in _TOTAL_FIELDS
             if k in totals and not _number(totals[k])
         )
-        if version == 3:
+        if version in (3, 4):
             problems.extend(_prompt_problems("totals", totals.get("prompt")))
     problems.extend(budget.run_problems(card, _count))
+    problems.extend(ablation.problems(card))
     problems.extend(graders.problems(card))
     if not budget.is_cut(card) and any(
         isinstance(s, dict) and s.get("status") == budget.BUDGET_EXCEEDED for s in specs

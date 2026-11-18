@@ -28,6 +28,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
   add the run-level block (``run``, ``budget.py``): whether the token budget
   cut the run, and the specifications it skipped. ``--graders FILE`` adds
   the commit the grade's tests came from (``graders.py``, ``run.sh --graders``).
+  ``--sections-off NAMES`` records the prompt sections the run turned off
+  (``sections_off``, schema v4; ``run.sh`` with ``BENCH_SECTIONS_OFF``), and a
+  card carrying a section ablation (``ablation.py``) renders its deltas.
 
 The pure functions are what ``backend/tests/test_bench_*.py`` check.
 
@@ -48,6 +51,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ablation
 import budget
 import graders
 import prompt_weight
@@ -222,9 +226,11 @@ def build_scorecard(
     policy: str = "default",
     run: dict[str, Any] | None = None,
     graders_record: dict[str, Any] | None = None,
+    sections_off: list[str] | None = None,
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them, and
-    the run-level block (``run``) and the graders' commit when given."""
+    the run-level block (``run``), the graders' commit and the prompt
+    sections turned off when given."""
     criteria_passed = sum(s["criteria"]["passed"] for s in specs)
     criteria_total = sum(s["criteria"]["total"] for s in specs)
     tasks = sum(s["tasks"]["total"] for s in specs)
@@ -255,6 +261,7 @@ def build_scorecard(
         },
         **({"run": run} if run is not None else {}),
         **({"graders": graders_record} if graders_record else {}),
+        **({"sections_off": list(sections_off)} if sections_off else {}),
     }
 
 
@@ -277,6 +284,15 @@ def render_markdown(card: dict[str, Any]) -> str:
         "tokens count only the turns whose usage the provider reported.",
         *graders.render_lines(card),
         *budget.render_lines(card),
+        *(
+            [
+                "Sections off in every Developer prompt: "
+                + ", ".join(card["sections_off"])
+                + "."
+            ]
+            if card.get("sections_off")
+            else []
+        ),
         "",
         "| Spec | Status | Criteria | First attempt | Rework / task | Blocked | Wall-clock | Tokens |",
         "|---|---|---|---|---|---|---|---|",
@@ -318,6 +334,7 @@ def render_markdown(card: dict[str, Any]) -> str:
             for r in s.get("routing") or []
         ]
     lines += prompt_weight.render_lines(card)
+    lines += ablation.render_lines(card)
     return "\n".join(lines) + "\n"
 
 
@@ -438,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--cut", action="store_true", help="the budget cut the run")
     w.add_argument("--skipped", action="append", default=[], help="a spec not run")
     w.add_argument("--graders", type=Path, help="the graders' record (graders.py)")
+    w.add_argument("--sections-off", default="", help="the prompt sections turned off")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -450,6 +468,11 @@ def main(argv: list[str] | None = None) -> int:
         args.out.write_text(json.dumps(collect(args), indent=2))
         return 0
     entries = [json.loads(p.read_text(encoding="utf-8")) for p in args.entries]
+    try:
+        off = ablation.parse_names(args.sections_off) if args.sections_off else []
+    except ValueError as exc:
+        print(f"--sections-off: {exc}", file=sys.stderr)
+        return 2
     card = build_scorecard(
         entries,
         stamp=args.stamp,
@@ -463,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
             skipped=args.skipped,
         ),
         graders_record=json.loads(args.graders.read_text()) if args.graders else None,
+        sections_off=off,
     )
     problems = validate(card)
     if problems:
