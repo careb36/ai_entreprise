@@ -51,17 +51,17 @@ export function Conversation({ companyId, sprintId, taskId, live = false }: {
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
           <h2 id={perTask ? 'task-conversation-title' : 'conversation-title'}
-            className="flex items-center gap-2 text-sm font-semibold text-white">
-            <MessagesSquare size={15} aria-hidden="true" /> {t('conversation.title', { defaultValue: 'Conversation' })}
+            className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-100">
+            <MessagesSquare size={13} aria-hidden="true" /> {t('conversation.title', { defaultValue: 'Conversation' })}
           </h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-400">
             {t('conversation.claimsNote', { defaultValue: 'What the roles said to each other. The evidence shows what was verified.' })}
           </p>
         </div>
         {!perTask && (
           <label className="text-xs text-gray-400">
             <span className="mr-2">{t('conversation.kindFilter', { defaultValue: 'Show' })}</span>
-            <select value={kind} onChange={e => setKind(e.target.value as MessageKind | '')} className="select py-1 text-xs">
+            <select value={kind} onChange={e => setKind(e.target.value as MessageKind | '')} className="select control-sm w-auto pr-7">
               <option value="">{t('conversation.allKinds', { defaultValue: 'All messages' })}</option>
               {MESSAGE_KINDS.map(value => (
                 <option key={value} value={value}>{t(`conversation.kinds.${value}`)}</option>
@@ -105,17 +105,17 @@ function MessageItem({ message, showTask }: { message: AgentMessage; showTask: b
   const recipient = message.to_role ?? t('conversation.team', { defaultValue: 'the team' })
 
   return (
-    <li className="card p-3">
+    <li className="panel border-dashed p-3">
       <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="font-semibold text-white">{message.from_name}</span>
-        {message.from_name !== message.from_role && <span className="text-gray-500">{message.from_role}</span>}
-        <ArrowRight size={12} className="text-gray-500" aria-label={t('conversation.to', { defaultValue: 'to' })} />
+        {message.from_name !== message.from_role && <span className="text-gray-400">{message.from_role}</span>}
+        <ArrowRight size={12} className="text-gray-400" aria-label={t('conversation.to', { defaultValue: 'to' })} />
         <span className="text-gray-300">{recipient}</span>
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${KIND_STYLES[message.kind] ?? KIND_STYLES.handoff}`}>
           {t(`conversation.kinds.${message.kind}`, { defaultValue: message.kind })}
         </span>
         {message.created_at && (
-          <time dateTime={message.created_at} className="ml-auto text-gray-500">
+          <time dateTime={message.created_at} className="ml-auto text-gray-400">
             {new Date(message.created_at).toLocaleString()}
           </time>
         )}

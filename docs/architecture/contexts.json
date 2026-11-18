@@ -657,6 +657,9 @@
       "test_documentation_router.py": [
         "loop"
       ],
+      "test_person_sections_router.py": [
+        "planning"
+      ],
       "test_e2e_ports.py": [
         "repo"
       ],

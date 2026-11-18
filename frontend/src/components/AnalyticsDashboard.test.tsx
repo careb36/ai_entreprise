@@ -15,7 +15,7 @@ const mockedUseAnalyticsSummary = vi.mocked(useAnalyticsSummary)
 const mockedUseOrchestrationHealth = vi.mocked(useOrchestrationHealth)
 
 function getCard(label: string) {
-  const card = screen.getByText(label).closest('.card') as HTMLElement | null
+  const card = screen.getByText(label).closest('.panel') as HTMLElement | null
   expect(card).not.toBeNull()
   return card!
 }

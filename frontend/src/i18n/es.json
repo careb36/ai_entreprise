@@ -177,7 +177,13 @@
     "manageQuotas": "Gestionar cuotas",
     "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites.",
     "tokenUsage": "{{used}} / {{limit}} tokens",
-    "goalLabel": "Objetivo del sprint"
+    "goalLabel": "Objetivo del sprint",
+    "agentState": {
+      "active": "Trabajando",
+      "error": "Con error",
+      "waiting": "En espera",
+      "idle": "Sin actividad"
+    }
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -550,8 +556,12 @@
       "version": "Versión {{version}}",
       "claimedFiles": "Archivos que el agente afirma haber escrito",
       "noFiles": "No afirma ningún archivo.",
-      "view": "Ver evidencia"
-    }
+      "view": "Ver evidencia",
+      "observed": "Observado",
+      "reported": "Declarado"
+    },
+    "commentCount_one": "{{count}} entrada",
+    "commentCount_other": "{{count}} entradas"
   },
   "controlPanel": {
     "title": "Panel de Control",
@@ -1391,7 +1401,9 @@
     "integrationBranch": "Rama de integración",
     "integrationError": "No se pudo cargar el plan de integración.",
     "integrationHint": "Mergeá estas ramas en orden, corré la suite completa sobre el resultado y publicá un único PR.",
-    "unmetDeps": "Dependencias sin resolver"
+    "unmetDeps": "Dependencias sin resolver",
+    "messageCount_one": "{{count}} mensaje",
+    "messageCount_other": "{{count}} mensajes"
   },
   "sprints": {
     "subtitle": "Todos los sprints de esta empresa, primero los activos.",
@@ -1573,7 +1585,9 @@
     "legacy": "sin empresa",
     "legacyHint": "Registrada antes de que las decisiones llevaran empresa.",
     "noSummary": "Sin resumen registrado.",
-    "open": "Ver las decisiones registradas sobre este archivo"
+    "open": "Ver las decisiones registradas sobre este archivo",
+    "count_one": "{{count}} decisión",
+    "count_other": "{{count}} decisiones"
   },
   "helpDesk": {
     "title": "Mesa de ayuda",
@@ -3095,7 +3109,9 @@
     "noTeam": "Sin equipo",
     "empty": "No hay nada registrado en este rango.",
     "generated": "Generado {{at}} a partir de los registros.",
-    "costNote": "El coste cuenta solo los turnos que informó el proxy y que el catálogo tiene con precio; los demás se cuentan aparte, nunca como cero. Una persona en dos equipos cuenta en ambos."
+    "costNote": "El coste cuenta solo los turnos que informó el proxy y que el catálogo tiene con precio; los demás se cuentan aparte, nunca como cero. Una persona en dos equipos cuenta en ambos.",
+    "rowCount_one": "{{count}} fila",
+    "rowCount_other": "{{count}} filas"
   },
   "wiki": {
     "title": "Wiki",

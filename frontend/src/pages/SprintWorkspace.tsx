@@ -12,7 +12,7 @@
 import React, { useEffect } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { MonitorPlay, Radio } from 'lucide-react'
+import { MonitorPlay, Radio, RefreshCw } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
 import GlassRoom from '../components/GlassRoom'
@@ -20,7 +20,6 @@ import { SprintTaskViews } from '../components/SprintTaskViews'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 import { Conversation } from '../components/Conversation'
 import { BoardNotes } from '../components/BoardNotes'
-import { Breadcrumbs } from '../components/Breadcrumbs'
 import SprintOverview from './Dashboard'
 import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
@@ -29,6 +28,8 @@ import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { SprintProgress } from '../components/SprintProgress'
 import { parseRouteId } from '../lib/routeId'
+import { CountPill, PageHeader } from '../components/ui'
+import { SprintStatusBadge } from './sprint/SprintStatusBadge'
 
 export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'notes', 'analytics'] as const
 export type SprintTab = typeof SPRINT_TABS[number]
@@ -71,10 +72,10 @@ function SprintTabs({ sprintId, selected }: { sprintId: number; selected: Sprint
         return (
           <Link key={tab} id={`sprint-tab-${tab}`} role="tab" to={sprintPath(sprintId, tab)}
             aria-selected={isSelected} aria-controls="sprint-panel" tabIndex={isSelected ? 0 : -1}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`whitespace-nowrap rounded-t-md border-b-2 px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 motion-reduce:transition-none ${
               isSelected
                 ? 'border-brand-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-white'
+                : 'border-transparent text-gray-400 hover:bg-surface-800/60 hover:text-white'
             }`}>
             {t(TAB_LABELS[tab].key, { defaultValue: TAB_LABELS[tab].defaultValue })}
           </Link>
@@ -89,22 +90,21 @@ function LivePanel({ sprintId }: { sprintId: number }) {
   const isSSEConnected = useAgentStore(s => s.isConnected)
   const messageCount = useAgentStore(s => s.messages.length)
   return (
-    <div className="card flex min-h-[32rem] flex-col overflow-visible xl:h-[calc(100vh-14rem)] xl:overflow-hidden">
-      <div className="flex min-h-11 flex-wrap items-center gap-3 border-b border-surface-700 bg-surface-900 px-4 py-2">
-        <MonitorPlay size={15} className="text-brand-400" />
-        <span className={`h-1.5 w-1.5 rounded-full ${isSSEConnected ? 'animate-pulse bg-green-400' : 'bg-red-500'}`} />
-        <span className="text-xs text-gray-400">
+    <div className="panel flex min-h-[32rem] flex-col overflow-visible xl:h-[calc(100vh-14rem)] xl:overflow-hidden">
+      <div className="panel-header">
+        <MonitorPlay size={14} className="text-brand-400" aria-hidden="true" />
+        <span aria-hidden="true"
+          className={`h-1.5 w-1.5 rounded-full ${isSSEConnected ? 'animate-pulse bg-green-400 motion-reduce:animate-none' : 'bg-red-500'}`} />
+        <span className="text-xs text-gray-300">
           {isSSEConnected
             ? t('sprint.streamConnected', { defaultValue: 'Stream connected' })
             : t('sprint.streamDisconnected', { defaultValue: 'Stream disconnected' })}
         </span>
         {messageCount > 0 && (
-          <span className="rounded-full bg-brand-700/40 px-1.5 py-0.5 text-[10px] font-medium text-brand-300">
-            {messageCount}
-          </span>
+          <CountPill count={messageCount} label={t('sprint.messageCount', { count: messageCount, defaultValue: '{{count}} messages' })} />
         )}
-        <span className="ml-auto hidden items-center gap-1 text-xs text-gray-500 sm:flex">
-          <Radio size={11} /> {t('workspace.aiAgentsActive', { defaultValue: 'AI Agents Active' })}
+        <span className="text-meta ml-auto hidden items-center gap-1 sm:flex">
+          <Radio size={11} aria-hidden="true" /> {t('workspace.aiAgentsActive', { defaultValue: 'AI Agents Active' })}
         </span>
       </div>
       <div className="min-h-0 flex-1">
@@ -117,8 +117,8 @@ function LivePanel({ sprintId }: { sprintId: number }) {
 function BoardPanel({ sprintId, companyId }: { sprintId: number; companyId: number | null }) {
   const { t } = useTranslation()
   return (
-    <div className="card flex min-h-[34rem] flex-col overflow-hidden">
-      <p className="border-b border-surface-700 bg-surface-900 px-4 py-2 text-xs text-gray-500">
+    <div className="panel flex min-h-[34rem] flex-col overflow-hidden">
+      <p className="text-meta border-b border-surface-700 px-3 py-2">
         {t('workspace.boardOpsHint', { defaultValue: 'Drag tasks to change status or reassign' })}
       </p>
       <div className="min-h-0 flex-1">
@@ -160,14 +160,18 @@ export const SprintWorkspace: React.FC = () => {
       ? t('workspace.invalidId', { id, defaultValue: 'Invalid sprint ID: {{id}}.' })
       : terminalMessage ?? t('workspace.loadError', { id, defaultValue: 'Failed to load sprint #{{id}}.' })
     return (
-      <div className="page-container">
-        <div role="alert" className="alert-error mb-4">
+      <div className="page-container max-w-6xl space-y-3">
+        <div role="alert" className="alert-error">
           {message}
         </div>
-        {sprintId !== null && !notFound && !noAccess && (
-          <button className="btn btn-ghost mr-3" onClick={() => boardQuery.refetch()}>{t('common.retry', { defaultValue: 'Retry' })}</button>
-        )}
-        <Link to="/sprints" className="btn btn-ghost">{sprintsLabel}</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {sprintId !== null && !notFound && !noAccess && (
+            <button type="button" className="btn-tool" onClick={() => boardQuery.refetch()}>
+              <RefreshCw size={13} aria-hidden="true" />{t('common.retry', { defaultValue: 'Retry' })}
+            </button>
+          )}
+          <Link to="/sprints" className="btn-tool border border-surface-700">{sprintsLabel}</Link>
+        </div>
       </div>
     )
   }
@@ -184,33 +188,29 @@ export const SprintWorkspace: React.FC = () => {
   return (
     <div className="bg-surface-950 px-4 pb-24 pt-4 text-white lg:px-6">
       <div className={`mx-auto min-w-0 space-y-4 ${wide ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
-        <Breadcrumbs items={[{ label: sprintsLabel, to: '/sprints' }, { label: sprintName }]} />
+        <PageHeader
+          breadcrumbs={[{ label: sprintsLabel, to: '/sprints' }, { label: sprintName }]}
+          title={<span className="block truncate">{sprintName}</span>}
+          subtitle={board?.sprint.status ? <SprintStatusBadge status={board.sprint.status} /> : undefined}
+          actions={board && <AutonomyControl companyId={board.sprint.company_id} canManage={canManage} />}
+        />
         {board && board.sprint.company_id !== companyId && (
-          <div role="alert" className="alert-error p-3">
+          <div role="alert" className="alert-error items-center p-3">
             {t('workspace.otherCompany', { defaultValue: 'This sprint belongs to another company. This view is read-only.' })}
             {' '}
             <Link to="/companies/select" className="underline">{t('workspace.selectCompany', { defaultValue: 'Select company' })}</Link>
           </div>
         )}
         {boardQuery.isError && (
-          <div role="alert" className="alert-error p-3">
+          <div role="alert" className="alert-error items-center p-3">
             {terminalMessage ?? t('workspace.refreshFailed', { defaultValue: 'Failed to refresh this sprint. Showing the last loaded view.' })}
             {!noAccess && !notFound && (
-              <button className="btn btn-ghost ml-3" onClick={() => boardQuery.refetch()}>{t('common.retry', { defaultValue: 'Retry' })}</button>
+              <button type="button" className="btn-tool ml-auto" onClick={() => boardQuery.refetch()}>
+                <RefreshCw size={13} aria-hidden="true" />{t('common.retry', { defaultValue: 'Retry' })}
+              </button>
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="min-w-0 truncate text-xl font-bold tracking-tight text-white">{sprintName}</h1>
-          {board?.sprint.status && (
-            <span className="rounded-full border border-surface-700 bg-surface-900 px-2 py-0.5 text-[11px] text-gray-400">
-              {t(`dashboard.status.${board.sprint.status}`, { defaultValue: board.sprint.status })}
-            </span>
-          )}
-          {board && (
-            <AutonomyControl companyId={board.sprint.company_id} canManage={canManage} />
-          )}
-        </div>
         {board && <SprintTeamChips team={board.sprint.team} source={board.sprint.team_source} />}
         {board && <SprintStatusBanner sprint={board.sprint} />}
         <div className="flex flex-wrap items-end gap-2 border-b border-surface-700">
@@ -223,7 +223,9 @@ export const SprintWorkspace: React.FC = () => {
         </div>
         <div id="sprint-panel" role="tabpanel" aria-labelledby={`sprint-tab-${tab}`} className="min-w-0">
           {!board ? (
-            <div role="status" className="py-8 text-sm text-gray-400">{t('common.loading', { defaultValue: 'Loading...' })}</div>
+            <div role="status" aria-label={t('common.loading', { defaultValue: 'Loading...' })} className="space-y-2">
+              {[0, 1, 2].map(index => <div key={index} className="skeleton h-14 rounded-xl motion-reduce:animate-none" />)}
+            </div>
           ) : tab === 'board' ? (
             <BoardPanel sprintId={sprintId} companyId={board?.sprint.company_id ?? null} />
           ) : tab === 'live' ? (
@@ -236,14 +238,14 @@ export const SprintWorkspace: React.FC = () => {
           ) : tab === 'analytics' ? (
             <AnalyticsDashboard sprintId={sprintId} />
           ) : (
-            <>
+            <div className="space-y-4">
               <SprintOverview sprintId={sprintId} />
               <SprintProgress sprintId={sprintId} live={board.sprint.status === 'active'}
                 specificationId={board.sprint.specification_id} />
               <SprintIntegration sprintId={sprintId} companyId={board.sprint.company_id}
                 canReview={canManage && board.sprint.company_id === companyId}
                 canConfigure={role === 'Owner' && board.sprint.company_id === companyId} />
-            </>
+            </div>
           )}
         </div>
       </div>

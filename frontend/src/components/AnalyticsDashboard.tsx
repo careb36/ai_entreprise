@@ -13,13 +13,13 @@ function HealthBadge({ score }: { score: number }) {
 
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${bg} group relative`}>
-      <span className={`text-2xl font-black ${color}`}>{score}</span>
+      <span className={`text-xl font-semibold tabular-nums ${color}`}>{score}</span>
       <div>
         <p className="text-xs text-gray-400 leading-none">{t('analytics.healthScore')}</p>
-        <p className="text-xs text-gray-500">/100</p>
+        <p className="text-xs text-gray-400">/100</p>
       </div>
       {/* Tooltip */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-surface-800 border border-surface-700 rounded-lg p-3 text-xs text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-card-md">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-surface-800 border border-surface-700 rounded-lg p-3 text-xs text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity motion-reduce:transition-none pointer-events-none z-10 shadow-card-md">
         {t('analytics.healthExplainer', 'Composite score: task completion rate, blocked items, and sprint velocity')}
       </div>
     </div>
@@ -84,7 +84,7 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {[1, 2, 3].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
         </div>
         <div className="skeleton h-32 rounded-lg" />
@@ -95,7 +95,7 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
   if (isError) {
     return (
       <div className="alert-error flex items-center gap-2">
-        <XSquare size={16} /> {t('analytics.error')}
+        <XSquare size={16} aria-hidden="true" /> {t('analytics.error')}
       </div>
     )
   }
@@ -137,26 +137,26 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
       {/* Section header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Activity className="text-cyan-400" size={18} />
-          <h3 className="text-base font-bold text-white">{t('analytics.orchestration_health.title')}</h3>
+          <Activity className="text-cyan-400" size={14} aria-hidden="true" />
+          <h3 className="text-[13px] font-semibold text-gray-100">{t('analytics.orchestration_health.title')}</h3>
           {anchor_date && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-400">
               ({t('analytics.orchestration_health.anchor_date')}: {anchor_date})
             </span>
           )}
         </div>
-        <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh', 'Refresh')} aria-label={t('common.refresh', 'Refresh')}>
-          <RefreshCw size={13} />
+        <button onClick={() => refetch()} className="btn-tool" title={t('common.refresh', 'Refresh')} aria-label={t('common.refresh', 'Refresh')}>
+          <RefreshCw size={13} aria-hidden="true" />
         </button>
       </div>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {kpis.map(kpi => (
-          <div key={kpi.label} className="card p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3">{kpi.label}</p>
+          <div key={kpi.label} className="panel px-3 py-2.5">
+            <p className="text-meta mb-2 font-semibold uppercase tracking-wide">{kpi.label}</p>
             {kpi.raw !== undefined ? (
-              <p className="text-3xl font-black text-white">{kpi.raw}</p>
+              <p className="text-xl font-semibold tabular-nums text-gray-100">{kpi.raw}</p>
             ) : (
               <div className="flex gap-4">
                 <div>
@@ -176,13 +176,13 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
 
       {/* Weekly trend chart or empty state */}
       {weeks.length === 0 ? (
-        <div className="card p-6 text-center text-gray-500 text-sm">
+        <div className="panel p-6 text-center text-gray-400 text-sm">
           {t('analytics.orchestration_health.empty')}
         </div>
       ) : (
-        <div className="card p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
-            <Info size={12} />
+        <div className="panel px-3 py-2.5">
+          <p className="text-meta mb-2 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
+            <Info size={12} aria-hidden="true" />
             {t('analytics.orchestration_health.weekly_trend')} — {t('analytics.orchestration_health.qa_rate')}
           </p>
           <WeeklyTrendChart weeks={weeks} />
@@ -210,7 +210,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {[1,2,3].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
         </div>
         <div className="skeleton h-32 rounded-lg" />
@@ -221,7 +221,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
   if (isError || !data) {
     return (
       <div className="alert-error flex items-center gap-2">
-        <XSquare size={16} /> {t('analytics.error')}
+        <XSquare size={16} aria-hidden="true" /> {t('analytics.error')}
         <button onClick={() => refetch()} className="btn btn-ghost btn-sm">{t('common.retry')}</button>
       </div>
     )
@@ -234,57 +234,57 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
   const inProg  = analytics.tasks_in_progress ?? 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex items-center gap-2">
-          <TrendingUp className="text-brand-400" size={22} />
+          <TrendingUp className="text-brand-400" size={16} aria-hidden="true" />
           <div>
-            <h2 className="text-xl font-bold text-white">{t('analytics.title')}</h2>
-            <p className="text-gray-500 text-sm">{t('analytics.subtitle')}</p>
+            <h2 className="text-[15px] font-semibold text-gray-100">{t('analytics.title')}</h2>
+            <p className="text-xs text-gray-400">{t('analytics.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <HealthBadge score={analytics.health_score} />
-          <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh','Refresh')} aria-label={t('common.refresh','Refresh')}>
-            <RefreshCw size={14} />
+          <button onClick={() => refetch()} className="btn-tool" title={t('common.refresh','Refresh')} aria-label={t('common.refresh','Refresh')}>
+            <RefreshCw size={13} aria-hidden="true" />
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="panel px-3 py-2.5">
           <div className="flex items-center gap-2 mb-2">
-            <Zap size={14} className="text-brand-400" />
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('analytics.tokensConsumed')}</p>
+            <Zap size={14} className="text-brand-400" aria-hidden="true" />
+            <p className="text-meta font-semibold uppercase tracking-wide">{t('analytics.tokensConsumed')}</p>
           </div>
-          <p className="text-3xl font-black text-white">{analytics.tokens_consumed.toLocaleString()}</p>
+          <p className="text-xl font-semibold tabular-nums text-gray-100">{analytics.tokens_consumed.toLocaleString()}</p>
         </div>
 
-        <div className="card p-4">
+        <div className="panel px-3 py-2.5">
           <div className="flex items-center gap-2 mb-2">
-            <CheckSquare size={14} className="text-status-success" />
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('analytics.tasksCompleted')}</p>
+            <CheckSquare size={14} className="text-status-success" aria-hidden="true" />
+            <p className="text-meta font-semibold uppercase tracking-wide">{t('analytics.tasksCompleted')}</p>
           </div>
-          <p className="text-3xl font-black text-white">{done}</p>
-          {inProg > 0 && <p className="text-xs text-gray-500 mt-1">{inProg} {t('analytics.inProgress')}</p>}
+          <p className="text-xl font-semibold tabular-nums text-gray-100">{done}</p>
+          {inProg > 0 && <p className="text-xs text-gray-400 mt-1">{inProg} {t('analytics.inProgress')}</p>}
         </div>
 
-        <div className="card p-4">
+        <div className="panel px-3 py-2.5">
           <div className="flex items-center gap-2 mb-2">
-            <XSquare size={14} className="text-status-error" />
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('analytics.tasksFailed')}</p>
+            <XSquare size={14} className="text-status-error" aria-hidden="true" />
+            <p className="text-meta font-semibold uppercase tracking-wide">{t('analytics.tasksFailed')}</p>
           </div>
-          <p className="text-3xl font-black text-white">{failed}</p>
+          <p className="text-xl font-semibold tabular-nums text-gray-100">{failed}</p>
         </div>
       </div>
 
       {/* Tokens by agent */}
       {analytics.agent_breakdown && analytics.agent_breakdown.length > 0 && (
-        <div className="card p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
-            <Info size={12} />
+        <div className="panel px-3 py-2.5">
+          <p className="text-meta mb-2 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
+            <Info size={12} aria-hidden="true" />
             {t('analytics.tokensByAgent')}
           </p>
           <div className="space-y-2">
@@ -292,7 +292,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
               <div key={role}>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-gray-400">{role}</span>
-                  <span className="text-gray-500">{tokens.toLocaleString()} ({percentage}%)</span>
+                  <span className="text-gray-400">{tokens.toLocaleString()} ({percentage}%)</span>
                 </div>
                 <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
                   <div className="h-full bg-brand-500 rounded-full" style={{ width: `${percentage}%` }} />
@@ -305,8 +305,8 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
 
       {/* Executive summary */}
       {analytics.executive_summary && (
-        <div className="card p-4 border-l-4 border-l-brand-500">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">{t('analytics.executiveSummary')}</p>
+        <div className="panel p-4 border-l-4 border-l-brand-500">
+          <p className="text-meta mb-2 font-semibold uppercase tracking-wide">{t('analytics.executiveSummary')}</p>
           <p className="text-gray-300 leading-relaxed italic">"{analytics.executive_summary}"</p>
         </div>
       )}

@@ -41,6 +41,7 @@ from .integration_review import IntegrationReview, IntegrationReviewComment
 from .invitation import CompanyInvitation
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
+from .person_statement import PersonStatement
 from .procedure import Procedure
 from .progress import SprintProgressSnapshot
 from .provider import ProviderConnection
@@ -95,6 +96,7 @@ __all__ = [
     "ManagerPolicy",
     "McpServer",
     "OutboxEvent",
+    "PersonStatement",
     "Procedure",
     "ProjectCredential",
     "ProjectDiscovery",

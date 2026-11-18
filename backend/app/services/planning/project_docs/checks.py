@@ -28,7 +28,7 @@ from collections.abc import Callable
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import specs, texts, wstg_status
+from services.planning.project_docs import specs, statements, texts, wstg_status
 from services.planning.project_docs.layout import DOMAINS, PMBOK, build, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_inline
@@ -303,6 +303,7 @@ CHECK_INPUTS = (
     "members",
     "retrospectives",
     "verifications",
+    statements.key_of("checks"),
 )
 
 
@@ -340,6 +341,14 @@ def document(snapshot: dict[str, Any]) -> dict[str, Any]:
         )
     missing = [r["outcome"] for r in results if r["result"] == NOT_COMPUTABLE]
     persons = [r["outcome"] for r in results if r["result"] == PERSON]
+    filled = statements.filled(snapshot, "checks")
+    if filled:
+        # A person's statement sits below the table: it never sets a result.
+        body += ["", tr("statements_heading"), "", tr("statements_intro")]
+        for item in filled:
+            heading = tr(statements.SECTIONS[item["section"]][1])
+            body += ["", f"### {md_inline(heading)}", ""]
+            body += statements.lines(snapshot, item["section"], src)
     return build(
         "checks",
         PMBOK,
@@ -349,4 +358,5 @@ def document(snapshot: dict[str, Any]) -> dict[str, Any]:
         specs.inputs(snapshot, CHECK_INPUTS),
         missing,
         persons=persons,
+        statements=filled,
     )
