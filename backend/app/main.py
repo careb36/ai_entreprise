@@ -49,6 +49,7 @@ from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.model_settings import router as model_settings_router
+from routers.person_sections import router as person_sections_router
 from routers.procedures import router as procedures_router
 from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
@@ -175,6 +176,7 @@ app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(company_architecture_router)
 app.include_router(documentation_router)
+app.include_router(person_sections_router)
 app.include_router(security_tests_router)
 app.include_router(workspace_router)
 app.include_router(mcp_router)

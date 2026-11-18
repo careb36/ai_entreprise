@@ -15,8 +15,10 @@ Verifier's verdict and risk tier per delivery), ``history`` (every version of
 the specifications and architectures), ``roles``, ``members``,
 ``retrospectives``, ``procedures``, ``integrations`` (with the commit each
 task was merged at), ``wstg_observations`` (the WSTG items the Verifier's
-checks observed) and ``wstg_reviews`` (a person's recorded reviews, without
-the reviewer's name). Each list is bounded (``LIMIT``), newest records kept.
+checks observed), ``wstg_reviews`` (a person's recorded reviews, without
+the reviewer's name) and ``statements_<document>`` (a person's current
+statement per person section, with the author's role and never their
+address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from models import (
     BacklogItem,
     Company,
     CompanyMember,
+    PersonStatement,
     Procedure,
     ProjectDiscovery,
     Specification,
@@ -47,7 +50,7 @@ from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
-from services.planning.project_docs import texts
+from services.planning.project_docs import statements, texts
 from services.planning.project_docs.refs import digest
 from services.platform import wstg_catalogue
 
@@ -506,6 +509,36 @@ def _wstg_reviews(session: Session, company_id: int) -> list[dict[str, Any]]:
     ]
 
 
+def current_statements(session: Session, company_id: int) -> list[PersonStatement]:
+    """The newest row per person section (a withdrawal included), in catalogue order."""
+    rows = session.exec(
+        select(PersonStatement)
+        .where(PersonStatement.company_id == company_id)
+        .order_by(PersonStatement.id.desc())
+    ).all()
+    newest: dict[str, PersonStatement] = {}
+    for row in rows:
+        newest.setdefault(row.section, row)
+    return [newest[k] for k in statements.SECTIONS if k in newest]
+
+
+def _person_statements(session: Session, company_id: int) -> dict[str, Any]:
+    """The current statements per document, without the author's address."""
+    return statements.by_document(
+        [
+            {
+                "id": r.id,
+                "section": r.section,
+                "text": r.text,
+                "author_role": r.author_role,
+                "created_at": _iso(r.created_at),
+                "statement_sha256": r.statement_sha256,
+            }
+            for r in current_statements(session, company_id)
+        ]
+    )
+
+
 def snapshot(session: Session, company: Company) -> dict[str, Any]:
     """Everything a pack reads about *company*, as plain data."""
     spec = current_specification(session, company.id)
@@ -530,4 +563,5 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "integrations": _integrations(session, company.id),
         "wstg_observations": _wstg_observations(session, company.id),
         "wstg_reviews": _wstg_reviews(session, company.id),
+        **_person_statements(session, company.id),
     }

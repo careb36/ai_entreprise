@@ -87,6 +87,9 @@ def serialize(pack: DocumentationPack, lint: dict[str, Any]) -> dict[str, Any]:
                 "missing": d.get("missing") or [],
                 "claims": d.get("claims") or [],
                 "persons": d.get("persons") or [],
+                # The person sections a person filled: a claim each, with its
+                # author's role and time (``project_docs.statements``).
+                "statements": d.get("statements") or [],
                 "domain": d.get("domain") or "",
                 "focus_area": d.get("focus_area") or "",
                 # CC BY-SA 4.0 for the WSTG checklist and report (issue #539).

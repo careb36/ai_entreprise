@@ -3,7 +3,8 @@
 A built document is plain data::
 
     {"key", "title", "framework", "markdown", "sources": [...],
-     "missing": [...], "claims": [...], "persons": [...], "domain",
+     "missing": [...], "claims": [...], "persons": [...], "statements": [...],
+     "domain",
      "focus_area", "inputs": [...], "input_sha256"}
 
 ``inputs`` names the parts of the snapshot the builder read and
@@ -14,7 +15,9 @@ language is not an input: a pack in another language than the company's
 current one is flagged by the lint on its own. ``missing`` lists the sections
 that had no record behind them, ``persons`` the sections only a person can
 write and ``claims`` the prose a model wrote; all three in the pack's
-language. ``domain`` and ``focus_area`` stay the English names of
+language. ``statements`` lists the person sections a person has filled
+(``statements.summary``: the statement's id, author role, time and digest),
+kept apart from ``claims``, which are a model's. ``domain`` and ``focus_area`` stay the English names of
 ``DOMAINS`` and ``FOCUS_AREAS`` (data, not text); the Markdown shows them in
 the pack's language.
 
@@ -123,6 +126,7 @@ def build(
     missing: list[str],
     claims: list[dict[str, Any]] | None = None,
     persons: list[str] | None = None,
+    statements: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lang, tr = tr_of(snapshot)
     title = tr(f"title.{key}")
@@ -140,6 +144,7 @@ def build(
         "missing": missing,
         "claims": claims or [],
         "persons": persons or [],
+        "statements": statements or [],
         "domain": domain,
         "focus_area": focus,
         "inputs": list(inputs),
