@@ -296,6 +296,72 @@ def count_qa_rework_requests(comments: Any) -> int:
     )
 
 
+# How the loop words a send-back by the gate before QA
+# (``services/loop/worker/review.py``): ``NEEDS WORK: <problem> — <observation>.
+# <instruction>`` while reworks remain, ``<Problem> after <n> rework(s) —
+# blocked for manual triage: <observation>`` at the limit. The problem is the
+# name ``services.evidence.delivery_gate`` gives it; platform may not import
+# the evidence, so the text is parsed, and ``tests/test_gate_refutations.py``
+# pins this format to what the loop actually writes.
+GATE_SEND_BACK_PREFIX = "NEEDS WORK:"
+GATE_PROBLEM_SEPARATOR = " — "
+GATE_BLOCKED_SUFFIX = "blocked for manual triage:"
+# The daemon never confirmed the write: the gate sends it back, but nothing
+# was refuted, so it is counted under its own name and left out of the total.
+GATE_UNCONFIRMED = "delivery unconfirmed"
+_GATE_BLOCKED = re.compile(
+    r"(?P<problem>[^\n]+?) after \d+ rework\(s\)"
+    + re.escape(GATE_PROBLEM_SEPARATOR + GATE_BLOCKED_SUFFIX)
+)
+
+
+def gate_refutation_problem(comment: Any) -> str | None:
+    """The problem the gate before QA named in *comment*, or ``None``.
+
+    *comment* is comment-shaped (``author``, ``text``), as a task event's
+    payload is. Only the Verifier's own send-backs count; see
+    :func:`count_gate_refutations` for what is left out.
+    """
+    if not isinstance(comment, dict):
+        return None
+    if str(comment.get("author", "")).strip().lower() != DELIVERY_GATE_AUTHOR.lower():
+        return None
+    text = str(comment.get("text", "")).strip()
+    if text.upper().startswith(GATE_SEND_BACK_PREFIX):
+        rest = text[len(GATE_SEND_BACK_PREFIX) :].strip()
+        problem, separator, _ = rest.partition(GATE_PROBLEM_SEPARATOR)
+        problem = problem.strip().lower()
+        return problem if separator and problem else None
+    blocked = _GATE_BLOCKED.match(text)
+    return blocked.group("problem").strip().lower() if blocked else None
+
+
+def count_gate_refutations(comments: Any) -> dict[str, int]:
+    """Deliveries the gate before QA sent back, by the problem it named.
+
+    The keys are ``delivery_gate``'s names (``invented dependency or import``,
+    ``tests failed``, ``standards violated``…); a send-back that reworks the
+    task and one that blocks it at the rework limit both count, since each is
+    one delivery the gate stopped. ``delivery unconfirmed`` (the daemon never
+    answered) is counted under its own key: callers leave it out of a total of
+    refutations (:data:`GATE_UNCONFIRMED`).
+
+    Left out on purpose, as :func:`count_qa_rework_requests` leaves the gate
+    out of its count: a reviewer's or a person's ``NEEDS WORK:`` (a judgement,
+    not a check), the Quality gate's text checks (too short, unbalanced
+    fences: they run on the text, not on what was observed at delivery),
+    the system's notes, a delivery queued for an offline daemon (it waits and
+    writes no send-back) and any Verifier text in neither format. The two
+    counters never mix: the Architect-consultation decision reads the other.
+    """
+    counts: dict[str, int] = {}
+    for comment in _coerce_comments(comments):
+        problem = gate_refutation_problem(comment)
+        if problem:
+            counts[problem] = counts.get(problem, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def should_consult_architect(
     item: dict[str, Any],
     agent: dict[str, Any],

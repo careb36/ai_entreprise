@@ -137,6 +137,7 @@ Test files:
 | `test_glassroom_sse.py` | SSE fan-out and stream ordering; the replayed history carries the same event ids on every connection, so a reconnecting client can tell it from new events |
 | `test_orchestration_metrics.py` | Orchestration metric helpers |
 | `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
+| `test_gate_refutations.py` | The count of deliveries the gate before QA sent back, by problem (issue #549): every problem `delivery_gate` names, written by the real review cycle, parsed back to that name (platform parses the text, since it may not import the evidence); an unconfirmed delivery under its own key; the block at the rework limit counted with its problem; a reviewer's, a person's, the Quality gate's and the system's `NEEDS WORK:` left out, and the count kept apart from `count_qa_rework_requests`; `GET /v1/analytics/gate_refutations` per company, per sprint and over a period, another company's sprint 404, a reversed period 400 |
 | `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
