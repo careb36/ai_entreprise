@@ -3,6 +3,7 @@
 Endpoints (split out of ``routers/enterprise.py``, which re-exports them):
 - ``GET /v1/analytics/summary``              — AI Scrum Master sprint health report.
 - ``GET /v1/analytics/orchestration_health`` — weekly KPI trends of the orchestration.
+- ``GET /v1/analytics/gate_refutations``     — deliveries the gate before QA sent back.
 - ``GET /v1/enterprise/quota_usage_history`` — a company's daily token usage.
 """
 
@@ -15,14 +16,22 @@ from auth_policy import (
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logging_config import logger
-from models import AuditLog, Sprint, User
+from models import AuditLog, Sprint, TaskEvent, User
 from schemas import (
+    GateRefutationsResponse,
+    GateRefutationWeek,
     OrchestrationHealthResponse,
     OrchestrationHealthSummaries,
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
 from services.loop.company_service import CompanyService
+from services.platform.orchestration_metrics import (
+    GATE_UNCONFIRMED,
+    count_gate_refutations,
+    gate_refutation_problem,
+)
+from services.tasks.task_events import GATE
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -235,6 +244,73 @@ async def get_orchestration_health(
                 avg_developer_tokens=_weighted_token_average(post_batch1),
             ),
         ),
+    )
+
+
+_GATE_REFUTATION_DAYS = 56
+
+
+@router.get(
+    "/analytics/gate_refutations",
+    response_model=GateRefutationsResponse,
+    tags=["Enterprise"],
+)
+async def get_gate_refutations(
+    company_id: int = Query(..., description="Company whose task events are read"),
+    sprint_id: int | None = Query(None, description="Only this sprint's tasks"),
+    since: date | None = Query(None, description="First day, inclusive"),  # noqa: B008 - FastAPI query marker.
+    until: date | None = Query(None, description="Last day, inclusive (today)"),  # noqa: B008 - FastAPI query marker.
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """
+    Deliveries the gate before QA sent back, per problem and ISO week (issue #549).
+
+    Read from the task-event chain (the Verifier's ``gate`` events), never
+    from what an agent said; ``count_gate_refutations`` says what is left
+    out. ``since`` defaults to eight weeks before ``until``.
+    """
+    require_company_role(session, user, company_id, "Viewer")
+    until = until or datetime.now(UTC).date()
+    since = since or until - timedelta(days=_GATE_REFUTATION_DAYS)
+    if since > until:
+        raise HTTPException(status_code=400, detail="since is after until")
+    if sprint_id is not None:
+        sprint = session.get(Sprint, sprint_id)
+        if sprint is None or sprint.company_id != company_id:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+    query = select(TaskEvent).where(
+        TaskEvent.company_id == company_id,
+        TaskEvent.actor == GATE,
+        TaskEvent.created_at >= datetime.combine(since, datetime.min.time()),
+        TaskEvent.created_at
+        < datetime.combine(until + timedelta(days=1), datetime.min.time()),
+    )
+    if sprint_id is not None:
+        query = query.where(TaskEvent.sprint_id == sprint_id)
+    weekly: dict[str, list[dict]] = {}
+    payloads = []
+    for event in session.exec(query.order_by(TaskEvent.id)).all():
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        if gate_refutation_problem(payload) is None:
+            continue
+        payloads.append(payload)
+        year, week, _ = event.created_at.isocalendar()
+        weekly.setdefault(f"{year}-W{week:02d}", []).append(payload)
+    by_problem = count_gate_refutations(payloads)
+    unconfirmed = by_problem.get(GATE_UNCONFIRMED, 0)
+    return GateRefutationsResponse(
+        company_id=company_id,
+        sprint_id=sprint_id,
+        since=since.isoformat(),
+        until=until.isoformat(),
+        by_problem=by_problem,
+        refuted=sum(by_problem.values()) - unconfirmed,
+        unconfirmed=unconfirmed,
+        weeks=[
+            GateRefutationWeek(week=week, by_problem=count_gate_refutations(rows))
+            for week, rows in sorted(weekly.items())
+        ],
     )
 
 
