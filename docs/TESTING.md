@@ -606,10 +606,9 @@ runs it after the backend tests.
 The workspace daemon has a suite of its own under `vscode-daemon/tests/`
 (standard library and pytest only; `conftest.py` puts `vscode-daemon/` on
 `sys.path`), run with any Python that has pytest:
-`python -m pytest vscode-daemon/tests -q`. CI does not run it yet (the
-workflows are protected paths; a step after the proxy's is the owner's to
-add), so `scripts/check.sh` does not either; run it when you change the
-daemon's sandbox. Most daemon tests still live in `backend/tests/`.
+`python -m pytest vscode-daemon/tests -q`. CI runs it in `backend-tests.yml`
+("Run workspace daemon tests", in the backend's venv); `scripts/check.sh`
+does not yet, so run it when you change the daemon's sandbox. Most daemon tests still live in `backend/tests/`.
 
 | File | What it covers |
 |---|---|
