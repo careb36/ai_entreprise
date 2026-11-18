@@ -93,11 +93,13 @@ def _developer_prompt(
     requirements_context: str | None,
     budget: int | None = None,
     wiki_context: str | None = None,
+    off: frozenset[str] = frozenset(),
 ) -> tuple[str, list[str], dict[str, Any]]:
     """The task's user prompt, the pending rework feedback it carries, and its measure.
 
     The prompt is a list of named sections (``prompt_budget``): measured one
-    by one and, over *budget*, the least needed left out first (#443).
+    by one, those named in *off* left out (``PROMPT_SECTIONS_OFF``) and, over
+    *budget*, the least needed left out first (#443).
     """
     # Sections run from the most stable to the most variable, so the providers'
     # prefix cache bills the shared start of the prompt at the cached rate:
@@ -211,7 +213,7 @@ def _developer_prompt(
                 + "\n".join(f"- {text[:1500]}" for text in rework_feedback),
             )
         )
-    user_prompt, measure = prompt_budget.fit(sections, budget)
+    user_prompt, measure = prompt_budget.fit(sections, budget, off)
     return user_prompt, rework_feedback, measure
 
 
@@ -257,6 +259,7 @@ def _execute_task(
         requirements_context,
         prompt_budget.budget_for(agent.get("role")),
         wiki_context,
+        off=prompt_budget.sections_off(),
     )
     # The backend's own measure of what it sent: an observation beside the run.
     measure["system_tokens"] = prompt_budget.estimate_tokens(system_prompt)
