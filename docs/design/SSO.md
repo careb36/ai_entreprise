@@ -3,7 +3,9 @@
 Status: draft, written before the code by the `threat-model` skill; a person
 reviews it before it guides more work · Issue: #512 · SDL practice 3 ·
 Amended 2026-11-18 for the DNS verification of allowed domains (T16–T24,
-again written before the code)
+again written before the code) · Amended 2026-11-18 for linking an identity
+from inside a signed-in session (T25–T33, written with the tests, before the
+code; T31's single transaction and T33 added after the sdl-review)
 
 ## What is built
 
@@ -14,7 +16,9 @@ account by `(issuer, sub)`, applies the company's membership policy and issues
 the same access token the password login issues. The Owner can require SSO
 for the company's members, with a break-glass password path the operator
 turns on. Each allowed domain is proved by a DNS TXT record before SSO may
-create or link accounts in it (below, "Domain verification"). Google and Microsoft Entra ID are presets of the generic connection
+create or link accounts in it (below, "Domain verification"). A signed-in
+person can also link their account to their company's provider themselves,
+and unlink it (below, "Linking in a session"). Google and Microsoft Entra ID are presets of the generic connection
 (issuer templates), not separate code paths. SAML is out of scope.
 
 ## Assets
@@ -46,6 +50,12 @@ Owner   ─B1─ GET/PUT/DELETE /v1/companies/{id}/sso, POST …/sso/test
 Owner   ─B1─ GET …/sso/domains, POST …/sso/domains/{domain}/check
                └─B14─ TXT _la-fabrique-verify.<domain> (system or named resolver)
 Re-check loop (backend, one replica) ─B14─ the same lookup every 24 h
+Person ─B1─ POST /v1/auth/sso/link/start {company_id}  (session cookie + CSRF)
+               sets the binding cookie, answers the IdP authorize URL (B8)
+IdP ──302──> Backend /v1/auth/sso/callback  (the same route; a "link" state)
+               └──302──> Frontend /account?sso_link=linked | sso_link_error=<code>
+Person ─B1─ GET/DELETE /v1/auth/sso/identities[/{id}]
+Owner  ─B1─ GET/DELETE /v1/companies/{id}/sso/identities[/{id}]
 ```
 
 **B8 (new): backend ↔ the company's identity provider.** The IdP is chosen by
@@ -90,6 +100,16 @@ check rows are the observation; the status is derived only from the latter.
 | T23 | — | R | A domain becomes verified or unverified with no record of why | M | M | Medium | New: each lookup is an append-only `sso_domain_checks` row (time, trigger, requester, outcome, the strings seen, kept when the domain is removed); each status change writes a signed, chained audit row (`sso_domain_verified`, `sso_domain_unverified`) |
 | T24 | — | T | The Owner's claim and DNS's observation share a field (`docs/POSITIONING.md`, rule 1) | L | M | Low | New: `allowed_domains` stays the claim; `sso_domains.status` is set only by `sso_domains.check` from the backend's own lookup; the observations are their own table |
 
+| T25 | B1 | S | **Link injection** (identity fixation): an attacker starts a link from their own session and gets the victim's browser to finish it (the victim, already signed in at the IdP, may pass through it without a prompt), so the attacker's account gains the victim's IdP identity — or the reverse, the attacker's code finishing in the victim's session | M | H | High | New: the link state is single use, 10 minutes, and its binding is sha256 of a random HttpOnly cookie value joined to the session's public id; the callback refuses unless the browser's cookie and one of the state user's **live** sessions reproduce it (`sso_link._bound`), before the code is exchanged; the email must also be the account's own (T27); tests for another browser, another person's state, an ended session, replay, expiry |
+| T26 | B1 | S, E | Linking is started by a forged request, a stolen Bearer token or an API token | L | H | Medium | New: `POST /v1/auth/sso/link/start` takes only a browser session cookie (CSRF checked by `auth_deps`); a Bearer access token or an API token is 403, since neither has a session to bind to; the caller must be a member of the company named; tests |
+| T27 | B8 | S, E | A company's IdP asserts another person's address and subject, and a member of that company links it to take over the person's account | M | H | High | New: the IdP's email (`email_verified` not false, as at sign-in) must equal the signed-in account's email, so a person can only link an identity for their own address; its domain must be allowed and **verified by DNS** for this company (a legacy domain's grace does not count: the single-company rule of T15 is not applied here, so only the proof that the company holds the domain will do); tests for a mismatched email, an unverified email, an unverified and a legacy domain |
+| T28 | B8 | E | A subject already linked to one account is re-linked to another, or one account collects several subjects at the same issuer | L | H | Medium | New: an `(issuer, subject)` linked to someone else is refused (`identity_taken`; the unique constraint backs it in a race), one already linked to this account is `already_linked`, a second subject at the same issuer is refused at start (409) and at the callback (`identity_conflict`); tests |
+| T29 | B1 | D | A person unlinks their only way to sign in and is locked out (no password reset exists) | M | M | Medium | New: oneself may unlink only while a password **that no SSO requirement refuses** (break-glass counted) or another identity through an enabled connection remains (409 `last_sign_in_method`); tests for an SSO-only account and a password refused by "require SSO" |
+| T30 | B1 | E | An Owner of one company unlinks (or lists) an identity of another company's connection, or a person unlinks someone else's | L | M | Medium | New: the Owner routes act only on identities whose connection is the company's and whose user is still a member (404 otherwise); a person's own route only on their identities (404); the routes are in `authorization.json`; tests |
+| T31 | — | R | A link or unlink leaves no record, or a failed audit write leaves the change without its row | M | M | Medium | New: every link callback writes a signed, chained `sso_identity_link` row (observed claims, outcome, refusals included) and every unlink an `sso_identity_unlink` row (issuer, subject, by self or owner, whether another sign-in remained, sessions ended). The change and its row are one commit: the new identity, or the deletion with the Owner's session revocations (`sessions.revoke_users(…, commit=False)`), is committed only by the audit write, and rolled back if it fails; tests that make the audit write fail for a link, a self-unlink and an Owner's unlink |
+| T33 | B1 | T | Two links of one account at one provider race past the `identity_conflict` check (two tabs, two states) and leave the account with two subjects there | L | M | Low | New: a unique index on `sso_identities (user_id, issuer)` (migration `0050`, which stops on existing duplicates and changes nothing, as `0045` does); the losing link's flush fails, is rolled back and ends as `identity_conflict` (or `identity_taken` if its subject was the one taken), audited, never a server error; the sign-in's linking by email likewise; tests for the index, both races and the migration |
+| T32 | B1 | E | An identity the Owner removes keeps working through sessions it already started | M | M | Medium | New: an Owner's unlink revokes the person's SSO-started session families at once (`sessions.revoke_users(…, method="sso")`, reason `sso_unlinked`); test. A person's own unlink ends nothing (they are using a session) |
+
 Assume breach: if the resolver the backend asks is compromised, it can
 verify any listed domain for whoever listed it (T17) — but only for a company
 whose Owner listed it and whose IdP then asserts addresses there, and every
@@ -127,6 +147,26 @@ a linked identity still signs in; legacy grace on, off, over and void once
 another company verified; the domain lookup on the login page; migration
 0049's backfill.
 
+`test_sso_link_integrity.py`: an audit write that fails leaves no link,
+no self-unlink and no Owner unlink (identity kept, sessions not revoked); the
+database refuses a second identity per account and provider; a link and a
+sign-in racing past the check end as `identity_conflict`; migration 0050
+stops on an existing duplicate without changing anything, then applies.
+
+`test_sso_link.py` (the same fake IdP; a browser session from the password
+login): a member of several companies links (PKCE verifier matches the
+challenge, password kept, audit row) and then signs in by SSO as that
+account; a replayed, expired, other-browser, ended-session and
+other-person's state refused before the provider is asked; a mismatched or
+unverified email, a subject linked to someone else, a second subject at
+the same issuer, an unverified and a legacy domain refused; start refused
+anonymously, by Bearer, without CSRF, outside the company and without a
+connection; the person's listing hides the subject; self-unlink with a
+password, refused as the last way in (SSO-only, or a password "require SSO"
+refuses), refused for another's identity; an Owner unlinks a member's
+identity (the Manager cannot) and ends their SSO sessions, and cannot
+unlink another company's.
+
 ## Residual risks
 
 - Sessions already issued (updated by #524, `docs/design/SESSIONS.md`):
@@ -158,11 +198,24 @@ another company verified; the domain lookup on the login page; migration
   `http_adapters`: `scripts/check_architecture.py` knows only HTTP libraries,
   so nothing yet stops another module importing `dns` directly. Adding `dns`
   to its list (a protected path) is the follow-up.
-- A person in several companies cannot link SSO by email (T15); they keep
-  their password, unless a company requires SSO, in which case an Owner of
-  the other companies removes them first
-  (`DELETE /v1/company/{id}/members/{user_id}`). Linking from inside a
-  signed-in session (Flow's AD-25) is the follow-up.
+- A person in several companies cannot be linked by email at sign-in (T15);
+  they link from their own Account page while signed in (T25–T28), which
+  needs the company's domain verified by DNS, not in its legacy grace.
+- Linking in a session trusts the company's provider for the person's
+  address once its domain is verified: an Owner who controls both the IdP
+  and the mail domain could already reach the mailbox. The person chose to
+  link; an Owner of that company can unlink (T30, T32).
+- The link state binds to a live session found from the state's user, not
+  to the exact session that began it: a second live session of the same
+  person in the **same** browser (a new login without logging out) also
+  matches. Another browser or another person never does.
+- An Owner's unlink can leave the person with no way to sign in (on
+  purpose: the Owner distrusts that identity); the audit row records
+  `other_sign_in: false`. Unlinking the identity an Owner used to prove the
+  connection does not turn "require SSO" off.
+- The desktop app moves only the callback's redirect to `/login/sso` into
+  its window (`frontend/electron/local-server.ts`); a link landing on
+  `/account` is not handled there yet.
 - Once linked, an identity keeps resolving to its account even after the
   account joins other companies, so a company's IdP stays trusted for the
   people it already signed in.
@@ -231,6 +284,18 @@ another company verified; the domain lookup on the login page; migration
   `https://login.microsoftonline.com/{tenant}/v2.0` with a tenant GUID;
   `generic` → any https issuer.
 
+- **Linking in a session** (`sso_flow_states.kind` takes `link`, its
+  `user_id` and `binding_hash` hold the person and the binding; migration
+  `0050` adds the unique index `ux_sso_identities_user_issuer`, T33):
+  `sso_link.py` (platform) starts a link (`start`), finishes the callback's
+  link states (`complete`, after `sso_flow.take_state` consumed it and
+  `sso_flow.exchange_claims` validated the token, both shared with the
+  sign-in), applies the rules (`link`), unlinks (`unlink`, with
+  `other_sign_in`) and lists (`mine`, `of_company`). Router:
+  `routers/sso_link.py`; the callback in `routers/sso.py` dispatches on the
+  state's kind. Frontend: `pages/Account.tsx` and
+  `components/SsoIdentities.tsx`.
+
 ## What was taken from AixleHQ/flow (Apache-2.0, design only)
 
 From `docs/design/federated-identity.md` and `app/services/auth/`:
@@ -254,3 +319,9 @@ first draft already cited it). The record's shape, the re-check, the grace
 for legacy domains and the rule that a newer proof re-checks the older claim
 are ours. From the reference agents named in `CLAUDE.md`: nothing; none of
 them verifies a tenant's email domain.
+
+For linking in a session: AD-25 of the same document (a signed-in user links
+a further identity; design only). The binding of the state to the browser
+and the live session, the email-must-match rule, the verified-domain
+requirement without the legacy grace and the unlink rules are ours. From
+the reference agents: nothing.

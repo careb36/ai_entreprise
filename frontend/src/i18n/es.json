@@ -37,6 +37,7 @@
     "duties": "Funciones y accesos",
     "auditAnchors": "Anclajes de auditoría",
     "invitations": "Invitaciones",
+    "account": "Cuenta",
     "findings": "Hallazgos"
   },
   "dashboard": {
@@ -3678,6 +3679,32 @@
       "completed_tasks": "Tareas terminadas",
       "console_assistant_notes": "Notas de consola",
       "wiki": "Wiki"
+    }
+  },
+  "account": {
+    "title": "Cuenta",
+    "subtitle": "Tu configuración personal, en cualquier empresa en la que trabajes.",
+    "sso": {
+      "title": "Inicio de sesión único",
+      "intro": "Vincula tu cuenta con el proveedor de identidad de tu empresa para iniciar sesión con él. El correo verificado del proveedor debe ser el de esta cuenta, en un dominio que la empresa haya verificado. Puedes desvincularla mientras conserves otra forma de iniciar sesión.",
+      "none": "Ninguna de tus empresas tiene configurado el inicio de sesión único.",
+      "link": "Vincular",
+      "unlink": "Desvincular",
+      "unknownCompany": "El proveedor de identidad de una empresa",
+      "linkedAt": "vinculada el {{date}}",
+      "outcome": {
+        "linked": "Tu identidad quedó vinculada. Ya puedes iniciar sesión con el inicio de sesión único.",
+        "already_linked": "Esta identidad ya estaba vinculada a tu cuenta."
+      },
+      "errors": {
+        "state_mismatch": "La vinculación se inició en otro navegador o tu sesión terminó. Inicia sesión y vuelve a empezar aquí.",
+        "email_mismatch": "El correo del proveedor de identidad no es el de esta cuenta, así que no se vinculó.",
+        "identity_taken": "Esta identidad ya está vinculada a otra cuenta.",
+        "already_linked": "Tu cuenta ya está vinculada con el proveedor de esta empresa.",
+        "last_sign_in_method": "Es tu única forma de iniciar sesión, así que no se puede desvincular. Define una contraseña o vincula otra identidad antes.",
+        "no_connection": "El inicio de sesión único de esta empresa no está activado.",
+        "not_found": "No se encontró esa identidad."
+      }
     }
   },
   "invitations": {
