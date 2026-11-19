@@ -26,6 +26,7 @@ main API.
 
 import logging
 import os
+import sys
 import time
 
 import psycopg2
@@ -41,6 +42,34 @@ logging.basicConfig(
 logger = logging.getLogger("fabrique-janitor")
 
 
+class MissingDatabasePassword(RuntimeError):
+    """``POSTGRES_PASSWORD`` is unset or blank: the janitor does not start."""
+
+
+def database_password() -> str:
+    """The database password from ``POSTGRES_PASSWORD``, never a default.
+
+    The janitor used to fall back to the placeholder from ``.env.example``,
+    a password anyone can read; an unset or blank variable now stops it.
+    """
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    if not password.strip():
+        raise MissingDatabasePassword(
+            "POSTGRES_PASSWORD is not set: the janitor has no database password "
+            "and does not start (set it in .env, docs/CONFIGURATION.md)."
+        )
+    return password
+
+
+def check_configuration() -> None:
+    """Exit with status 1 before the daily loop, whose errors are only logged."""
+    try:
+        database_password()
+    except MissingDatabasePassword as exc:
+        logger.error("Janitor refused to start: %s", exc)
+        sys.exit(1)
+
+
 def get_db_connection():
     """
     Establish a direct psycopg2 connection for the Janitor process.
@@ -53,7 +82,7 @@ def get_db_connection():
         host=os.getenv("POSTGRES_HOST", "localhost"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
         user=os.getenv("POSTGRES_USER", "factory"),
-        password=os.getenv("POSTGRES_PASSWORD", "your_secure_password_here"),
+        password=database_password(),
         database=os.getenv("POSTGRES_DB", "factory"),
     )
 
@@ -111,6 +140,7 @@ def run_janitor_tasks():
 if __name__ == "__main__":
     # Simulate a daily cron job running in the background container
     # For production, tools like Celery or pure cron are better, but this demonstrates the isolated architecture.
+    check_configuration()
     logger.info("Fabrique AI Janitor Service Online.")
     while True:
         run_janitor_tasks()

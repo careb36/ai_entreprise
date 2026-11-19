@@ -8,6 +8,11 @@ Decisions from Slack and Teams — the public inbound endpoints (issue #512, pha
   webhook's callback URL (``@Fabrique approve CODE``, ``sendback CODE
   <reason>``, ``link CODE``).
 
+A task blocked for a person's triage (no risk hold) is posted with Send back
+only; it goes through the board's own ``services/loop/board_moves.send_back``
+after the board's role check (Manager), with the reason in its note. Slack's
+``/fabrique sendback CODE <reason>`` carries a reason for either point.
+
 Both also take ``request <text>`` (issue #532): a linked account with at
 least the Viewer role sends a request to the company's intake queue, source
 ``chat`` (``services/planning/intake_queue.py``); a Manager decides it in the web.
@@ -42,7 +47,14 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from logging_config import logger
-from models import ChatApprovalMessage, ChatConnection, ChatInteraction, User
+from models import (
+    BacklogItem,
+    ChatApprovalMessage,
+    ChatConnection,
+    ChatInteraction,
+    Sprint,
+    User,
+)
 from security import limiter
 from services.integrations import chat_approvals, chat_links, chat_messages
 from services.integrations import chat_connections as conns
@@ -52,9 +64,11 @@ from services.integrations.chat_signatures import (
     verify_slack,
     verify_teams,
 )
+from services.loop import board_moves
 from services.loop.run_review import ReviewRefused, submit_review
 from services.planning import intake_queue
 from services.platform.agent_service import AgentService
+from services.tasks.board import SEND_BACK_MARKER
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
@@ -71,6 +85,10 @@ LINK_FIRST = (
     "Chat approvals, ask for a link code and send it here."
 )
 NEEDS_ROLE = "Deciding needs the Manager role in this company in La Fabrique."
+ONLY_SEND_BACK = (
+    "This task is blocked for a person's triage: there is no delivery to "
+    "approve. Send it back to work with a reason, or decide in La Fabrique."
+)
 
 
 def _rate_limit() -> str:
@@ -189,14 +207,22 @@ def decide(
         require_company_role(session, user, row.company_id, "Manager")
     except HTTPException as exc:
         raise _refuse(session, row, chat_user, message, NEEDS_ROLE) from exc
+    if (
+        decision == "approve"
+        and message is not None
+        and chat_approvals.kind_of(session, message) == chat_approvals.TRIAGE
+    ):
+        raise _refuse(session, row, chat_user, message, ONLY_SEND_BACK)
     try:
-        run, _item = chat_approvals.claim(
+        run, item, kind = chat_approvals.claim(
             session, row, message, head=head, run_version=run_version
         )
     except chat_approvals.StaleApproval as exc:
         raise _refuse(session, row, chat_user, message, str(exc)) from exc
     if message is None:  # claim refuses a missing message; this keeps the type
         raise Refusal("This approval is not known here.")
+    if kind == chat_approvals.TRIAGE:
+        return _send_back(session, row, chat_user, message, user, item, reason)
     author = user.full_name or user.email
     event = "approve" if decision == "approve" else "request_changes"
     body = (reason or "").strip()[:2000] or None
@@ -238,6 +264,55 @@ def decide(
             "chat_user": chat_user,
         },
         {"decision": event, "outcome": review.outcome},
+    )
+    session.commit()
+    return outcome
+
+
+def _send_back(
+    session: Session,
+    row: ChatConnection,
+    chat_user: str,
+    message: ChatApprovalMessage,
+    user: User,
+    item: BacklogItem,
+    reason: str | None,
+) -> str:
+    """Send a task blocked for triage back to work, as the board's button does.
+
+    The note starts with ``SEND_BACK_MARKER`` (the rework budgets restart)
+    and carries the person's reason; ``board_moves.send_back`` writes the
+    board's ``sent_back`` event and queues the task. The message was claimed.
+    """
+    name = NAMES[row.provider]
+    author = user.full_name or user.email
+    body = (reason or "").strip()[:2000]
+    note = f"{SEND_BACK_MARKER} by a person via {name}" + (f": {body}" if body else ".")
+    try:
+        event, started = board_moves.send_back(
+            session, item, session.get(Sprint, item.sprint_id), user, note
+        )
+    except board_moves.BoardMoveError as refused:
+        session.rollback()
+        chat_approvals.release(session, message)
+        raise _refuse(session, row, chat_user, message, refused.detail) from refused
+    outcome = f"Sent back to work by {author} via {name}."
+    chat_approvals.finish(
+        session, message, decision="send_back", user_id=user.id, outcome_text=outcome
+    )
+    _audit(
+        session,
+        row,
+        f"human:{author}",
+        "chat_approval_sent_back",
+        {
+            "approval_id": message.id,
+            "backlog_item_id": item.id,
+            "task_event_id": event.id if event else None,
+            "user_id": user.id,
+            "chat_user": chat_user,
+        },
+        {"decision": "send_back", "queued": bool(started.get("queued"))},
     )
     session.commit()
     return outcome
@@ -368,9 +443,25 @@ def _slack_command(
         return _slack_reply(
             _request(session, row, form.get("user_id") or "", raw[len("request") :])
         )
+    if len(words) >= 2 and words[0].lower() == "sendback":
+        try:
+            return _slack_reply(
+                decide(
+                    session,
+                    row,
+                    chat_user=form.get("user_id") or "",
+                    message=chat_approvals.message_for(
+                        session, row, short_code=words[1]
+                    ),
+                    decision="send_back",
+                    reason=" ".join(words[2:]),
+                )
+            )
+        except Refusal as refusal:
+            return _slack_reply(str(refusal))
     return _slack_reply(
         "Usage: /fabrique link CODE (ask for the code in La Fabrique), "
-        "or /fabrique request <what you need>."
+        "/fabrique sendback CODE <reason>, or /fabrique request <what you need>."
     )
 
 
