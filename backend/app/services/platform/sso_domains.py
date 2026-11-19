@@ -17,7 +17,8 @@ company is held by it: another cannot list it, and a newer proof by another
 company first re-checks the older claim (``trigger="conflict"``), which
 releases it only on a definite negative. ``recheck_due`` looks every domain
 up again each ``SSO_DOMAIN_RECHECK_HOURS``; ``run_rechecks`` is its loop,
-one replica at a time.
+one replica at a time. Each re-check, and each cycle of that loop, is
+counted for ``/metrics`` (``sso_metrics``).
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from models import SsoDomain, SsoDomainCheck
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
-from services.platform import dns_client, locks
+from services.platform import dns_client, locks, sso_metrics
 from services.platform.agent_service import AgentService
 
 logger = setup_logger("fabrique-sso-domains")
@@ -265,6 +266,7 @@ def check(
         row.status = "unverified"
     row.last_checked_at, row.last_outcome = now, outcome
     session.add(row)
+    sso_metrics.record_domain_recheck(trigger, outcome)
     if row.status != before:
         action = (
             "sso_domain_verified"
@@ -302,20 +304,33 @@ def _recheck_cycle(engine) -> int:
         return recheck_due(session)
 
 
+async def recheck_once(engine) -> int | None:
+    """One cycle of the re-check under its lock: how many domains were looked
+    up, or ``None`` when another replica holds the lock or the cycle failed
+    (counted, logged, never raised)."""
+    try:
+        done = await asyncio.to_thread(
+            locks.run_exclusive,
+            engine,
+            locks.SSO_DOMAIN_RECHECK,
+            _recheck_cycle,
+            engine,
+        )
+    except Exception as exc:  # noqa: BLE001 - Keep the loop alive.
+        sso_metrics.record_recheck_cycle(ok=False)
+        logger.warning("SSO domain re-check failed: %s", exc)
+        return None
+    if done is None:
+        return None
+    sso_metrics.record_recheck_cycle(ok=True)
+    if done:
+        logger.info("SSO domain re-check looked up %s domain(s)", done)
+    return done
+
+
 async def run_rechecks(engine) -> None:
     """Background loop: re-check the domains that are due, one replica at a time."""
     logger.info("SSO domain re-check started (every %ss)", RECHECK_WAKE_SECONDS)
     while True:
         await asyncio.sleep(RECHECK_WAKE_SECONDS)
-        try:
-            done = await asyncio.to_thread(
-                locks.run_exclusive,
-                engine,
-                locks.SSO_DOMAIN_RECHECK,
-                _recheck_cycle,
-                engine,
-            )
-            if done:
-                logger.info("SSO domain re-check looked up %s domain(s)", done)
-        except Exception as exc:  # noqa: BLE001 - Keep the loop alive.
-            logger.warning("SSO domain re-check failed: %s", exc)
+        await recheck_once(engine)
