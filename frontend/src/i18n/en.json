@@ -3012,6 +3012,10 @@
         "final_report_handover": {
           "title": "Handover notes",
           "what": "Who takes the result over (operations, maintenance, the client), what they receive, and what they should know about the holds and risks left open."
+        },
+        "transition_handover": {
+          "title": "Handover (ITIL transition set)",
+          "what": "Who takes each release over (operations, support, the client), what they receive, the workarounds for its known errors, and when the handover is complete."
         }
       }
     }
