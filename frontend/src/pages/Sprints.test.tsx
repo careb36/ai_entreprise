@@ -8,6 +8,7 @@ import { specificationsApi } from '../services/specifications'
 import { managerApi, type ManagerRecord } from '../services/manager'
 import { routingApi } from '../services/routing'
 import { gateRefutationsApi } from '../services/gateRefutations'
+import { missingModuleMentionsApi } from '../services/missingModuleMentions'
 import { queryClient } from '../lib/queryClient'
 import type { CostSummary } from '../services/cost'
 import type { ManagedSprint } from '../services/sprintAdmin'
@@ -42,6 +43,11 @@ describe('Sprints list', () => {
     vi.spyOn(routingApi, 'record').mockResolvedValue({ rows: [], tasks: 0, policy: null })
     vi.spyOn(gateRefutationsApi, 'get').mockResolvedValue({
       company_id: 42, sprint_id: null, since: '2026-11-02', until: '2026-11-15', by_problem: {}, refuted: 0, unconfirmed: 0, weeks: [],
+    })
+    const noRequests = { since: '2026-09-17T00:00:00', until: '2026-11-12T12:33:51', days: 56.52, rework_requests: {}, requests_whose_text_names_missing_module: {} }
+    vi.spyOn(missingModuleMentionsApi, 'get').mockResolvedValue({
+      company_id: 42, sprint_id: null, counts_what: '', cutoff: '2026-11-12T12:33:51', cutoff_is_default: true,
+      before: noRequests, after: { ...noRequests, since: '2026-11-12T12:33:51', until: '2026-11-16T00:00:00', days: 3.48 }, weeks: [],
     })
   })
   afterEach(() => {

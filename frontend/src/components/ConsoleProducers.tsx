@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Loader2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { consoleProducersApi, type ConsoleProducers as Settings } from '../services/consoleProducers'
-import { Panel } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, TABLE, TD, TH, TR } from './ui'
 
 /**
  * Which terminal coding agent (Claude Code, Codex CLI, Gemini CLI, Cursor CLI)

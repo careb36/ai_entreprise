@@ -4,8 +4,7 @@ import { errorDetail, type MemoryResult } from '../services/api'
 import { useSearchMemory, useStoreMemory } from '../hooks/useQueries'
 import { Search, Database, ChevronDown, ChevronUp, Save, SearchX } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { LoadErrorAlert, Spinner } from '../components/knowledge/PageStates'
-import { CountPill, EmptyState, PageHeader, Panel, Toolbar } from '../components/ui'
+import { CountPill, EmptyState, LoadError, PageHeader, Panel, Spinner, Toolbar } from '../components/ui'
 
 // The API takes the note as a query parameter, so long text is capped.
 const MAX_NOTE_LENGTH = 2000
@@ -102,9 +101,9 @@ export default function MemorySearch() {
       </form>
 
       {search.isError && (
-        <LoadErrorAlert onRetry={() => void search.refetch()}>
+        <LoadError onRetry={() => void search.refetch()}>
           {t('memorySearch.errorDetail', { message: errorDetail(search.error), defaultValue: 'Search failed: {{message}}' })}
-        </LoadErrorAlert>
+        </LoadError>
       )}
 
       {!submitted && (

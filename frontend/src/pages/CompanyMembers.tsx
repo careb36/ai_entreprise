@@ -5,8 +5,7 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { useCompanyInvitations, useInvite, useRevokeInvitation } from '../hooks/useInvitations'
 import { ApiError, errorDetail, type CompanyRole } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
-import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
-import { AccessNotice, ButtonSpinner, FormActions } from './admin/AdminParts'
+import { AccessNotice, CountPill, EmptyState, FormActions, PageHeader, Panel, Spinner } from '../components/ui'
 
 const ROLES: CompanyRole[] = ['Viewer', 'Manager', 'Owner']
 const RANK: Record<CompanyRole, number> = { Viewer: 1, Manager: 2, Owner: 3 }
@@ -97,7 +96,7 @@ export default function CompanyMembers() {
               )}
               <FormActions>
                 <button type="submit" disabled={invite.isPending || !email.trim()} className="btn-primary btn-sm">
-                  {invite.isPending ? <ButtonSpinner /> : <UserPlus size={13} aria-hidden="true" />}
+                  {invite.isPending ? <Spinner size={13} /> : <UserPlus size={13} aria-hidden="true" />}
                   {invite.isPending ? t('members.inviting') : t('members.invite')}
                 </button>
               </FormActions>
