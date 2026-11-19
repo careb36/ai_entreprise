@@ -548,6 +548,10 @@
         "integrations",
         "release"
       ],
+      "test_chat_send_back.py": [
+        "integrations",
+        "loop"
+      ],
       "test_changed_paths.py": [
         "repo"
       ],
@@ -1229,6 +1233,12 @@
         "platform"
       ],
       "test_sso_flow.py": [
+        "platform"
+      ],
+      "test_sso_link.py": [
+        "platform"
+      ],
+      "test_sso_link_integrity.py": [
         "platform"
       ],
       "test_sso_tokens.py": [

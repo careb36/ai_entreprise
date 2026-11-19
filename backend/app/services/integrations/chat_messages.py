@@ -1,8 +1,10 @@
 """What an approval looks like in Slack (Block Kit) and Teams (an Adaptive Card).
 
-Pure functions over the approval point ``chat_approvals.approval_point``
+Pure functions over the approval point ``chat_approvals.current_point``
 reads: the task, the Verifier's verdict and the checks that did not pass as
-recorded, the risk hold's note and links to the evidence. Nothing an agent
+recorded, the risk hold's note or the block's reason (the inbox's text) and
+links to the evidence. A risk hold offers Approve and Send back; a triage
+block offers Send back only, as the board does. Nothing an agent
 claimed about its own work is shown. Text from the record (a title, a check's
 name) is data: escaped for Slack's ``mrkdwn`` and capped; Teams gets it in
 plain ``TextBlock``s and ``FactSet``s, never as markdown links.
@@ -17,6 +19,21 @@ APPROVE = "fabrique_approve"
 SEND_BACK = "fabrique_send_back"
 MAX_TEXT = 300
 MAX_CHECKS = 6
+TRIAGE = "triage"  # chat_approvals.TRIAGE; this module imports nothing of it
+
+
+def _triage(point: dict[str, Any]) -> bool:
+    return point.get("kind") == TRIAGE
+
+
+def heading(point: dict[str, Any]) -> str:
+    if _triage(point):
+        return "A task is blocked and waits for a person"
+    return "A delivery waits for a person's acceptance"
+
+
+def _note_label(point: dict[str, Any]) -> str:
+    return "Why it is blocked (as recorded)" if _triage(point) else "Hold"
 
 
 def _cap(value: Any, limit: int = MAX_TEXT) -> str:
@@ -66,13 +83,33 @@ def slack_blocks(point: dict[str, Any], message_id: int, short_code: str) -> lis
         else "none recorded"
     )
     value = button_value(message_id, point["head"], point["run_version"])
+    send_back = {
+        "type": "button",
+        "action_id": SEND_BACK,
+        "style": "danger",
+        "text": {"type": "plain_text", "text": "Send back"},
+        "value": value,
+    }
+    approve = {
+        "type": "button",
+        "action_id": APPROVE,
+        "style": "primary",
+        "text": {"type": "plain_text", "text": "Approve"},
+        "value": value,
+    }
+    note = slack_escape(point["hold_note"], 200)
+    if _triage(point):
+        note = (
+            f"*{_note_label(point)}:* {note} · Send back with a reason: "
+            f"/fabrique sendback {short_code} followed by the reason"
+        )
     return [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    "*A delivery waits for a person's acceptance*\n"
+                    f"*{heading(point)}*\n"
                     f"<{point['task_url']}|{slack_escape(point['title'], 150)}> · "
                     f"{slack_escape(point['sprint_name'], 80)}"
                 ),
@@ -97,7 +134,7 @@ def slack_blocks(point: dict[str, Any], message_id: int, short_code: str) -> lis
                 {
                     "type": "mrkdwn",
                     "text": (
-                        f"{slack_escape(point['hold_note'], 200)} · "
+                        f"{note} · "
                         f"<{point['run_url']}|Run {point['run_id']} v{point['run_version']} evidence> · "
                         f"approval {short_code}"
                     ),
@@ -106,22 +143,7 @@ def slack_blocks(point: dict[str, Any], message_id: int, short_code: str) -> lis
         },
         {
             "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "action_id": APPROVE,
-                    "style": "primary",
-                    "text": {"type": "plain_text", "text": "Approve"},
-                    "value": value,
-                },
-                {
-                    "type": "button",
-                    "action_id": SEND_BACK,
-                    "style": "danger",
-                    "text": {"type": "plain_text", "text": "Send back"},
-                    "value": value,
-                },
-            ],
+            "elements": [send_back] if _triage(point) else [approve, send_back],
         },
     ]
 
@@ -144,10 +166,17 @@ def slack_outcome_blocks(title: str, outcome_text: str, run_url: str) -> list[di
 
 def teams_card(point: dict[str, Any], short_code: str) -> dict[str, Any]:
     checks = _check_lines(point) or ["none recorded"]
+    if _triage(point):
+        how = f"To send it back to work, mention the La Fabrique webhook: sendback {short_code} followed by the reason."
+    else:
+        how = (
+            f"To decide, mention the La Fabrique webhook: approve {short_code} "
+            f"or sendback {short_code} followed by the reason."
+        )
     body = [
         {
             "type": "TextBlock",
-            "text": "A delivery waits for a person's acceptance",
+            "text": heading(point),
             "weight": "Bolder",
             "size": "Medium",
             "wrap": True,
@@ -159,7 +188,7 @@ def teams_card(point: dict[str, Any], short_code: str) -> dict[str, Any]:
                 {"title": "Sprint", "value": _cap(point["sprint_name"], 80)},
                 {"title": "Verdict (Verifier)", "value": _cap(point["verdict"], 40)},
                 {"title": "Checks not passed", "value": _cap("; ".join(checks), 300)},
-                {"title": "Hold", "value": _cap(point["hold_note"], 200)},
+                {"title": _note_label(point), "value": _cap(point["hold_note"], 200)},
                 {
                     "title": "Run",
                     "value": f"{point['run_id']} v{point['run_version']}",
@@ -168,10 +197,7 @@ def teams_card(point: dict[str, Any], short_code: str) -> dict[str, Any]:
         },
         {
             "type": "TextBlock",
-            "text": (
-                f"To decide, mention the La Fabrique webhook: approve {short_code} "
-                f"or sendback {short_code} followed by the reason."
-            ),
+            "text": how,
             "wrap": True,
             "isSubtle": True,
         },
