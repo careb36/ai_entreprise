@@ -110,6 +110,8 @@ export interface AccessReviewListing {
   }
   members: AccessReviewMember[]
   tokens: AccessReviewToken[]
+  /** Exclusions, manual exceptions and single-Owner Manager pairs (issue #703). */
+  sso?: AccessReviewSso[]
   history: {
     id: number
     due_at: string | null
@@ -121,8 +123,27 @@ export interface AccessReviewListing {
   }[]
 }
 
+/** What the SSO group mapping keeps outside the identity provider's say (issue #703). */
+export interface AccessReviewSso {
+  kind: 'exclusion' | 'manual_exception' | 'manager_pair'
+  id: number
+  label: string
+  user_id?: number
+  team_id: number
+  team_name: string | null
+  created_by?: string
+  created_at?: string | null
+  age_days?: number | null
+  reason?: string | null
+  group_value?: string
+  decided_by?: string
+  decided_at?: string | null
+  flagged?: boolean
+  inactive: boolean
+}
+
 export interface AccessDecision {
-  kind: 'member' | 'token'
+  kind: 'member' | 'token' | AccessReviewSso['kind']
   id: number
   decision: 'confirm' | 'remove'
 }

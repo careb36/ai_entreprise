@@ -156,6 +156,7 @@ export function NavBar() {
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="menu-item">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   <Link role="menuitem" to="/company/chat" className="menu-item">{t('nav.chatApprovals')}</Link>
                   {canManage && <Link role="menuitem" to="/company/audit-anchors" className="menu-item">{t('nav.auditAnchors')}</Link>}
+                  <Link role="menuitem" to="/company/api-tokens" className="menu-item">{t('nav.apiTokens')}</Link>
                   {canManage && <Link role="menuitem" to="/company/github" className="menu-item">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="menu-item">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
                   <button role="menuitem" type="button" className="menu-item" onClick={() => {

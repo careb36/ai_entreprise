@@ -336,6 +336,7 @@ async def remove_member(
         company_id,
         user_id,
         by=f"human:{caller.email}" if caller else "human:anonymous",
+        actor_id=caller.id if caller else None,
     )
     session.commit()
     ended = sessions.revoke_users(session, [user_id], "member_removed")

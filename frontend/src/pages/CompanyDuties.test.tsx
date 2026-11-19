@@ -168,6 +168,37 @@ describe('CompanyDuties', () => {
     })
   })
 
+  it('lists what the SSO group mapping keeps by hand and needs a decision on each', async () => {
+    const withSso = {
+      ...review,
+      sso: [
+        { kind: 'exclusion', id: 5, label: 'Bruno', user_id: 12, team_id: 7, team_name: 'Platform', created_by: 'Ana', created_at: null, age_days: 3, reason: 'Suspected account compromise', inactive: false },
+        { kind: 'manager_pair', id: 6, label: 'leads', group_value: 'leads', team_id: 8, team_name: 'Leads', decided_by: 'Ana', decided_at: null, reason: 'only Owner', flagged: true, inactive: false },
+      ],
+    }
+    const fetch = vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method !== 'POST' && url.includes('/access-review') ? response(200, withSso) : api(url, init))
+    vi.stubGlobal('fetch', fetch)
+    renderAs('Owner')
+    const section = await screen.findByRole('region', { name: 'Access review' })
+    expect(within(section).getByText('Excluded from Platform by Ana, 3 days ago: Suspected account compromise')).toBeInTheDocument()
+    expect(within(section).getByText(/Group leads grants Manager in Leads, confirmed alone by Ana/)).toBeInTheDocument()
+    for (const name of ['Ana', 'ci', 'Bruno']) {
+      fireEvent.click(within(within(section).getByRole('group', { name: `Decision for ${name}` })).getByLabelText('Confirm'))
+    }
+    const submit = within(section).getByRole('button', { name: 'Complete the review' })
+    expect(submit).toBeDisabled()
+    fireEvent.click(within(within(section).getByRole('group', { name: 'Decision for leads' })).getByLabelText('Remove'))
+    fireEvent.click(submit)
+    await vi.waitFor(() => expect(calls(fetch, 'POST')).toHaveLength(1))
+    expect(JSON.parse(String((calls(fetch, 'POST')[0][1] as RequestInit).body)).decisions).toEqual([
+      { kind: 'member', id: 11, decision: 'confirm' },
+      { kind: 'token', id: 3, decision: 'confirm' },
+      { kind: 'exclusion', id: 5, decision: 'confirm' },
+      { kind: 'manager_pair', id: 6, decision: 'remove' },
+    ])
+  })
+
   it('grants the single-person exception only with a reason', async () => {
     const fetch = vi.fn(async (url: string, init?: RequestInit) => api(url, init))
     vi.stubGlobal('fetch', fetch)

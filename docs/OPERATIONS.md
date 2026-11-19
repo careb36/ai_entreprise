@@ -220,11 +220,18 @@ taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
 `NOTICE`), on `main` instead of a `develop` branch.
 
 1. **Changelog pull request.** On a branch cut from `main`, run
-   `python3 scripts/release_notes.py release X.Y.Z`: it moves everything
+   `python3 scripts/release_notes.py release X.Y.Z` (or `cut X.Y.Z`): it
+   first collects the changelog fragments, folding every
+   `changelog.d/<issue>-<slug>.md` into `[Unreleased]` under its section and
+   deleting it (issue #731, `changelog.d/README.md`), then moves everything
    under `[Unreleased]` in `CHANGELOG.md` into a dated `## [X.Y.Z] -
-   YYYY-MM-DD` section. Update the link references at the end of the file by
-   hand, read the section as a user would (it is the release announcement),
-   and open the pull request as `chore(release): X.Y.Z`.
+   YYYY-MM-DD` section. It refuses, changing no file, while a fragment is bad
+   (the reason names the file) or the version already has a section. Commit
+   the deleted fragments with `CHANGELOG.md`. Update the link references at
+   the end of the file by hand, read the section as a user would (it is the
+   release announcement), and open the pull request as
+   `chore(release): X.Y.Z`. `python3 scripts/release_notes.py collect` folds
+   the fragments alone, without cutting.
 2. **Merge it** once its head is green.
 3. **Tag the merge commit on `main`** and push the tag, as a person:
 
@@ -239,12 +246,14 @@ taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
 4. **Check both runs** (`Release`, `Publish Images`) and the GitHub Release.
 
 `python3 scripts/release_notes.py notes vX.Y.Z` prints the notes exactly as
-the release will show them.
+the release will show them, and `python3 scripts/release_notes.py unreleased`
+prints `[Unreleased]` with the fragments not yet collected folded in.
 
 **Pre-releases** (`vX.Y.Z-rc.N`) are for trying a release on a staging
 deployment first. Tag them straight from `main`, without a changelog pull
 request: they get no section of their own, and their GitHub Release, marked
-pre-release, shows `[Unreleased]` as of the tagged commit. They never move
+pre-release, shows `[Unreleased]` as of the tagged commit, with that commit's
+uncollected fragments folded in (`notes` reads them). They never move
 `latest`.
 
 What pushing the tag runs:
@@ -432,6 +441,37 @@ ends all of that person's sessions. Removing someone only at the provider
 ends nothing: their session lasts until it is refreshed past
 `REFRESH_TOKEN_ABSOLUTE_DAYS` or they are removed here (issue #524,
 `docs/design/SESSIONS.md`).
+
+### Groups mapped to teams
+
+On the SSO page an Owner can map the provider's groups to **SSO-managed**
+teams (issue #703, `docs/design/SSO_GROUP_MAPPING.md`). Each SSO sign-in then
+sets the person's membership in the mapped teams from the ID token's claim:
+an `sso_group_observations` row records what was seen (only the values that
+match a pair, their count and a hash), and an `sso_group_sync` audit row
+records every change. The mapping never reaches Owner; a pair to a Manager
+team needs the cap raised to Manager and a second Owner's approval.
+
+- **Nothing changes at sign-in.** Check the last observation's `state`:
+  `absent` (the provider sends no such claim: check the claim name and the
+  application's token configuration), `malformed` (not a list of strings, or
+  more than 1000 values), `overage` (below), or `skipped` reasons such as
+  `stale_token`, `excluded`, `role_above_cap`.
+- **Entra overage.** Past 200 groups Entra leaves `groups` out of the token
+  and names a Graph endpoint instead (`_claim_names`, `_claim_sources`). La
+  Fabrique never calls it, and changes nothing for that sign-in; the page
+  shows the last sign-in that hit it. Fix it in Entra: use **app roles** and
+  the `roles` claim (the recommended setting, which has no overage), or set
+  the application's group claim to **groups assigned to the application**.
+  Google's ID token carries no groups at all; its mapping waits for the
+  Directory sync (#716).
+- **Take someone out now.** The member routes refuse to remove a person the
+  provider placed in an SSO-managed team. Use the break-glass exclusion on
+  the team page (a reason is required); every other Owner is notified and it
+  is listed in each access review until an Owner lifts it.
+- **Revoked at the provider.** The mapping acts only at sign-in: a person
+  removed from a group keeps the team until they sign in again by SSO, an
+  Owner excludes them, removes the pair or removes them from the company.
 
 ### Break-glass: the provider is down or misconfigured
 

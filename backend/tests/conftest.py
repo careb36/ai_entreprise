@@ -134,6 +134,14 @@ from models.sso import (
     SsoFlowState,
     SsoIdentity,
 )
+from models.sso_groups import (
+    SsoGroupMapping,
+    SsoGroupObservation,
+    SsoManagerApproval,
+    SsoManualException,
+    SsoTeamExclusion,
+    TeamMembershipSourcePreview,
+)
 from models.support import BugReport
 from models.task_relation import TaskRelation
 from models.team import Team, TeamHistoryStart, TeamMember, TeamMembershipPeriod
@@ -440,6 +448,12 @@ SQLModel.metadata.create_all(
         TeamMember.__table__,
         TeamMembershipPeriod.__table__,
         TeamHistoryStart.__table__,
+        SsoGroupMapping.__table__,
+        SsoManagerApproval.__table__,
+        SsoTeamExclusion.__table__,
+        SsoManualException.__table__,
+        TeamMembershipSourcePreview.__table__,
+        SsoGroupObservation.__table__,
         SodPolicy.__table__,
         AccessReview.__table__,
         IntegrationReview.__table__,

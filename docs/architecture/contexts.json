@@ -363,6 +363,7 @@
       "AGENTS.md": "mentions",
       "ARCHITECTURE.md": "mentions",
       "CHANGELOG.md": "mentions",
+      "changelog.d/": "test_check_changelog.py",
       "CLAUDE.md": "mentions",
       "CODE_OF_CONDUCT.md": "mentions",
       "CODING_STANDARDS.md": "mentions",
@@ -568,7 +569,13 @@
       "test_changed_paths.py": [
         "repo"
       ],
+      "test_changelog_fragments.py": [
+        "repo"
+      ],
       "test_check_architecture_interfaces.py": [
+        "repo"
+      ],
+      "test_check_changelog.py": [
         "repo"
       ],
       "test_check_context_docs.py": [
@@ -1300,6 +1307,18 @@
       ],
       "test_sso_flow.py": [
         "platform"
+      ],
+      "test_sso_groups.py": [
+        "platform"
+      ],
+      "test_sso_group_sign_in.py": [
+        "platform"
+      ],
+      "test_sso_group_admin.py": [
+        "platform"
+      ],
+      "test_sso_group_governance.py": [
+        "management"
       ],
       "test_sso_link.py": [
         "platform"
