@@ -577,6 +577,9 @@
         "evidence",
         "loop"
       ],
+      "test_code_graph_persist.py": [
+        "loop"
+      ],
       "test_code_graph_store.py": [
         "loop"
       ],
