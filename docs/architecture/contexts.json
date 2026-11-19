@@ -1203,6 +1203,9 @@
       "test_security_tests_router.py": [
         "planning"
       ],
+      "test_self_host_sandbox_mode.py": [
+        "repo"
+      ],
       "test_self_hosting.py": [
         "loop"
       ],
