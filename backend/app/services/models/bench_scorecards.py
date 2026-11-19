@@ -26,7 +26,12 @@ metric was not measured, the entry says so (``{"measured": false,
 - the prompt weight, when no prompt was measured, or before schema v3;
 - in v5's ``humaneval`` section, a problem's outcome when its grade could not
   run (the card's own reason), and pass@1 while any problem is unmeasured
-  (the card writes null) or when no problem was graded.
+  (the card writes null) or when no problem was graded;
+- in v6's ``swebench`` section, an instance's outcome when its environment
+  could not be built or did not reproduce it (the card's own reason), its
+  FAIL_TO_PASS and PASS_TO_PASS counts when its tests did not run, and the
+  resolve rate when no instance was measured (an unmeasured instance is left
+  out of the rate, as the card counts it, and counted apart).
 
 The totals' criteria are unmeasured when any spec's grade is; the totals'
 tokens when no spec reported any. The other numbers (tasks, rework, blocked
@@ -53,6 +58,8 @@ COST_UNKNOWN = "cost_unknown"
 NOT_IN_CARD = "not_in_card"
 NO_PROMPT_MEASURE = "no_prompt_measure"
 NO_PROBLEMS_GRADED = "no_problems_graded"
+NO_INSTANCES_MEASURED = "no_instances_measured"
+TESTS_NOT_RUN = "tests_not_run"
 _SPEC_COPIED = (
     "name",
     "status",
@@ -267,6 +274,77 @@ def _humaneval(data: Any) -> dict[str, Any] | None:
     }
 
 
+def _tests(group: Any) -> dict[str, Any]:
+    if not isinstance(group, dict):
+        return unmeasured(TESTS_NOT_RUN)
+    return measured({"passed": group["passed"], "total": group["total"]})
+
+
+def _instance(row: dict) -> dict[str, Any]:
+    tokens = row["tokens"]
+    outcome = row["outcome"]
+    return {
+        "instance_id": row["instance_id"],
+        "repo": row["repo"],
+        "status": row["status"],
+        "outcome": (
+            unmeasured(GRADE_UNMEASURED, str(row["reason"]))
+            if outcome == "unmeasured"
+            else measured(outcome)
+        ),
+        # A failed instance's reason, as the grade gave it (or null).
+        "reason": None if outcome == "unmeasured" else row.get("reason"),
+        "fail_to_pass": _tests(row["fail_to_pass"]),
+        "pass_to_pass": _tests(row["pass_to_pass"]),
+        # Not in the schema's row check: shown only when it is a finite number.
+        "wall_clock_seconds": (
+            row["wall_clock_seconds"]
+            if bench_schema.number(row.get("wall_clock_seconds"))
+            else None
+        ),
+        "tokens": _tokens(
+            tokens["reported"], tokens["turns_reported"], tokens["turns_unreported"]
+        ),
+    }
+
+
+def _swebench(data: Any) -> dict[str, Any] | None:
+    """v6's SWE-bench Lite section: the resolve rate over the instances
+    measured and each instance's outcome from its own tests run by the
+    scorer; None without the block."""
+    if not isinstance(data, dict):
+        return None
+    rows = data["instances"]
+    rate = (
+        unmeasured(NO_INSTANCES_MEASURED)
+        if data["resolved_rate"] is None
+        else measured(data["resolved_rate"])
+    )
+    dataset = data["dataset"]
+    return {
+        "dataset": {
+            **{
+                k: dataset[k]
+                for k in ("name", "revision", "split", "source", "license")
+            },
+            "pinned": len(dataset["instances"]),
+        },
+        "graded": data["graded"],
+        "measured": data["measured"],
+        "resolved": data["resolved"],
+        "failed": data["failed"],
+        "unmeasured": data["unmeasured"],
+        "resolved_rate": rate,
+        "tokens": _tokens(
+            data["tokens_reported"],
+            sum(r["tokens"]["turns_reported"] for r in rows),
+            data["turns_unreported"],
+        ),
+        "instances": [_instance(r) for r in rows],
+        "skipped": list(data["skipped"]),
+    }
+
+
 def summarize(card: dict) -> dict[str, Any]:
     """A valid card's page entry: its header, totals and specs."""
     version = card["schema_version"]
@@ -295,6 +373,7 @@ def summarize(card: dict) -> dict[str, Any]:
         "specs": [_spec(s, version) for s in card["specs"]],
         "prompt_sections": _sections(card["totals"].get("prompt"), version),
         "humaneval": _humaneval(card.get("humaneval")),
+        "swebench": _swebench(card.get("swebench")),
     }
 
 
