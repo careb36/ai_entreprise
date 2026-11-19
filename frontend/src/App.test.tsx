@@ -134,6 +134,8 @@ describe('sectionForPath', () => {
     ['/company/members', 'company'],
     ['/company/github', 'company'],
     ['/support', 'company'],
+    ['/bench', 'company'],
+    ['/benchmarks', null],
     ['/supported', null],
   ])('puts %s under %s', (path, section) => {
     expect(sectionForPath(path)).toBe(section)
