@@ -47,7 +47,7 @@ appear without a code change:
 | default | `NEMOTRON_MODEL` | `nvidia/nemotron-3-super-120b-a12b` |
 | fast | `NEMOTRON_MODEL_FAST` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` |
 
-Agent roles opt in with `NEMOTRON_ROLES`; unset, the Qwen/DeepSeek defaults are
+Agent roles opt in with `NEMOTRON_ROLES`; unset, the DeepSeek defaults are
 untouched. `scripts/verify-nebius.sh` proves the three layers separately so a
 failure points at the broken one. See
 [Model Providers](../README.md#model-providers-nebius--nvidia-nemotron).

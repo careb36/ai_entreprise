@@ -1342,7 +1342,7 @@
     "deleteError": "Failed to delete agent. Please try again.",
     "recommendationReasons": {
       "dev": "Prioritizes code generation and refactoring quality, with stronger reasoning models for senior levels.",
-      "frontend": "Prioritizes UI code quality and component design, with Gemini Pro leading for senior levels.",
+      "frontend": "Prioritizes UI code quality and component design; DeepSeek Flash leads, with Gemini Pro as an alternative for senior levels.",
       "data": "Prefers reasoning for data design, pipeline correctness, and analytical decisions.",
       "designer": "Favors models strong at UX reasoning, visual structure, and clear written specs.",
       "qa": "Prefers stronger reasoning for review depth, risk analysis, and regression thinking.",

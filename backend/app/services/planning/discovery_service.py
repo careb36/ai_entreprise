@@ -76,6 +76,8 @@ def _ai_suggest_team(
 
         from llm_proxy_client import LLMProxyClient
 
+        from services.models.model_factory import FLASH_MODEL
+
         log = logging.getLogger("fabrique-backend")
 
         client = LLMProxyClient(base_url=llm_proxy_url)
@@ -84,7 +86,7 @@ def _ai_suggest_team(
         catalogue_data = client.get_available_models()
         models = catalogue_data.get("models", [])
         # Orchestrator: fastest stable non-preview model for meta-tasks
-        orchestrator_model = catalogue_data.get("orchestrator", "gemini-3.8-flash")
+        orchestrator_model = catalogue_data.get("orchestrator", FLASH_MODEL)
 
         if not models:
             log.warning("Empty model catalogue from proxy — falling back to rules")

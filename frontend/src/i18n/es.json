@@ -1342,7 +1342,7 @@
     "deleteError": "No se pudo eliminar el agente. Inténtalo de nuevo.",
     "recommendationReasons": {
       "dev": "Prioriza la calidad de generación y refactorización de código, con modelos de razonamiento más fuertes para niveles senior.",
-      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes, con Gemini Pro a la cabeza en niveles senior.",
+      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes; DeepSeek Flash va primero, con Gemini Pro como alternativa en niveles senior.",
       "data": "Prioriza el razonamiento para el diseño de datos, la corrección de pipelines y las decisiones analíticas.",
       "designer": "Prioriza modelos fuertes en razonamiento de UX, estructura visual y especificaciones claras.",
       "qa": "Prioriza un razonamiento sólido para revisiones profundas, análisis de riesgos y detección de regresiones.",

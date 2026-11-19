@@ -1,24 +1,78 @@
 from services.models.model_factory import AgentRole, ModelFactory, create_completion
 
+# The default team the owner chose: DeepSeek alone, Pro where a mistake is
+# expensive and Flash for the rest.
+EXPECTED_DEFAULTS = {
+    AgentRole.PO: "deepseek-v4-pro",
+    AgentRole.ARCHITECT: "deepseek-v4-pro",
+    AgentRole.SECOPS: "deepseek-v4-pro",
+    AgentRole.SCRUM_MASTER: "deepseek-flash",
+    AgentRole.DEVELOPER: "deepseek-flash",
+    AgentRole.QA: "deepseek-flash",
+    AgentRole.TECH_WRITER: "deepseek-flash",
+    AgentRole.BACKEND_DEVELOPER: "deepseek-flash",
+    AgentRole.FRONTEND_DEVELOPER: "deepseek-flash",
+    AgentRole.DEVOPS: "deepseek-flash",
+    AgentRole.DESIGNER: "deepseek-flash",
+    AgentRole.DATA_ENGINEER: "deepseek-flash",
+    AgentRole.ENGRAM_PROCESSOR: "deepseek-flash",
+}
 
-def test_role_model_map_uses_deepseek_and_qwen_models():
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.PO].model_name == "qwen3.7-plus"
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.ARCHITECT].model_name == "qwen3.7-plus"
-    assert (
-        ModelFactory.ROLE_MODEL_MAP[AgentRole.SCRUM_MASTER].model_name == "qwen3.7-plus"
-    )
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.SECOPS].model_name == "qwen3.7-plus"
-    assert (
-        ModelFactory.ROLE_MODEL_MAP[AgentRole.TECH_WRITER].model_name == "qwen3.6-flash"
-    )
-    assert (
-        ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name == "deepseek-v4-pro"
-    )
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.QA].model_name == "deepseek-v4-pro"
-    assert (
-        ModelFactory.ROLE_MODEL_MAP[AgentRole.ENGRAM_PROCESSOR].model_name
-        == "deepseek-v4-pro"
-    )
+
+def test_every_role_has_its_pinned_default():
+    assert {
+        role: config.model_name for role, config in ModelFactory.ROLE_MODEL_MAP.items()
+    } == EXPECTED_DEFAULTS
+
+
+def test_the_default_team_needs_only_the_deepseek_key(monkeypatch):
+    """WHEN no model variable is set THE default of every role and every
+    management agent SHALL be a DeepSeek model, so ``DEEPSEEK_API_KEY`` alone
+    runs the team."""
+    import importlib.util
+    from pathlib import Path
+
+    from services.models.model_factory import default_model_for_role
+
+    path = Path(__file__).resolve().parents[2] / "llm-proxy" / "catalogue.py"
+    spec = importlib.util.spec_from_file_location("proxy_catalogue", path)
+    catalogue = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(catalogue)
+
+    _clear_model_env(monkeypatch)
+    names = [role.value for role in AgentRole]
+    names += ["Reviewer", "Support", "Manager", "Dev", "unknown"]
+    for name in names:
+        assert catalogue.provider_for_model(default_model_for_role(name)) == (
+            "deepseek"
+        ), name
+
+
+def test_the_reviewer_judges_on_pro_and_reads_qa_settings(monkeypatch):
+    from services.models.model_factory import default_model_for_role
+
+    _clear_model_env(monkeypatch)
+    assert default_model_for_role("Reviewer") == "deepseek-v4-pro"
+    assert default_model_for_role("QA") == "deepseek-flash"
+    assert default_model_for_role("Support") == "deepseek-flash"
+    monkeypatch.setenv("AGENT_MODEL_QA", "qa-model")
+    assert default_model_for_role("Reviewer") == "qa-model"
+    monkeypatch.delenv("AGENT_MODEL_QA")
+    monkeypatch.setenv("AGENT_MODEL", "one-model")
+    assert default_model_for_role("Reviewer") == "one-model"
+    monkeypatch.delenv("AGENT_MODEL")
+    monkeypatch.setenv("NEMOTRON_ROLES", "qa")
+    monkeypatch.setenv("NEMOTRON_MODEL", "nvidia/Nemotron-Super")
+    assert default_model_for_role("Reviewer") == "nvidia/Nemotron-Super"
+
+
+def test_developer_family_still_reads_the_developer_variable(monkeypatch):
+    _clear_model_env(monkeypatch)
+    monkeypatch.setenv("AGENT_MODEL_DEVELOPER", "dev-model")
+    for role in ModelFactory.DEVELOPER_FAMILY:
+        assert ModelFactory.model_for_role(role) == "dev-model"
+    monkeypatch.setenv("AGENT_MODEL_DEVOPS", "ops-model")
+    assert ModelFactory.model_for_role(AgentRole.DEVOPS) == "ops-model"
 
 
 def test_create_completion_passes_bu_header(monkeypatch):
@@ -55,7 +109,7 @@ def test_nemotron_roles_opt_in_overrides_the_default_model(monkeypatch):
         == "nvidia/Llama-3.1-Nemotron-70B-Instruct"
     )
     # A role that did not opt in keeps its default.
-    assert ModelFactory.model_for_role(AgentRole.SCRUM_MASTER) == "qwen3.7-plus"
+    assert ModelFactory.model_for_role(AgentRole.SCRUM_MASTER) == "deepseek-flash"
 
 
 def test_nemotron_tier_overrides_pick_the_right_size(monkeypatch):
@@ -73,7 +127,7 @@ def test_without_nemotron_roles_nothing_changes(monkeypatch):
     monkeypatch.delenv("NEMOTRON_ROLES", raising=False)
     monkeypatch.setenv("NEMOTRON_MODEL", "nvidia/Nemotron-Ultra")
 
-    assert ModelFactory.model_for_role(AgentRole.DEVELOPER) == "deepseek-v4-pro"
+    assert ModelFactory.model_for_role(AgentRole.DEVELOPER) == "deepseek-flash"
 
 
 def _clear_model_env(monkeypatch):
@@ -114,8 +168,9 @@ def test_without_agent_model_the_defaults_stay(monkeypatch):
     from services.models.model_factory import default_model_for_role
 
     _clear_model_env(monkeypatch)
-    assert default_model_for_role("ScrumMaster") == "qwen3.7-plus"
-    assert default_model_for_role("Developer") == "deepseek-v4-pro"
+    assert default_model_for_role("ScrumMaster") == "deepseek-flash"
+    assert default_model_for_role("Developer") == "deepseek-flash"
+    assert default_model_for_role("Architect") == "deepseek-v4-pro"
 
 
 def test_compose_passes_every_role_model_variable_to_the_backend():

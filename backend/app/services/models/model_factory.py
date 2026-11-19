@@ -6,15 +6,24 @@ instantiated ``ChatOpenAI`` objects to avoid recreating HTTP sessions, and
 exposes a convenience ``create_completion()`` function used by every
 LangGraph node.
 
-The default team runs on Qwen Cloud and DeepSeek (``QWEN_API_KEY`` and
-``DEEPSEEK_API_KEY`` on the proxy); Gemini is optional:
-- **PO / Architect / ScrumMaster / SecOps / Designer**: the Qwen plan's
-  larger model, for specifications, architecture and security reasoning.
-- **Developer / QA / EngramProcessor**: DeepSeek, for code-heavy work and
-  low-temperature JSON extraction.
-- **BackendDeveloper / FrontendDeveloper / DevOps / DataEngineer**: as the
-  Developer (and ``AGENT_MODEL_DEVELOPER`` when they have no setting of their own).
-- **TechWriter**: the Qwen plan's fast model, for documentation.
+The default team runs on DeepSeek alone, through the LLM proxy, so only
+``DEEPSEEK_API_KEY`` is needed; Qwen, Gemini and Nebius stay optional:
+- **PO / Architect / SecOps**, and the Reviewer agent that judges a run
+  (``REVIEWER_MODEL``): DeepSeek Pro (``PRO_MODEL``), where a mistake is
+  expensive.
+- **Every other role** (ScrumMaster, Developer, QA, TechWriter, the
+  specialised coding roles, Designer, EngramProcessor) and every other
+  default use (the Manager and Support agents): DeepSeek Flash
+  (``FLASH_MODEL``).
+- **BackendDeveloper / FrontendDeveloper / DevOps / DataEngineer** still read
+  ``AGENT_MODEL_DEVELOPER`` when they have no setting of their own.
+
+``deepseek-flash`` is the name DeepSeek's pricing page gives the Flash model
+(DeepSeek-V4.1-Flash-1017, https://api-docs.deepseek.com/quick_start/pricing,
+read 2026-11-19); the older ``deepseek-v4-flash`` is still accepted there but
+served by the same model. The proxy sends a model only when the provider's
+live ``/models`` list has it. No request sets DeepSeek's ``thinking`` field,
+so DeepSeek's own default (thinking on) applies to every role.
 
 ``model_for_role`` says which settings override these defaults
 (``AGENT_MODEL_<ROLE>``, ``NEMOTRON_ROLES``, ``AGENT_MODEL``).
@@ -53,6 +62,14 @@ class AgentRole(str, Enum):
     ENGRAM_PROCESSOR = "EngramProcessor"
 
 
+# The two models of the default team (DeepSeek's API, through the proxy).
+PRO_MODEL = "deepseek-v4-pro"
+FLASH_MODEL = "deepseek-flash"
+# The Reviewer agent judges a run, so it runs Pro, while it still reads QA's
+# settings (``AGENT_MODEL_QA``, ``NEMOTRON_ROLES=qa``) as it always has.
+REVIEWER_MODEL = PRO_MODEL
+
+
 class LLMConfig(BaseModel):
     """LLM model configuration bound to a specific agent role."""
 
@@ -70,49 +87,46 @@ class ModelFactory:
     the process lifetime, reducing connection overhead.
     """
 
-    # Maps each role to its preferred model and generation parameters.
-    # Using DeepSeek + Qwen Cloud (token plan) instead of Gemini.
+    # Maps each role to its preferred model and generation parameters: DeepSeek
+    # Pro where a mistake is expensive, DeepSeek Flash for the rest.
     ROLE_MODEL_MAP: ClassVar[dict[AgentRole, LLMConfig]] = {
-        AgentRole.PO: LLMConfig(
-            model_name="qwen3.7-plus", temperature=0.3, max_tokens=4096
-        ),
+        AgentRole.PO: LLMConfig(model_name=PRO_MODEL, temperature=0.3, max_tokens=4096),
         AgentRole.ARCHITECT: LLMConfig(
-            model_name="qwen3.7-plus", temperature=0.2, max_tokens=4096
+            model_name=PRO_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.SCRUM_MASTER: LLMConfig(
-            model_name="qwen3.7-plus", temperature=0.5, max_tokens=2048
+            model_name=FLASH_MODEL, temperature=0.5, max_tokens=2048
         ),
         AgentRole.DEVELOPER: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.QA: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.SECOPS: LLMConfig(
-            model_name="qwen3.7-plus", temperature=0.1, max_tokens=4096
+            model_name=PRO_MODEL, temperature=0.1, max_tokens=4096
         ),  # precision-critical
         AgentRole.TECH_WRITER: LLMConfig(
-            model_name="qwen3.6-flash", temperature=0.4, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.4, max_tokens=4096
         ),
-        # The specialised coding roles run what the Developer runs; the
-        # Designer writes specifications and markup, as the deciding roles do.
+        # The specialised coding roles run what the Developer runs.
         AgentRole.BACKEND_DEVELOPER: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.FRONTEND_DEVELOPER: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.DEVOPS: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.DATA_ENGINEER: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.2, max_tokens=4096
         ),
         AgentRole.DESIGNER: LLMConfig(
-            model_name="qwen3.7-plus", temperature=0.4, max_tokens=4096
+            model_name=FLASH_MODEL, temperature=0.4, max_tokens=4096
         ),
         AgentRole.ENGRAM_PROCESSOR: LLMConfig(
-            model_name="deepseek-v4-pro", temperature=0.1, max_tokens=2048
+            model_name=FLASH_MODEL, temperature=0.1, max_tokens=2048
         ),
     }
 
@@ -131,7 +145,7 @@ class ModelFactory:
     _model_cache: ClassVar[dict[AgentRole, ChatOpenAI | None]] = {}
 
     @staticmethod
-    def model_for_role(role: AgentRole) -> str:
+    def model_for_role(role: AgentRole, default: str | None = None) -> str:
         """
         The model id to use for *role*, from the most specific setting to the
         least:
@@ -147,7 +161,8 @@ class ModelFactory:
         2. ``NEMOTRON_ROLES``, for the roles it names: ``NEMOTRON_MODEL``
            (with ``NEMOTRON_MODEL_STRATEGIC`` / ``_FAST`` overrides);
         3. ``AGENT_MODEL``, for every role (one provider for the whole team);
-        4. the ``ROLE_MODEL_MAP`` default.
+        4. *default* when given (the Reviewer's), else the ``ROLE_MODEL_MAP``
+           default.
 
         Unset means the default, so nothing changes for existing deployments.
         An agent's own ``model`` (the Agents page) still wins over all of it.
@@ -158,7 +173,7 @@ class ModelFactory:
         )
         if own:
             return own
-        default = ModelFactory.ROLE_MODEL_MAP[role].model_name
+        default = default or ModelFactory.ROLE_MODEL_MAP[role].model_name
         opted_in = {
             r.strip().lower()
             for r in os.getenv("NEMOTRON_ROLES", "").split(",")
@@ -195,7 +210,7 @@ class ModelFactory:
         if role in cls._model_cache:
             return cls._model_cache[role]
 
-        config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name="gemini-2.5-flash"))
+        config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name=FLASH_MODEL))
         proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
 
         model = ChatOpenAI(
@@ -258,8 +273,11 @@ def default_model_for_role(role: str) -> str:
     This is the single source of role defaults for every caller (the task
     worker, the ScrumMaster, the Support and Reviewer agents, the PO's
     drafts, the LangGraph producer): ``ModelFactory.model_for_role``, so
-    ``AGENT_MODEL`` and its per-role variants reach all of them.
+    ``AGENT_MODEL`` and its per-role variants reach all of them. The Reviewer
+    reads QA's settings but defaults to ``REVIEWER_MODEL``.
     """
+    if _normalise_role(role) == "reviewer":
+        return ModelFactory.model_for_role(AgentRole.QA, default=REVIEWER_MODEL)
     return ModelFactory.model_for_role(role_for_name(role))
 
 

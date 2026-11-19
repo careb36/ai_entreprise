@@ -58,7 +58,8 @@ def test_every_new_role_has_a_default_model_and_the_coding_ones_mirror_the_devel
     developer = default_model_for_role("Developer")
     for role in CODING:
         assert default_model_for_role(role) == developer
-    assert default_model_for_role("Designer") == default_model_for_role("Architect")
+    # The Designer runs Flash, as every role that does not decide or judge.
+    assert default_model_for_role("Designer") == default_model_for_role("ScrumMaster")
     # A deployment that set the Developer's model keeps it for its coding roles.
     monkeypatch.setenv("AGENT_MODEL_DEVELOPER", "dev-model")
     assert default_model_for_role("BackendDev") == "dev-model"
