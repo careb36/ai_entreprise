@@ -548,6 +548,10 @@
         "integrations",
         "release"
       ],
+      "test_chat_send_back.py": [
+        "integrations",
+        "loop"
+      ],
       "test_changed_paths.py": [
         "repo"
       ],
@@ -571,6 +575,9 @@
       ],
       "test_code_graph.py": [
         "evidence",
+        "loop"
+      ],
+      "test_code_graph_persist.py": [
         "loop"
       ],
       "test_code_graph_store.py": [
@@ -930,7 +937,13 @@
       "test_project_docs_pmbok.py": [
         "planning"
       ],
+      "test_project_docs_plans.py": [
+        "planning"
+      ],
       "test_project_docs_release.py": [
+        "planning"
+      ],
+      "test_project_docs_stakeholders.py": [
         "planning"
       ],
       "test_project_docs_status.py": [
@@ -1093,6 +1106,9 @@
       "test_run_cost.py": [
         "loop"
       ],
+      "test_run_log_ranges.py": [
+        "workspace"
+      ],
       "test_run_log_view.py": [
         "workspace"
       ],
@@ -1206,6 +1222,9 @@
       ],
       "test_sprint_integration_request.py": [
         "management"
+      ],
+      "test_sprint_integration_state.py": [
+        "release"
       ],
       "test_sprint_list.py": [
         "loop"

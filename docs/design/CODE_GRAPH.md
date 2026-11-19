@@ -74,10 +74,19 @@ turned into a fact, and the Verifier does not read the section.
   files it changed, already readable from `evidence/touched.py`) are not
   stored yet.
 - **When it is updated.** Before a Developer's `## Related code` section,
-  the task worker calls `code_graph.persist` (`services/loop/worker/related.py`):
-  one sync with the daemon (only changed files travel) and the edges
-  replaced from the current records. The section then reads the stored graph
-  and says it is the graph as the daemon last reported it. With nothing
+  the task worker starts `code_graph.persist_soon` (`services/loop/worker/related.py`):
+  in a background thread, one sync of the company's project folder with the
+  daemon (only changed files travel) and the edges replaced from the current
+  records. The task never waits for it: in the end-to-end run's step 9d, on
+  a snapshot of this repository (about 1,450 files, 106,000 definition and
+  reference rows), a sync on the task's path held the first task 2 min 17 s
+  and each rework, in its own worktree, about a minute, and the sprint
+  missed the harness's wait (PR #681). At most one sync per company and
+  folder runs in a process; none starts a page past `SYNC_BUDGET_SECONDS`
+  (the next one goes on from what was stored); while one is part way
+  through (pages stored, more to come) the section does not read the
+  half-written graph. The section reads the stored graph and says it is the
+  graph as the daemon last reported it. With nothing
   stored for the folder, no seed in it, `CODE_GRAPH_STORE=off`, a daemon
   without `workspace.graph` or any failure, it asks `workspace.related` on
   demand exactly as in slice 1.
@@ -90,9 +99,10 @@ turned into a fact, and the Verifier does not read the section.
   default for the engrams, and turning it on should not silently move where
   the code graph is kept; the Neo4j path is exercised only through a fake
   driver so far.
-- **The keys.** A graph is per company and folder; a task's worktree is its
-  own folder, so it has its own rows (their sha256 match the project's for
-  unchanged files). The sha256 is the daemon's, computed on the machine that
+- **The keys.** A graph is per company and folder. Only the company's
+  project folder is stored: a task's worktree is its own folder, read by
+  nobody once merged, and storing it would copy the whole project's rows
+  for each task, so its section is computed on demand. The sha256 is the daemon's, computed on the machine that
   holds the files: the daemon is the observer, never the party being
   recorded (rule 6 of `docs/POSITIONING.md`). Nothing a producer reports
   about its own files is stored.
@@ -109,7 +119,8 @@ turned into a fact, and the Verifier does not read the section.
   verification to a run), and the architecture's `depends_on` checked
   against the file edges, each still with its own source.
 - **Sharing parses.** A worktree's unchanged files could point at the
-  project's rows by sha256 instead of copying them.
+  project's rows by sha256, so a worktree's section could read the store
+  too, instead of being computed on demand.
 
 ## What was studied
 

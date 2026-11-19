@@ -8,10 +8,13 @@ daemon reports its own earlier runs wrote (``services/evidence/touched``).
 around them and renders the ``## Related code`` section; with no seeds the
 section is empty and the prompt is unchanged.
 
-Before the section, ``code_graph.persist`` brings the company's stored code
-graph up to date from the daemon (only the files whose sha256 changed) and
-records the edges the approved architecture states; the section then reads
-the stored graph, or asks the daemon on demand when nothing is stored.
+Before the section, ``code_graph.persist_soon`` starts, in the background,
+bringing the stored code graph of the company's project folder up to date
+from the daemon (only the files whose sha256 changed) and recording the
+edges the approved architecture states; the task never waits for it. The
+section reads the stored graph when there is one for the task's folder and
+no sync of it is running, or asks the daemon on demand (a task's own
+worktree is never stored, so its section is always on demand).
 """
 
 from __future__ import annotations
@@ -101,11 +104,12 @@ def related_code_section(
     if not seeds:
         return ""
     root = developer_tools.tool_root(company_id, item_id, engine=engine)
-    code_graph.persist(
+    # The project folder, never the task's worktree, and off the task's path.
+    code_graph.persist_soon(
         developer_tools._request_from_thread,
         engine,
         company_id,
-        root,
+        developer_tools.tool_root(company_id),
         architecture=architecture,
         architecture_id=architecture_id,
     )

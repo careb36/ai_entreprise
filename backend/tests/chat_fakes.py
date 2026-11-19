@@ -146,8 +146,8 @@ def link(session, company_id, user, provider, workspace_id, chat_user):
     session.commit()
 
 
-def held_task(session, company_id):
-    """A delivery QA approved that waits for a person, with its run and verdict."""
+def _task_with_run(session, company_id):
+    """A task in progress with its in-house run and the Verifier's verdict."""
     sprint = Sprint(company_id=company_id, sprint_name="Sprint 1", status="active")
     session.add(sprint)
     session.commit()
@@ -184,6 +184,12 @@ def held_task(session, company_id):
             ],
         )
     )
+    return item, run
+
+
+def held_task(session, company_id):
+    """A delivery QA approved that waits for a person, with its run and verdict."""
+    item, run = _task_with_run(session, company_id)
     task_events.record(
         session,
         item,
@@ -235,7 +241,20 @@ def deliver_pending(session, connection_ids, kinds=chat_approvals.EVENT_TYPES):
     return errors
 
 
-def world(session, monkeypatch):
+TRIAGE_NOTE = "Blocked: the gate refused the delivery twice; manual triage needed."
+
+
+def triage_task(session, company_id, text=TRIAGE_NOTE):
+    """A task blocked for a person's triage, without a risk hold."""
+    item, run = _task_with_run(session, company_id)
+    task_events.record(
+        session, item, "blocked", task_events.SYSTEM, status="blocked", text=text
+    )
+    session.commit()
+    return item, run
+
+
+def world(session, monkeypatch, make_task=held_task):
     team_id = _ident("T")
     fake = setup(monkeypatch, team_id)
     company = Company(company_name=f"Chat {secrets.token_hex(3)}")
@@ -269,7 +288,7 @@ def world(session, monkeypatch):
         enabled=True,
         actor=owner.email,
     )
-    item, run = held_task(session, company.id)
+    item, run = make_task(session, company.id)
     errors = deliver_pending(session, {slack.id, teams.id})
     assert errors == [], errors
     messages = {

@@ -39,12 +39,16 @@ export interface ReportedFacts {
   protected_paths: string[]
 }
 
+/** Where a sprint's latest integration stands, as the backend recorded it (`services/release/integration_state.py`). */
+export type IntegrationState = 'none' | 'integrating' | 'integrated' | 'failed'
+
 export interface SprintBoard {
   sprint: {
     id: number
     company_id: number
     sprint_name: string
     status: string
+    integration_state?: IntegrationState; integration_status?: string | null
     goal?: string
     start_date: string
     scope_size: string
@@ -59,6 +63,7 @@ export interface SprintSummary {
   id: number
   sprint_name: string
   status: string
+  integration_state?: IntegrationState; integration_status?: string | null
   goal: string | null
   start_date: string | null
   scope_size: string

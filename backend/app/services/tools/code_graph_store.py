@@ -30,6 +30,7 @@ stores nothing and the section is computed on demand, as in the first slice.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any
@@ -42,6 +43,7 @@ from models.code_graph import (
     CodeGraphFile,
     CodeGraphReference,
 )
+from sqlalchemy import insert
 from sqlmodel import Session, col, delete, func, select
 
 from services.evidence import touched
@@ -51,6 +53,8 @@ SUBJECT = "workspace.graph"
 TIMEOUT_SECONDS = 10.0
 PAGE_FILES = 200
 MAX_PAGES = 20
+# No page starts past this; the next sync goes on from what was stored.
+SYNC_BUDGET_SECONDS = 120.0
 # The daemon's bounds (``vscode-daemon/code_graph.py``, ``repo_map.py``).
 MAX_KNOWN = 5000
 MAX_DEFINERS = 20
@@ -204,6 +208,8 @@ class SqlStore:
                     session.exec(
                         delete(CodeGraphFile).where(col(CodeGraphFile.id).in_(ids))
                     )
+            defs: list[dict[str, Any]] = []
+            refs: list[dict[str, Any]] = []
             for f in files:
                 row = CodeGraphFile(
                     company_id=company_id,
@@ -216,22 +222,28 @@ class SqlStore:
                 )
                 session.add(row)
                 session.flush()
-                session.add_all(
-                    CodeGraphDefinition(
-                        file_id=row.id,
-                        company_id=company_id,
-                        name=n,
-                        line=line,
-                        depth=depth,
-                    )
+                defs += (
+                    {
+                        "file_id": row.id,
+                        "company_id": company_id,
+                        "name": n,
+                        "line": line,
+                        "depth": depth,
+                    }
                     for n, line, depth in f["defs"]
                 )
-                session.add_all(
-                    CodeGraphReference(
-                        file_id=row.id, company_id=company_id, name=n, count=c
-                    )
+                refs += (
+                    {"file_id": row.id, "company_id": company_id, "name": n, "count": c}
                     for n, c in f["refs"]
                 )
+            # Plain rows, not ORM objects: a large project's first sync has
+            # some hundred thousand of them.
+            for model, rows in (
+                (CodeGraphDefinition, defs),
+                (CodeGraphReference, refs),
+            ):
+                if rows:
+                    session.connection().execute(insert(model.__table__), rows)
             session.commit()
         return len(files), gone
 
@@ -319,13 +331,22 @@ def store_for(engine: Any) -> Any:
 
 
 def sync(
-    store: Any, request_fn: Requester, company_id: int, root: str
+    store: Any,
+    request_fn: Requester,
+    company_id: int,
+    root: str,
+    on_page: Callable[[bool], None] | None = None,
 ) -> dict[str, Any]:
     """Ask the daemon for the files whose sha256 the store does not hold and
-    store them, page by page (at most ``MAX_PAGES``). Raises ``SyncError``
-    (or the requester's error) when the daemon does not answer with a report."""
+    store them, page by page (at most ``MAX_PAGES``, none started past
+    ``SYNC_BUDGET_SECONDS``); *on_page* hears, after each stored page, whether
+    the daemon said more is to come. Raises ``SyncError`` (or the requester's
+    error) when the daemon does not answer with a report."""
     done = {"pages": 0, "replaced": 0, "removed": 0, "complete": False}
+    deadline = time.monotonic() + SYNC_BUDGET_SECONDS
     for _ in range(MAX_PAGES):
+        if done["pages"] and time.monotonic() >= deadline:
+            break
         known = dict(sorted(store.known(company_id, root).items())[:MAX_KNOWN])
         reply = request_fn(
             SUBJECT,
@@ -340,6 +361,8 @@ def sync(
         done["pages"] += 1
         done["replaced"] += replaced
         done["removed"] += gone
+        if on_page is not None:
+            on_page(bool(reply.get("more")))
         if not reply.get("more"):
             done["complete"] = True
             break

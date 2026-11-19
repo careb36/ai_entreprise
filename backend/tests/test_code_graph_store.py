@@ -415,7 +415,7 @@ def test_the_section_reads_the_stored_graph_and_falls_back(project, sqlite_sessi
     assert [c[0] for c in settings_off.calls] == ["workspace.related"]
 
 
-def test_the_task_worker_syncs_the_graph_before_the_section(
+def test_the_task_worker_syncs_the_graph_and_the_section_reads_it(
     project, sqlite_session, monkeypatch
 ):
     from models.architecture import Architecture
@@ -461,17 +461,28 @@ def test_the_task_worker_syncs_the_graph_before_the_section(
     daemon = _Daemon()
     developer_tools.bind(object(), object(), lambda company_id: str(project))
     monkeypatch.setattr(developer_tools, "_request_from_thread", daemon)
-    try:
+
+    def section():
         text = related.related_code_section(
             {"id": item.id},
             {"role": "Developer"},
             company.id,
             engine=sqlite_session.get_bind(),
         )
+        assert code_graph.wait_for_persists(10.0)
+        return text
+
+    try:
+        # The sync runs in the background (test_code_graph_persist.py); the
+        # first section may come from the daemon on demand, the next from the store.
+        first = section()
+        second = section()
     finally:
         developer_tools.unbind()
-    assert [c[0] for c in daemon.calls] == ["workspace.graph"]
-    assert "- pkg/api.py: Store, get_item" in text
+    assert {c[0] for c in daemon.calls} <= {"workspace.graph", "workspace.related"}
+    assert "- pkg/api.py: Store, get_item" in first
+    assert "- pkg/api.py: Store, get_item" in second
+    assert "as the daemon last reported it" in second
     store = _store(sqlite_session)
     assert set(store.known(company.id, str(project))) == {
         "pkg/api.py",
