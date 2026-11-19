@@ -180,7 +180,7 @@ Use the `useTranslation` hook from i18next; never hardcode English strings in JS
 
 ## Branches
 
-- Branches: trunk-based. Each change is a branch cut from `main` with one pull request into `main`, merged once the head is green (`CONTRIBUTING.md`, Branches). There is no `develop` integration branch.
+- Branches: trunk-based. Each change is a branch cut from `main`, landed locally once `scripts/land.sh <branch>` passes: it merges `main` and the branch in a clean worktree (never a rebase), runs `scripts/check.sh full` on that merge commit, fast-forwards local `main` and writes a verification record (a claim by the machine that ran it; `--verify <sha>` re-runs it elsewhere); `--push` mirrors `main` and `refs/notes/verification` to GitHub (`CONTRIBUTING.md`, Branches; `docs/OPERATIONS.md`, Landing locally). Pull requests remain possible for review but are no longer the gate. A protected path lands only with the owner (`LAND_OWNER=1`, a guard, not a security boundary). There is no `develop` integration branch.
 - The Glassroom VR entry for the Meta VR Start Developer Competition lives on
   the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
 

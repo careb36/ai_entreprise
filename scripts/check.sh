@@ -29,6 +29,8 @@
 #   CHECK_BACKEND_WORKERS   pytest-xdist workers for full (default auto; -n 2 on a shared machine)
 #   CHECK_FILES             the changed files for quick, instead of asking git (space separated)
 #   CHECK_DRY_RUN=1         print the steps the mode would run and run none of them
+#   CHECK_REPORT            a file to write each step to, one per line as
+#                           name<TAB>state<TAB>seconds (scripts/land.sh reads it)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -312,6 +314,12 @@ summary() {
     printf '  %-32s %-28s %7ss\n' "${NAMES[$i]}" "${STATES[$i]}" "${TIMES[$i]}"
   done
   printf '  %-32s %-28s %7ss\n' "total" "$([[ $FAILED == 0 ]] && echo ok || echo FAILED)" "$(since "$STARTED")"
+  if [[ -n "${CHECK_REPORT:-}" ]]; then
+    : > "$CHECK_REPORT"
+    for i in "${!NAMES[@]}"; do
+      printf '%s\t%s\t%s\n' "${NAMES[$i]}" "${STATES[$i]}" "${TIMES[$i]}" >> "$CHECK_REPORT"
+    done
+  fi
 }
 
 STARTED="$(now)"
