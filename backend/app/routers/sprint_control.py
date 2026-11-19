@@ -28,7 +28,7 @@ from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import Field
 from schemas import RequestModel
-from services.loop import sprint_control
+from services.loop import run_window_gate, sprint_control
 from services.release import git_setup
 from services.tools import research_tools
 from services.workspace import sandbox, stack_profiles, stack_roots
@@ -57,8 +57,12 @@ async def dispatch_sprint_tasks(
     require_company_role(session, user, sprint.company_id, "Manager")
     if sprint_control.is_halted(sprint.status):
         raise HTTPException(status_code=409, detail=f"Sprint is {sprint.status}")
-    dispatched = sprint_control.dispatch_todo(session, sprint)
+    # Outside the company's run window the tasks wait for it (issue #736).
+    outcome = run_window_gate.dispatch_or_defer(session, sprint)
     session.commit()
+    dispatched = outcome["dispatched"]
+    if outcome["run_window"]:
+        return {"sprint_id": sprint_id, **outcome}
     if not dispatched:
         return {"dispatched": 0, "message": "No todo items to dispatch"}
     logger.info("Dispatched %d tasks for sprint %d", dispatched, sprint_id)
@@ -88,9 +92,9 @@ async def start_planned_sprint(
         )
     sprint.status = sprint_control.ACTIVE
     session.add(sprint)
-    dispatched = sprint_control.dispatch_todo(session, sprint)
+    outcome = run_window_gate.dispatch_or_defer(session, sprint)
     session.commit()
-    return {"status": sprint.status, "dispatched": dispatched}
+    return {"status": sprint.status, **outcome}
 
 
 @router.post("/sprints/{sprint_id}/stop")
@@ -139,9 +143,9 @@ async def resume_sprint(
     sprint.status = sprint_control.ACTIVE
     sprint.pause_reason = None
     session.add(sprint)
-    dispatched = sprint_control.dispatch_todo(session, sprint)
+    outcome = run_window_gate.dispatch_or_defer(session, sprint)
     session.commit()
-    return {"status": "active", "dispatched": dispatched}
+    return {"status": "active", **outcome}
 
 
 class AutonomyRequest(RequestModel):
