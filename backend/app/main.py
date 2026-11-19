@@ -77,7 +77,12 @@ from routers.webhooks import router as webhooks_router
 from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 from security import cors_allows_credentials, get_cors_origins, setup_security
-from services.integrations import anchoring, chat_approvals, webhooks
+from services.integrations import (
+    anchoring,
+    chat_approvals,
+    chat_regressions,
+    webhooks,
+)
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -86,6 +91,8 @@ settings = Settings()
 webhooks.install()
 # A risk hold posts its approval to the company's Slack or Teams (issue #512).
 chat_approvals.install()
+# A regression the factory observed is posted there too, information only (issue #682).
+chat_regressions.install()
 # A closed sprint or a release anchors the audit chain's head (issue #542).
 anchoring.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
