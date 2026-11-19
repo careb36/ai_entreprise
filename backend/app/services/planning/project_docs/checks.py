@@ -29,6 +29,7 @@ from typing import Any
 
 from services.contracts import roles as role_catalogue
 from services.planning.project_docs import (
+    closure,
     iterations,
     performance,
     specs,
@@ -36,7 +37,9 @@ from services.planning.project_docs import (
     texts,
     wstg_status,
 )
+from services.planning.project_docs.control_docs import event_ref
 from services.planning.project_docs.layout import DOMAINS, PMBOK, build, tr_of
+from services.planning.project_docs.log_docs import verification_ref
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_inline
 from services.planning.project_docs.scope_docs import covering, spec_ref, tasks_of
@@ -405,6 +408,32 @@ def iterations_released(snapshot: dict, src: Sources, tr: Tr) -> Result:
     )
 
 
+def nothing_left_on_hold(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Met or not met once every iteration is closed; measured while one runs,
+    since a hold in a running sprint is work in progress, not a leftover."""
+    sprints = snapshot.get("sprints") or []
+    if not sprints:
+        return NOT_COMPUTABLE, tr("check.no_sprints"), ""
+    total = closure.totals(snapshot)
+    holds, risks = total["open_holds"], total["open_risks"]
+    refs = [event_ref(h["event"], src.lang) for h in closure.open_holds(snapshot)]
+    refs += [verification_ref(v, src.lang) for v in closure.open_risks(snapshot)]
+    more = f" (+{len(refs) - MAX_MARKS})" if len(refs) > MAX_MARKS else ""
+    marks = (
+        (src.cite(*refs[:MAX_MARKS]) + more) if refs else _sprint_marks(sprints, src)
+    )
+    if total["open_iterations"]:
+        observed = tr(
+            "check.closure_running",
+            holds=holds,
+            risks=risks,
+            open=total["open_iterations"],
+        )
+        return MEASURED, observed, marks
+    observed = tr("check.closure_obs", holds=holds, risks=risks)
+    return (MET if holds + risks == 0 else NOT_MET), observed, marks
+
+
 def _person(_snapshot: dict, _src: Sources, tr: Tr) -> Result:
     return PERSON, tr("check.person_obs"), ""
 
@@ -426,7 +455,11 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
     "Finance": [("budget", _person), ("spend", spend_known)],
     "Stakeholders": [("people", people_recorded), ("external", _person)],
     "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
-    "Risk": [("risk", risk_on_every_delivery), ("security", security_tests_run)],
+    "Risk": [
+        ("risk", risk_on_every_delivery),
+        ("security", security_tests_run),
+        ("closure", nothing_left_on_hold),
+    ],
 }
 CHECK_INPUTS = (
     "stack",
@@ -443,6 +476,7 @@ CHECK_INPUTS = (
     "events",
     "effort",
     "costs",
+    "carries",
     "releases",
     statements.key_of("checks"),
 )

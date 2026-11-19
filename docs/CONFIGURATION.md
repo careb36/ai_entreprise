@@ -5,9 +5,42 @@ Every environment variable of the backend, the LLM proxy, the broker and the wor
 ## Required Environment Variables
 
 Copy `.env.example` to `.env` and fill in:
-- `GEMINI_API_KEY` — Google AI Studio key (used by Architect/PO agents)
-- `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
-- `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
+- `QWEN_API_KEY`, `DEEPSEEK_API_KEY` — secrets, set in `.env`; read by the LLM
+  proxy (`llm-proxy/app.py`), which compose gives them to (the backend never
+  holds a provider key). The default team needs both: the role defaults in
+  `services/models/model_factory.py` (`ROLE_MODEL_MAP`) put PO, Architect,
+  ScrumMaster, SecOps, TechWriter and Designer on Qwen, and Developer, QA,
+  BackendDeveloper, FrontendDeveloper, DevOps, DataEngineer and the
+  EngramProcessor on DeepSeek. With `AGENT_MODEL` (below) on one provider's
+  model only that provider's key is needed. Unset, the proxy logs
+  `QWEN_API_KEY is not set` (or `DEEPSEEK_…`) at startup and lists none of that
+  provider's models.
+- `GEMINI_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. No
+  default role runs on Gemini. It serves `gemini-*`/`gemma-*` model ids an agent,
+  a role variable or a policy names, and the proxy's `/v1/embeddings` (Gemini's
+  embedding model; without the key, a deterministic local vector,
+  `llm-proxy/embedding.py`).
+- `NEBIUS_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. The
+  Nebius Token Factory key, needed only for the roles `NEMOTRON_ROLES` names or
+  a model id with a vendor segment (`nvidia/…`; README.md, the routing table).
+  `NEBIUS_PROXY_URL` — default `https://api.tokenfactory.nebius.com/v1` (in the
+  proxy and in compose): the OpenAI-compatible base URL it is sent to, for a
+  Serverless Endpoint of your own. Not a secret.
+- `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials (secrets, set in
+  `.env`)
+- `POSTGRES_USER` (default `factory`), `POSTGRES_DB` (default `factory`),
+  `POSTGRES_HOST` (default `localhost`), `POSTGRES_PORT` (default `5432`) — where
+  the backend (`config.py`, `app/database.py`), the janitor
+  (`backend/janitor/main.py`) and the LLM proxy's quota store
+  (`llm-proxy/quota.py`) find Postgres. Compose sets `POSTGRES_HOST=postgres`
+  and `POSTGRES_PORT=5432` for each of them and takes the user and database
+  name from `.env` (`${POSTGRES_USER:-factory}`, `${POSTGRES_DB:-factory}`),
+  which also create them in the `postgres` container. Not secrets.
+- `NEO4J_URI` (default `bolt://localhost:7687`; `.env.example`
+  `bolt://neo4j:7687`) and `NEO4J_USER` (default `neo4j`) — where and as whom
+  the backend reaches the knowledge graph (`config.py`, `app/database.py`,
+  `services/platform/engram_processor.py`). Not secrets; the password is
+  `NEO4J_PASSWORD`.
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
 - `NEO4J_ENABLED` — optional, default `true` (issue #328). The knowledge
   graph (Neo4j) is optional: the backend never depends on it (compose starts
@@ -275,6 +308,9 @@ Copy `.env.example` to `.env` and fill in:
   it reached (never an address), the next window starts where the last sent
   one ended, and a failed send is retried from the same start at most once an
   hour. One replica sends at a time (`locks.MANAGER_BRIEF`).
+  `MANAGER_BRIEF_CHECK_SECONDS` (300) is how often that loop looks for a due
+  brief, and `SMTP_TIMEOUT_SECONDS` (20) bounds one connection to the mail
+  server. `SMTP_PASSWORD` is a secret: set it in `.env`.
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL. It is also the base of
@@ -330,8 +366,10 @@ Copy `.env.example` to `.env` and fill in:
   TLS, `NATS_TLS_CA` pins the CA (the backend container reads
   `nats/certs/ca.crt`), `NATS_TLS_CERT`/`_KEY` present a client certificate.
   In the containers `nats/certs` is `/etc/fabrique-nats/certs`, and
-  `NATS_BACKEND_TLS_CERT`/`_KEY` and `NATS_DAEMON_TLS_CERT`/`_KEY` name a
-  client certificate's files there (compose turns them into those paths).
+  `NATS_BACKEND_TLS_CERT` / `NATS_BACKEND_TLS_KEY` and `NATS_DAEMON_TLS_CERT` /
+  `NATS_DAEMON_TLS_KEY` (compose only, default empty: none) name a client
+  certificate's files there (compose turns them into those paths). The key
+  file is a secret: keep it in `nats/certs`, never in `.env`.
   `docs/OPERATIONS.md`, "Securing the bus", generates a self-signed CA.
 - `FABRIQUE_HEARTBEAT_SECONDS` — daemon side, optional, default `20`, bounded
   to 1..25. How often the daemon publishes `workspace.heartbeat` with its id,
@@ -348,16 +386,55 @@ Copy `.env.example` to `.env` and fill in:
   `services/workspace/daemon_liveness.py`). The offline window also bounds how
   long a daemon that reported an incompatible protocol keeps deliveries
   refused after it was last heard.
+- `NATS_URL` — default `nats://localhost:4222` in the backend (`config.py`) and
+  the daemon (`vscode-daemon/daemon.py`). The broker's address. Compose sets
+  `nats://nats:4222` for the backend and the daemon container;
+  `scripts/start-daemon.*` leave it at localhost. Not a secret: credentials
+  go in the variables above, never in the URL.
 - `PROJECTS_ROOT` — only for the optional Linux daemon container (`--profile
-  docker-daemon`): the host folder holding your projects, mounted at the same path.
+  docker-daemon`): the host folder holding your projects, mounted at the same
+  path. Unset, compose mounts `$HOME` (or `/tmp` when `HOME` is unset too).
+- `CONTAINER_WORKSPACE_ROOT` — compose only, default `/workspace`. The path
+  inside the backend and daemon containers where compose mounts this
+  repository; compose passes it on as the two variables below.
+- `AGENT_WORKSPACE_ROOT` — backend, default unset (compose:
+  `${CONTAINER_WORKSPACE_ROOT:-/workspace}`). Where a company's files are
+  written when it has no discovered project folder (a self-improvement sprint
+  on this repository): `services/loop/worker/deliver.py` and
+  `services/release/integration.py` use the company's `ProjectDiscovery` path
+  first. Unset and no project, the files are not sent and the evidence says
+  `workspace path not configured`.
+- `WORKSPACE_ROOT` — daemon side, default `~/factory-workspaces`
+  (`vscode-daemon/daemon.py`; compose's daemon container:
+  `${CONTAINER_WORKSPACE_ROOT:-/workspace}`). The folder a request that names
+  no `workspace_root` writes into; the daemon creates it when missing.
+- `FABRIQUE_EDIT_STATE` — daemon side, default `~/.fabrique-daemon/edits`
+  (`vscode-daemon/workspace_edit.py`). Where the first edit of a file in a
+  task's tool loop keeps the file's original bytes until
+  `workspace.edit.finish` puts them back.
+- `FABRIQUE_EXEC_SHELL` — daemon side, default unset (`vscode-daemon/shell_exec.py`):
+  the shell a host-mode command runs in. Unset: `/bin/zsh` when it exists, else
+  `/bin/sh`; on Windows `COMSPEC` (else `cmd.exe`), and a `powershell`/`pwsh`
+  path runs with `-NoProfile -NonInteractive -Command`.
+- `FABRIQUE_SANDBOX_RUNTIME` — daemon side, default unset
+  (`vscode-daemon/sandbox.py`): the container runtime of `DELIVERY_SANDBOX=container`,
+  a command name or path. Unset, the first of `docker` and `podman` on the
+  `PATH`; none found makes the run unavailable with the reason.
+- `CONSOLE_ASSISTANT_COMMANDS` — daemon side, default `copilot,claude`
+  (`vscode-daemon/daemon.py`). The assistant CLIs the daemon looks for when
+  the backend's request lists none; bare command names only (a path or shell
+  syntax is dropped).
 - `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
   `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
-  sends the task back for rework. It executes agent-written code on the daemon's machine,
+  sends the task back for rework. The backend waits `DELIVERY_TEST_TIMEOUT_SECONDS`
+  (default `130`; the daemon stops a command after 120 s) for the run's answer.
+  It executes agent-written code on the daemon's machine,
   where `DELIVERY_SANDBOX` says: `host` (default, as before), `container` (an
   ephemeral container per run: worktree mounted, network off unless
-  `DELIVERY_SANDBOX_NETWORK`, limits `DELIVERY_SANDBOX_CPUS` / `_MEMORY_MB` /
-  `_PIDS`, image `DELIVERY_SANDBOX_IMAGE`, every capability dropped) or `bwrap`.
+  `DELIVERY_SANDBOX_NETWORK`, limits `DELIVERY_SANDBOX_CPUS` (2),
+  `DELIVERY_SANDBOX_MEMORY_MB` (2048) and `DELIVERY_SANDBOX_PIDS` (512),
+  image `DELIVERY_SANDBOX_IMAGE`, every capability dropped) or `bwrap`.
   A company sets its own (`Company.delivery_sandbox`, and `sandbox_env`: the
   variable names a sandboxed run may see) with `GET`/`PUT
   /v1/companies/{id}/sandbox` (Viewer / Manager). The daemon reports what it
@@ -732,6 +809,53 @@ Copy `.env.example` to `.env` and fill in:
   role defaults apply), a band that cannot be read is dropped with a warning;
   an agent's, a role's or the company's chosen model is never re-routed.
   Unset: every task runs on its role's model, as before.
+- `AGENT_MODEL` — backend, optional, default empty. One model id for every
+  role (`AGENT_MODEL=<a DeepSeek model id>` runs the whole team on DeepSeek,
+  and then only `DEEPSEEK_API_KEY` is needed). Read by
+  `ModelFactory.model_for_role` (`services/models/model_factory.py`), the
+  single source of role defaults for the task worker, the ScrumMaster, the
+  Support and Reviewer agents, the PO's drafts and the LangGraph producer.
+  Use ids from the proxy's `GET /v1/models`: the proxy refuses an id its
+  provider does not list (`unknown_model`). Not a secret.
+- `AGENT_MODEL_<ROLE>` — backend, optional, default empty: one role's model,
+  winning over `NEMOTRON_ROLES` and `AGENT_MODEL`. The names the code reads
+  are `AGENT_MODEL_PO`, `AGENT_MODEL_ARCHITECT`, `AGENT_MODEL_SCRUM_MASTER`,
+  `AGENT_MODEL_DEVELOPER`, `AGENT_MODEL_QA`, `AGENT_MODEL_SECOPS`,
+  `AGENT_MODEL_TECH_WRITER`, `AGENT_MODEL_BACKEND_DEVELOPER`,
+  `AGENT_MODEL_FRONTEND_DEVELOPER`, `AGENT_MODEL_DEVOPS`,
+  `AGENT_MODEL_DESIGNER`, `AGENT_MODEL_DATA_ENGINEER` and
+  `AGENT_MODEL_ENGRAM_PROCESSOR`; a coding role without its own (backend,
+  frontend, DevOps, data) reads `AGENT_MODEL_DEVELOPER`. `docker-compose.yml`
+  passes only `AGENT_MODEL` and the first seven plus
+  `AGENT_MODEL_ENGRAM_PROCESSOR` from `.env` to the backend; the others reach
+  it only by adding them to the backend's `environment` in compose. The order,
+  from most to least specific: an agent's own `model` (the Agents page), the
+  company's model for the role, then its default model
+  (`services/models/company_models.py`), the difficulty policy
+  (`AGENT_MODEL_POLICY`, above), `AGENT_MODEL_<ROLE>`, `NEMOTRON_ROLES`,
+  `AGENT_MODEL`, the `ROLE_MODEL_MAP` default.
+- `NEMOTRON_ROLES` — backend, optional, default empty. Comma-separated role
+  names (`PO`, `Architect`, `ScrumMaster`, `Developer`, `QA`, `SecOps`,
+  `TechWriter`, `Designer`…, case-insensitive; `Developer` also covers the
+  coding roles) that run on NVIDIA Nemotron through Nebius, winning over
+  `AGENT_MODEL`. Such a role runs `NEMOTRON_MODEL_STRATEGIC` (PO, Architect,
+  SecOps, Designer) or `NEMOTRON_MODEL_FAST` (TechWriter) when set, else
+  `NEMOTRON_MODEL`, else its `ROLE_MODEL_MAP` default; all three are empty by
+  default. Read the real ids from `GET /v1/models` (`provider == "nebius"`)
+  first; needs `NEBIUS_API_KEY` on the proxy. Not secrets.
+- `ARCHITECT_EDITOR_MODE` — backend, default `false` (compose:
+  `${ARCHITECT_EDITOR_MODE:-false}`). Architect and editor mode
+  (`services/loop/edit_plan.py`, from Aider): on, a Developer task whose
+  difficulty is at least `ARCHITECT_EDITOR_MIN_DIFFICULTY` (default `4`, on
+  the 1-5 scale of `services/models/difficulty.py`) gets a numbered edit plan
+  from the Architect and runs on the policy's cheapest band model. Off, the
+  Architect's brief stays free text. Needs `ARCHITECT_CONSULT_ENABLED`.
+- `ARCHITECT_CONSULT_ENABLED` — backend, default `true`. The task worker asks
+  the Architect before a Developer task that is high priority, touches a
+  design-sensitive topic or comes back from QA, once per attempt
+  (`services/platform/orchestration_metrics.py`), recorded as an
+  `ARCHITECT_CONSULTED:` comment; `false` turns that off, and the editor mode's
+  plan with it.
 - `API_DOCS_ENABLED` — default `false`. The interactive documentation
   (`/docs`, `/redoc`, `/openapi.json`); off, all three answer 404
   (WSTG-v42-CONF-05). `docker-compose.yml` sets it to `true` for local
@@ -766,7 +890,9 @@ Copy `.env.example` to `.env` and fill in:
   one on a company's list is fetched only on a public address, resolved once
   and pinned (issue #541). `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
   `RESEARCH_CRATES_URL`, `RESEARCH_GO_URL` and `RESEARCH_OSV_URL` may point
-  at a mirror (the e2e points PyPI at its fake).
+  at a mirror (the e2e points PyPI at its fake). `RESEARCH_TIMEOUT_SECONDS`
+  (20) bounds one fetch and `RESEARCH_FETCH_MAX_BYTES` (524288, 512 KiB) cuts
+  a page or registry answer there (the result says `cut_at_bytes`).
 - `GROUNDING_LOOKUPS_ENABLED` (true), `GROUNDING_MAX_LOOKUPS` (20) — the
   Verifier's `grounded` check (`services/evidence/grounding.py`): when a
   delivery writes a manifest, the backend asks each registry for its
@@ -774,6 +900,105 @@ Copy `.env.example` to `.env` and fill in:
   answers on the evidence as `registry_lookups`; verification then reads them
   and never reaches the network. Off, or over the bound, a dependency without
   an answer is a finding, never a refutation.
+- `AGENT_GRAPH_ENABLED` — backend, `config.py` default `false`, but
+  `docker-compose.yml` sets `${AGENT_GRAPH_ENABLED:-true}`, so the compose
+  stack has it on unless `.env` says `false` (`.env.example` does). The
+  internal LangGraph producer: off, `POST /v1/generate` answers 409 (ingest
+  external work through `POST /v1/agent_runs`) and a story on
+  `workspace.generate` is ignored with a Glassroom note
+  (`services/producers/agent_worker.py`); `/v1/capabilities` reports it as
+  `agent_graph`. The sprint's task worker does not depend on it.
+- `AUDIT_LOG_PATH` — backend, default `/app/.factory/logs` (compose sets the
+  same, on the `factory-logs` volume). The folder of the append-only
+  `audit.jsonl` (`services/platform/agent_service.py`), which the support desk
+  downloads (`routers/support.py`). The audit hash chain lives in Postgres,
+  not here.
+- `GITHUB_TOKEN` — backend, optional secret, default unset; set it in `.env`
+  (compose passes `${GITHUB_TOKEN:-}`). Sent as the bearer token of the GitHub
+  API calls of `services/producers/github_adapter.py` (the backfill's reads of
+  pull requests, their commits and diffs) when the call carries no token of
+  its own, for rate-limit headroom; `/v1/capabilities` reports `github: true`
+  with it. Compose does not give it to the daemon.
+- `OPENPROJECT_URL` (default `http://localhost:8080`), `OPENPROJECT_TOKEN_PO`
+  (optional secret, default unset) — backend
+  (`services/producers/openproject_tools.py`): with the PO's token, the PO's
+  backlog tool creates work packages there; without it the ticket is
+  simulated locally and the chat says so. `OPENPROJECT_TOKEN_DEV` is declared
+  in `config.py` but no code reads it today. Set the tokens in `.env` (or the
+  secret store); compose does not pass them.
+- `RATE_LIMIT_DEFAULT` — backend, default `100/minute`. The slowapi limit on
+  every route without one of its own, per connecting address
+  (`app/security.py`, `RATE_LIMIT_STORAGE_URI`).
+- `WORKSPACE_WRITE_TIMEOUT_SECONDS` — backend, default `30`. How long the task
+  worker waits for the daemon to confirm a delivery's writes (more when the
+  Git workflow may fetch the base, `services/workspace/git_workflow.py`); a
+  console producer's preparation and collection steps on the daemon get twice
+  that.
+- Console assistants (`services/producers/console_assistants.py`,
+  `console_commands.py`; on by default with `CONSOLE_ASSISTANTS_ENABLED`):
+  advice from the CLIs on the daemon's machine before a task, context for the
+  prompt and never evidence. All backend, none secret:
+  - `CONSOLE_ASSISTANT_ALLOWED_ROLES` — default
+    `Developer,Architect,QA,PO,ScrumMaster`: the roles that ask.
+  - `CONSOLE_ASSISTANT_STRATEGY` — default `copilot_first`: the Copilot CLI
+    is asked first; any other value asks it only when no other assistant is
+    chosen.
+  - `COPILOT_CLI_COMMAND_TEMPLATE` — default
+    `copilot -p {prompt} --output-format json`.
+  - `CLAUDE_CLI_COMMAND_TEMPLATE` — default
+    `claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}`;
+    empty never asks it. It is asked only for a high-value task: a role in
+    `CLAUDE_CLI_HIGH_VALUE_ROLES` (default `Architect,PO,QA,ScrumMaster`), a
+    `high` or `critical` priority, or a strategic keyword in the task.
+  - `CLAUDE_CLI_ALLOWED_TOOLS` — default `Read,Grep,Glob,LS,Bash(git *)`,
+    and `CLAUDE_CLI_APPEND_SYSTEM_PROMPT` (a fixed advisory prompt in
+    `config.py`) fill the template's placeholders.
+  - `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES` — default `10` (at least 1): how
+    long a company skips that CLI after it reported a quota without a reset
+    time.
+  - `CONSOLE_ASSISTANT_TIMEOUT_SECONDS` — default `90`: one assistant run on
+    the daemon.
+
+## The LLM proxy
+
+Read by `llm-proxy/` (the provider keys are in the list at the top), and by
+the backend where it says so:
+
+- `LLM_PROXY_URL` — backend, default `http://localhost:5100` (`config.py`,
+  `app/llm_proxy_client.py`, `services/models/model_factory.py`); compose and
+  `.env.example` set `http://llm-proxy:5100`. Where every model call goes.
+- `LLM_UPSTREAM_TIMEOUT_SECONDS` — default `110`, read by the proxy
+  (`llm-proxy/app.py`) and by the backend (`app/llm_proxy_client.py`). The time
+  budget of one chat request's provider calls, fallbacks included; the
+  backend's client waits this plus 10 s, so an answer the provider is still
+  writing (and billing) is never given up on.
+- `PROXY_PORT` — default `5100`, read only when the proxy runs as
+  `python app.py`. The image runs gunicorn bound to `0.0.0.0:5100`
+  (`llm-proxy/Dockerfile`) and ignores it, so the value compose sets changes
+  nothing; change the port in the Dockerfile and the `ports:` mapping instead.
+- `LLM_PROXY_INTERNAL_TOKEN` — in the list at the top.
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` —
+  default unset; compose sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`.
+  The OTLP/HTTP collector the proxy exports its spans to (`/v1/traces` is
+  appended; `llm-proxy/telemetry.py`). `OTEL_EXPORTER_OTLP_ENABLED` truthy with
+  no endpoint exports to `http://localhost:4318`; `OTEL_SDK_DISABLED` truthy
+  turns export off whatever else is set. Unset, nothing is exported, and the
+  `traceparent` header is still propagated. The backend reads the same
+  variables the same way (`backend/telemetry.py`, loaded at startup), so the
+  compose value sends its spans to Jaeger too; the daemon has no telemetry
+  code and ignores it.
+
+## Set by docker-compose.yml for third-party containers
+
+Fixed in `docker-compose.yml`, not read by La Fabrique's code, and not
+meant to be set in `.env`:
+
+- `COLLECTOR_OTLP_ENABLED: "true"` — the Jaeger container's OTLP receiver
+  (port 4318), which the proxy exports to; the Jaeger UI is on 16686.
+- `NEO4J_ACCEPT_LICENSE_AGREEMENT: "eval"` and `NEO4J_PLUGINS: '["apoc"]'` —
+  the Neo4j container's licence acceptance and the APOC plugin it loads.
+- `HOME` — the host's home folder, the default of `PROJECTS_ROOT` for the
+  optional daemon container.
 
 ## The desktop app
 

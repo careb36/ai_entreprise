@@ -10,8 +10,8 @@ import {
   resourceSummary,
 } from './constants'
 import type { Agent, ModelInfo, Permissions } from './types'
-import { ButtonSpinner } from '../admin/AdminParts'
 import { AUTONOMY_ICONS, RESOURCE_ICONS } from './icons'
+import { Spinner } from '../../components/ui'
 
 /** One summary group: its title, the way back to its step, and what was chosen there. */
 function Summary({ title, onEdit, editLabel, children }: { title: ReactNode; onEdit: () => void; editLabel: string; children: ReactNode }) {
@@ -136,7 +136,7 @@ export function ReviewStep({
       <button type="button" onClick={handleSubmit}
         disabled={loading}
         className="btn-primary w-full">
-        {loading ? <ButtonSpinner /> : <Factory size={15} aria-hidden="true" />}
+        {loading ? <Spinner size={13} /> : <Factory size={15} aria-hidden="true" />}
         {loading ? t('companyNew.submitting') : t('companyNew.submit')}
       </button>
     </div>

@@ -6,8 +6,7 @@ import SodPolicyPanel from '../components/SodPolicyPanel'
 import SodReportPanel from '../components/SodReportPanel'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
-import { PageHeader } from '../components/ui'
-import { AccessNotice } from './admin/AdminParts'
+import { AccessNotice, PageHeader } from '../components/ui'
 
 /**
  * Duties and access, for the company's Owners (issue #543): who asked for a

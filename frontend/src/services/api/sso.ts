@@ -79,6 +79,23 @@ export interface SsoTestResult {
   connection: SsoConnection
 }
 
+/** One of the signed-in person's own identities (the subject is never shown). */
+export interface SsoIdentity {
+  id: number
+  company_id: number | null
+  company_name: string | null
+  email: string | null
+  linked_at: string | null
+  last_login_at: string | null
+}
+
+/** The person's identities, the companies they can still link, and whether they have a password. */
+export interface MySsoIdentities {
+  identities: SsoIdentity[]
+  linkable: { company_id: number; company_name: string; preset: SsoPreset }[]
+  has_password: boolean
+}
+
 /**
  * Where the browser goes to sign in with SSO: a full-page navigation, since
  * the backend sets a cookie and redirects to the identity provider.
@@ -105,6 +122,15 @@ export const ssoEndpoints = (http: Http) => ({
   testSso: (companyId: number) => http.post<SsoTestResult>(`/v1/companies/${companyId}/sso/test`),
 
   deleteSso: (companyId: number) => http.delete<void>(`/v1/companies/${companyId}/sso`),
+
+  getMySsoIdentities: () => http.get<MySsoIdentities>('/v1/auth/sso/identities'),
+
+  /** Begin linking at a company's connection; the browser then goes to the returned URL. */
+  startSsoLink: (companyId: number) =>
+    http.post<{ authorization_url: string }>('/v1/auth/sso/link/start', { company_id: companyId }),
+
+  unlinkMySsoIdentity: (identityId: number) =>
+    http.delete<{ unlinked: boolean }>(`/v1/auth/sso/identities/${identityId}`),
 
   checkSsoDomain: (companyId: number, domain: string) =>
     http.post<SsoDomainCheck>(`/v1/companies/${companyId}/sso/domains/${encodeURIComponent(domain)}/check`),

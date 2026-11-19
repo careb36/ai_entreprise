@@ -16,6 +16,10 @@ why). The role always comes from the company's
 membership, never from a claim; a new member gets the connection's default
 role, never Owner. Each completed callback writes one audit row with what
 the provider asserted and the outcome.
+
+The same callback also finishes a link begun inside a signed-in session
+(``sso_link``): ``take_state`` consumes either kind of state, and
+``authorization_url`` and ``exchange_claims`` are shared with it.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from urllib.parse import urlencode
 
 from models import CompanyMember, SsoConnection, SsoFlowState, SsoIdentity, User
 from sqlalchemy import delete, func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from services.platform import oidc, sso_connections, sso_domains
@@ -88,18 +93,32 @@ def find_connection(session: Session, key: str) -> SsoConnection:
 def start(session: Session, key: str) -> tuple[str, str]:
     """The provider's authorization URL and the browser binding to set."""
     conn = find_connection(session, key)
+    binding = secrets.token_urlsafe(32)
+    return authorization_url(session, conn, "login", _hash(binding)), binding
+
+
+def authorization_url(
+    session: Session,
+    conn: SsoConnection,
+    kind: str,
+    binding_hash: str,
+    user_id: int | None = None,
+) -> str:
+    """Store a one-time ``state`` of *kind* (with the PKCE verifier, the nonce
+    and *binding_hash*) and return the provider's authorization URL for it."""
     discovery = oidc.discover(conn.issuer)
     session.exec(delete(SsoFlowState).where(SsoFlowState.expires_at < _now()))
-    state, nonce, binding = (secrets.token_urlsafe(32) for _ in range(3))
+    state, nonce = (secrets.token_urlsafe(32) for _ in range(2))
     verifier, challenge = oidc.pkce_pair()
     session.add(
         SsoFlowState(
-            kind="login",
+            kind=kind,
             key_hash=_hash(state),
             connection_id=conn.id,
+            user_id=user_id,
             nonce=nonce,
             code_verifier=verifier,
-            binding_hash=_hash(binding),
+            binding_hash=binding_hash,
             expires_at=_now() + STATE_TTL,
         )
     )
@@ -117,16 +136,18 @@ def start(session: Session, key: str) -> tuple[str, str]:
             "code_challenge_method": "S256",
         }
     )
-    return f"{endpoint}{'&' if '?' in endpoint else '?'}{query}", binding
+    return f"{endpoint}{'&' if '?' in endpoint else '?'}{query}"
 
 
-def _consume(session: Session, kind: str, value: str | None) -> SsoFlowState | None:
+def _consume(
+    session: Session, kinds: tuple[str, ...], value: str | None
+) -> SsoFlowState | None:
     """The row for *value*, deleted: whoever deletes it is the only one to use it."""
     if not value or len(value) > 512:
         return None
     row = session.exec(
         select(SsoFlowState).where(
-            SsoFlowState.kind == kind, SsoFlowState.key_hash == _hash(value)
+            SsoFlowState.kind.in_(kinds), SsoFlowState.key_hash == _hash(value)
         )
     ).first()
     if row is None:
@@ -165,6 +186,50 @@ def _audit(
     )
 
 
+def take_state(session: Session, state: str | None) -> SsoFlowState:
+    """The sign-in or link ``state`` row, consumed: it can be used once.
+    Whoever finishes it checks ``fresh`` first, so an expired link state is
+    reported where the link began."""
+    if not state:
+        raise oidc.SsoError("missing_state")
+    row = _consume(session, ("login", "link"), state)
+    if row is None:
+        raise oidc.SsoError("invalid_state", "state unknown or already used")
+    return row
+
+
+def fresh(row: SsoFlowState) -> None:
+    if row.expires_at < _now():
+        raise oidc.SsoError("state_expired")
+
+
+def exchange_claims(
+    conn: SsoConnection, row: SsoFlowState, code: str | None, error: str | None
+) -> dict:
+    """The provider's validated ID token claims for the *code* of *row*'s flow:
+    the code exchanged with the PKCE verifier, the token checked by ``oidc``
+    (signature, issuer, audience, expiry, nonce, ``email_verified``)."""
+    if error:
+        raise oidc.SsoError("idp_denied", "the provider returned an error")
+    if not code:
+        raise oidc.SsoError("missing_code")
+    discovery = oidc.discover(conn.issuer)
+    answer = oidc.exchange_code(
+        discovery,
+        code=code,
+        redirect_uri=sso_connections.redirect_uri(),
+        code_verifier=row.code_verifier or "",
+        client_id=conn.client_id,
+        client_secret=sso_connections.client_secret(conn),
+    )
+    return oidc.validate_id_token(
+        answer["id_token"],
+        discovery=discovery,
+        client_id=conn.client_id,
+        nonce=row.nonce or "",
+    )
+
+
 def complete(
     session: Session,
     *,
@@ -173,14 +238,23 @@ def complete(
     error: str | None,
     binding: str | None,
 ) -> str:
-    """The handoff code for a valid callback; ``SsoError`` otherwise."""
-    if not state:
-        raise oidc.SsoError("missing_state")
-    row = _consume(session, "login", state)
-    if row is None:
-        raise oidc.SsoError("invalid_state", "state unknown or already used")
-    if row.expires_at < _now():
-        raise oidc.SsoError("state_expired")
+    """The handoff code for a valid sign-in callback; ``SsoError`` otherwise."""
+    row = take_state(session, state)
+    if row.kind != "login":
+        raise oidc.SsoError("invalid_state", "not a sign-in state")
+    return finish_login(session, row, code=code, error=error, binding=binding)
+
+
+def finish_login(
+    session: Session,
+    row: SsoFlowState,
+    *,
+    code: str | None,
+    error: str | None,
+    binding: str | None,
+) -> str:
+    """The handoff code for the consumed sign-in *row*; ``SsoError`` otherwise."""
+    fresh(row)
     if not binding or not hmac.compare_digest(_hash(binding), row.binding_hash or ""):
         raise oidc.SsoError("state_mismatch", "state was issued to another browser")
     conn = session.get(SsoConnection, row.connection_id)
@@ -188,26 +262,14 @@ def complete(
         raise oidc.SsoError("unknown_connection")
     claims = None
     try:
-        if error:
-            raise oidc.SsoError("idp_denied", "the provider returned an error")
-        if not code:
-            raise oidc.SsoError("missing_code")
-        discovery = oidc.discover(conn.issuer)
-        answer = oidc.exchange_code(
-            discovery,
-            code=code,
-            redirect_uri=sso_connections.redirect_uri(),
-            code_verifier=row.code_verifier or "",
-            client_id=conn.client_id,
-            client_secret=sso_connections.client_secret(conn),
-        )
-        claims = oidc.validate_id_token(
-            answer["id_token"],
-            discovery=discovery,
-            client_id=conn.client_id,
-            nonce=row.nonce or "",
-        )
+        claims = exchange_claims(conn, row, code, error)
         user, outcome, cleared = resolve_identity(session, conn, claims)
+        session.flush()
+    except IntegrityError:
+        # A link of this account at this provider won the race since the check.
+        session.rollback()
+        _audit(session, conn, "refused:identity_conflict", claims)
+        raise oidc.SsoError("identity_conflict") from None
     except oidc.SsoError as exc:
         session.rollback()
         _audit(session, conn, f"refused:{exc.code}", claims)
@@ -224,6 +286,16 @@ def complete(
     )
     _audit(session, conn, outcome, claims, user.id, password_cleared=cleared)
     return handoff
+
+
+def linked_at(session: Session, user_id: int, issuer: str) -> SsoIdentity | None:
+    """The account's identity at *issuer*, if any: one per account and provider
+    (the unique index ``ux_sso_identities_user_issuer`` backs this check)."""
+    return session.exec(
+        select(SsoIdentity).where(
+            SsoIdentity.user_id == user_id, SsoIdentity.issuer == issuer
+        )
+    ).first()
 
 
 def _memberships(session: Session, user_id: int) -> dict[int, str]:
@@ -293,11 +365,7 @@ def resolve_identity(
             raise oidc.SsoError(
                 "link_refused", "the account belongs to other companies too"
             )
-        if session.exec(
-            select(SsoIdentity.id).where(
-                SsoIdentity.user_id == user.id, SsoIdentity.issuer == issuer
-            )
-        ).first():
+        if linked_at(session, user.id, issuer) is not None:
             raise oidc.SsoError(
                 "identity_conflict", "the account is linked to another subject"
             )
@@ -340,7 +408,7 @@ def resolve_identity(
 
 def exchange_handoff(session: Session, code: str | None) -> User:
     """The account a one-time handoff code was issued to."""
-    row = _consume(session, "handoff", code)
+    row = _consume(session, ("handoff",), code)
     if row is None or row.expires_at < _now() or row.user_id is None:
         raise oidc.SsoError("invalid_handoff")
     user = session.get(User, row.user_id)
@@ -397,23 +465,36 @@ def members_refused_password(session: Session, company_id: int) -> list[int]:
     ]
 
 
+def _sso_requirements(session: Session, user: User) -> list[tuple[SsoConnection, str]]:
+    """The enabled connections requiring SSO of *user*'s companies, with the
+    user's role in each."""
+    return list(
+        session.exec(
+            select(SsoConnection, CompanyMember.human_role)
+            .join(CompanyMember, CompanyMember.company_id == SsoConnection.company_id)
+            .where(
+                CompanyMember.user_id == user.id,
+                SsoConnection.enabled == True,
+                SsoConnection.require_sso == True,
+            )
+        ).all()
+    )
+
+
+def password_refused(session: Session, user: User) -> bool:
+    """Whether a requirement of SSO refuses *user*'s password sign-in."""
+    rows = _sso_requirements(session, user)
+    return bool(rows) and (
+        not _break_glass(user) or any(role != "Owner" for _, role in rows)
+    )
+
+
 def check_password_login(session: Session, user: User) -> None:
     """Refuse a password sign-in for a member of a company that requires SSO,
     unless the operator listed this Owner for break-glass; audit that use."""
-    rows = session.exec(
-        select(SsoConnection, CompanyMember.human_role)
-        .join(CompanyMember, CompanyMember.company_id == SsoConnection.company_id)
-        .where(
-            CompanyMember.user_id == user.id,
-            SsoConnection.enabled == True,
-            SsoConnection.require_sso == True,
-        )
-    ).all()
-    if not rows:
-        return
-    if not _break_glass(user) or any(role != "Owner" for _, role in rows):
+    if password_refused(session, user):
         raise oidc.SsoError("sso_required")
-    for conn, _ in rows:
+    for conn, _ in _sso_requirements(session, user):
         AgentService().audit_interaction(
             session=session,
             company_id=conn.company_id,

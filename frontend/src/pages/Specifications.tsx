@@ -13,8 +13,7 @@ import { errorDetail } from '../services/api'
 import { type Specification, useCreateSpecification, useDraftSpecification, useSpecifications } from '../services/specifications'
 import { SpecificationEditor } from '../components/SpecificationEditor'
 import { CheckSummary, StatusBadge } from '../components/SpecificationBadges'
-import { LoadErrorAlert, LoadingLine, Spinner } from '../components/knowledge/PageStates'
-import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
+import { CountPill, EmptyState, LoadError, LoadingLine, PageHeader, Panel, Spinner } from '../components/ui'
 import { useAppStore } from '../store/useAppStore'
 
 // Re-exported for the pages that import them from here.
@@ -119,7 +118,7 @@ export default function Specifications() {
       ) : query.isLoading ? (
         <LoadingLine>{t('specifications.loading')}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('specifications.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('specifications.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : (
         <>
           {canWrite && writing && <WriteYourself companyId={companyId} onClose={() => setWriting(false)} />}
