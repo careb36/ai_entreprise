@@ -2,8 +2,9 @@
 No git command of the workspace daemon ever prompts (issue #745, ``vscode-daemon/git_env.py``).
 
 A remote reached over SSH runs the person's SSH command with
-``-o BatchMode=yes`` appended (``GIT_SSH_COMMAND``, else ``core.sshCommand``,
-else ``GIT_SSH``, else ``ssh``), and every git command runs with
+``-o BatchMode=yes`` right after its program (``GIT_SSH_COMMAND``, else
+``core.sshCommand``, else ``GIT_SSH``, else ``ssh``), so a ``BatchMode=no``
+of theirs comes second and loses, and every git command runs with
 ``GIT_TERMINAL_PROMPT=0`` and no askpass. A fake ``ssh`` stands for a host
 whose key is unknown, or a key with a passphrase: with ``BatchMode=yes`` it
 fails at once, as OpenSSH does; without it, it would wait for an answer
@@ -35,15 +36,21 @@ AT_ONCE_SECONDS = 8
 
 @pytest.fixture
 def fake_ssh(tmp_path):
-    """``(program, log)``: an ssh that refuses at once under BatchMode and otherwise waits for an answer."""
+    """``(program, log)``: an ssh that refuses at once under BatchMode and otherwise waits for an answer.
+
+    Like OpenSSH, it keeps the first ``BatchMode`` it is given."""
     log = tmp_path / "ssh.log"
     program = tmp_path / "fake-ssh"
     program.write_text(
         "#!/bin/sh\n"
         f'echo "$*" >> "{log}"\n'
-        'case "$*" in *BatchMode=yes*)\n'
-        '  echo "Host key verification failed." >&2; exit 255;;\n'
-        "esac\n"
+        "mode=\n"
+        'for a in "$@"; do\n'
+        '  case "$a" in BatchMode=*) [ -z "$mode" ] && mode="$a";; esac\n'
+        "done\n"
+        'if [ "$mode" = "BatchMode=yes" ]; then\n'
+        '  echo "Host key verification failed." >&2; exit 255\n'
+        "fi\n"
         "sleep 30\n"
         "exit 255\n"
     )
@@ -72,7 +79,7 @@ def _quick(call):
     return result
 
 
-def test_the_persons_ssh_command_is_kept_and_batch_mode_appended(
+def test_the_persons_ssh_command_is_kept_with_batch_mode_first(
     over_ssh, fake_ssh, monkeypatch
 ):
     program, log = fake_ssh
@@ -85,7 +92,20 @@ def test_the_persons_ssh_command_is_kept_and_batch_mode_appended(
     assert "Host key verification failed" in answer["reason"]
     assert git(over_ssh, "rev-parse", "main") == before
     called = log.read_text()
-    assert "-o ConnectTimeout=7 -o BatchMode=yes" in called
+    assert "-o BatchMode=yes -o ConnectTimeout=7" in called
+
+
+def test_a_persons_batch_mode_no_cannot_bring_a_prompt_back(
+    over_ssh, fake_ssh, monkeypatch
+):
+    """ssh keeps the first value: ours comes before theirs, so it still fails at once."""
+    program, log = fake_ssh
+    monkeypatch.setenv("GIT_SSH_COMMAND", f"{program} -o BatchMode=no -i key")
+
+    answer = _quick(lambda: git_sync.sync(str(over_ssh), "main", "fetch"))
+
+    assert answer["outcome"] == "remote_needs_interaction"
+    assert "-o BatchMode=yes -o BatchMode=no -i key" in log.read_text()
 
 
 def test_core_ssh_command_is_kept_when_the_environment_names_none(
@@ -101,7 +121,7 @@ def test_core_ssh_command_is_kept_when_the_environment_names_none(
     assert observed["remote_needs_interaction"] is True
     assert observed["remote_unreachable"].startswith("remote_needs_interaction:")
     assert "base_behind_remote" not in observed
-    assert "-o Compression=no -o BatchMode=yes" in log.read_text()
+    assert "-o BatchMode=yes -o Compression=no" in log.read_text()
 
 
 def test_the_check_before_publishing_names_the_reason(over_ssh, fake_ssh, monkeypatch):
@@ -142,6 +162,19 @@ def test_the_environment_of_every_command(tmp_path):
         git_env.ssh_command({"GIT_SSH": "/opt/my ssh/plink"}, tmp_path)
         == "'/opt/my ssh/plink' -o BatchMode=yes"
     )
+    # Right after the program, the rest kept as written (quotes, variables).
+    for command, expected in (
+        (
+            "ssh -i ~/.ssh/k -o BatchMode=no",
+            "ssh -o BatchMode=yes -i ~/.ssh/k -o BatchMode=no",
+        ),
+        ("'/opt/my ssh/ssh' -p 2222", "'/opt/my ssh/ssh' -o BatchMode=yes -p 2222"),
+        (
+            "SSH_AUTH_SOCK=$HOME/a ssh -v",
+            "SSH_AUTH_SOCK=$HOME/a ssh -o BatchMode=yes -v",
+        ),
+    ):
+        assert git_env.ssh_command({"GIT_SSH_COMMAND": command}, tmp_path) == expected
     assert git_env.needs_interaction("Permission denied (publickey).")
     assert git_env.needs_interaction("fatal: could not read Username for 'https://x'")
     assert not git_env.needs_interaction("Could not resolve host: example.invalid")

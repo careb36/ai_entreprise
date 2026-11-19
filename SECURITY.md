@@ -335,8 +335,11 @@ OpenID Connect provider (single sign-on, below).
   clean and in-progress flags, the folder's remote URL without credentials
   and the ahead/behind counts: no commit ids, no repository path, and an
   unreadable remote as a code, never the remote's own words. No git command
-  of the daemon ever prompts (`vscode-daemon/git_env.py`): SSH runs with
-  `-o BatchMode=yes` appended to the person's own command.
+  of the daemon ever prompts (`vscode-daemon/git_env.py`): SSH runs the
+  person's own command with `-o BatchMode=yes` right after the program,
+  before their options, so a `-o BatchMode=no` of theirs (ssh keeps the
+  first value) cannot turn a refusal into a prompt the daemon, with no
+  terminal, could only wait out.
 - **Known gap.** `GET /v1/workspace/browse` and `/inspect` are open to any
   signed-in person (the New company folder picker runs before the person
   belongs to a company), and registration is open: on a deployment shared by

@@ -13,12 +13,15 @@ with no reason worth reading. So every git command runs with:
   shows no window;
 
 and a command that can reach a remote (``fetch``, ``push``, ``pull``,
-``ls-remote``, ``clone``) also with ``GIT_SSH_COMMAND`` ending in
+``ls-remote``, ``clone``) also with ``GIT_SSH_COMMAND`` giving
 ``-o BatchMode=yes``: ssh asks for no passphrase and no host-key
 confirmation, and fails at once instead (``Host key verification failed``,
-``Permission denied (publickey)``). The person's own SSH command is kept and
-the option appended to it: ``GIT_SSH_COMMAND`` when set, else the
-repository's ``core.sshCommand``, else ``GIT_SSH``, else ``ssh``. Credential
+``Permission denied (publickey)``). The person's own SSH command is kept
+(``GIT_SSH_COMMAND`` when set, else the repository's ``core.sshCommand``,
+else ``GIT_SSH``, else ``ssh``) with the option put right after its program,
+before the person's own options: ssh keeps the first value of an option, so
+a ``-o BatchMode=no`` there cannot bring a prompt back. With no terminal, a
+prompt could never be answered, only waited out. Credential
 helpers, the ssh agent and keys without a passphrase work as before.
 
 ``needs_interaction`` names such a failure, so the answer says
@@ -28,6 +31,7 @@ helpers, the ssh agent and keys without a passphrase work as before.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -36,6 +40,7 @@ from typing import Mapping, Sequence
 # The git verbs that can contact a remote.
 REMOTE_VERBS = frozenset({"fetch", "push", "pull", "ls-remote", "clone"})
 BATCH_MODE = "-o BatchMode=yes"
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 NEEDS_INTERACTION = "remote_needs_interaction"
 # What git or ssh write when they stopped because they would have asked.
 _INTERACTION_SIGNS = (
@@ -65,13 +70,35 @@ def _core_ssh_command(cwd: Path) -> str:
     return found.stdout.strip() if found.returncode == 0 else ""
 
 
+def _with_batch_mode(command: str) -> str:
+    """*command* with ``-o BatchMode=yes`` right after its program, before the person's options.
+
+    ssh keeps the first value it is given for an option, so a ``-o
+    BatchMode=no`` of the person's, which here could only turn a refusal into
+    a wait nobody can answer, comes second and loses. The rest of the command
+    is kept as written (quoting, variables); leading ``NAME=value``
+    assignments stay in front of the program.
+    """
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    while True:
+        token = lexer.get_token()
+        if token is None:
+            return f"{command} {BATCH_MODE}"
+        if not _ASSIGNMENT.match(token):
+            break
+    rest = lexer.instream.read()
+    head = command[: len(command) - len(rest)].rstrip()
+    return f"{head} {BATCH_MODE} {rest}".rstrip()
+
+
 def ssh_command(environ: Mapping[str, str], cwd: Path) -> str:
-    """The person's SSH command for *cwd*, with ``-o BatchMode=yes`` appended."""
+    """The person's SSH command for *cwd*, with ``-o BatchMode=yes`` given first."""
     base = (environ.get("GIT_SSH_COMMAND") or "").strip() or _core_ssh_command(cwd)
     if not base:
         program = (environ.get("GIT_SSH") or "").strip()
         base = shlex.quote(program) if program else "ssh"
-    return f"{base} {BATCH_MODE}"
+    return _with_batch_mode(base)
 
 
 def env_for(args: Sequence[str], cwd: Path, environ: Mapping[str, str] = os.environ) -> dict:

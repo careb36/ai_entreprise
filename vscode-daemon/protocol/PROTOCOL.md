@@ -374,9 +374,10 @@ these subjects (§2.1).
 **Never a prompt** (`git_env.py`, issue #745). Every git command runs with
 `GIT_TERMINAL_PROMPT=0`, an empty `GIT_ASKPASS` and `GCM_INTERACTIVE=never`;
 one that can reach a remote (`fetch`, `push`, `pull`, `ls-remote`, `clone`)
-also with `GIT_SSH_COMMAND` ending in `-o BatchMode=yes`, appended to the
-person's own (`GIT_SSH_COMMAND`, else `core.sshCommand`, else `GIT_SSH`,
-else `ssh`). A remote that wants a passphrase, a password or an unknown host
+also with `GIT_SSH_COMMAND`: the person's own (`GIT_SSH_COMMAND`, else
+`core.sshCommand`, else `GIT_SSH`, else `ssh`) with `-o BatchMode=yes` right
+after the program, before their options, so it wins over a `BatchMode=no`
+of theirs (ssh keeps the first value). A remote that wants a passphrase, a password or an unknown host
 key fails at once: the base's observation says `remote_needs_interaction:
 true` with the reason prefixed `remote_needs_interaction:`, and
 `workspace.git.sync_base` answers that outcome.
