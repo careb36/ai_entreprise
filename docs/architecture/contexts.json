@@ -541,6 +541,9 @@
       "test_chat_approvals.py": [
         "integrations"
       ],
+      "test_chat_regressions.py": [
+        "integrations"
+      ],
       "test_chat_inbound.py": [
         "integrations",
         "release"
