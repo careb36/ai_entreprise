@@ -1334,9 +1334,9 @@ not say who accepted it; the owner confirms or removes the entry.
 | E-07 | Dependabot `ignore`: `react`, `react-dom`, `@types/react`, `@types/react-dom` majors | React 19 breaks `tsc` and the frontend tests while the pair is on 18. Locked 18.3.1, latest 19.3.1 (`npm outdated`) | As E-06 (`npm audit --omit=dev` gates pull requests) | A React 19 migration with its own tests | Not set | Not recorded |
 | E-08 | The Trivy file scan on pull requests does not gate, and its SARIF goes nowhere | The `security` job of `security-scan.yml` sets no `exit-code`, its upload step has `continue-on-error: true`, and code scanning is not enabled on the repository, so the results are not stored. That job is also the one status check `main` requires | The weekly baseline (`security-baseline.yml`) runs Trivy failing on CRITICAL and HIGH; pull requests are gated by pip-audit, npm audit, the licence scan, gitleaks and Semgrep | Enable code scanning, or make the pull-request scan fail on CRITICAL and HIGH, and decide which check `main` requires | Not set | Not recorded |
 | E-09 | Dependabot `ignore`: `tailwindcss` majors | Tailwind 4 moves its PostCSS plugin and needs a config migration; #463 broke the build. Locked 3.4.19, latest 4.3.5 | As E-07 | A Tailwind 4 migration | Not set | Not recorded |
-| E-10 | Dependabot `ignore`: `vite`, `vitest`, `@vitejs/plugin-react` majors | The reason written next to it ("the project is on vite ^5") **no longer holds**: the lock has `vite` 8.3.8 and `@vitejs/plugin-react` 6. No newer major exists on this date, so it holds nothing back yet | None needed today | The owner rewrites the reason or removes the ignore | Not set | Not recorded |
 | E-11 | Dependabot `ignore`: `python` base image minor and major (the five Python images and compose) | The backend's dependencies publish no wheels for newer Pythons and the slim image has no compiler; not re-verified on this date | 3.12.x patch updates still arrive | Move when the wheels exist | Not set | Not recorded |
 | E-13 | `slsa-framework/slsa-github-generator` referenced by tag `@v2.1.0`, not by sha | The generator runs only when called by a release tag | `backend/tests/test_workflow_pinning.py` allows that one reference and no other; Dependabot updates it | Upstream support for sha calls | Not set | Not recorded |
+| E-15 | gitleaks exceptions for 27 findings triaged as fixtures or examples (#522) | Triaged on 2026-11-18 from the weekly scan and a local full-history run of v8.21.2: 5 distinct values, none a live credential. An alphabet-run OpenAI-style key and AWS key id, and a stub RSA key with the body `abc`, in tests that check a secret is refused or never opened; the placeholder `X-Voice-Key` value `clave-demo` in a curl example of `AGENTS.md`; and two CVE identifiers in the deleted pytm `docs/threat_model.json` (false positives). 23 of the 27 are only in the history: those files were split, rewritten or deleted. The 4 in the tree are in `backend/tests/test_standards.py`, a protected file whose standards check must be fed values it recognises | History-only findings are ignored by fingerprint (`.gitleaksignore`, `commit:file:rule:line`), which never matches a new commit. The live file has one `.gitleaks.toml` entry per rule: that path AND that exact value (`condition = "AND"`). The same value in another file, or another value in that file, is still reported (checked with a scratch file on 2026-11-18). No test guards their shape yet: a backend test reading `.gitleaks.toml` and `.gitleaksignore` needs both in the `backend` filter of `changes.yml`, a protected path the owner edits | The owner, or an agent the owner allows to edit the protected test, builds the fixtures of `test_standards.py` by concatenation; its two `.gitleaks.toml` entries then go. The history entries stay as long as the history does | 2027-02-18 | **Proposed** in this pull request; the owner accepts it by merging |
 
 Closed entries, kept for the history:
 
@@ -1344,6 +1344,7 @@ Closed entries, kept for the history:
 |---|---|---|---|
 | E-12 | `safeReturnPath()` as the compensating control for GHSA-wrjc-x8rr-h8h6 and GHSA-337j-9hxr-rhxg (`react-router` 6) | 2026-11-18 (read) | `react-router-dom` 7.18.5 carries the fix; the function stays as defence in depth |
 | E-14 | `safety check \|\| true`, a dependency check that never failed | 2026-11-15 | PR #523: `pip-audit` and `npm audit` fail the job, exceptions only in `.github/pip-audit-ignore.txt` (empty on 2026-11-18) |
+| E-10 | Dependabot `ignore` on `vite`, `vitest` and `@vitejs/plugin-react` majors, whose reason ("the project is on vite ^5") no longer held | 2026-11-18 | The ignore is removed (#522). The project is on `vite` 8, `@vitejs/plugin-react` 6 and `vitest` 5, the latest majors that day; their next majors arrive together in the `vite-toolchain` Dependabot group, since `@vitejs/plugin-react` and `vitest` declare peer ranges on `vite`'s major |
 
 **Open owner decisions.** Nothing in this list is decided by the reviewer:
 
@@ -1356,8 +1357,10 @@ Closed entries, kept for the history:
    active rulesets (`main`, `factory-status-gates`) have
    `require_code_owner_review: false`. The owner says which state is meant,
    and §5.3 is corrected to it.
-3. E-06 to E-11 and E-13 have no review date and no recorded acceptor: the
-   owner sets both, or removes the entry.
+3. E-06 to E-09, E-11 and E-13 have no review date and no recorded
+   acceptor: the owner sets both, or removes the entry.
+4. E-15, the gitleaks exceptions, is proposed with a review date of
+   2027-02-18; accepting it is merging the pull request that adds it.
 
 ### 17.2 Security metrics
 
@@ -1374,8 +1377,8 @@ could not read is marked **not read**, never estimated.
 | Advisories in the shipped frontend | 0 (0 with the build tooling too) | `cd frontend && npm audit --omit=dev`; `npm audit` |
 | Python advisories (backend, proxy and daemon locks) | 0: the `dependencies` job passed on `8ddbe9f`; no ignore entries | `security-scan.yml` run 44364348276; `.github/pip-audit-ignore.txt` |
 | Code-scanning alerts | **Not available**: code scanning is not enabled (E-08) | `gh api repos/{owner}/{repo}/code-scanning/alerts` |
-| Weekly baseline | Failed on 2026-11-02, 2026-11-09 and 2026-11-16. On 2026-11-16 only gitleaks failed; Semgrep and Trivy passed | `gh run list --workflow security-baseline.yml`, run 43798024603 |
-| gitleaks findings in the history | 22 on 2026-11-16 (22 on 2026-11-09, 2 on 2026-11-02): 11 `generic-api-key`, 8 `aws-access-token`, 2 `private-key`, 1 `curl-auth-header`, in `backend/tests/test_standards.py`, `test_developer_tools.py`, `test_agent_tools.py`, `AGENTS.md` and `docs/threat_model.json`. **Not triaged**: the paths suggest test fixtures and examples, which nobody has confirmed | The job log of run 43798024603 (values redacted by `--redact`) |
+| Weekly baseline | Failed on 2026-11-02, 2026-11-09 and 2026-11-16. On 2026-11-16 only gitleaks failed; Semgrep and Trivy passed. With the E-15 exceptions, the same gitleaks command over the full history exits 0 locally on 2026-11-18; the next scheduled run is the first in CI | `gh api repos/{owner}/{repo}/actions/workflows/security-baseline.yml/runs`, run 43798024603 |
+| gitleaks findings in the history | 22 on 2026-11-16 (22 on 2026-11-09, 2 on 2026-11-02); 27 on 2026-11-18 at `b6596ce`, the 5 more from commits that split `test_agent_tools.py` and `test_developer_tools.py`. **Triaged on 2026-11-18: 0 live credentials**; 27 fixtures, examples or false positives, 5 distinct values, excepted narrowly (E-15). Open after the exceptions: 0 | The job log of run 43798024603 (values redacted); `gitleaks detect --source . --config .gitleaks.toml` v8.21.2, with and without the exceptions |
 | Time to fix | 9 issues labelled `security` closed from 2026-10-30 to 2026-11-18: median 12.7 h, worst 26.6 h (#327). The two filed as vulnerabilities, #524 and #525, closed in 2.3 h and 1.2 h. Measured from opened to closed, not to a release; **not comparable with the bug bar**, since none carries a severity | `gh api "repos/{owner}/{repo}/issues?labels=security&state=all"` |
 | Dependency age, backend | 10 top-level packages behind: 1 major (`bcrypt` 4.3.0 → 5.0.0), 1 held by E-06 (`sqlmodel`), `sqlalchemy` 2.0.57 → 2.1.9, 7 minor or patch | `cd backend && poetry show --outdated --top-level` |
 | Dependency age, LLM proxy | 1 patch behind (`sqlalchemy` 2.1.8 → 2.1.9) | `cd llm-proxy && poetry show --outdated --top-level` |
@@ -1389,7 +1392,8 @@ could not read is marked **not read**, never estimated.
 
 Compared with the previous review (§5.4 of 2026-10-29): the advisories in the
 shipped frontend went from 1 to 0; the weekly gitleaks findings rose from 2 to
-22 and are not triaged.
+22 (27 by 2026-11-18), and on 2026-11-18 all were triaged as fixtures,
+examples or false positives and excepted narrowly (E-15, #522).
 
 ### 17.3 Training notes
 
