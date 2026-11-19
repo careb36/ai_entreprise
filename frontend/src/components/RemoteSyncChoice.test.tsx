@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RemoteSyncChoice, remoteChoiceFor, type RemoteChoice } from './RemoteSyncChoice'
 import { BaseBehindNotice } from './BaseSyncAction'
 import { queryClient } from '../lib/queryClient'
-import { api, type ForgePolicy, type WorkspaceInspection } from '../services/api'
+import { api, ApiError, type ForgePolicy, type WorkspaceInspection } from '../services/api'
 import { baseSyncApi, type FolderGitCheck } from '../services/baseSync'
 import { workControlApi } from '../services/workControl'
 
@@ -77,7 +77,7 @@ describe('the New company form: the remote and the local copy (#745)', () => {
   it('shows what was read locally and contacts the remote only on "Check remote"', async () => {
     capabilities('publish')
     const check = vi.spyOn(baseSyncApi, 'checkFolder').mockImplementation(async (_path, _base, contact) => contact
-      ? { ...LOCAL, remote_contacted: true, base_remote: 'origin/main', base_commit: 'abc', base_behind_remote: 5, base_ahead_of_remote: 0 }
+      ? { ...LOCAL, remote_contacted: true, base_remote: 'origin/main', base_behind_remote: 5, base_ahead_of_remote: 0 }
       : LOCAL)
     wrap(<Harness folder={inspection(REMOTE)} />)
 
@@ -107,6 +107,24 @@ describe('the New company form: the remote and the local copy (#745)', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Local only \(none\)/ }))
     expect(screen.getByRole('checkbox', { name: /Bring my local copy up to date/ })).toBeDisabled()
     expect(JSON.parse(screen.getByTestId('payload').textContent ?? '')).toEqual({ forge_policy: 'none', sync_base: false })
+  })
+
+  it('names a remote that wanted a passphrase or a host key, and shows a refused check', async () => {
+    capabilities('publish')
+    vi.spyOn(baseSyncApi, 'checkFolder').mockImplementation(async (_path, _base, contact) => contact
+      ? { ...LOCAL, remote_contacted: true, base_remote: 'origin/main', remote_unreachable: 'remote_needs_interaction', remote_needs_interaction: true }
+      : LOCAL)
+    wrap(<Harness folder={inspection(REMOTE)} />)
+    await screen.findByText('Clean')
+    fireEvent.click(screen.getByRole('button', { name: 'Check remote' }))
+    expect(await screen.findByText(/asked for a passphrase, a password or a new host key/)).toBeInTheDocument()
+  })
+
+  it('says why the folder could not be checked', async () => {
+    capabilities('publish')
+    vi.spyOn(baseSyncApi, 'checkFolder').mockRejectedValue(new ApiError(403, 'only an account that already belongs to a company'))
+    wrap(<Harness folder={inspection(REMOTE)} />)
+    expect(await screen.findByText(/only an account that already belongs to a company/)).toBeInTheDocument()
   })
 
   it('offers nothing above the deployment ceiling', async () => {

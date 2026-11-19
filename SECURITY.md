@@ -321,10 +321,23 @@ OpenID Connect provider (single sign-on, below).
   registration, refresh, SSO, the chat endpoints), per client address
   (`backend/app/security.py`); `RATE_LIMIT_DEFAULT` is configured but no
   middleware applies it to the other routes.
-- **Known gap.** `GET /v1/workspace/browse` and `/inspect`, and `POST
-  /v1/workspace/git_check` (the New company form's "Check remote", issue
-  #745, which makes the daemon fetch one branch of the folder's remote with
-  the person's git credentials, capped by `FORGE_POLICY_MAX`), are open to any
+- **The New company form's git check** (`POST /v1/workspace/git_check`,
+  issue #745; `services/release/folder_check.py`; OWASP ASVS V4 and V11,
+  NIST SP 800-53 AC-6 and AU-2). It runs before its caller belongs to the
+  company being created, and with "Check remote" makes the daemon fetch one
+  branch of the folder's remote with the person's git credentials (capped by
+  `FORGE_POLICY_MAX`). So: on a deployment with more than one account, only
+  an account that already holds a role in some company (an API token always
+  does) or the deployment's first account may call it (403 otherwise); each
+  account is limited to `GIT_CHECK_RATE_LIMIT` (default `10/minute`); each
+  "Check remote" is audited as `folder_remote_checked` with the account and
+  the folder, never a URL; and the answer holds only branch names, the
+  clean and in-progress flags, the folder's remote URL without credentials
+  and the ahead/behind counts: no commit ids, no repository path, and an
+  unreadable remote as a code, never the remote's own words. No git command
+  of the daemon ever prompts (`vscode-daemon/git_env.py`): SSH runs with
+  `-o BatchMode=yes` appended to the person's own command.
+- **Known gap.** `GET /v1/workspace/browse` and `/inspect` are open to any
   signed-in person (the New company folder picker runs before the person
   belongs to a company), and registration is open: on a deployment shared by
   people who do not trust each other, any account can list folders on the

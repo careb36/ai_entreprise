@@ -19,6 +19,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from models import ProjectDiscovery
 from sqlmodel import Session
@@ -50,6 +51,25 @@ def _read_readme(root: Path, max_chars: int = 1500) -> str:
         if candidate.exists():
             return _read_text(candidate)[:max_chars]
     return "(no README found)"
+
+
+def detect_stack(root: Path, project_name: str | None = None) -> dict[str, Any]:
+    """The deterministic scan of *root* (no model): its languages, frameworks,
+    databases, infrastructure and size. ``POST /v1/init_company`` runs it again
+    on the folder as fast-forwarded by "Bring my local copy up to date"
+    (issue #745), so the stack recorded is the one the agents will read."""
+    files = _walk_files(root)
+    primary_lang, lang_counts = _detect_language(files)
+    return {
+        "name": project_name or root.name or "New Project",
+        "language": primary_lang,
+        "all_languages": dict(lang_counts.most_common(5)),
+        "frameworks": _detect_frameworks(root, primary_lang),
+        "databases": _detect_databases(root),
+        "infra": list(_detect_infra(root).keys()),
+        "complexity": _estimate_complexity(files, lang_counts),
+        "file_count": len(files),
+    }
 
 
 def _ai_suggest_team(
@@ -267,32 +287,18 @@ class DiscoveryService:
                 f"Project path does not exist or is not a directory: {root}"
             )
 
-        folder_name = project_name or root.name or "New Project"
-
         # ── Phase 1: deterministic filesystem scan ────────────────────────────
-        files = _walk_files(root)
-        primary_lang, lang_counts = _detect_language(files)
-        frameworks = _detect_frameworks(root, primary_lang)
-        databases = _detect_databases(root)
-        infra = _detect_infra(root)
-        complexity = _estimate_complexity(files, lang_counts)
-
-        detected_stack = {
-            "name": folder_name,
-            "language": primary_lang,
-            "all_languages": dict(lang_counts.most_common(5)),
-            "frameworks": frameworks,
-            "databases": databases,
-            "infra": list(infra.keys()),
-            "complexity": complexity,
-            "file_count": len(files),
-        }
+        detected_stack = detect_stack(root, project_name)
 
         # ── Phase 2: AI team suggestion (with rule-based fallback) ────────────
         suggested_team = _ai_suggest_team(detected_stack, root, self.llm_proxy_url)
         if suggested_team is None:
             suggested_team = _build_team(
-                primary_lang, frameworks, databases, infra, complexity
+                detected_stack["language"],
+                detected_stack["frameworks"],
+                detected_stack["databases"],
+                _detect_infra(root),
+                detected_stack["complexity"],
             )
             # Tag as rule-based so the frontend can show a different indicator
             detected_stack["team_source"] = "rules"

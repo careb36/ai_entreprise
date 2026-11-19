@@ -978,7 +978,7 @@
     },
     "POST /v1/workspace/git_check": {
       "access": "authenticated",
-      "why": "As inspect: the New company form reads the chosen folder before a company exists; the remote is read only when the person asks, capped by FORGE_POLICY_MAX (issue #745).",
+      "why": "The New company form reads the chosen folder before a company exists. Past authentication it is held to folder_check.may_check (with several accounts, only a company member or the first account), GIT_CHECK_RATE_LIMIT per account, and audited (issue #745; SECURITY.md).",
       "body": {
         "project_path": "/srv/authz"
       }

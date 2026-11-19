@@ -356,6 +356,8 @@ class Settings(BaseSettings):
     SSO_FRONTEND_URL: str = "http://localhost:5173"
     # Applied to the start, callback and exchange routes, per client address.
     SSO_RATE_LIMIT: str = "20/minute"
+    # POST /v1/workspace/git_check (the New company form), per account (issue #745).
+    GIT_CHECK_RATE_LIMIT: str = "10/minute"
     # Owners (comma-separated emails) who may still sign in with a password
     # when their company requires SSO: the operator's break-glass list.
     SSO_BREAK_GLASS_EMAILS: str = ""
