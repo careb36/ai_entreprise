@@ -13,6 +13,7 @@ export type BenchUnmeasuredReason =
   | 'cost_unknown'
   | 'not_in_card'
   | 'no_prompt_measure'
+  | 'no_problems_graded'
 
 export type BenchMeasure<T> =
   | { measured: true; value: T }
@@ -69,6 +70,29 @@ export interface BenchTotals {
 
 export interface BenchPromptSection { section: string; tokens: number; prompts: number; share: number; cut: number }
 
+/** A HumanEval problem (schema v5): its outcome from HumanEval's own tests, or unmeasured with the card's reason. */
+export interface BenchHumanEvalProblem {
+  task_id: string
+  entry_point: string
+  status: BenchSpecStatus
+  outcome: BenchMeasure<'pass' | 'fail'>
+  wall_clock_seconds: number | null
+  tokens: BenchTokens
+}
+
+/** The card's `humaneval` block (schema v5); pass@1 is unmeasured while any problem is. */
+export interface BenchHumanEval {
+  dataset: { name: string; source: string; sha256: string; license: string }
+  graded: number
+  passed: number
+  failed: number
+  unmeasured: number
+  pass_at_1: BenchMeasure<number>
+  tokens: BenchTokens
+  problems: BenchHumanEvalProblem[]
+  skipped: string[]
+}
+
 interface BenchCardBase {
   file: string
   folder: '' | 'real' | 'ablation'
@@ -89,6 +113,7 @@ export interface BenchValidCard extends BenchCardBase {
   totals: BenchTotals
   specs: BenchSpec[]
   prompt_sections: BenchPromptSection[] | null
+  humaneval: BenchHumanEval | null
 }
 
 export interface BenchRejectedCard extends BenchCardBase { status: 'invalid' | 'unreadable' }

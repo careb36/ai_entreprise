@@ -930,6 +930,9 @@
       "test_project_docs_diagrams.py": [
         "planning"
       ],
+      "test_project_docs_domain_checks.py": [
+        "planning"
+      ],
       "test_project_docs_final.py": [
         "planning"
       ],
@@ -949,6 +952,9 @@
         "planning"
       ],
       "test_project_docs_status.py": [
+        "planning"
+      ],
+      "test_project_docs_transition.py": [
         "planning"
       ],
       "test_project_wiki.py": [

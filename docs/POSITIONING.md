@@ -6,7 +6,10 @@
 > reproducible; the market reading is a judgment, and remains open to revision
 > if the market moves. The [amendment](#amendment-2026-10-18-a-self-managed-company-of-agents)
 > at the end adds the owner's direction that the factory runs itself as a
-> company of agents; it keeps every design rule below.
+> company of agents; it keeps every design rule below. The
+> [scope amendment](#scope-2026-11-19-it-projects-of-any-kind) of
+> 2026-11-19 widens the platform from software to IT projects of any kind,
+> under the same rules.
 
 ## The one-line version
 
@@ -325,3 +328,96 @@ their tools before it delivers. The rules above decide how:
   allows, and whether tools help is measurable in the same tables as the
   rest (tasks with and without tool calls, by the board's numbers) — the
   next step, not this one.
+
+## Scope (2026-11-19): IT projects of any kind
+
+The owner set the scope on 2026-11-19:
+
+> La Fabrique is a platform to manage IT projects, not only software
+> development. The idea is to do whatever we come up with: for example a data
+> science project, a machine learning one, deep learning, and so on. It also
+> documents the work, and later evolutions are automation and research.
+
+### What is built and what is not
+
+- **Built.** The task worker's loop runs software tasks end to end, and the
+  project documentation pack compiles a project's management documents from
+  its records, each statement citing a record with a digest the backend
+  computed (`docs/contexts/planning.md`, The documentation pack). The bench
+  grades the factory with tests a person wrote (`bench/README.md`).
+- **Not built.** Project types for data science, machine learning or deep
+  learning; automation beyond the software loop; research as a kind of work.
+  The research tools today only let the deciding roles read official sources,
+  and each fetch is an observation of what came back, not of what it means.
+
+### How the rules above apply
+
+The thesis does not change: the agents are interchangeable producers, and the
+product is the layer that verifies their work and records the evidence. Every
+design rule holds for non-software work as written.
+
+- **A metric is an observation only when the platform measured it.** A
+  training run's loss, accuracy or F1 counts as observed when the platform
+  ran the evaluation itself and recorded the command, its exit status and the
+  digest of its output. The accuracy an agent reports, in a message, in a
+  results file it wrote or in a notebook's saved output, is a claim (rules 1
+  and 2), however precise it looks.
+- **A file read back proves the file, not its numbers.** The daemon's sha256
+  shows that a metrics file or a checkpoint exists with that content; it does
+  not make the figures in it true.
+- **Digests of datasets and models are computed by the platform** (rule 6),
+  never taken from a manifest or a model card the agent wrote.
+- **What cannot be reproduced is `unverifiable`** (rule 3): a run that needs
+  hardware or data the platform does not have is not `verified` because the
+  agent says it ran. A seed or a hardware description nobody recorded is
+  unknown, not defaulted (rule 7).
+- **No model decides whether a model is good enough** (rule 5). A threshold is
+  a person's decision, and the check against it is deterministic.
+
+### Decisions (2026-11-19)
+
+The owner asked that open questions be settled for a corporate product, with
+the highest recognised standards. The six questions this scope raised are
+decided as follows; each is built when its project type is.
+
+1. **What an observation is for a data science or machine learning
+   deliverable.** The platform always re-runs the evaluation itself, in the
+   sandbox, from a pinned environment, and records the command, its exit status
+   and the digest of its output. It also re-runs the training when the run is
+   at the high risk tier or is itself the deliverable being accepted. A person
+   states the tolerance per metric in the specification before the run; a
+   re-run outside it is `refuted`. Seeds and the environment are pinned and
+   recorded by the platform. A run that needs compute or data the platform does
+   not have is `unverifiable`, never `verified`. Accelerators are a sandbox
+   capability the daemon announces, never one an agent claims.
+2. **Who holds the evaluation data.** The platform. Held-out sets live outside
+   any producer's workspace; the producing agent never has read access to them,
+   and the evaluation runs in a separate sandbox that mounts them read-only.
+   Every access is audited and every digest is computed by the platform, as the
+   bench already keeps its graders out of the factory's reach.
+3. **Datasets as deliverables.** A dataset is identified by the digest the
+   platform computes, its schema, its lineage (sources and the recorded
+   commands that transformed them) and its licence, and it comes with a
+   datasheet (Gebru et al., *Datasheets for Datasets*). Its data is classified
+   before use. Personal data never enters the evidence record, which holds only
+   digests and counts; a dataset holding personal data needs a data protection
+   impact assessment (GDPR, art. 35) and the Owner's approval, and follows a
+   retention policy.
+4. **Notebooks as deliverables.** The platform executes a notebook top to
+   bottom in a clean kernel in the sandbox. Outputs saved in the file are always
+   claims; only the outputs of the platform's own execution are observations.
+5. **"Done" for an experiment.** The acceptance criteria are about the
+   measurement, not the hoped-for result: the hypothesis, the metric, the
+   threshold and the evaluation data are fixed before the run
+   (pre-registration). A negative result that was measured correctly is done.
+   Whether it meets the business threshold is a separate decision, by a person.
+6. **Standards and documents.** These project types are held to model cards
+   (Mitchell et al., *Model Cards for Model Reporting*) and datasheets; to the
+   NIST AI Risk Management Framework 1.0; to ISO/IEC 42001 (AI management
+   system), ISO/IEC 23894 (AI risk management) and ISO/IEC 5338 (AI system life
+   cycle); and to the EU AI Act's risk classification where it applies.
+   Research delivers reports in which every statement cites a source the
+   platform fetched, recorded as an observation of what came back. Automation
+   delivers workflows the sandbox executes with each run recorded
+   (`docs/WORKFLOWS.md`). These enter `docs/STANDARDS.md` when the project types
+   are built.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-**La Fabrique** is an AI-powered autonomous software development platform. It orchestrates a multi-agent team (PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter, and the specialised BackendDeveloper, FrontendDeveloper, DevOps, Designer and DataEngineer; `services/contracts/roles.py`) using LangGraph to execute software sprints — from backlog to code generation and execution — inside a user's VS Code workspace.
+**La Fabrique** is a platform for running IT projects of any kind (software, data science, machine learning, deep learning…) with a company of AI agents that plan, build and document the work, and that records verifiable evidence of what the agents did. Today the loop executes software tasks end to end and the project documentation pack is built (`docs/contexts/planning.md`); other project types, automation and research are direction. For software it orchestrates a multi-agent team (PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter, and the specialised BackendDeveloper, FrontendDeveloper, DevOps, Designer and DataEngineer; `services/contracts/roles.py`) using LangGraph to execute software sprints — from backlog to code generation and execution — inside a user's VS Code workspace.
 
 > **Direction adopted (2026-09-19).** The repositioning in
 > [`docs/POSITIONING.md`](docs/POSITIONING.md), tracked in issue #38, is the
@@ -35,6 +35,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > requirements with EARS criteria, design and tasks before code) and Factory
 > (Droids: enterprise execution, local or cloud, with compliance). Name what
 > was taken, and from where, in the pull request.
+>
+> **Scope (2026-11-19).** The owner broadened the scope: La Fabrique manages
+> IT projects, not only software development (data science, machine learning,
+> deep learning and others), documents the work, and grows toward automation
+> and research. The evidence rules apply unchanged: an agent's reported
+> metric is a claim, and a metric is an observation only when the platform
+> measured it. See the amendment "Scope (2026-11-19)" at the end of
+> `docs/POSITIONING.md`, which also records the owner's decisions on the questions it raises.
 
 ## Running the System
 

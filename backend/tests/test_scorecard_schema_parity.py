@@ -207,3 +207,80 @@ def test_cards_the_writer_builds_read_the_same():
     _same(_card(_entry("01-a"), _entry("02-b", status="timeout", rework=2)))
     _same(_card(_entry(results={"REQ-1.1": "missing"})))
     _same("not a card")
+
+
+def _problem(task: int, outcome: str = "pass", **changes) -> dict:
+    row = {
+        "task_id": f"HumanEval/{task}",
+        "spec": f"he-{task:03d}",
+        "entry_point": "f",
+        "status": "completed",
+        "outcome": outcome,
+        "reason": "the sandbox could not run" if outcome == "unmeasured" else None,
+        "tokens": {"reported": 100, "turns_reported": 2, "turns_unreported": 1},
+    }
+    row.update(changes)
+    return row
+
+
+def _humaneval(rows: list) -> dict:
+    outcomes = [r.get("outcome") for r in rows if isinstance(r, dict)]
+    graded, passed = len(rows), outcomes.count("pass")
+    return {
+        "dataset": {
+            "name": "HumanEval",
+            "source": "example/HumanEval.jsonl.gz",
+            "sha256": "b" * 64,
+            "license": "MIT",
+        },
+        "subset": [0, 1],
+        "problems": rows,
+        "skipped": [],
+        "graded": graded,
+        "passed": passed,
+        "failed": outcomes.count("fail"),
+        "unmeasured": outcomes.count("unmeasured"),
+        "pass_at_1": (
+            round(passed / graded, 4)
+            if graded and "unmeasured" not in outcomes
+            else None
+        ),
+        "tokens_reported": 100 * graded,
+        "turns_unreported": graded,
+    }
+
+
+SOUND = _humaneval([_problem(0), _problem(1, "fail")])
+HUMANEVAL_BREAKS = [
+    {},
+    SOUND,
+    _humaneval([_problem(0), _problem(1, "unmeasured")]),
+    _humaneval([]),
+    "not a block",
+    {**SOUND, "dataset": {"sha256": "x"}},
+    {**SOUND, "problems": {}},
+    {**SOUND, "subset": None, "skipped": "x"},
+    {**SOUND, "pass_at_1": 0.0},
+    {**SOUND, "graded": 3, "tokens_reported": 0},
+    _humaneval([_problem(0), _problem(0)]),
+    _humaneval([_problem(0, spec="01-cli-wordcount")]),
+    _humaneval([_problem(0, "unmeasured", reason="")]),
+    _humaneval(["not a row", _problem(1, "skip", status="done", task_id="HE/1")]),
+    _humaneval([_problem(0, spec="", entry_point=None, tokens={"reported": -1})]),
+]
+
+
+@pytest.mark.parametrize("version", [3, 4, 5])
+@pytest.mark.parametrize("block", HUMANEVAL_BREAKS)
+def test_a_humaneval_block_reads_the_same(version, block):
+    _same({**_base(), "schema_version": version, "humaneval": block})
+
+
+def test_a_sound_humaneval_block_is_valid_on_v5_only():
+    assert (
+        bench_schema.validate({**_base(), "schema_version": 5, "humaneval": SOUND})
+        == []
+    )
+    assert "humaneval needs schema v5" in bench_schema.validate(
+        {**_base(), "schema_version": 4, "humaneval": SOUND}
+    )

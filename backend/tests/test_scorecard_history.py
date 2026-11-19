@@ -16,6 +16,10 @@ EARS criteria held here:
   give, no turn that reported usage, a cost unknown, no prompt measured, a
   field older than the card's version), the entry SHALL say ``measured:
   false`` with the reason, never a 0.
+- WHEN a v5 card holds a ``humaneval`` block, its entry SHALL carry pass@1,
+  the counts, the dataset and each problem's outcome; WHERE a problem's grade
+  could not run, its outcome and pass@1 SHALL be ``measured: false``, never 0;
+  a card without the block SHALL carry ``humaneval: null``.
 - WHEN the folder is missing, the endpoint SHALL answer ``available: false``.
 - The endpoint SHALL refuse an anonymous caller when authentication is on.
 """
@@ -309,6 +313,137 @@ def test_fields_a_version_does_not_hold_are_not_in_the_card(repo, test_client):
     assert spec["prompt"] == {"measured": False, "reason": "not_in_card"}
     assert entry["totals"]["prompt"] == {"measured": False, "reason": "not_in_card"}
     assert entry["prompt_sections"] is None
+
+
+def _he_row(task: int, outcome: str, reason=None, turns_reported=2) -> dict:
+    return {
+        "task_id": f"HumanEval/{task}",
+        "spec": f"he-{task:03d}",
+        "entry_point": "has_close_elements",
+        "status": "completed",
+        "outcome": outcome,
+        "reason": reason,
+        "isolation": "sandbox",
+        "error": None,
+        "tasks": {"total": 1, "done": 1, "blocked": 0, "done_first_attempt": 1},
+        "rework_requests": 0,
+        "wall_clock_seconds": 42.0,
+        "tokens": {
+            "reported": 900 if turns_reported else 0,
+            "turns_reported": turns_reported,
+            "turns_unreported": 1,
+        },
+        "models": {},
+    }
+
+
+def _he_card(rows, skipped=()) -> dict:
+    graded = len(rows)
+    count = {k: sum(r["outcome"] == k for r in rows) for k in ("pass", "fail")}
+    unmeasured = graded - count["pass"] - count["fail"]
+    card = _card(version=5)
+    card["humaneval"] = {
+        "dataset": {
+            "name": "HumanEval",
+            "source": "example/HumanEval.jsonl.gz",
+            "sha256": "c" * 64,
+            "license": "MIT",
+            "problems": 164,
+        },
+        "subset": [r["task_id"] for r in rows],
+        "problems": rows,
+        "skipped": list(skipped),
+        "graded": graded,
+        "passed": count["pass"],
+        "failed": count["fail"],
+        "unmeasured": unmeasured,
+        "pass_at_1": round(count["pass"] / graded, 4)
+        if graded and not unmeasured
+        else None,
+        "tokens_reported": sum(r["tokens"]["reported"] for r in rows),
+        "turns_unreported": sum(r["tokens"]["turns_unreported"] for r in rows),
+    }
+    return card
+
+
+def test_a_humaneval_block_carries_pass_at_1_and_each_outcome(repo, test_client):
+    card = _he_card([_he_row(0, "pass"), _he_row(1, "fail")], skipped=["HumanEval/2"])
+    _write(_cards_dir(repo), "20261114T201804Z.json", card)
+
+    entry = test_client.get("/v1/bench/scorecards").json()["cards"][0]
+
+    assert entry["status"] == "valid", entry["problems"]
+    he = entry["humaneval"]
+    assert he["pass_at_1"] == {"measured": True, "value": 0.5}
+    assert (he["graded"], he["passed"], he["failed"], he["unmeasured"]) == (2, 1, 1, 0)
+    assert he["dataset"] == {
+        "name": "HumanEval",
+        "source": "example/HumanEval.jsonl.gz",
+        "sha256": "c" * 64,
+        "license": "MIT",
+    }
+    assert he["skipped"] == ["HumanEval/2"]
+    assert he["tokens"] == {
+        "measured": True,
+        "value": 1800,
+        "turns_reported": 4,
+        "turns_unreported": 2,
+    }
+    assert [p["outcome"] for p in he["problems"]] == [
+        {"measured": True, "value": "pass"},
+        {"measured": True, "value": "fail"},
+    ]
+    assert he["problems"][0]["wall_clock_seconds"] == 42.0
+    # The problems are not reference specifications.
+    assert [s["name"] for s in entry["specs"]] == ["01-cli"]
+
+
+def test_an_unmeasured_humaneval_problem_is_never_a_zero(repo, test_client):
+    rows = [
+        _he_row(0, "pass"),
+        _he_row(3, "unmeasured", "the sandbox could not run", turns_reported=0),
+    ]
+    _write(_cards_dir(repo), "20261114T201804Z.json", _he_card(rows))
+
+    he = test_client.get("/v1/bench/scorecards").json()["cards"][0]["humaneval"]
+
+    assert he["pass_at_1"] == {
+        "measured": False,
+        "reason": "grade_unmeasured",
+        "detail": ["HumanEval/3"],
+    }
+    unmeasured = he["problems"][1]
+    assert unmeasured["outcome"] == {
+        "measured": False,
+        "reason": "grade_unmeasured",
+        "detail": "the sandbox could not run",
+    }
+    assert unmeasured["tokens"]["measured"] is False
+    assert "value" not in unmeasured["tokens"]
+
+
+def test_humaneval_with_no_problem_graded_and_cards_without_it(repo, test_client):
+    cards = _cards_dir(repo)
+    _write(cards, "20261114T201804Z.json", _he_card([]))
+    _write(cards, "20261108T140751Z.json", _card("20261108T140751Z"))
+
+    entries = _by_file(test_client.get("/v1/bench/scorecards").json())
+
+    he = entries["20261114T201804Z.json"]["humaneval"]
+    assert he["pass_at_1"] == {"measured": False, "reason": "no_problems_graded"}
+    assert he["tokens"]["measured"] is False
+    assert entries["20261108T140751Z.json"]["humaneval"] is None
+
+
+def test_a_humaneval_block_on_an_older_card_is_invalid(repo, test_client):
+    card = _he_card([_he_row(0, "pass")])
+    card["schema_version"] = 4
+    _write(_cards_dir(repo), "20261114T201804Z.json", card)
+
+    entry = test_client.get("/v1/bench/scorecards").json()["cards"][0]
+
+    assert entry["status"] == "invalid"
+    assert entry["problems"] == ["humaneval needs schema v5"]
 
 
 def test_invalid_and_unreadable_cards_are_listed_with_their_problems(repo, test_client):

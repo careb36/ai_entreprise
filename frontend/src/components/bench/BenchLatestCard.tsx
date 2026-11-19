@@ -27,7 +27,7 @@ export function useCriteriaFormat() {
     t('bench.criteriaValue', { passed: c.passed, total: c.total, rate: formatShare(c.rate, i18n.language) })
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-meta">{label}</dt>

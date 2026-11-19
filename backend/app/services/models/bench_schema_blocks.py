@@ -1,8 +1,9 @@
 """The scorecard's optional blocks, as ``bench_schema`` checks them.
 
 Copies of the bench scripts' own checks (``scripts/bench/budget.run_problems``,
-``graders.problems`` and ``ablation.problems``), pure functions with the same
-messages; ``tests/test_scorecard_schema_parity.py`` holds them in step.
+``graders.problems``, ``ablation.problems`` and ``humaneval_card.problems``),
+pure functions with the same messages; ``tests/test_scorecard_schema_parity.py``
+holds them in step.
 """
 
 from __future__ import annotations
@@ -15,6 +16,11 @@ COMPLETE, BUDGET_EXCEEDED = "complete", "budget_exceeded"
 RUN_STATUSES = (COMPLETE, BUDGET_EXCEEDED)
 SKIPPED_BUDGET = "budget"
 ABLATION_VERSION = 4
+HUMANEVAL_VERSION = 5
+HUMANEVAL_PASS, HUMANEVAL_FAIL, HUMANEVAL_UNMEASURED = "pass", "fail", "unmeasured"
+HUMANEVAL_OUTCOMES = (HUMANEVAL_PASS, HUMANEVAL_FAIL, HUMANEVAL_UNMEASURED)
+_HUMANEVAL_ID = re.compile(r"^HumanEval/\d{1,4}$")
+_HUMANEVAL_TOKENS = ("reported", "turns_reported", "turns_unreported")
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SIDE_COUNTS = (
@@ -226,4 +232,96 @@ def ablation_problems(card: dict[str, Any]) -> list[str]:
         for r in not_run
     ):
         found.append("ablation.not_run must list {section, reason}")
+    return found
+
+
+def humaneval_rate(passed: int, graded: int) -> float:
+    """pass@1 as the card writes it (``humaneval_card._ratio``)."""
+    return round(passed / graded, 4)
+
+
+def _humaneval_row_problems(at: str, row: Any, statuses: tuple[str, ...]) -> list[str]:
+    if not isinstance(row, dict):
+        return [f"{at} is not an object"]
+    found = []
+    if not isinstance(row.get("task_id"), str) or not _HUMANEVAL_ID.match(
+        row["task_id"]
+    ):
+        found.append(f"{at}.task_id must be a HumanEval task id")
+    for key in ("spec", "entry_point"):
+        if not isinstance(row.get(key), str) or not row.get(key):
+            found.append(f"{at}.{key} must be a non-empty string")
+    if row.get("outcome") not in HUMANEVAL_OUTCOMES:
+        found.append(f"{at}.outcome must be one of {', '.join(HUMANEVAL_OUTCOMES)}")
+    if row.get("status") not in statuses:
+        found.append(f"{at}.status must be one of {', '.join(statuses)}")
+    if row.get("outcome") == HUMANEVAL_UNMEASURED and not row.get("reason"):
+        found.append(f"{at}: an unmeasured problem says why (reason)")
+    tokens = row.get("tokens") if isinstance(row.get("tokens"), dict) else {}
+    found += [
+        f"{at}.tokens.{k} must be a count"
+        for k in _HUMANEVAL_TOKENS
+        if not count(tokens.get(k))
+    ]
+    return found
+
+
+def humaneval_problems(card: dict[str, Any], statuses: tuple[str, ...]) -> list[str]:
+    """What is wrong with the optional ``humaneval`` block of *card* (v5)."""
+    if "humaneval" not in card:
+        return []
+    version = card.get("schema_version")
+    found = []
+    if not (isinstance(version, int) and version >= HUMANEVAL_VERSION):
+        found.append(f"humaneval needs schema v{HUMANEVAL_VERSION}")
+    data = card["humaneval"]
+    if not isinstance(data, dict):
+        return [*found, "humaneval must be an object"]
+    dataset = data.get("dataset") if isinstance(data.get("dataset"), dict) else {}
+    if not _SHA256.fullmatch(str(dataset.get("sha256", ""))):
+        found.append("humaneval.dataset.sha256 must be a sha256")
+    for key in ("name", "source", "license"):
+        if not isinstance(dataset.get(key), str) or not dataset.get(key):
+            found.append(f"humaneval.dataset.{key} must be a non-empty string")
+    rows = data.get("problems")
+    if not isinstance(rows, list):
+        return [*found, "humaneval.problems must be a list"]
+    for index, row in enumerate(rows):
+        found += _humaneval_row_problems(f"humaneval.problems[{index}]", row, statuses)
+    if found:
+        return found
+    for key in ("subset", "skipped"):
+        if not isinstance(data.get(key), list):
+            found.append(f"humaneval.{key} must be a list")
+    ids = [r["task_id"] for r in rows]
+    if len(set(ids)) != len(ids):
+        found.append("humaneval.problems names a problem twice")
+    ran = {s.get("name") for s in card.get("specs") or [] if isinstance(s, dict)}
+    found += [
+        f"humaneval: {r['spec']} is also a reference specification's entry"
+        for r in rows
+        if r["spec"] in ran
+    ]
+    expected = {
+        "graded": len(rows),
+        "passed": sum(r["outcome"] == HUMANEVAL_PASS for r in rows),
+        "failed": sum(r["outcome"] == HUMANEVAL_FAIL for r in rows),
+        "unmeasured": sum(r["outcome"] == HUMANEVAL_UNMEASURED for r in rows),
+        "tokens_reported": sum(r["tokens"]["reported"] for r in rows),
+        "turns_unreported": sum(r["tokens"]["turns_unreported"] for r in rows),
+    }
+    found += [
+        f"humaneval.{k} does not match its problems"
+        for k, v in expected.items()
+        if data.get(k) != v
+    ]
+    rate = (
+        humaneval_rate(expected["passed"], len(rows))
+        if rows and not expected["unmeasured"]
+        else None
+    )
+    if data.get("pass_at_1") != rate:
+        found.append(
+            "humaneval.pass_at_1 must be passed / graded, or null while a problem is unmeasured"
+        )
     return found

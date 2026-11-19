@@ -23,7 +23,10 @@ metric was not measured, the entry says so (``{"measured": false,
   the turns that did not report are counted apart either way);
 - the cost, unless every routing row carries a ``cost_cents`` (the bench
   prices no turn today, so it is never measured yet), or before schema v2;
-- the prompt weight, when no prompt was measured, or before schema v3.
+- the prompt weight, when no prompt was measured, or before schema v3;
+- in v5's ``humaneval`` section, a problem's outcome when its grade could not
+  run (the card's own reason), and pass@1 while any problem is unmeasured
+  (the card writes null) or when no problem was graded.
 
 The totals' criteria are unmeasured when any spec's grade is; the totals'
 tokens when no spec reported any. The other numbers (tasks, rework, blocked
@@ -49,6 +52,7 @@ NO_REPORTED_TURNS = "no_reported_turns"
 COST_UNKNOWN = "cost_unknown"
 NOT_IN_CARD = "not_in_card"
 NO_PROMPT_MEASURE = "no_prompt_measure"
+NO_PROBLEMS_GRADED = "no_problems_graded"
 _SPEC_COPIED = (
     "name",
     "status",
@@ -208,6 +212,61 @@ def _totals(card: dict, version: int) -> dict[str, Any]:
     }
 
 
+def _problem(row: dict) -> dict[str, Any]:
+    tokens = row["tokens"]
+    outcome = row["outcome"]
+    return {
+        "task_id": row["task_id"],
+        "entry_point": row["entry_point"],
+        "status": row["status"],
+        "outcome": (
+            unmeasured(GRADE_UNMEASURED, str(row["reason"]))
+            if outcome == "unmeasured"
+            else measured(outcome)
+        ),
+        # Not in the schema's row check: shown only when it is a finite number.
+        "wall_clock_seconds": (
+            row["wall_clock_seconds"]
+            if bench_schema.number(row.get("wall_clock_seconds"))
+            else None
+        ),
+        "tokens": _tokens(
+            tokens["reported"], tokens["turns_reported"], tokens["turns_unreported"]
+        ),
+    }
+
+
+def _humaneval(data: Any) -> dict[str, Any] | None:
+    """v5's HumanEval section: pass@1 over the problems graded and each
+    problem's outcome from HumanEval's own tests; None without the block."""
+    if not isinstance(data, dict):
+        return None
+    rows = data["problems"]
+    ungraded = [r["task_id"] for r in rows if r["outcome"] == "unmeasured"]
+    if ungraded:
+        rate = unmeasured(GRADE_UNMEASURED, ungraded)
+    elif not rows:
+        rate = unmeasured(NO_PROBLEMS_GRADED)
+    else:
+        rate = measured(data["pass_at_1"])
+    dataset = data["dataset"]
+    return {
+        "dataset": {k: dataset[k] for k in ("name", "source", "sha256", "license")},
+        "graded": data["graded"],
+        "passed": data["passed"],
+        "failed": data["failed"],
+        "unmeasured": data["unmeasured"],
+        "pass_at_1": rate,
+        "tokens": _tokens(
+            data["tokens_reported"],
+            sum(r["tokens"]["turns_reported"] for r in rows),
+            data["turns_unreported"],
+        ),
+        "problems": [_problem(r) for r in rows],
+        "skipped": list(data["skipped"]),
+    }
+
+
 def summarize(card: dict) -> dict[str, Any]:
     """A valid card's page entry: its header, totals and specs."""
     version = card["schema_version"]
@@ -235,6 +294,7 @@ def summarize(card: dict) -> dict[str, Any]:
         "totals": _totals(card, version),
         "specs": [_spec(s, version) for s in card["specs"]],
         "prompt_sections": _sections(card["totals"].get("prompt"), version),
+        "humaneval": _humaneval(card.get("humaneval")),
     }
 
 
