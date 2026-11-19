@@ -27,7 +27,7 @@ function card(stamp: string, totals: Partial<BenchTotals> = {}): BenchValidCard 
   return {
     file: `${stamp}.json`, folder: '', stamp, problems: [], status: 'valid', schema_version: 3,
     commit: 'c'.repeat(40), llm: 'fake', policy: null, run: null, graders_sha: null, sections_off: [],
-    has_ablation: false, totals: { ...TOTALS, ...totals }, specs: [], prompt_sections: null,
+    has_ablation: false, totals: { ...TOTALS, ...totals }, specs: [], prompt_sections: null, humaneval: null,
   }
 }
 const INVALID: BenchCard = { file: '20261118T090000Z.json', folder: '', stamp: '20261118T090000Z', problems: ['schema_version'], status: 'invalid' }
