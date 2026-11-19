@@ -45,6 +45,8 @@
     "execution": "Execution",
     "mcp": "MCP servers",
     "selfImprovement": "Self-improvement",
+    "project": "Project settings",
+    "notifications": "Notifications",
     "modelCatalog": "Model catalog"
   },
   "dashboard": {
@@ -2062,6 +2064,20 @@
       "countLabel_other": "{{count}} versions"
     }
   },
+  "architectureFiles": {
+    "revise": "Revise the company's architecture (version {{version}}) for this specification",
+    "reviseHint": "The draft starts from the current version and keeps what it covers for earlier specifications.",
+    "revisionOpen": "Version {{version}} of the company's architecture is already in draft.",
+    "openDraft": "Open the draft",
+    "adrTitle": "ADR files",
+    "adrHint": "The decisions as Markdown files for docs/adr/, to add to the repository yourself.",
+    "firstNumber": "Number of the first ADR",
+    "prepare": "Prepare the files",
+    "noDecisions": "This architecture records no decisions.",
+    "adrList": "ADR files",
+    "download": "Download",
+    "downloadNamed": "Download {{path}}"
+  },
   "procedures": {
     "title": "Procedures",
     "subtitle": "The rules each role follows. The ScrumMaster proposes them after a sprint with rework; the board's numbers keep or revert them.",
@@ -2841,6 +2857,51 @@
     "saved": "Console producers saved.",
     "sandboxWarning": "No CLI runs until then: {{reason}}. The model produces these tasks, and the board says why. A console producer runs only in a container or bwrap sandbox with network on, and sees only the variables listed in the sandbox settings (list the provider key there)."
   },
+  "projectSettings": {
+    "title": "Project settings",
+    "subtitle": "How the factory builds and tests the project, and how a sprint's team is chosen.",
+    "saved": "Saved",
+    "managersChange": "A manager changes these settings.",
+    "team": {
+      "title": "Sprint team",
+      "loading": "Loading the team setting",
+      "suggested": {
+        "label": "Suggested",
+        "hint": "The PO suggests a team for each sprint and a manager confirms it."
+      },
+      "automatic": {
+        "label": "Automatic",
+        "hint": "The PO's suggestion is the sprint's team."
+      }
+    },
+    "stack": {
+      "title": "Stack profile",
+      "loading": "Loading the stack profile",
+      "hint": "Each field left to the detection uses what the factory finds in the project. A step turned off is skipped on every delivery.",
+      "stack": "Stack",
+      "port": "Port",
+      "probePath": "Probe path",
+      "web": "Serves web pages",
+      "webYes": "Yes",
+      "webNo": "No",
+      "detected": "Detected",
+      "command": "Command",
+      "off": "Off",
+      "modeFor": "How the {{step}} step is set",
+      "commandFor": "The {{step}} command",
+      "commands": {
+        "install": "Install",
+        "test": "Test",
+        "lint": "Lint",
+        "start": "Start",
+        "e2e": "End-to-end"
+      },
+      "portBad": "The port is a whole number from 1 to 65535.",
+      "probeBad": "The probe path starts with /.",
+      "folders": "Folders with their own profile (kept as they are): {{folders}}",
+      "installed": "Manifests its last installs saw: {{manifests}}"
+    }
+  },
   "teamRoles": {
     "PO": "Product Owner",
     "Architect": "Architect",
@@ -3106,6 +3167,32 @@
       "reason": "Reason (10 to 500 characters)"
     }
   },
+  "ssoMembers": {
+    "title": "Members' single sign-on identities",
+    "count_one": "{{count}} identity",
+    "count_other": "{{count}} identities",
+    "loading": "Loading the members' identities",
+    "loadError": "Could not load the members' identities: {{message}}",
+    "empty": "No member has linked an identity through the company's provider.",
+    "columns": {
+      "member": "Member",
+      "providerEmail": "Provider's address",
+      "linked": "Linked",
+      "lastLogin": "Last sign-in",
+      "actions": "Actions"
+    },
+    "never": "Never",
+    "yours": "Yours: unlink it from Account",
+    "unlink": "Unlink",
+    "unlinkNamed": "Unlink the identity of {{email}}",
+    "confirmLabel": "Confirm unlinking the identity of {{email}}",
+    "confirm": "Unlink {{email}}? The sessions they started through single sign-on end now; they sign in again another way or link again.",
+    "unlinkConfirm": "Yes, unlink",
+    "unlinked_one": "Unlinked; {{count}} session ended",
+    "unlinked_other": "Unlinked; {{count}} sessions ended",
+    "notFound": "This identity is no longer linked through the company.",
+    "lastMethod": "This is the person's only way to sign in."
+  },
   "documentation": {
     "title": "Documentation",
     "subtitle": "The project's management documents and architecture diagrams, compiled from what La Fabrique recorded. Every statement cites its source; prose a model wrote is marked as a claim.",
@@ -3292,7 +3379,9 @@
           "what": "Who takes each release over (operations, support, the client), what they receive, the workarounds for its known errors, and when the handover is complete."
         }
       }
-    }
+    },
+    "manifest": "Signed manifest",
+    "manifestError": "Could not download the manifest: {{message}}"
   },
   "chat": {
     "title": "Chat approvals",
@@ -3336,6 +3425,52 @@
       "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
     },
     "selectCompany": "Select a company to link your chat accounts."
+  },
+  "webhook": {
+    "title": "Notifications",
+    "subtitle": "The company's notification webhook: where the factory posts its events, signed with a secret only the receiver knows.",
+    "loading": "Loading the webhook",
+    "loadError": "Could not load the webhook: {{message}}",
+    "statusTitle": "Webhook",
+    "none": "No webhook is set.",
+    "noneManager": "No webhook is set. Create one below.",
+    "on": "On",
+    "off": "Off",
+    "eventsList": "Events: {{events}}",
+    "noEvents": "No events selected: nothing is sent",
+    "events": {
+      "task_done": "A task is done",
+      "task_blocked": "A task is blocked",
+      "sprint_closed": "A sprint closed",
+      "run_refuted": "A run was refuted"
+    },
+    "lastDelivery": "Last delivery {{when}}, status {{status}}",
+    "noDelivery": "Nothing delivered yet",
+    "lastError": "Last error: {{error}}",
+    "ping": "Send a test ping",
+    "pinged": "Ping queued",
+    "delete": "Delete",
+    "confirmLabel": "Confirm deleting the webhook",
+    "confirmDelete": "Delete the webhook? Events stop being sent.",
+    "deleteConfirm": "Yes, delete",
+    "createTitle": "Create the webhook",
+    "editTitle": "Change the webhook",
+    "url": "URL",
+    "urlPlaceholder": "https://hooks.example.com/fabrique",
+    "urlHint": "An https address. Credentials go in the secret, never in the URL.",
+    "urlProblem": {
+      "invalid": "This is not a URL.",
+      "scheme": "Only https addresses are accepted.",
+      "credentials": "Remove the user name and password from the URL: use the secret."
+    },
+    "secretRequired": "Signing secret (required)",
+    "secretReplace": "New signing secret (leave empty to keep the current one)",
+    "secretHint_one": "At least {{count}} character. It is stored encrypted and never shown again.",
+    "secretHint_other": "At least {{count}} characters. It is stored encrypted and never shown again.",
+    "eventsLabel": "Events to send",
+    "eventsHint": "With none selected, the webhook stays configured but sends nothing.",
+    "enabled": "Send events",
+    "saved": "Webhook saved"
   },
   "taskRelations": {
     "title": "Related tasks",
@@ -3543,6 +3678,25 @@
       "claimed": "Claimed",
       "open": "Open",
       "uncovered": "Uncovered"
+    }
+  },
+  "sprintRelations": {
+    "title": "Task relations",
+    "count_one": "{{count}} relation",
+    "count_other": "{{count}} relations",
+    "show": "Show",
+    "hide": "Hide",
+    "loading": "Loading the task relations",
+    "loadError": "Could not load the task relations: {{message}}",
+    "metrics": "{{confirmed}} confirmed, {{proposed}} proposed.",
+    "duplicatesDelivered_one": "{{count}} confirmed duplicate was delivered twice.",
+    "duplicatesDelivered_other": "{{count}} confirmed duplicates were delivered twice.",
+    "empty": "No task of this sprint has a relation.",
+    "columns": {
+      "task": "Task",
+      "relation": "Relation",
+      "other": "Other task",
+      "state": "State"
     }
   },
   "teams": {

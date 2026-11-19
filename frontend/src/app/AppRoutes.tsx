@@ -32,6 +32,8 @@ import SecurityTests from '../pages/SecurityTests'
 import ExecutionSettings from '../pages/ExecutionSettings'
 import McpServers from '../pages/McpServers'
 import SelfImprovement from '../pages/SelfImprovement'
+import Notifications from '../pages/Notifications'
+import ProjectSettings from '../pages/ProjectSettings'
 import ModelCatalog from '../pages/ModelCatalog'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
@@ -94,6 +96,8 @@ export function AppRoutes() {
         <Route path="/company/sso" element={<CompanySso />} />
         <Route path="/company/chat" element={<ChatApprovals />} />
         <Route path="/company/teams" element={<CompanyTeams />} />
+        <Route path="/company/notifications" element={<Notifications />} />
+        <Route path="/company/project" element={<ProjectSettings />} />
         <Route path="/company/duties" element={<CompanyDuties />} />
         <Route path="/company/security-tests" element={<SecurityTests />} />
         <Route path="/company/execution" element={<ExecutionSettings />} />

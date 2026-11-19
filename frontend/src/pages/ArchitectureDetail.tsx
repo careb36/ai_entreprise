@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, Pencil, Send, Sparkles } from 'lucide-react'
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
 import { ArchitectureHistory, ArchitectureVersionLine } from '../components/ArchitectureHistory'
+import { AdrFiles } from '../components/AdrFiles'
 import { FindingList, Where } from '../components/Findings'
 import { SourcesConsulted } from '../components/SourcesConsulted'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
@@ -507,6 +508,7 @@ export default function ArchitectureDetail() {
           <Modules architecture={architecture} />
           <Interfaces architecture={architecture} />
           <Decisions architecture={architecture} />
+          {architecture.decisions.length > 0 && <AdrFiles architectureId={architecture.id} />}
           <Panel title={t('architectures.conventions.title')}>
             {architecture.conventions.length === 0 ? (
               <p className="px-3 py-2.5 text-[13px] text-gray-400">{t('architectures.conventions.none')}</p>

@@ -35,6 +35,7 @@ export const QUERY_KEYS = {
   specificationProgress: (specId: number) => ['specification', specId, 'progress'] as const,
   allTaskRelations: () => ['task-relations'] as const,
   taskRelations: (taskId: number) => ['task-relations', taskId] as const,
+  sprintRelations: (sprintId: number) => ['task-relations', 'sprint', sprintId] as const,
   wiki: (companyId: number) => ['wiki', companyId] as const,
   wikiPage: (companyId: number, slug: string) => ['wiki', companyId, 'page', slug] as const,
   wikiVersions: (companyId: number, slug: string) => ['wiki', companyId, 'versions', slug] as const,

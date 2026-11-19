@@ -51,7 +51,24 @@ export interface TaskRelationCreate {
   confirm?: boolean
 }
 
+/** The relations of a sprint's tasks, each read from its sprint task's side, and their numbers. */
+export interface SprintRelationsResponse {
+  sprint_id: number
+  relations: TaskRelation[]
+  metrics: {
+    total: number
+    proposed: number
+    confirmed: number
+    by_kind: Record<'blocked_by' | 'duplicate' | 'relates_to', number>
+    /** Confirmed duplicate pairs where both tasks were delivered: work run twice. */
+    duplicates_delivered: number
+  }
+}
+
 export const taskRelationEndpoints = (api: Http) => ({
+  getSprintRelations: (sprintId: number) =>
+    api.get<SprintRelationsResponse>(`/v1/sprints/${sprintId}/relations`),
+
   getTaskRelations: (taskId: number) =>
     api.get<TaskRelationsResponse>(`/v1/tasks/${taskId}/relations`),
 
