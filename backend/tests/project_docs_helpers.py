@@ -63,6 +63,51 @@ def _communications():
     }
 
 
+def _stakeholders():
+    """One Manager team of two; approvals by a Manager, the agent and a former member."""
+    return {
+        "teams": [
+            _hashed(
+                {
+                    "id": 4,
+                    "role": "Manager",
+                    "members": 2,
+                    "created_at": "2026-10-29T09:00:00",
+                }
+            )
+        ],
+        "approvals": [
+            _hashed(
+                {
+                    "kind": "specification",
+                    "id": 2,
+                    "version": 1,
+                    "approved_at": "2026-10-30T11:00:00",
+                    "by": "former",
+                }
+            ),
+            _hashed(
+                {
+                    "kind": "specification",
+                    "id": 3,
+                    "version": 2,
+                    "approved_at": "2026-11-01T10:00:00",
+                    "by": "Manager",
+                }
+            ),
+            _hashed(
+                {
+                    "kind": "architecture",
+                    "id": 5,
+                    "version": 1,
+                    "approved_at": "2026-11-02T10:00:00",
+                    "by": "agent",
+                }
+            ),
+        ],
+    }
+
+
 def _no_channels():
     brief = {
         "policy_id": None,
@@ -403,6 +448,7 @@ def _snapshot():
         ],
         "quality_basis": collect_plans.quality_basis(),
         "communications": _communications(),
+        "stakeholders": _stakeholders(),
     }
 
 
@@ -428,6 +474,7 @@ def _empty():
         "releases": [],
         "quality_basis": collect_plans.quality_basis(),
         "communications": _no_channels(),
+        "stakeholders": {"teams": [], "approvals": []},
     }
 
 

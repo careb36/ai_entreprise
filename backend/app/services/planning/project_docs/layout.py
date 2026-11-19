@@ -63,6 +63,8 @@ PLACEMENT: dict[str, tuple[str, str]] = {
     "schedule": ("Schedule", "Planning"),
     "release_plan": ("Schedule", "Planning"),
     "raci": ("Resources", "Planning"),
+    # Stakeholders are identified at the start, then communications are planned.
+    "stakeholder_register": ("Stakeholders", "Initiating"),
     "communications_plan": ("Stakeholders", "Planning"),
     "risks": ("Risk", "Planning"),
     "issues": ("Governance", "Executing"),

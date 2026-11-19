@@ -2955,6 +2955,10 @@
           "title": "Interesados ajenos a la empresa y qué necesitan saber",
           "what": "Quién fuera de la empresa debe mantenerse informado (patrocinador, usuarios, proveedores, reguladores), qué necesita saber cada uno y por cuál de los canales de la plataforma o por qué canal ajeno a ella."
         },
+        "stakeholder_register_external": {
+          "title": "Interesados ajenos a la empresa",
+          "what": "Quién fuera de la empresa tiene interés en el proyecto o influencia sobre él (patrocinador, clientes, usuarios, proveedores, reguladores), qué espera cada uno, cuánta influencia tiene y cómo se lo involucra; la plataforma no registra a ninguno."
+        },
         "communications_plan_cadence": {
           "title": "Reuniones, informes y frecuencia acordados entre personas",
           "what": "Las reuniones, revisiones e informes acordados entre personas, con qué frecuencia se hacen y quién participa, además de lo que la plataforma envía por sí sola."

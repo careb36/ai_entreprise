@@ -34,6 +34,7 @@ from services.planning.project_docs import (
     performance,
     plan_checks,
     specs,
+    stakeholder_docs,
     statements,
     texts,
     wstg_status,
@@ -460,6 +461,7 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("people", people_recorded),
         ("external", _person),
         ("channels", plan_checks.channels),
+        ("approvals", stakeholder_docs.approvals_check),
     ],
     "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
     "Risk": [
@@ -470,6 +472,7 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
 }
 CHECK_INPUTS = (
     *plan_checks.INPUTS,
+    stakeholder_docs.KEY,
     "stack",
     "wstg_observations",
     "wstg_reviews",

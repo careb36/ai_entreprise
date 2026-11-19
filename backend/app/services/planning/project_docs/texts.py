@@ -26,6 +26,8 @@ from services.planning.project_docs import (
     texts_plans_es,
     texts_release_en,
     texts_release_es,
+    texts_stakeholders_en,
+    texts_stakeholders_es,
     texts_status_en,
     texts_status_es,
     texts_wstg_en,
@@ -38,10 +40,12 @@ DEFAULT_LANGUAGE = "en"
 # The security documents' strings (issue #539), the status report's
 # (``status_docs``), the release and iteration plan's (``release_docs``) and
 # the final report's (``final_docs``) live in their own modules; so do the
-# quality and communications plans' (``texts_plans_*``).
+# quality and communications plans' (``texts_plans_*``) and the stakeholder
+# register's (``texts_stakeholders_*``).
 TEXTS: dict[str, dict[str, str]] = {
     "en": {
         **texts_plans_en.TEXTS,
+        **texts_stakeholders_en.TEXTS,
         **texts_en.TEXTS,
         **texts_wstg_en.TEXTS,
         **texts_status_en.TEXTS,
@@ -50,6 +54,7 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "es": {
         **texts_plans_es.TEXTS,
+        **texts_stakeholders_es.TEXTS,
         **texts_es.TEXTS,
         **texts_wstg_es.TEXTS,
         **texts_status_es.TEXTS,

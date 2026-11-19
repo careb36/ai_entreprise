@@ -41,6 +41,7 @@ from services.planning.project_docs import (
     scope_docs,
     security_docs,
     specs,
+    stakeholder_docs,
     status_docs,
     texts,
 )
@@ -168,6 +169,7 @@ def build_documents(
         control_docs.schedule(snapshot),
         release_docs.plan(snapshot),
         control_docs.raci(snapshot),
+        stakeholder_docs.register(snapshot),
         comms_docs.plan(snapshot),
         control_docs.risks(snapshot),
         log_docs.issues(snapshot),

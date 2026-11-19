@@ -69,6 +69,7 @@ Brown, c4model.com, CC BY 4.0).
 | Schedule | Planning | Schedule and milestones (`schedule.md`) | approvals, sprints, integrations |
 | Schedule | Planning | Release and iteration plan (`release_plan.md`, phase 2) | sprints and their plan, specifications, carries, published integrations; one person section |
 | Resources | Planning | Responsibility assignment, RACI (`raci.md`) | roster, members, tasks, factory rules |
+| Stakeholders | Initiating | Stakeholder register (`stakeholder_register.md`, #691) | members, teams, approvals of specifications and architectures, roles hired, factory rules; one person section |
 | Stakeholders | Planning | Communications management plan (`communications_plan.md`, phase 2) | members, the channels' configuration records, factory rules; two person sections |
 | Risk | Planning | Risk register (`risks.md`) | verifications, holds; one person section |
 | Scope | Monitoring and Controlling | Security test checklist, OWASP WSTG (`wstg_checklist.md`, CC BY-SA 4.0) | specification, architecture, stack discovery, the Verifier's WSTG items, people's recorded reviews |
@@ -100,6 +101,7 @@ the index:
 | Release and iteration plan | Target release dates and scope ahead (phase 2) |
 | Quality management plan | Quality objectives and acceptance thresholds (phase 2) |
 | Communications management plan | Stakeholders outside the company and what they need to know; meetings, reports and cadence agreed with people (phase 2) |
+| Stakeholder register | Stakeholders outside the company: interest, influence, expectations and engagement (#691) |
 | Final report | Acceptance by the sponsor, benefits realisation outlook, handover notes (phase 2) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
@@ -137,6 +139,7 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Schedule | Completed iterations leave the factory as releases | completed sprints whose integration was published as a request (measured; phase 2) |
 | Scope | Deliveries are verified by the evidence | the Verifier's readings with the verdict verified, over every reading (measured; phase 2) |
 | Scope | The specification names a quality target for every area | the quality areas the specification check expects against the documented specifications' quality attributes (STD-PO-1; met or not met; phase 2) |
+| Stakeholders | Approvals are traced to who gave them | the approvals of specifications and architectures by the approving account's current company role, the Manager agent or another account (measured; #691) |
 | Stakeholders | The company is told about its work outside the product | the notification webhook, Slack, Teams and the brief by mail that are on, from their configuration records (measured; phase 2) |
 | Risk | Nothing is left on hold when the project closes | holds and high-risk readings whose task is neither done nor carried: met / not met once every sprint is closed, measured while one runs (phase 2) |
 
@@ -348,6 +351,25 @@ configuration records; `comms_docs` renders.
 Delivery counters (`last_status`, outbox rows) change at every post and are
 left out, so a delivery never makes the plan stale; the pack's own approval is
 not read either, so approving a pack cannot make it stale.
+
+### Stakeholder register (`stakeholder_register.md`; Stakeholders, Initiating; inputs: members, roles, stakeholders, statements_stakeholder_register)
+
+Issue #691. Who has a stake in the project, from the company's records;
+nobody is named. `collect_stakeholders.stakeholders` reads the teams and the
+approvals; `stakeholder_docs.register` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| People in the company | `members` (counts by own company role), with what each role receives and decides as the routes enforce it (`require_company_role` in the cited router) | membership ref (digest), rule refs |
+| Teams | `Team`: the role it grants, its members who are company members, counted; never its name, description or author (free text that may name a person) | `team` ref (digest) |
+| Approvals given | each `Specification` and `Architecture` with `approved_by`, reduced to the approving account's effective role now (own role raised by its teams, `services/platform/teams`), the Manager agent, a deployment without sign-in, or an account no longer a member; the address never leaves `collect_stakeholders` | specification / architecture ref (digest of the approval entry) |
+| The agent team | `roles` (the roles hired, canonical) | membership ref (digest) |
+| Stakeholders outside the company | `stakeholder_register.external`, a person's statement | person, **claim** |
+
+The role shown for an approval is the account's role now, not at the time of
+the approval, and the text says so. The pack's own approvals are not read,
+so approving a pack cannot make its register stale; a team's rename changes
+nothing either (`updated_at` is left out).
 
 ### Final report (`final_report.md`; Governance, Closing; inputs: specification, sprints, events, verifications, carries, releases, effort, costs, statements_final_report, and specifications when there are several)
 
@@ -589,8 +611,9 @@ holds, with the lessons left to their register since retrospectives are
 claims (all done: `status_report.md`, `release_plan.md`, `final_report.md`).
 The communications and quality plans, first planned for phase 3, are done
 too (`communications_plan.md`, `quality_plan.md`). Then more computed checks
-per domain (backlog rates, a stakeholder register from members plus a
-person's external list). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
+per domain (backlog rates). The stakeholder register from members, teams and
+approvals plus a person's external list is done too (`stakeholder_register.md`,
+#691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
 manifest of the pack), the COBIT governance matrix and the ITIL transition set
 (phase 5), and bench grading of packs against person-written expectations.
 The C4 code level from the daemon's code graph (`workspace.related`) fits
