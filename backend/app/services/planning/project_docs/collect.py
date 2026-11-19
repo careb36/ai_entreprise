@@ -24,7 +24,8 @@ integrations; ``collect_release``), ``quality_basis`` and ``communications``
 (the backend's quality definitions and the channels' configuration;
 ``collect_plans``), ``stakeholders`` (the teams and approvals by role;
 ``collect_stakeholders``), ``check_basis`` (sprint lengths, intake tasks, token
-quotas; ``collect_checks``) and ``statements_<document>`` (a person's current
+quotas; ``collect_checks``), ``transition`` (each release's records, by role;
+``collect_transition``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -64,6 +65,7 @@ from services.planning.project_docs import (
     collect_release,
     collect_stakeholders,
     collect_status,
+    collect_transition,
     statements,
     texts,
 )
@@ -591,5 +593,6 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "communications": collect_plans.communications(session, company.id),
         "stakeholders": collect_stakeholders.stakeholders(session, company.id),
         collect_checks.KEY: collect_checks.basis(session, company.id, sprints),
+        collect_transition.KEY: collect_transition.releases(session, company.id),
         **_person_statements(session, company.id),
     }

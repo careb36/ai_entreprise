@@ -61,6 +61,7 @@ Brown, c4model.com, CC BY 4.0).
 | Governance | Executing | Lessons learned register (`lessons.md`) | retrospectives, procedures |
 | Governance | Monitoring and Controlling | Change log (`changes.md`) | specification and architecture versions, carry-over events |
 | Governance | Monitoring and Controlling | Check results by domain (`checks.md`) | all of the above |
+| Governance | Executing | ITIL transition set (`transition.md`, #696) | per release: the integration's tasks, its suite run, publication and local merge, review, the Verifier's readings at integration, undo audit rows, the sprint's hold events; one person section |
 | Governance | Closing | Final report (`final_report.md`, phase 2) | specifications, sprints, task events, verifications, effort, model usage, carries, published integrations; three person sections |
 | Scope | Planning | Scope statement (`scope.md`) | specification, tasks |
 | Scope | Planning | Work breakdown structure (`wbs.md`) | specification, tasks |
@@ -103,6 +104,7 @@ the index:
 | Communications management plan | Stakeholders outside the company and what they need to know; meetings, reports and cadence agreed with people (phase 2) |
 | Stakeholder register | Stakeholders outside the company: interest, influence, expectations and engagement (#691) |
 | Final report | Acceptance by the sponsor, benefits realisation outlook, handover notes (phase 2) |
+| ITIL transition set | Handover of each release: who takes it over, what they receive, workarounds for its known errors (#696) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
 author recorded in the audit, is the first item of phase 2. The TechWriter's
@@ -438,6 +440,35 @@ shows what the procedures that followed measured; the final report points
 there instead of repeating or counting what was said. A blocked task the
 platform carried to a later sprint is followed in that sprint (its new task),
 not counted as left open, and a carry reported by an agent is not read.
+
+### ITIL transition set (`transition.md`; Governance, Executing; inputs: transition, statements_transition)
+
+Issue #696. What each release changed and left behind, after the practices
+ITIL 4 (AXELOS / PeopleCert) names for moving a change into use: change
+enablement, release management, problem management with its known errors,
+and the handover. Only the practice names are taken; the wording is ours.
+A release is a sprint integration that left the factory: published as one
+request, or merged locally into the base branch. `collect_transition` reads
+one snapshot key, `transition`, from the release context's tables;
+`transition` derives what each release delivered and its known errors;
+`transition_docs` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| Change record: what changed | the integration's `tasks` (state, commit, run, verification as recorded at integration), the tasks' `covers` read as requirements, the base and the integration commit | integration ref (its audit row's chain hash), task refs (digest of the entry) |
+| Change record: approved by | the integration's latest decision (`IntegrationReview`, `approve` or `request_changes`; else its latest review), its author reduced to the account's effective company role now, `former` or `no_account`; never the name, address or words | `review` ref (its audit row's chain hash) |
+| Change record: integration review | the review's event, outcome, commit (whether it is the integration's), `diff_sha256` the backend computed from the daemon's diff, files, segregation-of-duties outcome, the number of reviews | `review` ref |
+| Change record: suite result | the integration's status and the daemon's `test_run` (command, exit code, timeout, failing tests counted), the tested commit | `suite` ref (digest of the kept facts) |
+| Change record: published | `publication` (how, base, the daemon's commit, the `sprint_published` audit row) and `details.local_merge` (base, fast-forward or merge commit, the commit after, who merged as a role, the `sprint_merged_locally` audit row); never the request's address | `release` and `merge` refs (audit rows' chain hashes) |
+| Change record: undone | `run_delivery_undone` audit rows naming a run of the release; a delivery on a Git branch is undone by discarding the branch, which the platform does not record, and the record says so | `undo` ref (audit row's chain hash) |
+| Release notes | per release, the tasks merged or already in, the requirements they cover, and the done tasks left out with their state | task refs |
+| Known errors | a delivery the release carries whose reading at integration was refuted, unverifiable or high risk; a hold open in its sprint at release time: the newest `blocked` or `risk_hold` event of a task whose status after its newest event then was `blocked`, or an `escalated` one with no later `decided`, on a task the release does not deliver and the platform (actor `system`) had not carried by then | verification ref (artifact digest), event ref (chain hash) |
+| Handover | `transition.handover`, a person's statement | person, **claim** |
+
+A review's words, retrospectives and agent messages are not inputs: a claim
+can neither appear in the set nor make it stale. The approver's role is the
+account's role now, not at the time of the review, as in the stakeholder
+register.
 Acceptance, the benefits after closure and the handover are what only a
 person can say at closure, so they are person sections, never computed.
 
@@ -628,8 +659,11 @@ the audit key once approved (phase 4, with export)?
   draft a person stays accountable for. Taken from a summary in our own words,
   never from the book's text; the book forbids use for AI training and no
   model read it.
-- **COBIT** (ISACA) and **ITIL** (AXELOS / PeopleCert): named as later phases;
-  nothing taken.
+- **ITIL 4** (AXELOS / PeopleCert): the names of the practices the transition
+  set follows (change enablement, release management, problem management and
+  its known errors, the handover; #696), summarised in our own words; no text,
+  definition or table of ITIL is reproduced.
+- **COBIT** (ISACA): named as a later phase; nothing taken.
 
 ## Extension points and next phases
 
@@ -657,8 +691,8 @@ domain are done too (#692: approval before work, backlog churn, iterations on
 time, usage against the quota, sprint teams). The stakeholder register from members, teams and
 approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
-manifest of the pack), the COBIT governance matrix and the ITIL transition set
-(phase 5), and bench grading of packs against person-written expectations.
+manifest of the pack), the COBIT governance matrix (phase 5; the ITIL transition set is done,
+`transition.md`, #696), and bench grading of packs against person-written expectations.
 The C4 code level from the daemon's code graph (`workspace.related`) fits
 phase 2 when a daemon is connected.
 

@@ -3010,6 +3010,10 @@
         "final_report_handover": {
           "title": "Notas de traspaso",
           "what": "Quién recibe el resultado (operaciones, mantenimiento, el cliente), qué recibe y qué debe saber sobre las retenciones y los riesgos que quedan abiertos."
+        },
+        "transition_handover": {
+          "title": "Traspaso (conjunto de transición ITIL)",
+          "what": "Quién se hace cargo de cada entrega (operaciones, soporte, el cliente), qué recibe, las soluciones provisionales para sus errores conocidos y cuándo se completa el traspaso."
         }
       }
     }

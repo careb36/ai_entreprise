@@ -32,6 +32,8 @@ from services.planning.project_docs import (
     texts_stakeholders_es,
     texts_status_en,
     texts_status_es,
+    texts_transition_en,
+    texts_transition_es,
     texts_wstg_en,
     texts_wstg_es,
 )
@@ -43,7 +45,8 @@ DEFAULT_LANGUAGE = "en"
 # (``status_docs``), the release and iteration plan's (``release_docs``) and
 # the final report's (``final_docs``) live in their own modules; so do the
 # quality and communications plans' (``texts_plans_*``) and the stakeholder
-# register's (``texts_stakeholders_*``) and the domain checks' (``texts_checks_*``).
+# register's (``texts_stakeholders_*``), the domain checks' (``texts_checks_*``)
+# and the ITIL transition set's (``texts_transition_*``).
 TEXTS: dict[str, dict[str, str]] = {
     "en": {
         **texts_plans_en.TEXTS,
@@ -54,6 +57,7 @@ TEXTS: dict[str, dict[str, str]] = {
         **texts_status_en.TEXTS,
         **texts_release_en.TEXTS,
         **texts_final_en.TEXTS,
+        **texts_transition_en.TEXTS,
     },
     "es": {
         **texts_plans_es.TEXTS,
@@ -64,6 +68,7 @@ TEXTS: dict[str, dict[str, str]] = {
         **texts_status_es.TEXTS,
         **texts_release_es.TEXTS,
         **texts_final_es.TEXTS,
+        **texts_transition_es.TEXTS,
     },
 }
 
