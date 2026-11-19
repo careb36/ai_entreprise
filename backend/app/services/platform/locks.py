@@ -52,6 +52,7 @@ SPRINT_INTEGRATION = "sprint-integration"
 INTAKE_WAKE = "intake-wake"
 RSI_CYCLE_START = "rsi-cycle-start"
 SSO_DOMAIN_RECHECK = "sso-domain-recheck"
+RUN_WINDOW_RELEASE = "run-window-release"
 SSO_GROUPS = "sso-groups"
 
 _local_lock = threading.Lock()

@@ -30,7 +30,7 @@ from schemas import (
     SprintStartRequest,
 )
 from services.evidence import acceptance
-from services.loop import board_moves, sprint_archive
+from services.loop import board_moves, run_window_gate, sprint_archive
 from services.loop.carry_over import CarryOverError, carry_over
 from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
@@ -147,6 +147,10 @@ async def start_sprint(
     sprint.business_unit_id = default_bu_id
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
+    # Outside the run window (issue #736) work waits, unless urgent (audited).
+    held = run_window_gate.start_new(
+        session, sprint, req.urgent, sod.actor_of(session, user)
+    )
 
     positions = _refused(dependencies.check_positions, backlog_items)
     item_ids = []
@@ -175,6 +179,9 @@ async def start_sprint(
                 session, row, dependencies.waiting_note([rows[p] for p in deps])
             )
             session.add(row)
+            continue
+        if held:
+            run_window_gate.defer_task(session, row, sprint, held)
             continue
         # Outbox entry — delivered to NATS by the process_outbox background worker.
         session.add(
@@ -236,6 +243,7 @@ async def start_sprint(
             aggregate_type="sprint",
             aggregate_id=str(sprint.id),
             event_type="nats_publish",
+            status=run_window_gate.HELD_OUTBOX if held else "pending",
             payload={
                 "subject": "workspace.generate",
                 "message": {
@@ -255,6 +263,8 @@ async def start_sprint(
         "sprint_id": sprint.id,
         "backlog_item_ids": item_ids,
         "sprint_url": f"/v1/sprints/{sprint.id}/board",
+        "urgent": sprint.urgent,
+        "run_window": run_window_gate.view(session, sprint),
     }
 
 
@@ -425,6 +435,8 @@ async def get_sprint_board(
         "status": sprint.status,
         **integration_state.of_sprint(session, sprint.id),
         "pause_reason": sprint.pause_reason,
+        "urgent": sprint.urgent,
+        "run_window": run_window_gate.view(session, sprint),
         "goal": sprint.goal,
         "specification_id": sprint.specification_id,
         "archived_at": sprint.archived_at.isoformat() if sprint.archived_at else None,

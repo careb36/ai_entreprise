@@ -140,6 +140,7 @@ def test_a_planned_sprint_starts_once_and_dispatches_its_tasks(
     assert resp.status_code == 200 and resp.json() == {
         "status": "active",
         "dispatched": 2,
+        "run_window": None,  # no run window: nothing waits (issue #736)
     }
     assert len(_events(sqlite_session, sprint)) == 2
     assert (
@@ -163,7 +164,7 @@ def test_pause_resume_and_stop(sqlite_session, test_client, auth_on):
     resumed = test_client.post(
         f"/v1/sprints/{sprint.id}/resume", headers=manager
     ).json()
-    assert resumed == {"status": "active", "dispatched": 2}
+    assert resumed == {"status": "active", "dispatched": 2, "run_window": None}
     stopped = test_client.post(f"/v1/sprints/{sprint.id}/stop", headers=manager)
     assert stopped.status_code == 200 and stopped.json() == {
         "status": "cancelled",

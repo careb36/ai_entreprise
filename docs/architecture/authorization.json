@@ -69,9 +69,6 @@
     "DELETE /v1/companies/{company_id}/teams/{team_id}": {
       "access": "Owner"
     },
-    "DELETE /v1/companies/{company_id}/teams/{team_id}/exclusions/{exclusion_id}": {
-      "access": "Owner"
-    },
     "DELETE /v1/companies/{company_id}/teams/{team_id}/members/{user_id}": {
       "access": "Owner"
     },
@@ -305,6 +302,15 @@
     "GET /v1/companies/{company_id}/routing_record": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/rsi/cycles": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/run_window": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/sandbox": {
       "access": "Viewer"
     },
@@ -312,12 +318,6 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
-      "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/rsi/cycles": {
-      "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/service-accounts": {
@@ -333,9 +333,6 @@
       "access": "Owner"
     },
     "GET /v1/companies/{company_id}/sso/domains": {
-      "access": "Owner"
-    },
-    "GET /v1/companies/{company_id}/sso/group-mappings": {
       "access": "Owner"
     },
     "GET /v1/companies/{company_id}/sso/identities": {
@@ -725,6 +722,12 @@
     "POST /v1/companies/{company_id}/rsi/resume": {
       "access": "Owner"
     },
+    "POST /v1/companies/{company_id}/run_window/preview": {
+      "access": "Viewer",
+      "body": {
+        "run_window": null
+      }
+    },
     "POST /v1/companies/{company_id}/sandbox/cache/reset": {
       "access": "Manager"
     },
@@ -741,31 +744,13 @@
     "POST /v1/companies/{company_id}/sod/exception": {
       "access": "Owner"
     },
-    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/approve": {
-      "access": "Owner"
-    },
-    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/confirm-single-owner": {
-      "access": "Owner"
-    },
-    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/reject": {
-      "access": "Owner"
-    },
-    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/withdraw": {
+    "POST /v1/companies/{company_id}/sso/domains/{domain}/check": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/sso/test": {
       "access": "Owner"
     },
-    "POST /v1/companies/{company_id}/sso/domains/{domain}/check": {
-      "access": "Owner"
-    },
     "POST /v1/companies/{company_id}/teams": {
-      "access": "Owner"
-    },
-    "POST /v1/companies/{company_id}/teams/{team_id}/exclusions": {
-      "access": "Owner"
-    },
-    "POST /v1/companies/{company_id}/teams/{team_id}/membership-source-preview": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/views": {
@@ -1039,6 +1024,12 @@
     "PUT /v1/companies/{company_id}/research": {
       "access": "Manager"
     },
+    "PUT /v1/companies/{company_id}/run_window": {
+      "access": "Owner",
+      "body": {
+        "run_window": null
+      }
+    },
     "PUT /v1/companies/{company_id}/sandbox": {
       "access": "Manager"
     },
@@ -1046,9 +1037,6 @@
       "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/sso": {
-      "access": "Owner"
-    },
-    "PUT /v1/companies/{company_id}/sso/group-mappings": {
       "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/stack_profile": {
@@ -1072,11 +1060,44 @@
     "PUT /v1/specifications/{spec_id}": {
       "access": "Manager"
     },
+    "PUT /v1/sprints/{sprint_id}/urgent": {
+      "access": "Manager",
+      "body": {
+        "urgent": false
+      }
+    },
     "PUT /v1/views/{view_id}": {
       "access": "Viewer"
     },
     "PUT /v1/views/{view_id}/preferences": {
       "access": "Viewer"
+    },
+    "DELETE /v1/companies/{company_id}/teams/{team_id}/exclusions/{exclusion_id}": {
+      "access": "Owner"
+    },
+    "GET /v1/companies/{company_id}/sso/group-mappings": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/approve": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/confirm-single-owner": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/reject": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/withdraw": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/teams/{team_id}/exclusions": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/teams/{team_id}/membership-source-preview": {
+      "access": "Owner"
+    },
+    "PUT /v1/companies/{company_id}/sso/group-mappings": {
+      "access": "Owner"
     }
   }
 }

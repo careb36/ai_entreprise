@@ -179,6 +179,8 @@ class SprintStartRequest(RequestModel):
     # The PO's suggestion the plan carried, sent back unchanged: the team in
     # automatic mode, and what tells a confirmed team from a person's change.
     suggested_team: list[str] | None = None
+    # Bypass the company's run window (issue #736): starts at once, audited.
+    urgent: bool = False
 
 
 class SprintPlanRequest(RequestModel):
