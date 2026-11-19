@@ -15,6 +15,12 @@ which is exact for one process and lets the tests race two threads.
 
 The key is a stable 63-bit number derived from the lock's name and an id,
 so every replica computes the same key without a registry.
+
+``in_transaction`` is the other kind: a lock that waits and lasts until the
+caller's transaction ends (``pg_advisory_xact_lock``), for a write that must
+not interleave with another one on the same key (the group mapping of one
+person at sign-in, ``sso-groups``). Elsewhere it is a no-op: SQLite
+serialises writers itself.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ SPRINT_INTEGRATION = "sprint-integration"
 INTAKE_WAKE = "intake-wake"
 RSI_CYCLE_START = "rsi-cycle-start"
 SSO_DOMAIN_RECHECK = "sso-domain-recheck"
+SSO_GROUPS = "sso-groups"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()
@@ -113,6 +120,16 @@ def held(engine: Engine, name: str, ident: int | str = 0) -> Iterator[bool]:
     else:
         with _local(key) as acquired:
             yield acquired
+
+
+def in_transaction(session: Any, name: str, ident: int | str = 0) -> None:
+    """Wait for the lock *name*/*ident* inside *session*'s transaction; it is
+    released when that transaction commits or rolls back (Postgres only)."""
+    bind = session.get_bind()
+    if is_postgres(bind.engine if hasattr(bind, "engine") else bind):
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key(name, ident)}
+        )
 
 
 def run_exclusive(

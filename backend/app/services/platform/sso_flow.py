@@ -17,6 +17,10 @@ membership, never from a claim; a new member gets the connection's default
 role, never Owner. Each completed callback writes one audit row with what
 the provider asserted and the outcome.
 
+When the connection maps groups to teams, ``sso_group_sync.apply_sign_in``
+sets the person's SSO-managed team memberships from the token's claim in the
+same transaction (issue #703); a link from inside a session never does.
+
 The same callback also finishes a link begun inside a signed-in session
 (``sso_link``): ``take_state`` consumes either kind of state, and
 ``authorization_url`` and ``exchange_claims`` are shared with it.
@@ -35,7 +39,7 @@ from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from services.platform import oidc, sso_connections, sso_domains
+from services.platform import oidc, sso_connections, sso_domains, sso_group_sync
 from services.platform.agent_service import AgentService
 
 STATE_TTL = timedelta(minutes=10)
@@ -274,6 +278,9 @@ def finish_login(
         session.rollback()
         _audit(session, conn, f"refused:{exc.code}", claims)
         raise
+    # The group mapping (issue #703): in this transaction, committed with the
+    # ``sso_sign_in`` row below or rolled back with it.
+    sso_group_sync.apply_sign_in(session, conn, user, claims)
     handoff = secrets.token_urlsafe(32)
     session.add(
         SsoFlowState(

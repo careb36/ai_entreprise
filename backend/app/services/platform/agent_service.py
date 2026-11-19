@@ -19,9 +19,36 @@ from uuid import uuid4
 
 from audit_chain import seal_audit_row
 from models import AuditLog
+from sqlalchemy import event
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session
 
 logger = logging.getLogger("fabrique-backend")
+
+# Audit rows written with ``commit=False`` wait here for their transaction:
+# their file copy is appended once it commits, and dropped if it rolls back.
+_PENDING_LINES = "fabrique_pending_audit_lines"
+
+
+def _append_lines(entries: list[dict]) -> None:
+    """Append committed audit entries to the JSONL copy, one per line."""
+    if not entries:
+        return
+    audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
+    audit_log_path.mkdir(parents=True, exist_ok=True)
+    with open(audit_log_path / "audit.jsonl", "a") as f:
+        f.writelines(json.dumps(entry) + "\n" for entry in entries)
+
+
+@event.listens_for(OrmSession, "after_commit")
+def _write_pending(session: OrmSession) -> None:
+    _append_lines(session.info.pop(_PENDING_LINES, []))
+
+
+@event.listens_for(OrmSession, "after_soft_rollback")
+def _drop_pending(session: OrmSession, previous_transaction) -> None:
+    if not getattr(previous_transaction, "nested", False):
+        session.info.pop(_PENDING_LINES, None)
 
 
 class AgentService:
@@ -93,6 +120,7 @@ class AgentService:
         decision_signature: str,
         cost_tokens: int,
         company_id: int | None = None,
+        commit: bool = True,
     ):
         """
         Write a dual-destination audit entry for an agent interaction.
@@ -114,6 +142,10 @@ class AgentService:
             result:             Outcome dict / string returned by the action.
             decision_signature: Deprecated caller value; ignored in favor of a server signature.
             cost_tokens:        LLM tokens consumed; credited to the business unit.
+            commit:             ``False`` leaves the commit to the caller, so the
+                                row is committed with the change it records, or
+                                rolled back with it; its file copy follows the
+                                commit.
 
         Returns:
             The persisted ``AuditLog`` ORM instance.
@@ -153,14 +185,14 @@ class AgentService:
             "chain_hash": log.chain_hash,
         }
 
-        # Database audit — queryable via the governance dashboard.
-        session.commit()
+        if not commit:
+            session.info.setdefault(_PENDING_LINES, []).append(entry)
+            return log
 
-        # Filesystem audit — append-only JSONL; one JSON object per line.
-        # Written after the commit, so the file never holds a chain entry the
+        # Database audit — queryable via the governance dashboard. The file
+        # copy (append-only JSONL) is written after the commit by
+        # ``_write_pending``, so the file never holds a chain entry the
         # database rolled back (its sequence number would be given out again).
-        audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
-        audit_log_path.mkdir(parents=True, exist_ok=True)
-        with open(audit_log_path / "audit.jsonl", "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        session.info.setdefault(_PENDING_LINES, []).append(entry)
+        session.commit()
         return log

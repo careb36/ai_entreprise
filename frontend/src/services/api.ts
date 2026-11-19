@@ -17,6 +17,7 @@ import { messageEndpoints } from './api/messages'
 import { progressEndpoints } from './api/progress'
 import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
+import { ssoGroupEndpoints } from './api/ssoGroups'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
 import { dutiesEndpoints } from './api/duties'
@@ -45,6 +46,7 @@ export * from './api/messages'
 export * from './api/progress'
 export * from './api/sprints'
 export * from './api/sso'
+export * from './api/ssoGroups'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
@@ -81,6 +83,7 @@ const endpoints = {
   ...supportEndpoints(http),
   ...githubEndpoints(http),
   ...ssoEndpoints(http),
+  ...ssoGroupEndpoints(http),
   ...wikiEndpoints(http),
   ...chatEndpoints(http),
   ...teamEndpoints(http),
