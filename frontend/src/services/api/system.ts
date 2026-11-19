@@ -10,6 +10,8 @@ export interface Capabilities {
   support_agent?: boolean
   /** Where GitHub can reach the backend (PUBLIC_API_URL); null when unset. */
   public_api_url?: string | null
+  /** The widest forge policy a company may choose here (FORGE_POLICY_MAX, issue #745). */
+  forge_policy_max?: 'none' | 'fetch' | 'publish'
 }
 
 export type ComponentStatus = { status: 'up' | 'down' | 'disabled'; reason?: string; detail?: string }

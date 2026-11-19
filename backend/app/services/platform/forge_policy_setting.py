@@ -17,6 +17,10 @@ Only an Owner changes it (``PUT /v1/companies/{id}/forge_policy``), never a
 Manager and never the Manager agent; each change is audited as
 ``forge_policy_changed`` with both values and the account (``user_id``, and
 ``token_id`` for an API token). A value above the ceiling is refused.
+
+The Owner may also choose it on the New company form (``POST
+/v1/init_company``, ``forge_policy``; issue #745): that choice is audited the
+same way, with ``at: creation``, even when it is the default ``none``.
 """
 
 from __future__ import annotations
@@ -85,19 +89,8 @@ def state(session: Session, company_id: int) -> dict[str, Any]:
     }
 
 
-def set_policy(
-    session: Session,
-    company_id: int,
-    value: str,
-    *,
-    by: str,
-    user_id: int | None,
-    token_id: int | None,
-) -> dict[str, Any]:
-    """Set the company's policy (an Owner's call, checked by the router); audited."""
-    company = session.get(Company, company_id)
-    if company is None:
-        raise ForgePolicyRefused(404, "Company not found")
+def require_allowed(value: str) -> None:
+    """A 422 for a value that is not a policy, a 409 for one above the deployment's ceiling."""
     if value not in forge_policy.POLICIES:
         raise ForgePolicyRefused(
             422, f"forge_policy is one of {', '.join(forge_policy.POLICIES)}"
@@ -109,21 +102,46 @@ def set_policy(
             f"This deployment allows at most {limit!r} (FORGE_POLICY_MAX): "
             f"{value!r} cannot be set",
         )
+
+
+def set_policy(
+    session: Session,
+    company_id: int,
+    value: str,
+    *,
+    by: str,
+    user_id: int | None,
+    token_id: int | None,
+    at_creation: bool = False,
+) -> dict[str, Any]:
+    """Set the company's policy (an Owner's call, checked by the router); audited.
+
+    *at_creation*: the Owner's choice on the New company form (issue #745),
+    audited even when it is the default, ``none``, so the record holds the
+    decision and not only a change.
+    """
+    company = session.get(Company, company_id)
+    if company is None:
+        raise ForgePolicyRefused(404, "Company not found")
+    require_allowed(value)
     before = forge_policy.parse(company.forge_policy)
-    if before != value:
+    if before != value or at_creation:
         company.forge_policy = value
         session.add(company)
+        details: dict[str, Any] = {
+            "company_id": str(company_id),
+            "user_id": user_id,
+            "token_id": token_id,
+        }
+        if at_creation:
+            details["at"] = "creation"
         AgentService().audit_interaction(
             session=session,
             company_id=company_id,
             interaction_id=f"company:{company_id}:forge_policy",
             agent_id=f"human:{by}",
             action=AUDIT_ACTION,
-            details={
-                "company_id": str(company_id),
-                "user_id": user_id,
-                "token_id": token_id,
-            },
+            details=details,
             result={"from": before, "to": value},
             decision_signature=None,
             cost_tokens=0,

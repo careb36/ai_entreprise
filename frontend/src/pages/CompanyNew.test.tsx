@@ -27,6 +27,7 @@ const daemon = vi.hoisted(() => ({
 
 vi.mock('../hooks/useQueries', () => ({
   useModels: () => ({ data: modelCatalogue }),
+  useCapabilities: () => ({ data: undefined }),
   useDiscoverTeam: () => useMutation({
     mutationFn: ({ companyId, projectPath }: { companyId: number | null; projectPath: string }) =>
       api.discoverTeam(companyId, projectPath),

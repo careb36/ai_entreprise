@@ -10,8 +10,11 @@ import {
   type InitCompanyResponse,
 } from '../services/api'
 import { gitChoiceFor, useFolderGitChoice } from '../components/GitWorkflowPanel'
+import { remoteChoiceFor, useFolderRemoteChoice } from '../components/RemoteSyncChoice'
 import { PendingInvitations } from '../components/PendingInvitations'
+import { SYNC_DONE } from '../services/baseSync'
 import {
+  useCapabilities,
   useModels,
   useDiscoverTeam,
   useInitCompany,
@@ -50,6 +53,9 @@ export default function CompanyNew() {
   const [autonomyLevel, setAutonomyLevel] = useState(2)
   const [startNow, setStartNow] = useState(false)
   const [gitChoice, setGitChoice] = useFolderGitChoice(inspected?.path ?? projectPath.trim()) // null: as the folder's inspection observed
+  // The forge policy and "Bring my local copy up to date" (issue #745); null: fetch when the folder has a remote.
+  const [remoteChoice, setRemoteChoice] = useFolderRemoteChoice(inspected?.path ?? projectPath.trim())
+  const { data: capabilities } = useCapabilities()
 
   // Step 3 — Permissions
   const [permissions, setPermissions] = useState<Permissions>(DEFAULT_PERMISSIONS)
@@ -136,6 +142,7 @@ export default function CompanyNew() {
       project_path: projectPath.trim() || undefined,
       detected_stack: discoveryResult || undefined,
       ...gitChoiceFor(inspected, gitChoice),
+      ...remoteChoiceFor(inspected, remoteChoice, capabilities?.forge_policy_max),
       // The documentation packs follow the creator's interface language; editable later.
       doc_language: (i18n.language ?? '').startsWith('es') ? 'es' as const : 'en' as const,
     }
@@ -144,6 +151,14 @@ export default function CompanyNew() {
       onSuccess: (response: InitCompanyResponse) => {
         const companyId = response.company_id
         setCompany(companyId, companyName.trim())
+        // The local copy was not brought up to date: the company exists, and the daemon said why.
+        const sync = response.base_sync
+        if (sync && !SYNC_DONE.includes(sync.outcome)) {
+          alert(t('remoteSync.refused', {
+            outcome: t(`remoteSync.outcomes.${sync.outcome}`, { defaultValue: sync.outcome }),
+            reason: sync.reason ?? '',
+          }))
+        }
         // No foundation sprint was planned (the daemon observed an existing
         // repository with code, or the request declined it): say why, then
         // land on the sprint list instead of a sprint that does not exist.
@@ -203,7 +218,8 @@ export default function CompanyNew() {
     () => (
       <ReviewStep companyName={companyName} companyDesc={companyDesc} scopeSize={scopeSize} timezone={timezone}
         autonomyLevel={autonomyLevel} startNow={startNow} setStartNow={setStartNow} inspected={inspected}
-        gitChoice={gitChoice} setGitChoice={setGitChoice} permissions={permissions} agents={agents}
+        gitChoice={gitChoice} setGitChoice={setGitChoice} remoteChoice={remoteChoice} setRemoteChoice={setRemoteChoice}
+        permissions={permissions} agents={agents}
         availableModels={availableModels} mutationError={mutationError} loading={loading}
         handleSubmit={handleSubmit} setStep={setStep} />
     ),

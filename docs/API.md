@@ -235,6 +235,8 @@ observations, never agent claims.
 | `GET` | `/v1/workspace/status` | Is a daemon reachable |
 | `GET` | `/v1/workspace/inspect` | Trees, files |
 | `GET` | `/v1/workspace/browse` | Browse a path |
+| `POST` | `/v1/workspace/git_check` | The folder's remote, branches and checkout, read locally; with `contact_remote`, how far its base is behind (issue #745, `routers/company_sync.py`) |
+| `POST` | `/v1/companies/{id}/git/sync_base` | Fast-forward the company's local base to its remote, held to the forge policy (Manager; recorded `base_sync_observed`) |
 
 ### Inbox and messages — `routers/inbox.py`, `routers/messages.py`
 

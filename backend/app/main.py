@@ -32,6 +32,7 @@ from routers.board_notes import router as board_notes_router
 from routers.chat_approvals import router as chat_approvals_router
 from routers.chat_interactions import router as chat_interactions_router
 from routers.company_architecture import router as company_architecture_router
+from routers.company_sync import router as company_sync_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.documentation import router as documentation_router
@@ -222,6 +223,7 @@ app.include_router(chat_interactions_router)
 app.include_router(sod_router)
 app.include_router(protected_paths_router)
 app.include_router(forge_policy_router)
+app.include_router(company_sync_router)
 app.include_router(run_window_router)
 app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)

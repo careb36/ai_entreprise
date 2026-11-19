@@ -752,6 +752,9 @@
       "test_git_publish.py": [
         "release"
       ],
+      "test_git_sync.py": [
+        "release"
+      ],
       "test_git_workflow.py": [
         "management"
       ],

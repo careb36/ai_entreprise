@@ -321,7 +321,10 @@ OpenID Connect provider (single sign-on, below).
   registration, refresh, SSO, the chat endpoints), per client address
   (`backend/app/security.py`); `RATE_LIMIT_DEFAULT` is configured but no
   middleware applies it to the other routes.
-- **Known gap.** `GET /v1/workspace/browse` and `/inspect` are open to any
+- **Known gap.** `GET /v1/workspace/browse` and `/inspect`, and `POST
+  /v1/workspace/git_check` (the New company form's "Check remote", issue
+  #745, which makes the daemon fetch one branch of the folder's remote with
+  the person's git credentials, capped by `FORGE_POLICY_MAX`), are open to any
   signed-in person (the New company folder picker runs before the person
   belongs to a company), and registration is open: on a deployment shared by
   people who do not trust each other, any account can list folders on the
