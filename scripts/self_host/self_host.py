@@ -30,6 +30,9 @@ Steps (``--steps``, comma-separated; ``all`` by default):
   product, the change adding the new ones), approved; the PO's plan,
   acceptance tests first; the sprint started on the plan.
 - ``wait``: until that sprint completes (``--timeout``).
+- ``sandbox``: the mode the sprint's runs used, from the daemon's replies,
+  never from ``--sandbox``; ``--container-mode`` exits 5 unless a container
+  (``sandbox_mode.py``, issue #701).
 - ``review``: the tasks waiting for a person, the task branches and the
   sprint's integration (its branches merged and the suite run, the one
   request a person reviews); with ``--accept TEXT`` a person accepts the
@@ -64,12 +67,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.append(str(HERE))  # spec_source beside this file, whether run or imported
+import sandbox_mode
 import spec_source
+from sandbox_mode import step_sandbox  # noqa: F401 - a step; re-exported
 from spec_source import revised_architecture, step_measure  # noqa: F401 - a step; re-exported
 
 COMPANY_NAME = "La Fabrique"
 ADR_FIRST_NUMBER_KEY = "adr_first_number"
-STEPS = ("checkout", "company", "records", "issue", "wait", "review", "pack")  # "all"; "measure" by name
+STEPS = ("checkout", "company", "records", "issue", "wait", "sandbox", "review", "pack")  # "all"; "measure" by name
 AGENTS = [
     {"role": "PO", "name": "Po Fab"},
     {"role": "Architect", "name": "Ari Fab"},
@@ -542,18 +547,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", help="the state file (default: <checkout>.self_host.json)")
     parser.add_argument("--report", help="also write the JSON report here")
     parser.add_argument("--steps", default="all")
-    parser.add_argument("--sandbox", default="container", choices=("host", "container", "bwrap"))
-    parser.add_argument(
-        "--profile",
-        default="folders",
-        choices=("folders", "sprint-tests"),
-        help="company: La Fabrique's suites per folder and its every-delivery checks, or one root command (--test-command)",
-    )
-    parser.add_argument(
-        "--test-command",
-        default="python -m pytest -q -p no:cacheprovider tests",
-        help="company: the root's one command, with --profile sprint-tests",
-    )
+    sandbox_mode.add_arguments(parser)  # --sandbox, --profile, --test-command, --container-mode
     parser.add_argument("--autonomy", type=int, default=2, help="2: QA's approval closes a low-risk task; a high-risk one waits for a person")
     parser.add_argument("--scope", default="M")
     parser.add_argument("--timeout", type=int, default=600)
@@ -565,7 +559,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--build", help="measure: the build whose backend/ the measure runs on (default: --checkout)")
     spec_source.add_measure_arguments(parser)  # --python, --grading-image, --in-process-measure
     args = parser.parse_args(argv)
-    steps = STEPS if args.steps == "all" else tuple(s.strip() for s in args.steps.split(","))
+    steps = sandbox_mode.apply(parser, args, STEPS)
     unknown = [s for s in steps if s not in (*STEPS, "measure")]
     if unknown:
         parser.error(f"unknown step(s): {', '.join(unknown)}")
@@ -592,7 +586,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.report:
         Path(args.report).write_text(text + "\n", encoding="utf-8")
     print(text)
-    return 1 if "error" in report else spec_source.exit_status(report)  # 3 failed, 4 unmeasured
+    if "error" in report:
+        return 1
+    # 3 failed, 4 unmeasured; 5 a --container-mode run the daemon did not report in a container
+    return spec_source.exit_status(report) or sandbox_mode.exit_status(report, args.container_mode)
 
 
 if __name__ == "__main__":

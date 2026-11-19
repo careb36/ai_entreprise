@@ -22,11 +22,11 @@ rm -rf "$SELF/la-fabrique" "$SELF/la-fabrique.self_host.json"
 self_host() {  # self_host <report name> <harness arguments...>
   local name=$1; shift
   "$PY" "$REPO/scripts/self_host/self_host.py" --api "$API" --checkout "$SELF/la-fabrique" \
-    --sandbox "$SANDBOX" --profile sprint-tests --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
+    --sandbox "$SANDBOX" $([ "$SANDBOX" = container ] && echo --container-mode) --profile sprint-tests --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
     --report "$SELF/$name.json" "$@" > "$SELF/$name.log" 2>&1
 }
 report() { "$PY" -c "import sys, json; d = json.load(open(sys.argv[1])); print($2)" "$SELF/$1.json"; }
-self_host first --steps checkout,company,records,issue,wait
+self_host first --steps checkout,company,records,issue,wait,sandbox
 check "the harness ran without an API error" test "$(report first "d.get('error', '')")" = ""
 check "the company's project is a snapshot of this repository, outside it, as one commit" test "$(report first "d['checkout']['created'], d['checkout']['files'] > 1000")" = "True True"
 check "an existing repository: init_company planned no foundation sprint, as the daemon observed (retrospective F8)" test "$(report first "(d['company'].get('foundation_sprint') or {}).get('planned'), (d['company'].get('foundation_sprint') or {}).get('reason')")" = "False repository_with_code"
@@ -44,6 +44,10 @@ check "the sprint on La Fabrique closes" test "$(report first "d['wait']['status
 check "QA's three acceptance-test tasks are done" test "$(report first "sum(1 for b in d['wait']['board'] if b.startswith('Acceptance tests for REQ-') and b.endswith('=done'))")" = 3
 check "and at least two of the three implementations" test "$(report first "sum(1 for b in d['wait']['board'] if b.startswith('Add ') and b.endswith('=done'))")" -ge 2
 echo "     board: $(report first "' '.join(d['wait']['board'])")"
+# Issue #701: the mode is the daemon's replies to the sprint's test runs, never
+# --sandbox; in the container job the harness runs with --container-mode.
+check "the sprint's tests ran where the daemon reported ($SANDBOX), read from its replies, not the harness's setting" test "$(report first "d['sandbox']['observed'], d['sandbox']['observed_by'], d['sandbox']['container_mode']")" = "$SANDBOX daemon $([ "$SANDBOX" = container ] && echo True || echo False)"
+echo "     sandbox: $(report first "d['sandbox']['modes'], d['sandbox']['images']")"
 # What the retrospective (docs/retrospectives/2026-11-self-hosting.md) reads:
 # an implementation task's branch holds only its own dependencies' acceptance
 # tests, so the Verifier takes the others as edited and restores them there.
