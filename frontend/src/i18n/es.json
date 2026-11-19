@@ -3819,6 +3819,24 @@
     },
     "counts": "+{{additions}} −{{deletions}}"
   },
+  "integrationActions": {
+    "integrate": "Integrar ahora",
+    "integrateAgain": "Integrar de nuevo",
+    "publish": "Publicar como una solicitud",
+    "publishAgain": "Publicar de nuevo",
+    "merge": "Fusionar localmente",
+    "confirmLabel": "Confirmar la fusión local",
+    "confirmMerge": "¿Fusionar la integración en {{base}} en la computadora del proyecto? No se envía nada.",
+    "mergeConfirm": "Sí, fusionar",
+    "forgeHolds": "La publicación está desactivada: la política de forja de la empresa es “{{policy}}”. Un propietario la cambia en Funciones y accesos.",
+    "reviewHolds": "La empresa exige la revisión aprobatoria de una persona antes de fusionar esta integración.",
+    "hint": "Integrar fusiona en orden las ramas de las tareas terminadas en {{branch}} y ejecuta la batería de pruebas sobre el resultado. Quien inició el sprint no puede fusionarlo.",
+    "integrated": "Integrado. El plan de abajo muestra el resultado.",
+    "published": "Publicado por {{name}} en {{commit}} sobre {{base}}.",
+    "openRequest": "Abrir la solicitud",
+    "newTab": "(se abre en una pestaña nueva)",
+    "merged": "Fusionado localmente por {{name}}, {{when}}."
+  },
   "promptWeight": {
     "none": "No hay medida del prompt registrada para estas corridas.",
     "summary": "{{calls}} prompts · {{tokens}} tokens estimados, más {{system}} en el prompt de sistema",

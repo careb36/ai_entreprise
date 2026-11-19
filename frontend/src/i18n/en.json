@@ -3819,6 +3819,24 @@
     },
     "counts": "+{{additions}} −{{deletions}}"
   },
+  "integrationActions": {
+    "integrate": "Integrate now",
+    "integrateAgain": "Integrate again",
+    "publish": "Publish as one request",
+    "publishAgain": "Publish again",
+    "merge": "Merge locally",
+    "confirmLabel": "Confirm the local merge",
+    "confirmMerge": "Merge the integration into {{base}} on the project's computer? Nothing is pushed.",
+    "mergeConfirm": "Yes, merge",
+    "forgeHolds": "Publishing is off: the company's forge policy is “{{policy}}”. An owner changes it on Duties and access.",
+    "reviewHolds": "The company requires a person's approving review of this integration before it is merged.",
+    "hint": "Integrating merges the done task branches into {{branch}} in order and runs the suite on the result. The person who started the sprint cannot merge it.",
+    "integrated": "Integrated. The plan below shows the result.",
+    "published": "Published by {{name}} at {{commit}} onto {{base}}.",
+    "openRequest": "Open the request",
+    "newTab": "(opens in a new tab)",
+    "merged": "Merged locally by {{name}}, {{when}}."
+  },
   "promptWeight": {
     "none": "No prompt measure recorded for these runs.",
     "summary": "{{calls}} prompts · {{tokens}} estimated tokens, plus {{system}} in the system prompt",
