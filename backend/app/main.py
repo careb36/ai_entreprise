@@ -149,6 +149,10 @@ app.add_middleware(
         "X-Log-Sha256-Observed",
         "X-Log-Size",
         "X-Log-Observed-By",
+        "X-Log-Verified",
+        "X-Log-Unverified-Reason",
+        "Content-Range",
+        "Accept-Ranges",
     ],
 )
 

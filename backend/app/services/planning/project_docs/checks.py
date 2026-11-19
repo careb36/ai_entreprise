@@ -32,7 +32,9 @@ from services.planning.project_docs import (
     closure,
     iterations,
     performance,
+    plan_checks,
     specs,
+    stakeholder_docs,
     statements,
     texts,
     wstg_status,
@@ -446,6 +448,8 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("covered", requirements_covered),
         ("first_pass", first_pass),
         ("delivered", requirements_delivered),
+        ("verified", plan_checks.verified),
+        ("quality_targets", plan_checks.quality_targets),
     ],
     "Schedule": [
         ("schedule", schedule_documented),
@@ -453,7 +457,12 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("released", iterations_released),
     ],
     "Finance": [("budget", _person), ("spend", spend_known)],
-    "Stakeholders": [("people", people_recorded), ("external", _person)],
+    "Stakeholders": [
+        ("people", people_recorded),
+        ("external", _person),
+        ("channels", plan_checks.channels),
+        ("approvals", stakeholder_docs.approvals_check),
+    ],
     "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
     "Risk": [
         ("risk", risk_on_every_delivery),
@@ -462,6 +471,8 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
     ],
 }
 CHECK_INPUTS = (
+    *plan_checks.INPUTS,
+    stakeholder_docs.KEY,
     "stack",
     "wstg_observations",
     "wstg_reviews",

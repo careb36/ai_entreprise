@@ -1,0 +1,47 @@
+{
+  "description": "The parse of the files whose sha256 the backend does not hold: the one it holds is left out, a known file that is gone is removed.",
+  "subject": "workspace.graph",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "known": {
+      "src/greeting.py": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2",
+      "src/gone.py": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "reply": {
+    "files": [
+      {
+        "path": "src/main.py",
+        "sha256": "685bd27aedad0bf0bb34d4fc6cb1f5a3fdeaf3eed37a9d32ef12e64878244989",
+        "status": "parsed",
+        "defs": [
+          [
+            "main",
+            4,
+            0
+          ]
+        ],
+        "refs": [
+          [
+            "greet",
+            2
+          ]
+        ],
+        "truncated": false
+      }
+    ],
+    "unchanged": 1,
+    "removed": [
+      "src/gone.py"
+    ],
+    "more": false,
+    "partial": false
+  }
+}
