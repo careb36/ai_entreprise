@@ -52,6 +52,17 @@ def _cells(dimension: str, row: dict[str, Any]) -> list[Any]:
     ]
 
 
+def _teams_line(history: dict[str, Any]) -> str:
+    # Which part of the range keeps today's teams (issue #702).
+    cover = history.get("current_teams_cover")
+    if not cover:
+        return "teams: each person's teams at the time of the work"
+    return (
+        f"teams: today's teams for work from {cover['since']} to before "
+        f"{cover['before']}; the teams at the time of the work after it"
+    )
+
+
 def render(report: dict[str, Any], company_name: str | None = None) -> str:
     """The CSV document for *report*."""
     out = io.StringIO()
@@ -68,6 +79,7 @@ def render(report: dict[str, Any], company_name: str | None = None) -> str:
         ),
         f"generated: {report['generated_at']}",
         "cost_usd: the priced turns only; cost_unknown_turns are not in it",
+        _teams_line(report.get("team_history") or {}),
     ):
         writer.writerow([safe_text("# " + line)])
     writer.writerow(HEADER)

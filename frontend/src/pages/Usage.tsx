@@ -15,6 +15,7 @@ import {
 import { formatCostCents, formatTokens } from '../services/cost'
 import { useAppStore } from '../store/useAppStore'
 import { CountPill, EmptyState, PageHeader, Panel, Toolbar } from '../components/ui'
+import { UsageTeamHistory } from '../components/UsageTeamHistory'
 
 const PERIODS: UsagePeriod[] = ['day', 'week', 'month']
 
@@ -110,6 +111,7 @@ export default function Usage() {
               <p className="text-meta">
                 {t('usage.generated', { at: usage.data.generated_at })} {t('usage.costNote')}
               </p>
+              <UsageTeamHistory history={usage.data.team_history} />
             </>
           ) : null}
         </>

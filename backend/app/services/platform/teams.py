@@ -18,13 +18,31 @@ project teams (Apache-2.0, design only: ``docs/design/project-teams.md``, a
 team is a named group of members of the same tenant, managed by its admins,
 and a member must already belong before joining), with a role scope where Flow
 has a run-owner pick.
+
+**Membership history** (issue #702): every change to a membership also
+writes ``team_membership_periods``: ``open_membership`` when a member joins,
+``close_memberships`` when they leave the team, the team is deleted or they
+leave the company (``drop_memberships``). The backend writes it at the moment
+of the change, with who made it; a closed period is never edited and none is
+deleted (``HistoryRefused``, raised before the database is touched), so a
+person who joins again gets a new period. The usage report reads it to give
+each piece of work the teams of its time (``membership_periods``,
+``history_started_at``).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
 
-from models import CompanyMember, Team, TeamMember
+from models import (
+    CompanyMember,
+    Team,
+    TeamHistoryStart,
+    TeamMember,
+    TeamMembershipPeriod,
+)
+from sqlalchemy import event
 from sqlmodel import Session, select
 
 ROLE_RANK = {"Viewer": 1, "Manager": 2, "Owner": 3}
@@ -67,12 +85,16 @@ def team_roles(session: Session, company_id: int, user_id: int) -> list[str]:
     return sorted(str(r) for r in rows)
 
 
-def drop_memberships(session: Session, company_id: int, user_id: int) -> int:
+def drop_memberships(
+    session: Session, company_id: int, user_id: int, by: str | None = None
+) -> int:
     """Remove *user_id* from every team of *company_id*; the number removed.
 
     Called when a person leaves the company, so team rows never outlive the
-    membership: invited again later, they start with no team.
+    membership: invited again later, they start with no team. Their open
+    periods are closed, by *by*.
     """
+    close_memberships(session, company_id, user_id=user_id, by=by)
     rows = session.exec(
         select(TeamMember).where(
             TeamMember.company_id == company_id, TeamMember.user_id == user_id
@@ -137,6 +159,122 @@ def teams_of(session: Session, company_id: int) -> dict[int, list[int]]:
     ).all():
         out.setdefault(user_id, []).append(team_id)
     return out
+
+
+class HistoryRefused(RuntimeError):
+    """A write that would edit a closed period, rewrite one, or delete one."""
+
+
+def _now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def open_membership(
+    session: Session,
+    team: Team,
+    user_id: int,
+    by: str | None,
+    at: datetime | None = None,
+) -> TeamMembershipPeriod:
+    """Open *user_id*'s period in *team* at *at* (now), written by *by*."""
+    period = TeamMembershipPeriod(
+        company_id=team.company_id,
+        team_id=team.id,
+        team_name=team.name,
+        user_id=user_id,
+        started_at=at or _now(),
+        started_by=by,
+    )
+    session.add(period)
+    return period
+
+
+def close_memberships(
+    session: Session,
+    company_id: int,
+    *,
+    by: str | None,
+    team_id: int | None = None,
+    user_id: int | None = None,
+    at: datetime | None = None,
+) -> int:
+    """Close the open periods of *company_id* (of *team_id*, of *user_id*, or
+    both) at *at* (now); the number closed. A closed one is left as it is."""
+    query = select(TeamMembershipPeriod).where(
+        TeamMembershipPeriod.company_id == company_id,
+        TeamMembershipPeriod.ended_at.is_(None),
+    )
+    if team_id is not None:
+        query = query.where(TeamMembershipPeriod.team_id == team_id)
+    if user_id is not None:
+        query = query.where(TeamMembershipPeriod.user_id == user_id)
+    rows = session.exec(query).all()
+    moment = at or _now()
+    for period in rows:
+        period.ended_at = max(moment, period.started_at)
+        period.ended_by = by
+        session.add(period)
+    return len(rows)
+
+
+def history_started_at(session: Session) -> datetime | None:
+    """When the membership history started (migration 0052); ``None``: never."""
+    return session.exec(
+        select(TeamHistoryStart.started_at).order_by(TeamHistoryStart.started_at)
+    ).first()
+
+
+def membership_periods(
+    session: Session, company_id: int, user_ids: Iterable[int]
+) -> list[TeamMembershipPeriod]:
+    """The periods of *user_ids* in *company_id*, oldest first."""
+    ids = sorted(set(user_ids))
+    if not ids:
+        return []
+    return list(
+        session.exec(
+            select(TeamMembershipPeriod)
+            .where(
+                TeamMembershipPeriod.company_id == company_id,
+                TeamMembershipPeriod.user_id.in_(ids),
+            )
+            .order_by(TeamMembershipPeriod.started_at, TeamMembershipPeriod.id)
+        ).all()
+    )
+
+
+_FIXED_FIELDS = (
+    "company_id",
+    "team_id",
+    "team_name",
+    "user_id",
+    "started_at",
+    "started_by",
+)
+
+
+@event.listens_for(TeamMembershipPeriod, "before_update")
+def _refuse_edits(_mapper, connection, period: TeamMembershipPeriod) -> None:
+    """Only an open period's end is written, once; read back from the
+    database, not from the session, so an expired attribute hides nothing."""
+    table = TeamMembershipPeriod.__table__
+    stored = (
+        connection.execute(table.select().where(table.c.id == period.id))
+        .mappings()
+        .first()
+    )
+    if stored is None:
+        return
+    if stored["ended_at"] is not None:
+        raise HistoryRefused("a closed membership period is never edited")
+    for field in _FIXED_FIELDS:
+        if getattr(period, field) != stored[field]:
+            raise HistoryRefused(f"a membership period's {field} is never rewritten")
+
+
+@event.listens_for(TeamMembershipPeriod, "before_delete")
+def _refuse_deletes(_mapper, _connection, _period: TeamMembershipPeriod) -> None:
+    raise HistoryRefused("a membership period is never deleted")
 
 
 class TeamRefused(ValueError):
