@@ -29,6 +29,7 @@ from fastapi import HTTPException, Request
 from models import Company
 from sqlmodel import Session
 
+from services.platform import forge_policy_setting
 from services.release.integration import _project_path
 from services.workspace import git_workflow
 from services.workspace.workspace_daemon import (
@@ -90,6 +91,8 @@ async def base_status(request: Request, session: Session, company: Company) -> d
             {
                 "workspace_root": path,
                 "base": company.git_base_branch or "",
+                # The daemon fetches the base only when the policy allows it.
+                "forge_policy": forge_policy_setting.effective(session, company.id),
             },
             BASE_STATUS_TIMEOUT_SECONDS,
         )

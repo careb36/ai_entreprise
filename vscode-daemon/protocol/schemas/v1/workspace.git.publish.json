@@ -32,6 +32,15 @@
         },
         "require_current_base": {
           "type": "boolean"
+        },
+        "forge_policy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fetch",
+            "publish"
+          ],
+          "description": "The company's forge policy (issue #727, PROTOCOL.md section 5.3). Missing or unknown reads as none; capped by the daemon's FORGE_POLICY_MAX."
         }
       },
       "required": [
@@ -63,6 +72,10 @@
             },
             "message": {
               "type": "string"
+            },
+            "code": {
+              "type": "string",
+              "description": "forge_disabled: the forge policy does not allow this request."
             }
           },
           "required": [

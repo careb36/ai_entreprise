@@ -36,6 +36,7 @@ from models.review import RunPublication
 from sqlmodel import Session
 
 from services.evidence.review_changes import run_changes
+from services.platform import forge_policy_setting
 from services.platform.agent_service import AgentService
 from services.release import integration_review, protected_merge, self_change
 from services.release.git_publish import PublishRefused
@@ -72,13 +73,18 @@ def run_merge_spec(
     commit = git.get("commit") or git.get("parent")
     if not commit:
         raise PublishRefused(409, "This run's delivery names no commit to merge")
-    return {
-        "workspace_root": git["repository"],
-        "branch": git["branch"],
-        "commit": commit,
-        "base": _base(session, run.company_id, git.get("base")),
-        "message": f"Merge {git['branch']}\n\nFabrique-Run: {run.id}\n",
-    }
+    # Local: nothing is pushed; the policy goes with every git request (#727).
+    return forge_policy_setting.stamp(
+        session,
+        run.company_id,
+        {
+            "workspace_root": git["repository"],
+            "branch": git["branch"],
+            "commit": commit,
+            "base": _base(session, run.company_id, git.get("base")),
+            "message": f"Merge {git['branch']}\n\nFabrique-Run: {run.id}\n",
+        },
+    )
 
 
 def needs_diff(session: Session, row: SprintIntegration) -> bool:
@@ -139,16 +145,20 @@ def integration_merge_spec(
         integration_review.require_approval(session, row)
     except integration_review.IntegrationReviewRefused as refused:
         raise PublishRefused(refused.status, refused.detail) from refused
-    return {
-        "workspace_root": row.repository,
-        "branch": row.branch,
-        "commit": row.commit,
-        "base": _base(session, row.company_id, row.base),
-        "message": (
-            f"Merge {row.branch}\n\nFabrique-Sprint: {row.sprint_id}\n"
-            f"Fabrique-Integration: {row.id}\n"
-        ),
-    }
+    return forge_policy_setting.stamp(
+        session,
+        row.company_id,
+        {
+            "workspace_root": row.repository,
+            "branch": row.branch,
+            "commit": row.commit,
+            "base": _base(session, row.company_id, row.base),
+            "message": (
+                f"Merge {row.branch}\n\nFabrique-Sprint: {row.sprint_id}\n"
+                f"Fabrique-Integration: {row.id}\n"
+            ),
+        },
+    )
 
 
 def _observed(reply: dict[str, Any]) -> dict[str, Any]:

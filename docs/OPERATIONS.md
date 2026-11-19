@@ -940,6 +940,32 @@ admin bypass, deliberately, or approved by another owner. The pull request
 that adds the check fails it by design (the base has no copy of the script
 yet, and the head's is never run).
 
+## Forge policy
+
+A company's git contacts an outside forge only as its forge policy allows
+(issue #727; `docs/contexts/release.md`, The forge policy): `none` (never),
+`fetch` (the base is fetched before a new branch) or `publish` (fetch, plus
+push and the request's comments). A company created after migration `0054`
+starts at `none`; every company that existed then was set to `publish`.
+
+- **Lower it** (a company whose code must not leave the computer that holds
+  it): an Owner picks *Local only* on the Models page, or
+  `PUT /v1/companies/{id}/forge_policy` with `{"forge_policy": "none"}`. The
+  change is audited as `forge_policy_changed` (`GET /v1/audit/verify` checks
+  the chain). Sprints keep integrating, testing and merging locally; publish
+  answers 409 `forge_disabled`.
+- **An air-gapped install** sets `FORGE_POLICY_MAX=none` on the backend and
+  on each daemon's computer. The backend then holds every company at `none`
+  whatever is stored (the Models page says so), refuses a wider value with
+  409, and the daemon refuses any remote operation even if a backend asks.
+- **Upgrade order.** The daemon reads a request without a policy as `none`:
+  a daemon newer than the backend fetches nothing and publishes nothing until
+  the backend is upgraded too. A daemon older than the backend ignores the
+  field and fetches as before (the backend still refuses publishing), so
+  upgrade the daemons to enforce the policy on their side.
+- **A publish answered `forge_disabled`** names the policy in force; raise it
+  only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
+
 ## Runner capacity
 
 The seven self-hosted runners (`lafabrique`) share one machine of about 4

@@ -70,5 +70,8 @@ class SprintIntegration(SQLModel, table=True):
     # already_merged, missing, refused, not_attempted, left_out (tasks not done).
     details: dict | None = Field(default=None, sa_column=Column(JSON))
     publication: dict | None = Field(default=None, sa_column=Column(JSON))
+    # The company's forge policy this integration ran under (issue #727,
+    # services/contracts/forge_policy.py); None for one recorded before 0054.
+    forge_policy: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")

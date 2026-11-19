@@ -260,6 +260,9 @@
     "GET /v1/companies/{company_id}/documentation/person-sections/{section}/history": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/forge_policy": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/git": {
       "access": "Viewer"
     },
@@ -978,6 +981,12 @@
     },
     "PUT /v1/companies/{company_id}/documentation/person-sections/{section}": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/forge_policy": {
+      "access": "Owner",
+      "body": {
+        "forge_policy": "none"
+      }
     },
     "PUT /v1/companies/{company_id}/git": {
       "access": "Manager"

@@ -21,6 +21,7 @@
         "audit_anchors",
         "egress",
         "engram_processor",
+        "forge_policy_setting",
         "glassroom",
         "hooks",
         "locks",
@@ -710,6 +711,9 @@
       ],
       "test_findings_retry.py": [
         "learning"
+      ],
+      "test_forge_policy.py": [
+        "release"
       ],
       "test_foundation_sprint.py": [
         "release"

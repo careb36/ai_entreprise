@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from config import settings
-from models import Company, SsoDomain, SsoIdentity, User
+from models import SsoDomain, SsoIdentity, User
 from services.platform import sso_domains
 from sqlmodel import select
 from sso_fake_dns import FakeDns
@@ -154,7 +154,7 @@ def test_the_login_page_finds_the_connection_that_may_use_the_domain(
 def test_the_migration_gives_existing_domains_a_legacy_record(tmp_path, monkeypatch):
     import migrations
     from sqlalchemy import text
-    from sqlmodel import Session, create_engine
+    from sqlmodel import create_engine
 
     from alembic import command
 
@@ -165,9 +165,14 @@ def test_the_migration_gives_existing_domains_a_legacy_record(tmp_path, monkeypa
     with engine.begin() as connection:
         config.attributes["connection"] = connection
         command.upgrade(config, "0048")
-    with Session(engine) as session:
-        session.add(Company(company_name="Acme", autonomy_level=2))
-        session.commit()
+    with engine.begin() as connection:
+        # In SQL: the model has columns later migrations add (0054).
+        connection.execute(
+            text(
+                "INSERT INTO companies (company_name, default_scope_size, "
+                "autonomy_level, git_workflow) VALUES ('Acme', 'M', 2, 1)"
+            )
+        )
     with engine.begin() as connection:
         connection.execute(
             text(

@@ -234,7 +234,7 @@ async def publish_run(
     except PublishRefused as refused:
         session.rollback()
         raise HTTPException(
-            status_code=refused.status, detail=refused.detail
+            status_code=refused.status, detail=refused.body
         ) from refused
     except DaemonUnavailable as exc:
         raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from exc
@@ -285,7 +285,7 @@ async def merge_run(
     except PublishRefused as refused:
         session.rollback()
         raise HTTPException(
-            status_code=refused.status, detail=refused.detail
+            status_code=refused.status, detail=refused.body
         ) from refused
     except DaemonUnavailable as exc:
         raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from exc

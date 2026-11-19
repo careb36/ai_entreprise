@@ -40,6 +40,7 @@ from routers.enterprise_agents import router as enterprise_agents_router
 from routers.enterprise_analytics import router as enterprise_analytics_router
 from routers.events import router as events_router
 from routers.findings import router as findings_router
+from routers.forge_policy import router as forge_policy_router
 from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
@@ -214,6 +215,7 @@ app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
 app.include_router(sod_router)
 app.include_router(protected_paths_router)
+app.include_router(forge_policy_router)
 app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)

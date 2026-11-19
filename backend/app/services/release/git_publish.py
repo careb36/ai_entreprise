@@ -13,6 +13,11 @@ commit, with a ``Fabrique-Run`` trailer that leads back to the run. The
 producer's own account (its summary, its declared files) is labelled as a
 claim, never mixed with what was observed. The daemon's answer is kept as a
 ``RunPublication`` and audited.
+
+Only a company whose forge policy is ``publish`` publishes
+(``services/platform/forge_policy_setting.py``, issue #727): with ``none`` or
+``fetch`` the request is refused here with 409 ``forge_disabled``, and the
+daemon refuses it too if asked directly.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from sqlmodel import Session, select
 from services.evidence.review_changes import run_changes
 from services.loop.run_review import task_of
 from services.planning.spec_planning import acceptance_summary
+from services.platform import forge_policy_setting
 from services.platform.agent_service import AgentService
 
 PUBLISH_HOW = ("gh", "glab", "compare")
@@ -35,10 +41,22 @@ MAX_TITLE_CHARS = 200
 
 
 class PublishRefused(Exception):
-    def __init__(self, status: int, detail: str):
+    """Why a branch is not published: ``detail`` in words, ``body`` the HTTP detail
+    (a ``forge_disabled`` refusal carries its code and the policy in force)."""
+
+    def __init__(self, status: int, detail: str, body: Any = None):
         super().__init__(detail)
         self.status = status
         self.detail = detail
+        self.body = body if body is not None else detail
+
+
+def require_forge(session: Session, company_id: int) -> str:
+    """The forge policy in force when it allows publishing (issue #727), else 409."""
+    try:
+        return forge_policy_setting.require_publish(session, company_id)
+    except forge_policy_setting.ForgePolicyRefused as refused:
+        raise PublishRefused(refused.status, str(refused), refused.detail) from refused
 
 
 def _cell(value: Any) -> str:
@@ -131,6 +149,7 @@ def request_body(session: Session, run: AgentRun, changes: dict[str, Any]) -> st
 
 def publish_spec(session: Session, run: AgentRun) -> dict[str, Any]:
     """The ``workspace.git.publish`` request for *run*, or why it cannot be published."""
+    policy = require_forge(session, run.company_id)
     changes = run_changes(session, run)
     git = changes.get("git") or {}
     if not git.get("branch") or not git.get("repository"):
@@ -151,6 +170,7 @@ def publish_spec(session: Session, run: AgentRun) -> dict[str, Any]:
         "base": "" if base == "HEAD" else base,
         "title": request_title(session, run),
         "body": request_body(session, run, changes),
+        "forge_policy": policy,
     }
 
 

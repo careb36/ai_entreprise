@@ -62,8 +62,18 @@ SUBJECTS = (
 )
 
 # The optional request fields added within protocol version 1 (PROTOCOL.md
-# §5.1, §5.1.1, §5.2), per subject: an older daemon ignores them silently.
+# §5.1, §5.1.1, §5.2, §5.3), per subject: an older daemon ignores them silently.
+_FORGE = ("forge_policy",)
 FEATURES = {
+    # The forge policy (§5.3, issue #727): enforced by this daemon.
+    "workspace.console.prepare": _FORGE,
+    "workspace.generate": _FORGE,
+    "workspace.git.base_status": _FORGE,
+    "workspace.git.diff": _FORGE,
+    "workspace.git.integrate": _FORGE,
+    "workspace.git.merge": _FORGE,
+    "workspace.git.publish": _FORGE,
+    "workspace.git.reviews": _FORGE,
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }

@@ -5,17 +5,15 @@ nobody joins them. A sprint is not delivered until its work is integrated
 and the whole suite passes on the integrated result.
 
 ``plan`` says which branches, in which order (dependencies first).
-``integrate`` carries it out when a sprint closes, or when a Manager asks:
-the workspace daemon merges the done tasks' branches into
-``fabrique/sprint-<id>`` with real git (``vscode-daemon/sprint_integration.py``,
-``workspace.git.integrate``), and, with ``DELIVERY_TESTS_ENABLED``, runs the
-project's test command, every folder's suite and the every-delivery commands
-on the integrated worktree as a delivery's tests run them
-(``delivery_checks.run_delivery_tests``); the backend never shells out. What the daemon answered is kept as a
-``SprintIntegration``: the merges, the conflict (files and hunks) at the
-first merge git could not make, and the test run. A conflict or a failing
-suite waits for a person (``GET /v1/inbox``, ``integrations``). The branch is
-published as one request for the sprint by ``services/release/integration_publish.py``.
+``integrate`` carries it out when a sprint closes, or when a Manager asks: the
+workspace daemon merges the done tasks' branches into ``fabrique/sprint-<id>``
+with real git (``vscode-daemon/sprint_integration.py``, ``workspace.git.integrate``,
+under the company's forge policy, recorded on the row), and, with
+``DELIVERY_TESTS_ENABLED``, runs the project's tests on the integrated worktree
+as a delivery's run (``delivery_checks.run_delivery_tests``); the backend never
+shells out. The answer is kept as a ``SprintIntegration`` (the merges, the first
+conflict's files and hunks, the test run); a conflict or a failing suite waits
+for a person (``GET /v1/inbox``); ``integration_publish.py`` publishes it.
 """
 
 from __future__ import annotations
@@ -37,7 +35,7 @@ from sqlmodel import Session, create_engine, select
 from services.evidence import command_runs
 from services.loop import delivery_checks
 from services.planning.spec_planning import acceptance_summaries
-from services.platform import locks
+from services.platform import forge_policy_setting, locks
 from services.platform.agent_service import AgentService
 from services.release import integration_events
 from services.workspace import workspace_daemon
@@ -269,6 +267,7 @@ def integration_spec(
         "base": company.git_base_branch or "",
         # Dependencies first: a task's branch already holds the ones it built on.
         "merge": [t["branch"] for t in done],
+        "forge_policy": forge_policy_setting.effective(session, company.id),
         # This attempt's own snapshot worktree on the daemon; a retry gets another.
         "attempt": secrets.token_hex(8),
     }
@@ -438,6 +437,7 @@ def record(
         "test_run": test_run,
         "tested_commit": (test_run or {}).get("commit"),
         "tasks": _task_states(context, reply, conflict),
+        "forge_policy": reply.get("forge_policy") or spec.get("forge_policy"),
         # Where the base stood against its remote (git_base): an observation.
         "details": details
         | {"left_out": context["left_out"]}
