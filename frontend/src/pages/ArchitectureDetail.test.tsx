@@ -168,7 +168,8 @@ describe('ArchitectureDetail', () => {
     renderAs('Manager', 22)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revise' }))
-    expect(await screen.findByText('v3')).toBeInTheDocument()
+    // A revision is two requests (POST, then GET of the new draft): give it more than the 1 s default on a loaded runner.
+    expect(await screen.findByText('v3', undefined, { timeout: 5000 })).toBeInTheDocument()
     expect(posted(fetch, '/v1/architectures/22/revise')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
   })
@@ -182,7 +183,8 @@ describe('ArchitectureDetail', () => {
     renderAs('Manager', 22)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revise' }))
-    expect(await screen.findByText('v3')).toBeInTheDocument()
+    // A revision is two requests (POST, then GET of the new draft): give it more than the 1 s default on a loaded runner.
+    expect(await screen.findByText('v3', undefined, { timeout: 5000 })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

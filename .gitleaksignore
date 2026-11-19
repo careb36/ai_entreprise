@@ -1,0 +1,35 @@
+# Findings of the full-history gitleaks scan (security-baseline.yml) that were
+# triaged as fixtures or examples, ignored by fingerprint (commit:file:rule:line).
+# A fingerprint names one finding in one commit, so it never hides a new one.
+# Every file below no longer holds the value at HEAD (rewritten, split or
+# deleted), so these entries only ever match the history. Triaged in issue
+# #522; register entry E-15 in SECURITY.md §17.1. Live exceptions, if any,
+# go in .gitleaks.toml as path + rule + exact value.
+
+# Fake AWS access key id (an alphabet run) and a stub RSA key ("abc" body) in
+# the workspace-tool tests that check a secret file is never opened.
+2572ebe42828ac2c85f3403a492923aa5c8066a3:la-fabrique/backend/tests/test_developer_tools.py:aws-access-token:834
+2572ebe42828ac2c85f3403a492923aa5c8066a3:la-fabrique/backend/tests/test_developer_tools.py:aws-access-token:839
+2572ebe42828ac2c85f3403a492923aa5c8066a3:la-fabrique/backend/tests/test_developer_tools.py:aws-access-token:844
+2572ebe42828ac2c85f3403a492923aa5c8066a3:la-fabrique/backend/tests/test_developer_tools.py:private-key:808
+aae68cc381ec712de76490035ae0da84db9762a0:backend/tests/test_developer_tools.py:aws-access-token:834
+aae68cc381ec712de76490035ae0da84db9762a0:backend/tests/test_developer_tools.py:aws-access-token:839
+aae68cc381ec712de76490035ae0da84db9762a0:backend/tests/test_developer_tools.py:aws-access-token:844
+aae68cc381ec712de76490035ae0da84db9762a0:backend/tests/test_developer_tools.py:private-key:808
+e6cef258531950e22aa935a4a40086fdab59a6e5:backend/tests/test_developer_tools_limits.py:aws-access-token:95
+e6cef258531950e22aa935a4a40086fdab59a6e5:backend/tests/test_developer_tools_limits.py:aws-access-token:100
+e6cef258531950e22aa935a4a40086fdab59a6e5:backend/tests/test_developer_tools_limits.py:aws-access-token:105
+e6cef258531950e22aa935a4a40086fdab59a6e5:backend/tests/test_developer_tools_limits.py:private-key:69
+
+# Fake OpenAI-style key (an alphabet run) in the agent-tool tests.
+cf3059b9d01c7e64b3d4a3b0d1cb42c2f5fbc066:backend/tests/test_agent_tools.py:generic-api-key:784
+b29ae361766ff55dd9c70b90ef385fef8d5c4f5f:backend/tests/test_agent_tools_delivery.py:generic-api-key:259
+
+# A placeholder voice key ("demo") in a curl example of AGENTS.md.
+3a7139dafc9fad61e32bb11547b38dc59203de8b:AGENTS.md:curl-auth-header:231
+
+# False positives: CVE identifiers in the pytm threat model (since deleted).
+2f58791c314cd6f1046e91989b41495cb47c5fa0:docs/threat_model.json:generic-api-key:1496
+2f58791c314cd6f1046e91989b41495cb47c5fa0:docs/threat_model.json:generic-api-key:1511
+ddaa3561d01c12ad202925aa8a1093b41ba4c7c1:la-fabrique/docs/threat_model.json:generic-api-key:1496
+ddaa3561d01c12ad202925aa8a1093b41ba4c7c1:la-fabrique/docs/threat_model.json:generic-api-key:1511
