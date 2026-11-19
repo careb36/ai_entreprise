@@ -19,6 +19,15 @@ again for the run log view (``routers/run_logs.py``):
   (``LogUnavailable``): unknown is not absent (rule 7 of
   ``docs/POSITIONING.md``).
 
+- ``parse_range`` and ``read_range`` serve one byte range (``Range: bytes=a-b``
+  or ``?offset=&limit=``). JetStream's object store has no byte-range read, so
+  the object's chunks are listed headers only (an ordered consumer with
+  ``headers_only``, which carries each chunk's size and stream sequence) and
+  only the chunks the range overlaps are fetched by sequence, into a spool of
+  the range's size: neither memory nor transfer follows the log's length. A
+  piece is never hashed against the record: it is ``unverified`` with the
+  reason ``partial``, and only the full read can be ``matched``.
+
 No hash is taken from the daemon, the client or the object store's metadata
 (rule 6): the recorded sha256 is the one the backend computed when it first
 read the object, and the observed one is computed here. Only the backend's own
@@ -55,6 +64,11 @@ MATCHED = "matched"
 MISMATCHED = "mismatched"
 MISSING = "missing"
 UNAVAILABLE = "unavailable"
+# A piece of a log: it cannot be checked against the whole log's sha256.
+UNVERIFIED = "unverified"
+PARTIAL = "partial"
+
+_RANGE = re.compile(r"^bytes=(\d{0,18})-(\d{0,18})$")
 
 
 class LogMissing(Exception):
@@ -63,6 +77,15 @@ class LogMissing(Exception):
 
 class LogUnavailable(Exception):
     """The object could not be read: no store, an error, a timeout or its size."""
+
+
+class LogChanged(Exception):
+    """The store holds a size other than the recorded one: a range of it
+    would not be a range of the log that was recorded."""
+
+
+class RangeNotSatisfiable(Exception):
+    """The range starts at or past the end of the log (HTTP 416)."""
 
 
 @dataclass
@@ -75,12 +98,29 @@ class ReadLog:
 
     def chunks(self) -> Iterator[bytes]:
         """The spooled bytes from the start, in chunks; closes the spool."""
-        try:
-            self.spool.seek(0)
-            while chunk := self.spool.read(CHUNK_BYTES):
-                yield chunk
-        finally:
-            self.spool.close()
+        return _drain(self.spool)
+
+
+@dataclass
+class ReadPiece:
+    """Bytes ``start``..``end`` (inclusive) of a log of ``total`` bytes, spooled."""
+
+    spool: IO[bytes]
+    start: int
+    end: int
+    total: int
+
+    def chunks(self) -> Iterator[bytes]:
+        return _drain(self.spool)
+
+
+def _drain(spool: IO[bytes]) -> Iterator[bytes]:
+    try:
+        spool.seek(0)
+        while chunk := spool.read(CHUNK_BYTES):
+            yield chunk
+    finally:
+        spool.close()
 
 
 class _HashingSpool:
@@ -195,6 +235,40 @@ def integrity(recorded_sha256: str, observed_sha256: str) -> str:
     return MATCHED if recorded_sha256 == observed_sha256 else MISMATCHED
 
 
+def parse_range(
+    header: str | None, offset: int | None, limit: int | None, total: int
+) -> tuple[int, int] | None:
+    """The inclusive ``(start, end)`` asked for, or ``None`` for the whole log.
+
+    ``offset``/``limit`` (the frontend's form) or one ``Range: bytes=a-b``,
+    ``bytes=a-`` or ``bytes=-n`` against the recorded size *total*. A header
+    that is not one byte range is ignored (RFC 9110 §14.2), so the answer is
+    the full read; a range that covers the whole log is the full read too, so
+    it is verified. ``RangeNotSatisfiable`` when it starts at or past the end."""
+    if offset is not None or limit is not None:
+        start = offset or 0
+        end = total - 1 if limit is None else min(start + limit, total) - 1
+    else:
+        match = _RANGE.match((header or "").strip())
+        if not match or not (match[1] or match[2]):
+            return None
+        if not match[1]:
+            suffix = int(match[2])
+            if suffix == 0:
+                raise RangeNotSatisfiable("an empty suffix")
+            start, end = max(total - suffix, 0), total - 1
+        else:
+            start = int(match[1])
+            if match[2] and int(match[2]) < start:
+                return None  # not a valid range: ignored
+            end = min(int(match[2]), total - 1) if match[2] else total - 1
+    if start >= total:
+        raise RangeNotSatisfiable(f"the log has {total} bytes")
+    if start == 0 and end == total - 1:
+        return None
+    return start, end
+
+
 def _missing(exc: BaseException) -> bool:
     return type(exc).__name__ in _NOT_FOUND
 
@@ -205,15 +279,7 @@ async def read(nats_client: Any, name: str) -> ReadLog:
     Raises ``LogMissing`` when the store no longer holds it and
     ``LogUnavailable`` when it cannot be read (no store, an error, a timeout,
     over the cap)."""
-    if not _OBJECT_NAME.match(name or ""):
-        raise LogUnavailable("not an object name the backend asks for")
-    bucket = getattr(nats_client, "run_logs_bucket", None)
-    js = getattr(nats_client, "js", None)
-    if not isinstance(bucket, str) or js is None:
-        raise LogUnavailable(
-            "no object store for full logs (JetStream is not enabled, or the "
-            "bucket could not be created)"
-        )
+    js, bucket = _store_of(nats_client, name)
     cap = max(int(settings.DELIVERY_FULL_LOG_MAX_MB or 0), 1) * MIB
     try:
         return await asyncio.wait_for(_read(js, bucket, name, cap), READ_SECONDS)
@@ -225,6 +291,90 @@ async def read(nats_client: Any, name: str) -> ReadLog:
         if _missing(exc):
             raise LogMissing("the object store no longer holds it") from exc
         raise LogUnavailable(f"{type(exc).__name__}: {exc}"[:300]) from exc
+
+
+def _store_of(nats_client: Any, name: str) -> tuple[Any, str]:
+    if not _OBJECT_NAME.match(name or ""):
+        raise LogUnavailable("not an object name the backend asks for")
+    bucket = getattr(nats_client, "run_logs_bucket", None)
+    js = getattr(nats_client, "js", None)
+    if not isinstance(bucket, str) or js is None:
+        raise LogUnavailable(
+            "no object store for full logs (JetStream is not enabled, or the "
+            "bucket could not be created)"
+        )
+    return js, bucket
+
+
+async def read_range(
+    nats_client: Any, name: str, total: int, start: int, end: int
+) -> ReadPiece:
+    """Bytes *start*..*end* of *name*, whose recorded size is *total*.
+
+    Raises ``LogMissing``, ``LogUnavailable`` as ``read`` does, and
+    ``LogChanged`` when the store's size is not the recorded one."""
+    js, bucket = _store_of(nats_client, name)
+    try:
+        return await asyncio.wait_for(
+            _read_range(js, bucket, name, total, start, end), READ_SECONDS
+        )
+    except (LogMissing, LogUnavailable, LogChanged):
+        raise
+    except TimeoutError as exc:
+        raise LogUnavailable(f"reading it took over {READ_SECONDS:.0f} s") from exc
+    except Exception as exc:
+        if _missing(exc):
+            raise LogMissing("the object store no longer holds it") from exc
+        raise LogUnavailable(f"{type(exc).__name__}: {exc}"[:300]) from exc
+
+
+async def _read_range(
+    js: Any, bucket: str, name: str, total: int, start: int, end: int
+) -> ReadPiece:
+    store = await js.object_store(bucket)
+    info = await store.get_info(name)
+    if getattr(info, "deleted", False):
+        raise LogMissing("the object store no longer holds it")
+    if getattr(info, "size", None) != total:
+        raise LogChanged(
+            f"the store holds {getattr(info, 'size', None)} bytes, the record "
+            f"{total}; read the whole log to check it"
+        )
+    nuid = getattr(info, "nuid", None)
+    if not isinstance(nuid, str) or not re.fullmatch(r"[A-Za-z0-9]{1,64}", nuid):
+        raise LogUnavailable("the object has no chunk subject")
+    # Listing the chunks: headers only, so no chunk's bytes travel here.
+    sub = await js.subscribe(
+        f"$O.{bucket}.C.{nuid}", ordered_consumer=True, headers_only=True
+    )
+    # Outlives this call: ReadPiece.chunks closes it once served.
+    spool = tempfile.SpooledTemporaryFile(max_size=SPOOL_MEMORY_BYTES)  # noqa: SIM115
+    try:
+        at = 0
+        async for msg in sub.messages:
+            size = int((msg.headers or {}).get("Nats-Msg-Size", -1))
+            if size < 0:
+                raise LogUnavailable("a chunk was listed without its size")
+            if at + size > start and at <= end:
+                seq = msg.metadata.sequence.stream
+                raw = await js.get_msg(f"OBJ_{bucket}", seq=seq)
+                data = raw.data or b""
+                if len(data) != size:
+                    raise LogUnavailable(
+                        f"chunk {seq} has {len(data)} bytes, listed as {size}"
+                    )
+                spool.write(data[max(start - at, 0) : end - at + 1])
+            at += size
+            if at > end or msg.metadata.num_pending == 0:
+                break
+        if spool.tell() != end - start + 1:
+            raise LogUnavailable("the object ended before the range")
+    except BaseException:
+        spool.close()
+        raise
+    finally:
+        await sub.unsubscribe()
+    return ReadPiece(spool=spool, start=start, end=end, total=total)
 
 
 async def _read(js: Any, bucket: str, name: str, cap: int) -> ReadLog:

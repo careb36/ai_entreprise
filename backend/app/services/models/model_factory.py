@@ -1,23 +1,23 @@
 """
 LLM Model Factory — multi-model LLM configuration and routing.
 
-Maps each AI agent role to a specific Gemini or DeepSeek model configuration,
-caches instantiated ``ChatOpenAI`` objects to avoid recreating HTTP sessions,
-and exposes a convenience ``create_completion()`` function used by every
+Maps each AI agent role to a default model (``ROLE_MODEL_MAP``), caches
+instantiated ``ChatOpenAI`` objects to avoid recreating HTTP sessions, and
+exposes a convenience ``create_completion()`` function used by every
 LangGraph node.
 
-Model selection rationale:
-- **PO / Architect / SecOps**: Gemini 2.5 Pro — best at natural language,
-  architecture and security reasoning.
-- **Developer / QA**: DeepSeek Coder — lower latency and cost for code-heavy
-  tasks.
+The default team runs on Qwen Cloud and DeepSeek (``QWEN_API_KEY`` and
+``DEEPSEEK_API_KEY`` on the proxy); Gemini is optional:
+- **PO / Architect / ScrumMaster / SecOps / Designer**: the Qwen plan's
+  larger model, for specifications, architecture and security reasoning.
+- **Developer / QA / EngramProcessor**: DeepSeek, for code-heavy work and
+  low-temperature JSON extraction.
 - **BackendDeveloper / FrontendDeveloper / DevOps / DataEngineer**: as the
   Developer (and ``AGENT_MODEL_DEVELOPER`` when they have no setting of their own).
-- **Designer**: the deciding roles' model, for specifications and markup.
-- **TechWriter / fallback**: Gemini 2.5 Flash — fast and fluent for
-  documentation and general prompts.
-- **EngramProcessor**: DeepSeek Coder — deterministic (low temperature) for
-  structured JSON extraction from decision summaries.
+- **TechWriter**: the Qwen plan's fast model, for documentation.
+
+``model_for_role`` says which settings override these defaults
+(``AGENT_MODEL_<ROLE>``, ``NEMOTRON_ROLES``, ``AGENT_MODEL``).
 
 All requests are routed through the internal LLM proxy (``llm-proxy/app.py``)
 so API keys and token budgets are enforced centrally.

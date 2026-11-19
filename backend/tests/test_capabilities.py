@@ -126,3 +126,17 @@ def test_public_api_url_is_reported_without_trailing_slash(
     assert test_client.get("/v1/capabilities").json()["public_api_url"] == (
         "https://fabrique.example.com"
     )
+
+
+def test_compose_keeps_the_agent_graph_off_by_default():
+    """docker-compose.yml defaults AGENT_GRAPH_ENABLED to what config.py and
+    .env.example default it to: off (the graph is an optional producer)."""
+    from pathlib import Path
+
+    import config
+    import yaml
+
+    compose = Path(__file__).resolve().parents[2] / "docker-compose.yml"
+    env = yaml.safe_load(compose.read_text())["services"]["backend"]["environment"]
+    assert env["AGENT_GRAPH_ENABLED"] == "${AGENT_GRAPH_ENABLED:-false}"
+    assert config.Settings.model_fields["AGENT_GRAPH_ENABLED"].default is False

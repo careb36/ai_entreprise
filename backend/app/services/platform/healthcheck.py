@@ -102,6 +102,34 @@ async def probe_neo4j() -> dict[str, Any]:
     return await asyncio.to_thread(_sync_probe_neo4j)
 
 
+# The fields of the proxy's per-provider observation passed on as they are;
+# anything else the proxy might add is dropped, so nothing more leaves here.
+_PROVIDER_FIELDS = (
+    "status",
+    "observed_at",
+    "http_status",
+    "source",
+    "checked",
+    "detail",
+)
+
+
+def _provider_observations(raw: Any) -> dict[str, dict[str, Any]] | None:
+    """The proxy's ``providers`` block, read-only: what it last saw of each provider.
+
+    The proxy being up says nothing of whether a provider can serve (a key
+    without credit, a placeholder key); this is the proxy's observation, not
+    the backend's, and it does not change the component's status.
+    """
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, dict[str, Any]] = {}
+    for name, obs in raw.items():
+        if isinstance(obs, dict):
+            out[str(name)] = {k: obs[k] for k in _PROVIDER_FIELDS if k in obs}
+    return out
+
+
 async def probe_llm_proxy() -> dict[str, Any]:
     base_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100").rstrip("/")
     try:
@@ -114,9 +142,14 @@ async def probe_llm_proxy() -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             body = {}
         models = body.get("models")
+        extra: dict[str, Any] = {}
+        providers = _provider_observations(body.get("providers"))
+        if providers is not None:
+            extra["providers"] = providers
         return _ok(
             detail=body.get("status"),
             models_count=len(models) if isinstance(models, list) else None,
+            **extra,
         )
     except Exception as exc:  # noqa: BLE001
         return _down(f"{type(exc).__name__}: {exc}")
