@@ -27,6 +27,10 @@ import CompanyFindingDetail from '../pages/CompanyFindingDetail'
 import CompanyFindings from '../pages/CompanyFindings'
 import Usage from '../pages/Usage'
 import AuditAnchors from '../pages/AuditAnchors'
+import SecurityTests from '../pages/SecurityTests'
+import ExecutionSettings from '../pages/ExecutionSettings'
+import McpServers from '../pages/McpServers'
+import SelfImprovement from '../pages/SelfImprovement'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
 import HelpDesk from '../pages/HelpDesk'
@@ -89,6 +93,10 @@ export function AppRoutes() {
         <Route path="/company/chat" element={<ChatApprovals />} />
         <Route path="/company/teams" element={<CompanyTeams />} />
         <Route path="/company/duties" element={<CompanyDuties />} />
+        <Route path="/company/security-tests" element={<SecurityTests />} />
+        <Route path="/company/execution" element={<ExecutionSettings />} />
+        <Route path="/company/mcp" element={<McpServers />} />
+        <Route path="/company/self-improvement" element={<SelfImprovement />} />
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
         <Route path="/company/procedures" element={<Procedures />} />
