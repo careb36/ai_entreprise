@@ -21,6 +21,7 @@ from sqlmodel import Session
 from services.contracts.manifest import MANIFEST_BLOCK, parse_file_manifest
 from services.evidence import agent_run_service, delivery_gate, protected_check, risk
 from services.evidence.verification import verify_agent_run
+from services.models import edit_format
 from services.tools.workspace_edits import observe_tools
 
 logger = setup_logger("fabrique-task-worker")
@@ -113,6 +114,16 @@ def _record_task_run(
         if agent.get(key):
             evidence = evidence if isinstance(evidence, dict) else {}
             evidence[key] = agent[key]
+    # The edit format asked for and the one the backend read in the answer's
+    # blocks and tool calls (#689); never the model's account of it. Only a
+    # run of the task worker's own model call has a requested format.
+    if agent.get("edit_format"):
+        evidence = evidence if isinstance(evidence, dict) else {}
+        evidence["edit_format"] = edit_format.observe(
+            parse_file_manifest(deliverable),
+            agent.get("tool_calls"),
+            agent["edit_format"],
+        )
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)

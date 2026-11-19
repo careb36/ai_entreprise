@@ -433,6 +433,37 @@ ends nothing: their session lasts until it is refreshed past
 `REFRESH_TOKEN_ABSOLUTE_DAYS` or they are removed here (issue #524,
 `docs/design/SESSIONS.md`).
 
+### Groups mapped to teams
+
+On the SSO page an Owner can map the provider's groups to **SSO-managed**
+teams (issue #703, `docs/design/SSO_GROUP_MAPPING.md`). Each SSO sign-in then
+sets the person's membership in the mapped teams from the ID token's claim:
+an `sso_group_observations` row records what was seen (only the values that
+match a pair, their count and a hash), and an `sso_group_sync` audit row
+records every change. The mapping never reaches Owner; a pair to a Manager
+team needs the cap raised to Manager and a second Owner's approval.
+
+- **Nothing changes at sign-in.** Check the last observation's `state`:
+  `absent` (the provider sends no such claim: check the claim name and the
+  application's token configuration), `malformed` (not a list of strings, or
+  more than 1000 values), `overage` (below), or `skipped` reasons such as
+  `stale_token`, `excluded`, `role_above_cap`.
+- **Entra overage.** Past 200 groups Entra leaves `groups` out of the token
+  and names a Graph endpoint instead (`_claim_names`, `_claim_sources`). La
+  Fabrique never calls it, and changes nothing for that sign-in; the page
+  shows the last sign-in that hit it. Fix it in Entra: use **app roles** and
+  the `roles` claim (the recommended setting, which has no overage), or set
+  the application's group claim to **groups assigned to the application**.
+  Google's ID token carries no groups at all; its mapping waits for the
+  Directory sync (#716).
+- **Take someone out now.** The member routes refuse to remove a person the
+  provider placed in an SSO-managed team. Use the break-glass exclusion on
+  the team page (a reason is required); every other Owner is notified and it
+  is listed in each access review until an Owner lifts it.
+- **Revoked at the provider.** The mapping acts only at sign-in: a person
+  removed from a group keeps the team until they sign in again by SSO, an
+  Owner excludes them, removes the pair or removes them from the company.
+
 ### Break-glass: the provider is down or misconfigured
 
 While a company requires SSO, password sign-in is refused for its members.

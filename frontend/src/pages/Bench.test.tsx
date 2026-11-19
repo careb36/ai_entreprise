@@ -283,6 +283,57 @@ describe('Bench page', () => {
     expect(screen.queryByRole('region', { name: 'SWE-bench Lite' })).not.toBeInTheDocument()
   })
 
+  it('shows the edit format per model of a v7 card: unusable and unmeasured never as a pass or 0', async () => {
+    const seen = (observed: number, well_formed: number) => ({
+      deliveries: observed + 1, observed, missing: 1, well_formed, malformed_edit_blocks: 3 - well_formed,
+      off_format: 0, rejected_edits: 0,
+      well_formed_rate: observed
+        ? { measured: true, value: well_formed / observed }
+        : { measured: false, reason: 'no_delivery_observed' },
+    })
+    const row = (format: string, outcome: unknown, extra: Record<string, unknown> = {}) => ({
+      model: 'fake-model', format, outcome, reason: null,
+      criteria: { measured: true, value: { passed: 2, total: 2 } }, rework_requests: 0, ...seen(3, 3), ...extra,
+    })
+    const edit_formats = {
+      requested: 'whole',
+      deliveries: seen(3, 2),
+      rows: [
+        row('whole', { measured: true, value: 'pass' }),
+        row('search_replace', { measured: true, value: 'unusable' }, { reason: 'no delivery well formed', ...seen(3, 0) }),
+        row('auto', { measured: false, reason: 'format_unmeasured', detail: 'no delivery observed in any format' }, {
+          criteria: { measured: false, reason: 'format_unmeasured' }, ...seen(0, 0),
+        }),
+      ],
+    }
+    stubApi({ available: true, cards: [{ ...LATEST, schema_version: 7, humaneval: null, swebench: null, edit_formats }] })
+    renderPage()
+
+    const panel = await screen.findByRole('region', { name: 'Edit format per model' })
+    expect(within(panel).getByText('Format this run asked for: whole')).toBeInTheDocument()
+    expect(within(panel).getByText(/2 of 3 observed well formed/)).toBeInTheDocument()
+
+    const table = within(panel).getByRole('table', { name: 'Each model and edit format of the latest scorecard' })
+    const pass = within(table).getByRole('row', { name: /whole/ })
+    expect(within(pass).getByText('Pass')).toBeInTheDocument()
+    const unusable = within(table).getByRole('row', { name: /search_replace/ })
+    expect(within(unusable).getByText('Unusable')).toBeInTheDocument()
+    expect(within(unusable).queryByText('Pass')).not.toBeInTheDocument()
+    expect(within(unusable).getByText('no delivery well formed')).toBeInTheDocument()
+    const unmeasured = within(table).getByRole('row', { name: /auto/ })
+    expect(within(unmeasured).queryByText('Pass')).not.toBeInTheDocument()
+    expect(within(unmeasured).getAllByText('Not measured')).toHaveLength(3)
+    expect(within(unmeasured).getByText('no delivery observed in any format')).toBeInTheDocument()
+    expect(within(unmeasured).queryByText(/0%/)).not.toBeInTheDocument()
+  })
+
+  it('has no edit-format section on a card without the fields', async () => {
+    stubApi({ available: true, cards: [{ ...LATEST, edit_formats: null }] })
+    renderPage()
+    await screen.findByRole('region', { name: /Latest scorecard/ })
+    expect(screen.queryByRole('region', { name: 'Edit format per model' })).not.toBeInTheDocument()
+  })
+
   it('says when the backend finds no scorecards folder', async () => {
     stubApi({ available: false, cards: [] })
     renderPage()

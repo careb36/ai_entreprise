@@ -65,6 +65,7 @@
       ],
       "public": [
         "company_models",
+        "edit_format",
         "effort",
         "model_factory",
         "model_routing",
@@ -333,6 +334,7 @@
         "test_bench_broker.py",
         "test_bench_budget.py",
         "test_bench_compare.py",
+        "test_bench_edit_formats.py",
         "test_bench_graders.py",
         "test_bench_grading.py",
         "test_bench_prompt_weight.py",
@@ -484,6 +486,9 @@
       ],
       "test_bench_compare.py": [
         "planning"
+      ],
+      "test_bench_edit_formats.py": [
+        "repo"
       ],
       "test_bench_graders.py": [
         "planning",
@@ -691,6 +696,9 @@
       ],
       "test_edit_blocks.py": [
         "evidence",
+        "loop"
+      ],
+      "test_edit_format.py": [
         "loop"
       ],
       "test_edit_lint.py": [
@@ -1185,6 +1193,9 @@
       "test_scorecard_swebench.py": [
         "models"
       ],
+      "test_scorecard_edit_formats.py": [
+        "models"
+      ],
       "test_scrum_master.py": [
         "loop"
       ],
@@ -1293,6 +1304,18 @@
       ],
       "test_sso_flow.py": [
         "platform"
+      ],
+      "test_sso_groups.py": [
+        "platform"
+      ],
+      "test_sso_group_sign_in.py": [
+        "platform"
+      ],
+      "test_sso_group_admin.py": [
+        "platform"
+      ],
+      "test_sso_group_governance.py": [
+        "management"
       ],
       "test_sso_link.py": [
         "platform"

@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useAccessReview, useCompleteAccessReview } from '../hooks/useDuties'
 import { CalendarClock, Clock } from 'lucide-react'
-import { errorDetail, type AccessDecision, type AccessReviewListing } from '../services/api'
+import { errorDetail, type AccessDecision, type AccessReviewListing, type AccessReviewSso } from '../services/api'
 import { Panel, TABLE, TD, TH, TR } from './ui'
 
-type Key = `${'member' | 'token'}:${number}`
+type Key = `${AccessDecision['kind']}:${number}`
 const CHOICES: AccessDecision['decision'][] = ['confirm', 'remove']
 
 /**
  * The periodic access review (issue #543): every member with their own,
  * team-derived and effective role, links and last activity, and every working
- * API token, each confirmed or removed by the Owner. The schedule says when
- * the next one is due, and flags a missed one.
+ * API token, each confirmed or removed by the Owner, and what the SSO group
+ * mapping keeps outside the provider's say (issue #703): exclusions, manual
+ * exceptions and Manager pairs one Owner confirmed alone. The schedule says
+ * when the next one is due, and flags a missed one.
  */
 export default function AccessReviewPanel({ companyId }: { companyId: number | null }) {
   const { t } = useTranslation()
@@ -47,7 +50,7 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
   const complete = useCompleteAccessReview(companyId)
   const [decisions, setDecisions] = useState<Record<Key, AccessDecision['decision']>>({})
   const [note, setNote] = useState('')
-  const items = [...listing.members, ...listing.tokens]
+  const items = [...listing.members, ...listing.tokens, ...(listing.sso ?? [])]
   const decided = items.every(i => decisions[`${i.kind}:${i.id}`])
 
   function choose(key: Key, value: AccessDecision['decision']) {
@@ -82,7 +85,9 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
                     item.sso_linked ? t('duties.review.sso') : null,
                     ...item.chat_links.map(p => t('duties.review.chat', { provider: p })),
                   ].filter(Boolean).join(' · ')
-                : t('duties.review.token', { role: item.role, by: item.created_by ?? '—' })
+                : item.kind === 'token'
+                  ? t('duties.review.token', { role: item.role, by: item.created_by ?? '—' })
+                  : ssoAccess(t, item)
               return (
                 <tr key={key} className={`${TR} align-top`}>
                   <td className={TD}>
@@ -95,7 +100,8 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
                   </td>
                   <td className={`${TD} text-gray-300`}>{access}</td>
                   <td className={`${TD} tabular-nums text-gray-400`}>
-                    {item.last_activity ? new Date(item.last_activity).toLocaleDateString() : t('duties.review.never')}
+                    {!('last_activity' in item) ? '—'
+                      : item.last_activity ? new Date(item.last_activity).toLocaleDateString() : t('duties.review.never')}
                   </td>
                   <td className={TD}>
                     <fieldset aria-label={t('duties.review.decideFor', { name: item.label })} className="flex gap-3">
@@ -124,6 +130,17 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
       </div>
     </form>
   )
+}
+
+function ssoAccess(t: TFunction, item: AccessReviewSso) {
+  const team = item.team_name ?? `#${item.team_id}`
+  if (item.kind === 'exclusion') {
+    return t('duties.review.ssoExclusion', { team, reason: item.reason ?? '—', by: item.created_by ?? '—', days: item.age_days ?? 0 })
+  }
+  if (item.kind === 'manual_exception') {
+    return t('duties.review.ssoException', { team, by: item.created_by ?? '—', days: item.age_days ?? 0 })
+  }
+  return t('duties.review.ssoManagerPair', { value: item.group_value ?? item.label, team, by: item.decided_by ?? '—' })
 }
 
 function History({ history }: { history: AccessReviewListing['history'] }) {

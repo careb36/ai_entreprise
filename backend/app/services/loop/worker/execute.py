@@ -37,7 +37,7 @@ from services.loop.worker import (
     sprint_notes,
     wiki_section,
 )
-from services.models import model_routing
+from services.models import edit_format, model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -94,6 +94,7 @@ def _developer_prompt(
     budget: int | None = None,
     wiki_context: str | None = None,
     off: frozenset[str] = frozenset(),
+    output_format: str | None = None,
 ) -> tuple[str, list[str], dict[str, Any]]:
     """The task's user prompt, the pending rework feedback it carries, and its measure.
 
@@ -108,7 +109,11 @@ def _developer_prompt(
     # The priority is the order they are left out over budget (0: never).
     Section = prompt_budget.Section
     sections = [
-        Section("output_format", prompt.FILE_MANIFEST_INSTRUCTIONS.lstrip("\n")),
+        # The model's edit format (#689); the format before it by default.
+        Section(
+            "output_format",
+            (output_format or prompt.FILE_MANIFEST_INSTRUCTIONS).lstrip("\n"),
+        ),
         Section("standards_and_procedures", procedures_context or "", 2),
     ]
     if lessons_context:
@@ -244,8 +249,24 @@ def _execute_task(
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     client.company_id = company_id
 
+    # The model by difficulty (#319): the estimate and the routing are stored
+    # on the task and kept for the run's evidence; the served model stays apart.
+    decision = task_routing.route_task(
+        item,
+        agent,
+        company_id,
+        rework=bool(task_projection.record_from_dict(item).pending_rework_feedback()),
+        editor=bool(edit_plan.plan_in(architect_advice)),
+        engine=engine,
+    )
+    model = decision["model"]
+    agent["difficulty"], agent["routing"] = decision["difficulty"], decision["routing"]
+    role = agent.get("role", "Dev")
+    # The requested model's edit format (#689), kept for the run's evidence.
+    agent["edit_format"] = edit_format.format_for(model, settings.EDIT_FORMAT_BY_MODEL)
+
     system_prompt = _developer_system_prompt(agent)
-    user_prompt, rework_feedback, measure = _developer_prompt(
+    user_prompt, _rework_feedback, measure = _developer_prompt(
         item,
         agent,
         sprint_name,
@@ -260,6 +281,7 @@ def _execute_task(
         prompt_budget.budget_for(agent.get("role")),
         wiki_context,
         off=prompt_budget.sections_off(),
+        output_format=prompt.file_instructions(agent["edit_format"]["format"]),
     )
     # The backend's own measure of what it sent: an observation beside the run.
     measure["system_tokens"] = prompt_budget.estimate_tokens(system_prompt)
@@ -272,20 +294,6 @@ def _execute_task(
         "memory": bool(memory_context),
     }
     agent["prompt_sections"] = measure
-
-    # The model by difficulty (#319): the estimate and the routing are stored
-    # on the task and kept for the run's evidence; the served model stays apart.
-    decision = task_routing.route_task(
-        item,
-        agent,
-        company_id,
-        rework=bool(rework_feedback),
-        editor=bool(edit_plan.plan_in(architect_advice)),
-        engine=engine,
-    )
-    model = decision["model"]
-    agent["difficulty"], agent["routing"] = decision["difficulty"], decision["routing"]
-    role = agent.get("role", "Dev")
 
     who = agent.get("name") or role
     logger.info(

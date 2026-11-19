@@ -70,6 +70,11 @@ or the block alone with no previous card; shown, never judged.
 A card carrying SWE-bench Lite's block (schema v6, ``run.sh --swebench``,
 ``swebench.py``) adds the resolve rate and each instance's outcome, before →
 after, or the block alone with no previous card; shown, never judged.
+
+A card carrying the edit format per model (schema v7, ``edit_formats.sh``,
+``edit_format_card.py``) adds each model and format's outcome and criteria,
+before → after, or the table alone with no previous card; shown, never
+judged. The header names the format each run asked for (``edit_format``).
 """
 
 import argparse
@@ -81,6 +86,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ablation  # the sibling modules, by path
 import budget
+import edit_format_card
 import graders
 import humaneval_card
 import prompt_weight
@@ -337,6 +343,7 @@ def render(
             f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`; "
             f"graders {graders.label(previous)} → {graders.label(current)}."
             + _sections_off(previous, current)
+            + _edit_format(previous, current)
         ),
         "",
         *render_cut(previous, current, result),
@@ -359,6 +366,7 @@ def render(
     lines += ablation.render_lines(current, level="###")
     lines += humaneval_card.render_compare(previous, current)
     lines += swebench_card.render_compare(previous, current)
+    lines += edit_format_card.render_compare(previous, current)
     if result["new_specs"]:
         lines += [
             "",
@@ -387,6 +395,14 @@ def _sections_off(previous: dict[str, Any], current: dict[str, Any]) -> str:
         ", ".join(c.get("sections_off") or []) or "none" for c in (previous, current)
     ]
     return f" Prompt sections off: {off[0]} → {off[1]}."
+
+
+def _edit_format(previous: dict[str, Any], current: dict[str, Any]) -> str:
+    """The header's edit format, when either run asked for one (#689)."""
+    if "edit_format" not in previous and "edit_format" not in current:
+        return ""
+    fmt = [c.get("edit_format") or "auto (unset)" for c in (previous, current)]
+    return f" Edit format: {fmt[0]} → {fmt[1]}."
 
 
 def _load(path: Path) -> dict[str, Any] | None:
@@ -469,6 +485,8 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(humaneval_card.render_lines(current, level="###")))
         if current.get("swebench"):
             print("\n".join(swebench_card.render_lines(current, level="###")))
+        if current.get("edit_formats"):
+            print("\n".join(edit_format_card.render_lines(current, level="###")))
         return 0
     previous = _load(previous_path)
     if previous is None:

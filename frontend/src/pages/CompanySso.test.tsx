@@ -6,6 +6,13 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 
+/** Answers the group mapping's own request (issue #703) apart, so a test's
+ * sequence of answers is the SSO settings' alone. */
+function skippingGroups(inner: (url: string, init?: RequestInit) => unknown) {
+  return vi.fn(async (url: string, init?: RequestInit) =>
+    String(url).includes('/sso/group-mappings') ? response(404, { detail: 'no SSO connection' }) : inner(url, init))
+}
+
 function response(status: number, body: unknown = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
 }
@@ -68,11 +75,11 @@ describe('CompanySso', () => {
   })
 
   it('creates a connection with the fields entered and shows the redirect URI', async () => {
-    const fetch = vi.fn()
+    const inner = vi.fn()
       .mockResolvedValueOnce(response(200, settings(null)))
       .mockResolvedValueOnce(response(200, connection))
       .mockResolvedValue(response(200, settings(connection)))
-    vi.stubGlobal('fetch', fetch)
+    vi.stubGlobal('fetch', skippingGroups(inner))
     renderAs('Owner')
 
     expect(await screen.findByText('http://backend.test/v1/auth/sso/callback')).toBeInTheDocument()
@@ -85,7 +92,7 @@ describe('CompanySso', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Saved.')).toBeInTheDocument()
-    const [url, init] = fetch.mock.calls[1]
+    const [url, init] = inner.mock.calls[1]
     expect(new URL(url).pathname).toBe('/v1/companies/4/sso')
     expect(init.method).toBe('PUT')
     expect(JSON.parse(init.body)).toEqual({
@@ -104,7 +111,7 @@ describe('CompanySso', () => {
   })
 
   it('keeps the stored secret when the field is left empty, and runs the test', async () => {
-    const fetch = vi.fn()
+    const inner = vi.fn()
       .mockResolvedValueOnce(response(200, settings(connection)))
       .mockResolvedValueOnce(response(200, {
         ok: true, detail: 'discovery and JWKS fetched',
@@ -112,7 +119,7 @@ describe('CompanySso', () => {
         connection: { ...connection, test_ok: true },
       }))
       .mockResolvedValue(response(200, settings(connection)))
-    vi.stubGlobal('fetch', fetch)
+    vi.stubGlobal('fetch', skippingGroups(inner))
     renderAs('Owner')
 
     const secret = await screen.findByLabelText('Client secret')
@@ -121,7 +128,7 @@ describe('CompanySso', () => {
     expect(screen.getByText('Requiring SSO becomes possible once an owner has signed in through this connection.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
     expect(await screen.findByText('Issuer https://idp.example.com, 2 signing key(s).')).toBeInTheDocument()
-    expect(new URL(fetch.mock.calls[1][0]).pathname).toBe('/v1/companies/4/sso/test')
+    expect(new URL(inner.mock.calls[1][0]).pathname).toBe('/v1/companies/4/sso/test')
   })
 
   it('shows only the tenant for the Entra preset', async () => {
@@ -133,10 +140,10 @@ describe('CompanySso', () => {
   })
 
   it('explains a refusal from the backend', async () => {
-    const fetch = vi.fn()
+    const inner = vi.fn()
       .mockResolvedValueOnce(response(200, settings(connection)))
       .mockResolvedValueOnce(response(409, { detail: 'require_sso: sign in through it as an Owner first' }))
-    vi.stubGlobal('fetch', fetch)
+    vi.stubGlobal('fetch', skippingGroups(inner))
     renderAs('Owner')
     fireEvent.click(await screen.findByLabelText('Require SSO: turn off password sign-in for members'))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))

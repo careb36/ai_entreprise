@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type TeamInput, type UsageQuery } from '../services/api'
+import { api, type MembershipSourceChange, type TeamInput, type UsageQuery } from '../services/api'
 
 const teamsKey = (companyId: number | null) => ['teams', companyId] as const
 const usageKey = (companyId: number | null, query: UsageQuery) =>
@@ -20,6 +20,9 @@ type TeamChange =
   | { kind: 'delete'; teamId: number }
   | { kind: 'add'; teamId: number; userId: number }
   | { kind: 'remove'; teamId: number; userId: number }
+  | { kind: 'source'; teamId: number; data: MembershipSourceChange }
+  | { kind: 'exclude'; teamId: number; userId: number; reason: string }
+  | { kind: 'lift'; teamId: number; exclusionId: number; reason: string }
 
 /** One mutation for every team change; each refreshes the list. */
 export function useTeamChange(companyId: number | null) {
@@ -33,9 +36,19 @@ export function useTeamChange(companyId: number | null) {
         case 'delete': return api.deleteTeam(id, change.teamId)
         case 'add': return api.addTeamMember(id, change.teamId, change.userId)
         case 'remove': return api.removeTeamMember(id, change.teamId, change.userId)
+        case 'source': return api.updateTeam(id, change.teamId, change.data)
+        case 'exclude': return api.createExclusion(id, change.teamId, change.userId, change.reason)
+        case 'lift': return api.liftExclusion(id, change.teamId, change.exclusionId, change.reason)
       }
     },
     onSuccess: () => client.invalidateQueries({ queryKey: teamsKey(companyId) }),
+  })
+}
+
+/** Who converting a team to SSO would keep as manual exceptions (issue #703). */
+export function useMembershipSourcePreview(companyId: number | null) {
+  return useMutation({
+    mutationFn: (teamId: number) => api.previewMembershipSource(companyId as number, teamId),
   })
 }
 

@@ -6,6 +6,7 @@ import { useTeamChange, useTeams } from '../hooks/useTeams'
 import { errorDetail, type Team, type TeamCandidate, type TeamRole } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { AccessNotice, CountPill, EmptyState, FormActions, LoadError, LoadingRows, PageHeader, Panel, TABLE, TD, TH, TR } from '../components/ui'
+import { SsoMemberAction, TeamExclusions, TeamSourceSwitch } from '../components/TeamSsoControls'
 
 const ROLES: TeamRole[] = ['Viewer', 'Manager']
 
@@ -14,6 +15,8 @@ const ROLES: TeamRole[] = ['Viewer', 'Manager']
  * never Owner) applies to its members here, so access can be granted to a
  * team rather than person by person. A member's effective role is the higher
  * of their own and their teams'. Every change is audited by the backend.
+ * A team's members are added by hand, or come from the identity provider's
+ * groups (SSO-managed, issue #703).
  */
 export default function CompanyTeams() {
   const { t } = useTranslation()
@@ -99,13 +102,15 @@ function TeamCard({ team, members, change }: { team: Team; members: TeamCandidat
   const { t } = useTranslation()
   const [adding, setAdding] = useState('')
   const inTeam = members.filter(m => team.members.includes(m.user_id))
-  const outside = members.filter(m => !team.members.includes(m.user_id))
+  const sso = team.membership_source === 'sso'
+  const outside = sso ? [] : members.filter(m => !team.members.includes(m.user_id))
 
   return (
     <Panel
       title={team.name}
       count={<CountPill count={inTeam.length} label={t('teams.memberCount', { count: inTeam.length })} />}
       actions={<>
+        <TeamSourceSwitch team={team} change={change} />
         <label className="flex items-center gap-1.5 text-xs text-gray-400">
           {t('teams.role')}
           <select className="select control-sm w-auto pr-7" value={team.role}
@@ -127,14 +132,18 @@ function TeamCard({ team, members, change }: { team: Team; members: TeamCandidat
           {inTeam.map(m => (
             <li key={m.user_id} className="data-row flex items-center justify-between gap-2 py-1.5">
               <span className="text-[13px] text-gray-100">{m.full_name || m.email}</span>
-              <button type="button" className="btn-tool"
-                onClick={() => change.mutate({ kind: 'remove', teamId: team.id, userId: m.user_id })}>
-                <UserMinus size={13} aria-hidden="true" />{t('teams.remove')}
-              </button>
+              {sso ? <SsoMemberAction team={team} member={m} change={change} /> : (
+                <button type="button" className="btn-tool"
+                  onClick={() => change.mutate({ kind: 'remove', teamId: team.id, userId: m.user_id })}>
+                  <UserMinus size={13} aria-hidden="true" />{t('teams.remove')}
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {sso && <p className="border-t border-surface-700 px-3 py-2 text-xs text-gray-400">{t('teams.sso.membersFromIdp')}</p>}
+      <TeamExclusions team={team} members={members} change={change} />
       {outside.length > 0 && (
         <form className="flex items-end gap-2 border-t border-surface-700 p-3" onSubmit={e => {
           e.preventDefault()
