@@ -3,6 +3,29 @@
 # a real stack and record a scorecard graded by tests a person wrote.
 #
 #   scripts/bench/run.sh [--out DIR] [--graders SHA] [SPEC_DIR...]
+#   scripts/bench/run.sh --humaneval[=IDS] [--out DIR]
+#   BENCH_GRADE_IN_PROCESS=1 scripts/bench/run.sh --swebench[=IDS] [--out DIR]
+#
+# --humaneval runs HumanEval problems instead of the reference specifications
+# (scripts/bench/humaneval.py): the dataset downloaded from openai/human-eval
+# at a pinned commit and refused unless its sha256 is the pinned one, each
+# problem posted as a one-requirement specification starting from its prompt
+# (seed/solution.py), and graded with HumanEval's own tests in the same
+# sandbox, never shown to the factory. IDS: default (ten fixed problems; with
+# the fake, the ones it has answers for), all, or ids (0,2,HumanEval/7). The
+# card (in bench/scorecards/humaneval unless --out) carries the humaneval
+# block: pass@1, each problem's outcome, tokens. Never with SPEC_DIR or
+# --graders, and never part of the default run.
+#
+# --swebench runs pinned SWE-bench Lite instances (scripts/bench/swebench.py):
+# each row fetched at run time and refused unless it hashes to its pin, the
+# repository cloned at the base commit as the seed, the problem statement as
+# the specification, and the instance's FAIL_TO_PASS and PASS_TO_PASS tests
+# run by the scorer after the test patch (scripts/bench/swebench_grade.py),
+# in a virtual environment on this machine: it needs BENCH_GRADE_IN_PROCESS=1.
+# IDS: default (the five pinned) or pinned ids, comma-separated. The card (in
+# bench/scorecards/swebench unless --out) carries the swebench block. Never
+# with SPEC_DIR, --graders or --humaneval, and never part of the default run.
 #
 # Without SPEC_DIR, every bench/specs/*/ holding a spec.json. With --graders,
 # the specifications, their acceptance tests, the fake's answers and the
@@ -95,6 +118,12 @@
 #                                    2). scripts/bench/ablate.sh sets it, one
 #                                    section per run. Empty: nothing is off,
 #                                    whatever PROMPT_SECTIONS_OFF says outside.
+#   BENCH_HUMANEVAL_CACHE [empty]    a folder that keeps the checked HumanEval
+#                                    dataset between runs; checked again on use
+#   BENCH_HUMANEVAL_URL [empty]      a mirror of the dataset; the sha256 pin stays
+#   BENCH_SWEBENCH_INSTANCES [empty] a local JSON-lines file of SWE-bench rows,
+#                                    checked against the pins like a download
+#   BENCH_SWEBENCH_REPO_URL [empty]  where to clone from, {repo} for owner/name
 #   BENCH_GRADE_IN_PROCESS [empty]   1: grade on BENCH_PYTHON itself, the
 #                                    project's code in the runner's Python, for
 #                                    local development only; the card's criteria
@@ -109,19 +138,47 @@
 # written, whatever the models scored: compare.py judges the numbers.
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
-OUT_DIR="$REPO/bench/scorecards"
+OUT_DIR=""
 GRADERS_REV=""
+HUMANEVAL=""
+HE_IDS=default
+SWEBENCH=""
+SWE_IDS=default
 SPECS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out=*) OUT_DIR="${1#--out=}"; shift ;;
     --out) [ $# -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
+    --humaneval) HUMANEVAL=1; shift ;;
+    --humaneval=*) HUMANEVAL=1; HE_IDS="${1#--humaneval=}"; shift ;;
+    --swebench) SWEBENCH=1; shift ;;
+    --swebench=*) SWEBENCH=1; SWE_IDS="${1#--swebench=}"; shift ;;
     --graders=*) GRADERS_REV="${1#--graders=}"; [ -n "$GRADERS_REV" ] || { echo "--graders requires a commit" >&2; exit 2; }; shift ;;
     --graders) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--graders requires a commit" >&2; exit 2; }; GRADERS_REV="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;
     *) SPECS+=("$(cd "$1" 2>/dev/null && pwd || echo "$1")"); shift ;;
   esac
 done
+if [ -n "$HUMANEVAL" ]; then
+  # A run of its own, refused before anything starts when mixed.
+  [ ${#SPECS[@]} -eq 0 ] || { echo "--humaneval runs HumanEval problems only: no SPEC_DIR" >&2; exit 2; }
+  [ -z "$GRADERS_REV" ] || { echo "--humaneval is not taken with --graders: HumanEval's tests come from the pinned dataset" >&2; exit 2; }
+  [[ "$HE_IDS" =~ ^(default|all|(HumanEval/)?[0-9]{1,4}(,(HumanEval/)?[0-9]{1,4})*)$ ]] \
+    || { echo "--humaneval=$HE_IDS: default, all, or task ids such as 0,2,HumanEval/7" >&2; exit 2; }
+  OUT_DIR=${OUT_DIR:-$REPO/bench/scorecards/humaneval}
+fi
+if [ -n "$SWEBENCH" ]; then
+  # A run of its own, refused before anything starts when mixed.
+  [ -z "$HUMANEVAL" ] || { echo "--swebench is not taken with --humaneval" >&2; exit 2; }
+  [ ${#SPECS[@]} -eq 0 ] || { echo "--swebench runs SWE-bench instances only: no SPEC_DIR" >&2; exit 2; }
+  [ -z "$GRADERS_REV" ] || { echo "--swebench is not taken with --graders: its tests come from the pinned instances" >&2; exit 2; }
+  [[ "$SWE_IDS" =~ ^(default|[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+-[0-9]+(,[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+-[0-9]+)*)$ ]] \
+    || { echo "--swebench=$SWE_IDS: default, or pinned instance ids such as pallets__flask-4992" >&2; exit 2; }
+  [ "${BENCH_GRADE_IN_PROCESS:-}" = "1" ] \
+    || { echo "--swebench grades in a virtual environment on this machine, the delivered code with its files and network: set BENCH_GRADE_IN_PROCESS=1 to accept that" >&2; exit 2; }
+  OUT_DIR=${OUT_DIR:-$REPO/bench/scorecards/swebench}
+fi
+OUT_DIR=${OUT_DIR:-$REPO/bench/scorecards}
 case "$OUT_DIR" in /*) ;; *) OUT_DIR="$PWD/$OUT_DIR" ;; esac
 
 PG_HOST=${BENCH_POSTGRES_HOST:-${E2E_POSTGRES_HOST:-127.0.0.1}}
@@ -176,6 +233,39 @@ if [ -n "$GRADERS_REV" ]; then
   DAEMON_SHA256=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/graders-daemon.json")
   echo "graders: $("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d["sha"], "sha256", d["sha256"])' "$WORK/graders.json")"
   for i in "${!SPECS[@]}"; do SPECS[i]="$SPECS_ROOT/$(basename "${SPECS[i]}")"; done
+fi
+HE_CARD=()
+if [ -n "$HUMANEVAL" ]; then
+  # The dataset fetched and checked against its pin, each problem written as
+  # a specification folder (spec.json, seed/, acceptance/, fake/ when the
+  # fake has an answer) under BENCH_WORKDIR, never in the repository.
+  HE_FLAGS=(--dest "$WORK/humaneval" --ids "$HE_IDS")
+  [ -n "$LLM_URL" ] || HE_FLAGS+=(--fake)
+  [ -z "${BENCH_HUMANEVAL_CACHE:-}" ] || HE_FLAGS+=(--cache "$BENCH_HUMANEVAL_CACHE")
+  [ -z "${BENCH_HUMANEVAL_URL:-}" ] || HE_FLAGS+=(--url "$BENCH_HUMANEVAL_URL")
+  rm -f "$WORK/humaneval/problems.json"
+  HE_SPECS=$("$PY" "$REPO/scripts/bench/humaneval.py" prepare "${HE_FLAGS[@]}") \
+    || { echo "HumanEval: the dataset could not be prepared"; exit 2; }
+  mapfile -t SPECS <<< "$HE_SPECS"
+  SPECS_ROOT="$WORK/humaneval/specs"
+  HE_CARD=(--humaneval "$WORK/humaneval/problems.json")
+  echo "HumanEval: ${#SPECS[@]} problem(s), dataset sha256 checked against its pin"
+fi
+SWE_CARD=()
+if [ -n "$SWEBENCH" ]; then
+  # Each pinned instance fetched and checked, its repository written as the
+  # seed of a specification folder under BENCH_WORKDIR, never the repository's.
+  SWE_FLAGS=(--dest "$WORK/swebench" --ids "$SWE_IDS")
+  [ -n "$LLM_URL" ] || SWE_FLAGS+=(--fake)
+  [ -z "${BENCH_SWEBENCH_INSTANCES:-}" ] || SWE_FLAGS+=(--instances "$BENCH_SWEBENCH_INSTANCES")
+  [ -z "${BENCH_SWEBENCH_REPO_URL:-}" ] || SWE_FLAGS+=(--repo-url "$BENCH_SWEBENCH_REPO_URL")
+  rm -f "$WORK/swebench/instances.json"
+  SWE_SPECS=$("$PY" "$REPO/scripts/bench/swebench.py" prepare "${SWE_FLAGS[@]}") \
+    || { echo "SWE-bench: the instances could not be prepared"; exit 2; }
+  mapfile -t SPECS <<< "$SWE_SPECS"
+  SPECS_ROOT="$WORK/swebench/specs"
+  SWE_CARD=(--swebench "$WORK/swebench/instances.json")
+  echo "SWE-bench Lite: ${#SPECS[@]} instance(s), each checked against its pinned sha256"
 fi
 if [ ${#SPECS[@]} -eq 0 ]; then
   for d in "$SPECS_ROOT"/*/; do [ -f "$d/spec.json" ] && SPECS+=("${d%/}"); done
@@ -327,8 +417,14 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  FABRIQUE_DAEMON_DIR="$DAEMON_DIR" FABRIQUE_DAEMON_SHA256="$DAEMON_SHA256" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
-    "${GRADE_FLAGS[@]}" --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
+  if [ -f "$dir/acceptance/instance.json" ]; then
+    # A SWE-bench instance: its own tests, run by the scorer after the test patch.
+    "$PY" "$REPO/scripts/bench/swebench_grade.py" grade --spec "$dir" --project "$project" --work "$WORK" \
+      --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
+  else
+    FABRIQUE_DAEMON_DIR="$DAEMON_DIR" FABRIQUE_DAEMON_SHA256="$DAEMON_SHA256" "$PY" "$GRADER" grade --spec "$dir" --project "$project" --python "$PY" \
+      "${GRADE_FLAGS[@]}" --out "$WORK/$name.grade.json" || fail "the grade of $name did not run"
+  fi
   unmeasured=$(json "d.get('unmeasured') or ''" < "$WORK/$name.grade.json")
   [ -z "$unmeasured" ] || echo "   grade unmeasured: $unmeasured"
   echo "   criteria passed: $(json "d.get('passed'), 'of', d.get('total')" < "$WORK/$name.grade.json")"
@@ -367,13 +463,27 @@ ENTRIES=("$WORK"/entries/*.json)
   || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
 CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
-  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} "${ENTRIES[@]}") \
+  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} ${HE_CARD[@]+"${HE_CARD[@]}"} ${SWE_CARD[@]+"${SWE_CARD[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ -n "$CUT" ]; then
   echo "BENCH CUT (token budget $BUDGET exceeded; ${#SKIPPED[@]} specification(s) skipped, the run not judged)"
+elif [ "$LLM_LABEL" = fake ] && [ -n "$HUMANEVAL" ]; then
+  # The fake answers every problem it was given: anything less is a broken circuit.
+  if "$PY" -c 'import json, sys; h = json.load(open(sys.argv[1]))["humaneval"]; sys.exit(not (h["passed"] == h["graded"] == len(h["subset"]) > 0))' "$CARD"; then
+    echo "BENCH PASSED (fake LLM: every HumanEval problem passed its own tests)"
+  else
+    echo "BENCH FAILED (fake LLM: the HumanEval circuit did not run green; logs in $WORK)"; exit 1
+  fi
+elif [ "$LLM_LABEL" = fake ] && [ -n "$SWEBENCH" ]; then
+  # The fake delivers each reference patch: every instance measured must resolve.
+  if "$PY" -c 'import json, sys; s = json.load(open(sys.argv[1]))["swebench"]; print(s["unmeasured"], "unmeasured"); sys.exit(not (s["resolved"] == s["measured"] > 0))' "$CARD"; then
+    echo "BENCH PASSED (fake LLM: every SWE-bench instance measured was resolved by its own tests)"
+  else
+    echo "BENCH FAILED (fake LLM: the SWE-bench circuit did not run green; logs in $WORK)"; exit 1
+  fi
 elif [ "$LLM_LABEL" = fake ]; then
   # The fake gets every spec right: anything less is a broken circuit.
   if "$PY" -c 'import json, sys; t = json.load(open(sys.argv[1]))["totals"]; sys.exit(not (t["specs_completed"] == t["specs"] and t["criteria_passed"] == t["criteria_total"] > 0))' "$CARD"; then

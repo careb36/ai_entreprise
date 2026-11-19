@@ -337,6 +337,7 @@
         "test_bench_routing.py",
         "test_bench_scorecard.py",
         "test_bench_specs.py",
+        "test_bench_swebench.py",
         "test_verificador_benchmark.py"
       ],
       "docs/": "mentions",
@@ -499,6 +500,9 @@
         "planning"
       ],
       "test_bench_specs.py": [
+        "planning"
+      ],
+      "test_bench_swebench.py": [
         "planning"
       ],
       "test_board.py": [

@@ -25,6 +25,7 @@ from xml.parsers import expat
 # A test case with one of these as a direct child did not pass.
 NOT_PASSED = ("failure", "error", "skipped")
 PASS, FAIL, SKIP = "pass", "fail", "skip"
+XFAIL = "xfail"  # a skip pytest wrote for an expected failure; cases() only
 
 
 class JUnitError(ValueError):
@@ -51,6 +52,18 @@ def outcomes(xml_text: str) -> list[tuple[str, str]]:
     one, else ``pass``. A skip is told apart from a failure because pytest
     exits 0 on a run of passes and skips (review of PR #634). Raises
     ``JUnitError`` as ``testcases`` does."""
+    return [
+        (name, SKIP if outcome == XFAIL else outcome)
+        for _classname, name, outcome in cases(xml_text)
+    ]
+
+
+def cases(xml_text: str) -> list[tuple[str, str, str]]:
+    """Each ``<testcase>`` as ``(classname, name, outcome)``, as ``outcomes``
+    reads it, except that a skip pytest marked ``pytest.xfail`` is ``xfail``;
+    the class name lets a test id (``path::Class::test``) be found
+    (``swebench_grade.py``, issue #687). Raises ``JUnitError`` as
+    ``testcases`` does."""
     parser = expat.ParserCreate()
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.StartDoctypeDeclHandler = _refuse
@@ -59,16 +72,17 @@ def outcomes(xml_text: str) -> list[tuple[str, str]]:
     parser.ExternalEntityRefHandler = _refuse
 
     stack: list[str] = []
-    cases: list[list] = []
+    found: list[list] = []
 
     def start(name: str, attrs: dict[str, str]) -> None:
         if name == "testcase":
-            cases.append([attrs.get("name", ""), PASS])
+            found.append([attrs.get("classname", ""), attrs.get("name", ""), PASS])
         elif name in NOT_PASSED and stack and stack[-1] == "testcase":
             if name != "skipped":
-                cases[-1][1] = FAIL
-            elif cases[-1][1] == PASS:
-                cases[-1][1] = SKIP
+                found[-1][2] = FAIL
+            elif found[-1][2] == PASS:
+                xfail = attrs.get("type") == "pytest.xfail"
+                found[-1][2] = XFAIL if xfail else SKIP
         stack.append(name)
 
     def end(_name: str) -> None:
@@ -80,4 +94,4 @@ def outcomes(xml_text: str) -> list[tuple[str, str]]:
         parser.Parse(xml_text, True)
     except expat.ExpatError as exc:
         raise JUnitError(str(exc)) from exc
-    return [(name, outcome) for name, outcome in cases]
+    return [(classname, name, outcome) for classname, name, outcome in found]
