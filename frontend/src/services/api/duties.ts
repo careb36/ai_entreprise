@@ -207,6 +207,10 @@ export const dutiesEndpoints = (http: Http) => ({
   completeAccessReview: (companyId: number, decisions: AccessDecision[], note: string | null) =>
     http.post<{ id: number; on_time: boolean }>(`/v1/companies/${companyId}/access-review`, { decisions, note }),
 
+  /** Owner: remove a member now; the backend ends their sessions and keeps the last Owner. */
+  removeMember: (companyId: number, userId: number) =>
+    http.delete<void>(`/v1/company/${companyId}/members/${userId}`),
+
   getServiceAccounts: (companyId: number) =>
     http.get<ServiceAccountsInventory>(`/v1/companies/${companyId}/service-accounts`),
 
