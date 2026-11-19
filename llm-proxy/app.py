@@ -264,21 +264,21 @@ def list_models():
       {
         "models": [
           {
-            "id":          "gemini-2.5-pro",
+            "id":          "deepseek-v4-pro",
             "provider":    "gemini" | "deepseek" | "qwen" | "nebius",
             "tier":        "strategic" | "balanced" | "code" | "fast" | "preview",
             "description": "..."
           },
           ...
         ],
-        "orchestrator": "gemini-2.5-flash",   // recommended model for meta-tasks
+        "orchestrator": "deepseek-flash",   // recommended model for meta-tasks
         "refreshed_at": 1712345678.0
       }
     """
     # Only ids the chat endpoint routes are listed.
     keys = {p: _provider_key(p) for p in ("deepseek", "qwen", "nebius")}
     models = catalogue.listed_models(_provider_catalogue, keys)
-    # The best non-preview balanced/fast model for orchestration: stability over power.
+    # DeepSeek Flash, the default team's model for meta-tasks.
     orchestrator = catalogue.pick_orchestrator(models)
     return jsonify({"models": models, "orchestrator": orchestrator, "refreshed_at": _last_refresh})
 

@@ -126,7 +126,7 @@ class Agent(SQLModel, table=True):
     persona: str | None = None  # Free-text system-prompt personality description
     seniority: str = "Senior"  # e.g. "Junior", "Mid", "Senior", "Staff"
     specialty: str = ""  # Domain speciality (e.g. "Cloud/DB", "Frontend/React")
-    model: str = ""  # LLM model ID (e.g. "deepseek-coder", "gemini-2.5-pro")
+    model: str = ""  # LLM model ID (e.g. "deepseek-flash"); empty = role default
     system_prompt: str | None = None  # Full system prompt for the agent's LLM calls
     token_budget: int = 500000  # Monthly token budget (soft limit)
 

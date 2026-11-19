@@ -62,6 +62,8 @@ a policy may still name their models.
 | Reviewer agent (judges a run; reads QA's settings) | DeepSeek Pro (`REVIEWER_MODEL`) |
 | ScrumMaster, Developer, QA, TechWriter, BackendDeveloper, FrontendDeveloper, DevOps, Designer, DataEngineer, EngramProcessor | DeepSeek Flash, `deepseek-flash` (`FLASH_MODEL`) |
 | Manager agent (as the ScrumMaster), Support agent (as the TechWriter), the support chat, the discovery orchestrator's fallback, `LLMProxyClient`'s default | DeepSeek Flash |
+| The proxy's recommended orchestrator (`/v1/models`, whatever the catalogue lists) | DeepSeek Flash |
+| A suggested team in New company (`discovery_team.model_for_discovery_role`, the LLM and the rules alike) and the agent settings' recommendation | Each role's default above |
 
 `tests/test_model_factory.py` pins each role's default and checks that no
 default needs a key other than DeepSeek's.

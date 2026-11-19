@@ -12,30 +12,46 @@ const catalogue = [
   entry('gemini-3.1-pro-preview', 'gemini'),
 ]
 
+const PRO = ['Architect', 'PO', 'SecOps', 'Security', 'Reviewer']
+const FLASH = ['ScrumMaster', 'Developer', 'QA', 'TechWriter', 'BackendDeveloper', 'FrontendDeveloper', 'DevOps', 'Designer', 'DataEngineer', 'Support', 'Unknown']
+const SENIORITIES = ['Junior', 'Mid', 'Senior', 'Staff']
+
 describe('recommendModelForRole', () => {
-  it.each(['Architect', 'PO', 'SecOps', 'Security', 'Reviewer'])('leads with DeepSeek Pro for %s', role => {
-    expect(recommendModelForRole(catalogue, role).primary?.id).toBe(DEEPSEEK_PRO)
+  it.each(PRO.flatMap(role => SENIORITIES.map(level => [role, level])))('recommends DeepSeek Pro for %s (%s)', (role, level) => {
+    const rec = recommendModelForRole(catalogue, role, level)
+    expect(rec.primary?.id).toBe(DEEPSEEK_PRO)
+    expect(rec.alternatives.map(m => m.id)).toEqual([DEEPSEEK_FLASH])
+    expect(rec.primaryInCatalogue).toBe(true)
   })
 
-  it.each(['ScrumMaster', 'Developer', 'QA', 'TechWriter', 'BackendDeveloper', 'FrontendDeveloper', 'DevOps', 'Designer', 'DataEngineer', 'Support'])(
-    'leads with DeepSeek Flash for %s',
-    role => {
-      expect(recommendModelForRole(catalogue, role).primary?.id).toBe(DEEPSEEK_FLASH)
-    },
-  )
-
-  it('keeps the other providers as alternatives', () => {
-    const rec = recommendModelForRole(catalogue, 'Architect')
-    expect(rec.alternatives.map(m => m.id)).toContain('gemini-3.1-pro-preview')
+  it.each(FLASH.flatMap(role => SENIORITIES.map(level => [role, level])))('recommends DeepSeek Flash for %s (%s)', (role, level) => {
+    const rec = recommendModelForRole(catalogue, role, level)
+    expect(rec.primary?.id).toBe(DEEPSEEK_FLASH)
+    expect(rec.alternatives.map(m => m.id)).toEqual([DEEPSEEK_PRO])
   })
 
-  it('falls back to the role list when the catalogue has no DeepSeek model', () => {
+  it('never recommends another provider', () => {
+    for (const role of [...PRO, ...FLASH]) {
+      const rec = recommendModelForRole(catalogue, role)
+      for (const model of [rec.primary, ...rec.alternatives]) {
+        expect(model?.id.startsWith('deepseek-')).toBe(true)
+      }
+    }
+  })
+
+  it('still recommends DeepSeek when the live catalogue does not list it', () => {
     const geminiOnly = catalogue.filter(m => m.provider === 'gemini')
-    expect(recommendModelForRole(geminiOnly, 'Architect').primary?.id).toBe('gemini-3.1-pro-preview')
+    const rec = recommendModelForRole(geminiOnly, 'Architect')
+    expect(rec.primary?.id).toBe(DEEPSEEK_PRO)
+    expect(rec.primary?.provider).toBe('deepseek')
+    expect(rec.alternatives.map(m => m.id)).toEqual([DEEPSEEK_FLASH])
+    expect(rec.primaryInCatalogue).toBe(false)
+    expect(recommendModelForRole([], 'Developer').primary?.id).toBe(DEEPSEEK_FLASH)
   })
 
-  it('replaces an auto-recommended DeepSeek model when the role changes', () => {
-    expect(AUTO_RECOMMENDED_MODEL_IDS.has(DEEPSEEK_PRO)).toBe(true)
-    expect(AUTO_RECOMMENDED_MODEL_IDS.has(DEEPSEEK_FLASH)).toBe(true)
+  it('replaces earlier automatic picks, the retired DeepSeek ids included', () => {
+    for (const id of [DEEPSEEK_PRO, DEEPSEEK_FLASH, 'deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'gemini-3.8-flash']) {
+      expect(AUTO_RECOMMENDED_MODEL_IDS.has(id)).toBe(true)
+    }
   })
 })

@@ -2,7 +2,8 @@
 LLMProxyClient — HTTP client for the internal LLM proxy service.
 
 The proxy (``llm-proxy/app.py``) centralises all model routing, API-key
-management, token-budget enforcement, and Gemini model-catalogue resolution.
+management, token-budget enforcement, and the live model catalogue of each
+configured provider (DeepSeek by default; Gemini, Qwen and Nebius optional).
 This client provides a simple synchronous interface so that backend services
 do not need to import or configure LLM SDKs directly.
 
@@ -246,7 +247,7 @@ class LLMProxyClient:
 
         Returns a dict with keys:
           - ``models``: list of dicts with id, provider, tier, description
-          - ``orchestrator``: recommended model for meta-tasks (team suggestion, routing)
+          - ``orchestrator``: recommended model for meta-tasks (DeepSeek Flash)
 
         Returns an empty dict on error so callers can fall back gracefully.
         """

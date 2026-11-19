@@ -45,6 +45,11 @@ function ModelRecommendationPanel({
           <p className="mt-1 text-xs text-gray-400">
             {t(`agentsConfig.recommendationReasons.${recommendation.reasonKey}`)}
           </p>
+          {!recommendation.primaryInCatalogue && (
+            <p className="mt-1 text-[11px] text-amber-300">
+              {t('agentsConfig.recommendationNotInCatalog', { model: primary.id })}
+            </p>
+          )}
         </div>
         <button
           type="button"

@@ -10,8 +10,11 @@ Provides a unified interface for:
   writes are skipped and reported as not recorded, and graph reads raise
   ``GraphNotRecorded``.
 
-The ``embed()`` call is delegated to ``LLMProxyClient`` (Gemini
-``text-embedding-004``) so this module has no direct dependency on any LLM SDK.
+The ``embed()`` call is delegated to ``LLMProxyClient`` so this module has no
+direct dependency on any LLM SDK. The proxy embeds with Gemini's
+``text-embedding-004`` only when a Gemini key is configured (DeepSeek, the
+default team, offers no embeddings) and otherwise with a deterministic local
+vector.
 """
 
 import json

@@ -57,11 +57,15 @@ def test_a_model_missing_from_the_live_list_is_refused_not_substituted(client, u
     assert upstream.calls == []
 
 
-def test_the_orchestrator_prefers_deepseek_flash():
+def test_the_orchestrator_is_always_deepseek_flash():
     models = [
         {"id": "gemini-3.8-flash", "tier": "balanced"},
         {"id": "deepseek-v4-pro", "tier": "balanced"},
         {"id": "deepseek-flash", "tier": "fast"},
     ]
     assert catalogue.pick_orchestrator(models) == "deepseek-flash"
-    assert catalogue.pick_orchestrator(models[:2]) == "gemini-3.8-flash"
+    # Without DeepSeek Flash in the catalogue, or with no catalogue at all, it
+    # is still recommended rather than another provider's model.
+    assert catalogue.pick_orchestrator(models[:2]) == "deepseek-flash"
+    assert catalogue.pick_orchestrator(models[:1]) == "deepseek-flash"
+    assert catalogue.pick_orchestrator([]) == "deepseek-flash"

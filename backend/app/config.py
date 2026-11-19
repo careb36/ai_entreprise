@@ -47,7 +47,8 @@ class Settings(BaseSettings):
     OPENPROJECT_TOKEN_DEV: str | None = None
 
     # ---------------------------------------------------------------------------
-    # LLM Proxy — internal gateway that routes requests to Gemini / DeepSeek
+    # LLM Proxy — internal gateway that routes requests to DeepSeek (the
+    # default team) and to Gemini / Qwen / Nebius when their keys are set
     # ---------------------------------------------------------------------------
     LLM_PROXY_URL: str = "http://localhost:5100"
     # How long the task worker waits for the workspace daemon to confirm file writes.

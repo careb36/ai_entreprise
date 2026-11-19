@@ -4,14 +4,22 @@ export type Recommendation = {
   primary: ModelCatalogEntry | null
   alternatives: ModelCatalogEntry[]
   reasonKey: string
+  // False when the live catalogue does not list the recommended model; the
+  // recommendation stands, and the panel says so instead of picking another
+  // provider.
+  primaryInCatalogue: boolean
 }
 
 // The default team's two models (backend services/models/model_factory.py):
 // DeepSeek Pro where a mistake is expensive, DeepSeek Flash for the rest.
 export const DEEPSEEK_PRO = 'deepseek-v4-pro'
 export const DEEPSEEK_FLASH = 'deepseek-flash'
-const PRO_ROLES = new Set(['architect', 'po', 'product owner', 'security', 'secops', 'reviewer'])
+const PRO_ROLES = new Set(['architect', 'po', 'product owner', 'productowner', 'security', 'secops', 'reviewer'])
 
+// Models a draft may hold because an earlier recommendation set them; a role
+// or seniority change replaces them with the current recommendation. The
+// retired DeepSeek ids and the Gemini ids earlier versions recommended stay
+// here so those old automatic picks are replaced too.
 export const AUTO_RECOMMENDED_MODEL_IDS = new Set([
   DEEPSEEK_PRO,
   DEEPSEEK_FLASH,
@@ -24,152 +32,54 @@ export const AUTO_RECOMMENDED_MODEL_IDS = new Set([
   'gemini-flash-latest',
 ])
 
-function normalizeRole(role: string): string {
-  return role.trim().toLowerCase()
+const REASON_KEYS: Array<[string[], string]> = [
+  [['backenddeveloper', 'backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'], 'dev'],
+  [['frontenddeveloper', 'frontenddev', 'frontend dev', 'frontend'], 'frontend'],
+  [['dataengineer', 'data engineer', 'data', 'mlengineer', 'ml engineer', 'ml'], 'data'],
+  [['designer', 'uxresearcher', 'ux researcher', 'ux'], 'designer'],
+  [['qa'], 'qa'],
+  [['reviewer'], 'reviewer'],
+  [['architect'], 'architect'],
+  [['po', 'product owner', 'productowner'], 'po'],
+  [['scrummaster', 'scrum master', 'sm'], 'scrummaster'],
+  [['devops', 'sre'], 'devops'],
+  [['security', 'secops'], 'security'],
+  [['techwriter', 'tech writer', 'support'], 'support'],
+]
+
+function reasonKeyFor(role: string): string {
+  for (const [roles, key] of REASON_KEYS) {
+    if (roles.includes(role)) return key
+  }
+  return 'generalist'
 }
 
-function pickModels(models: ModelCatalogEntry[], preferredIds: string[]): ModelCatalogEntry[] {
-  const unique: ModelCatalogEntry[] = []
-  const seen = new Set<string>()
-
-  for (const id of preferredIds) {
-    const match = models.find(model => model.id === id)
-    if (match && !seen.has(match.id)) {
-      seen.add(match.id)
-      unique.push(match)
-    }
-  }
-
-  return unique
+function catalogueEntry(models: ModelCatalogEntry[], id: string): ModelCatalogEntry {
+  return models.find(model => model.id === id)
+    ?? { id, provider: 'deepseek', tier: id === DEEPSEEK_PRO ? 'strategic' : 'balanced', description: id }
 }
 
 /**
- * Returns ordered model IDs based on role + seniority.
+ * The recommended model for a role: the default team's, DeepSeek only.
  *
- * The default team's DeepSeek model for the role comes first when the live
- * catalogue lists it (Pro for the Architect, PO, SecOps and Reviewer, Flash for
- * every other role); the lists below follow as alternatives.
- *
- * Seniority tiers:
- *   Staff / Senior  → strongest reasoning models first (higher cost, highest quality)
- *   Mid             → balanced models
- *   Junior          → fast/cheap models first (guided execution, cost-conscious)
+ * DeepSeek Pro for the Architect, PO, SecOps (Security) and Reviewer, DeepSeek
+ * Flash for every other role, whatever the seniority; the single alternative
+ * is the other DeepSeek model. When the live catalogue does not list the
+ * recommended id it is still recommended (``primaryInCatalogue`` is false).
+ * The seniority argument is kept for callers and no longer changes the pick.
  */
 export function recommendModelForRole(
   models: ModelCatalogEntry[],
   role: string,
-  seniority: string = 'Senior',
+  _seniority: string = 'Senior',
 ): Recommendation {
-  const normalizedRole = normalizeRole(role)
-  const level = seniority.trim().toLowerCase()
-  const isJuniorMid = level === 'junior' || level === 'mid'
-  const isStaffSenior = level === 'staff' || level === 'senior'
-
-  const defaults = {
-    ids: isJuniorMid
-      ? ['gemini-3.8-flash', 'deepseek-chat']
-      : ['gemini-3.8-flash', 'deepseek-chat'],
-    reasonKey: 'generalist',
-  }
-
-  const plan = (() => {
-    if (['backenddeveloper', 'backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'].includes(normalizedRole)) {
-      return {
-        ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
-          : ['deepseek-reasoner', 'deepseek-coder', 'gemini-3.1-pro-preview'],
-        reasonKey: 'dev',
-      }
-    }
-    if (['frontenddeveloper', 'frontenddev', 'frontend dev', 'frontend'].includes(normalizedRole)) {
-      return {
-        ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
-          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'deepseek-coder'],
-        reasonKey: 'frontend',
-      }
-    }
-    if (['dataengineer', 'data engineer', 'data', 'mlengineer', 'ml engineer', 'ml'].includes(normalizedRole)) {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-coder', 'deepseek-reasoner']
-          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
-        reasonKey: 'data',
-      }
-    }
-    if (['designer', 'uxresearcher', 'ux researcher', 'ux'].includes(normalizedRole)) {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-3.1-pro-preview', 'gemini-3.8-flash', 'deepseek-reasoner'],
-        reasonKey: 'designer',
-      }
-    }
-    if (normalizedRole === 'qa') {
-      return {
-        ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
-          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'deepseek-coder'],
-        reasonKey: 'qa',
-      }
-    }
-    if (normalizedRole === 'architect') {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
-          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
-        reasonKey: 'architect',
-      }
-    }
-    if (normalizedRole === 'po' || normalizedRole === 'product owner') {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-3.1-pro-preview']
-          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
-        reasonKey: 'po',
-      }
-    }
-    if (normalizedRole === 'scrummaster' || normalizedRole === 'sm') {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'deepseek-reasoner']
-          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
-        reasonKey: 'scrummaster',
-      }
-    }
-    if (normalizedRole === 'devops') {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-coder', 'deepseek-reasoner']
-          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
-        reasonKey: 'devops',
-      }
-    }
-    if (normalizedRole === 'security' || normalizedRole === 'secops') {
-      return {
-        ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
-          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
-        reasonKey: 'security',
-      }
-    }
-    if (['techwriter', 'tech writer', 'support'].includes(normalizedRole)) {
-      return {
-        ids: isStaffSenior
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest'],
-        reasonKey: 'support',
-      }
-    }
-    return defaults
-  })()
-
-  // The default team's model leads; the others stay as alternatives.
+  const normalizedRole = role.trim().toLowerCase()
   const lead = PRO_ROLES.has(normalizedRole) ? DEEPSEEK_PRO : DEEPSEEK_FLASH
-  const ordered = pickModels(models, [lead, ...plan.ids])
+  const other = lead === DEEPSEEK_PRO ? DEEPSEEK_FLASH : DEEPSEEK_PRO
   return {
-    primary: ordered[0] ?? null,
-    alternatives: ordered.slice(1, 4),
-    reasonKey: plan.reasonKey,
+    primary: catalogueEntry(models, lead),
+    alternatives: [catalogueEntry(models, other)],
+    reasonKey: reasonKeyFor(normalizedRole),
+    primaryInCatalogue: models.some(model => model.id === lead),
   }
 }

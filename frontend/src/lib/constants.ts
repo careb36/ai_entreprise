@@ -24,4 +24,5 @@ export const DEFAULT_SCOPE = 'M'
 export const DEFAULT_AGENT_TOKEN_BUDGET = 500_000
 
 // ─── Models ───────────────────────────────────────────────────────────────────
-export const DEFAULT_MODEL = 'gemini-pro'
+// The default team's model for every role that does not need DeepSeek Pro.
+export const DEFAULT_MODEL = 'deepseek-flash'
