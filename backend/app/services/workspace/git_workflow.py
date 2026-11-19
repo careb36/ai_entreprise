@@ -15,6 +15,11 @@ is behind (``vscode-daemon/git_base.py``: ``base_commit``,
 ``base_behind_remote``, ``remote_unreachable`` on the ``git`` evidence). A
 folder that is not a repository is delivered without a branch, with a
 snapshot, and the evidence says why (``git_workflow_skipped``).
+
+The base is fetched only when the company's forge policy allows it
+(``services/platform/forge_policy_setting.py``, sent as ``forge_policy``):
+with ``none``, the daemon contacts no remote and the evidence says so
+(``remote_contacted: false``).
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
 from services.contracts.task_dependencies import depends_on_of
+from services.platform import forge_policy_setting
 
 TASK_BRANCH = "fabrique/task-{id}"
 # A delivery with a git spec may first fetch the base from its remote, bounded
@@ -66,6 +72,8 @@ def delivery_spec(
             "branch": TASK_BRANCH.format(id=item["id"]),
             "base": company.git_base_branch or "",
             "message": commit_message(item, sprint),
+            # Whether the daemon may fetch the base from its remote (issue #727).
+            "forge_policy": forge_policy_setting.effective(session, company.id),
         }
         # The branches of the tasks this one depends on, done: the daemon
         # merges them into the task's worktree, so it builds on their files.

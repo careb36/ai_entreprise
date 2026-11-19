@@ -263,6 +263,9 @@
     "GET /v1/companies/{company_id}/documentation/person-sections/{section}/history": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/forge_policy": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/git": {
       "access": "Viewer"
     },
@@ -372,6 +375,9 @@
       "access": "Viewer"
     },
     "GET /v1/documentation/{pack_id}/documents/{key}": {
+      "access": "Viewer"
+    },
+    "GET /v1/documentation/{pack_id}/manifest": {
       "access": "Viewer"
     },
     "GET /v1/enterprise/lineage": {
@@ -1002,6 +1008,12 @@
     },
     "PUT /v1/companies/{company_id}/documentation/person-sections/{section}": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/forge_policy": {
+      "access": "Owner",
+      "body": {
+        "forge_policy": "none"
+      }
     },
     "PUT /v1/companies/{company_id}/git": {
       "access": "Manager"

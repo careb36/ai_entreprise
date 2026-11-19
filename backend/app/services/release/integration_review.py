@@ -54,7 +54,7 @@ from models.sprint import Sprint
 from sqlmodel import Session, select
 
 from services.loop import sod_requesters
-from services.platform import sod
+from services.platform import forge_policy_setting, sod
 from services.platform.agent_service import AgentService
 from services.release import protected_merge
 from services.workspace.workspace_daemon import daemon_request
@@ -107,7 +107,8 @@ def diff_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
     if not base:
         company = session.get(Company, row.company_id)
         base = (company.git_base_branch or "") if company else ""
-    return {"workspace_root": row.repository, "base": base, "commit": row.commit}
+    spec = {"workspace_root": row.repository, "base": base, "commit": row.commit}
+    return forge_policy_setting.stamp(session, row.company_id, spec)
 
 
 def _sha256_or_none(value: Any) -> str | None:

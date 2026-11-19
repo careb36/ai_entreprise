@@ -107,6 +107,17 @@ turned into a fact, and the Verifier does not read the section.
   recorded (rule 6 of `docs/POSITIONING.md`). Nothing a producer reports
   about its own files is stored.
 
+## Readers of the stored graph
+
+- **The documentation pack's C4 code level** (issue #693,
+  `services/tools/code_level.py`, read by
+  `planning/project_docs/collect_code`): per architecture component, the
+  stored files under the module's path (the architecture's claim), the
+  names they define and the references among them (observed, with the
+  daemon's sha256), in separate fields. It reads the store only; with
+  nothing stored the pack says "not observed". See
+  [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md).
+
 ## Later slices
 
 - **Measuring.** Whether the section helps is measured, not assumed: the

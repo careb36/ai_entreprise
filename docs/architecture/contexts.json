@@ -21,6 +21,7 @@
         "audit_anchors",
         "egress",
         "engram_processor",
+        "forge_policy_setting",
         "glassroom",
         "hooks",
         "locks",
@@ -129,6 +130,7 @@
       ],
       "public": [
         "code_graph",
+        "code_level",
         "developer_tools",
         "mcp_tools",
         "registry_lookup",
@@ -715,6 +717,9 @@
       "test_findings_retry.py": [
         "learning"
       ],
+      "test_forge_policy.py": [
+        "release"
+      ],
       "test_foundation_sprint.py": [
         "release"
       ],
@@ -931,6 +936,9 @@
       "test_project_docs.py": [
         "planning"
       ],
+      "test_project_docs_code_level.py": [
+        "planning"
+      ],
       "test_project_docs_diagrams.py": [
         "planning"
       ],
@@ -941,6 +949,9 @@
         "planning"
       ],
       "test_project_docs_language.py": [
+        "planning"
+      ],
+      "test_project_docs_manifest.py": [
         "planning"
       ],
       "test_project_docs_pmbok.py": [

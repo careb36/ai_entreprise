@@ -2720,6 +2720,24 @@
     "wizardNotRepo": "Esta carpeta no es un repositorio git: los agentes escriben en la carpeta, sin ramas de tarea. Ejecuta git init allí para usarlas.",
     "wizardUnobserved": "La carpeta no se ha inspeccionado: el flujo con Git queda apagado hasta que el daemon vea un repositorio allí."
   },
+  "forgePolicy": {
+    "title": "Política de forja",
+    "hint": "Si el git de esta empresa puede contactar una forja externa (GitHub, GitLab, Bitbucket…). Las ramas de las tareas, la integración del sprint, sus pruebas y la fusión local siempre se ejecutan en la computadora que tiene el proyecto. Solo un Owner la cambia; cada cambio queda auditado.",
+    "none": {
+      "label": "Solo local",
+      "hint": "Nunca se contacta un remoto: la base no se trae antes de una rama nueva y la publicación se rechaza."
+    },
+    "fetch": {
+      "label": "Leer la base de su remoto",
+      "hint": "La rama base se trae de su remoto antes de empezar una rama nueva. La publicación se rechaza."
+    },
+    "publish": {
+      "label": "Leer y publicar",
+      "hint": "Trae la base y permite que un Manager suba una rama y abra su pull request o merge request."
+    },
+    "capped": "Esta instalación permite como máximo «{{ceiling}}» (FORGE_POLICY_MAX): rige «{{effective}}».",
+    "ownerOnly": "Solo un Owner cambia la política de forja."
+  },
   "graphSkeleton": {
     "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",
     "loadingVisualization": "Cargando la visualización del grafo...",

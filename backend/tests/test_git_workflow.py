@@ -155,11 +155,12 @@ def test_what_git_refuses_is_an_error_the_backend_can_read(repo, tmp_path):
 # --- the backend ---------------------------------------------------------------
 
 
-def _company(session, *, on=True, base=None):
+def _company(session, *, on=True, base=None, forge="none"):
     company = Company(
         company_name=f"Git {secrets.token_hex(3)}",
         git_workflow=on,
         git_base_branch=base,
+        forge_policy=forge,
     )
     session.add(company)
     session.commit()
@@ -185,6 +186,8 @@ def test_the_spec_is_asked_only_with_the_workflow_on(sqlite_session):
         "branch": "fabrique/task-41",
         "base": "develop",
         "message": "Encrypt stored credentials\n\nFabrique-Task: 41\nFabrique-Sprint: 3\n",
+        # A new company's: the daemon fetches nothing (issue #727).
+        "forge_policy": "none",
     }
 
 

@@ -17,6 +17,10 @@ publication stays available beside it.
 A branch whose base is behind ``origin``'s is never published: the daemon
 fetches the base just before the push and refuses, naming how many commits
 the branch lacks (``require_current_base``); integrating again merges them in.
+
+Publishing needs the company's forge policy at ``publish`` (issue #727; 409
+``forge_disabled`` otherwise); the description names the policy the
+integration ran under.
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ from services.release.git_publish import (
     PUBLISH_HOW,
     PublishRefused,
     _cell,
+    require_forge,
 )
 
 MAX_FILES_PER_TASK = 30
@@ -223,6 +228,9 @@ def request_body(session: Session, row: SprintIntegration) -> str:
         "## Observed",
         "",
         *_integration_lines(row),
+        "",
+        # Named only here, in the published description (issue #727).
+        f"Forge policy at integration: `{_cell(row.forge_policy or 'not recorded')}`.",
     ]
     claims: list[str] = []
     for task in row.tasks or []:
@@ -240,6 +248,7 @@ def request_body(session: Session, row: SprintIntegration) -> str:
 
 def publish_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
     """The ``workspace.git.publish`` request for the sprint's branch, or why not."""
+    policy = require_forge(session, row.company_id)
     if row.status not in PUBLISHABLE:
         raise PublishRefused(
             409, REFUSALS.get(row.status, "This integration cannot be published")
@@ -266,6 +275,7 @@ def publish_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
         "require_current_base": True,
         "title": " ".join(title.split())[:MAX_TITLE_CHARS],
         "body": request_body(session, row),
+        "forge_policy": policy,
     }
 
 

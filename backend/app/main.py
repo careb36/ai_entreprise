@@ -35,11 +35,13 @@ from routers.company_architecture import router as company_architecture_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.documentation import router as documentation_router
+from routers.documentation_manifest import router as documentation_manifest_router
 from routers.enterprise import router as enterprise_router
 from routers.enterprise_agents import router as enterprise_agents_router
 from routers.enterprise_analytics import router as enterprise_analytics_router
 from routers.events import router as events_router
 from routers.findings import router as findings_router
+from routers.forge_policy import router as forge_policy_router
 from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.intake import router as intake_router
@@ -206,6 +208,7 @@ app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(company_architecture_router)
 app.include_router(documentation_router)
+app.include_router(documentation_manifest_router)
 app.include_router(person_sections_router)
 app.include_router(security_tests_router)
 app.include_router(workspace_router)
@@ -217,6 +220,7 @@ app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
 app.include_router(sod_router)
 app.include_router(protected_paths_router)
+app.include_router(forge_policy_router)
 app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)

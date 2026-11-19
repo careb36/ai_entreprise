@@ -36,7 +36,6 @@ import test_git_workflow
 import worker_stages
 from test_git_workflow import (
     ANSWER,
-    SPEC,
     _company,
     _DaemonOverNATS,
     _member,
@@ -46,6 +45,14 @@ from test_git_workflow import (
 
 # The fixture that requires authentication, as the Git workflow's tests use it.
 enforcement = test_git_workflow.enforcement
+# These tests are about the fetch: a company whose forge policy allows it
+# (issue #727; with ``none`` nothing is fetched, ``test_forge_policy.py``).
+SPEC = {**test_git_workflow.SPEC, "forge_policy": "fetch"}
+
+
+def _integrate(clone, sprint):
+    spec = {"branch": f"fabrique/sprint-{sprint}", "merge": [SPEC["branch"]]}
+    return sprint_integration.integrate(str(clone), {**spec, "forge_policy": "fetch"})
 
 
 def _commit(root, name, text):
@@ -207,7 +214,7 @@ def test_the_fetch_bound_stays_well_inside_the_backend_delivery_wait():
 
 def test_the_base_status_observes_without_starting_anything(behind, tmp_path):
     clone, upstream = behind
-    status = git_base.status(str(clone), "")
+    status = git_base.status(str(clone), "", "fetch")
     assert status["is_repo"] is True
     assert (status["base_ref"], status["base_remote"]) == ("main", "origin/main")
     assert status["base_behind_remote"] == 3
@@ -251,16 +258,12 @@ def test_an_integration_starts_from_the_remote_tip_and_an_older_one_gets_it_merg
     git(clone, "remote", "set-url", "origin", str(clone.parent / "unused.git"))
     # Integrated once while offline: from the stale local base.
     daemon.deliver_files(str(clone), _files(), SPEC)
-    stale = sprint_integration.integrate(
-        str(clone), {"branch": "fabrique/sprint-3", "merge": [SPEC["branch"]]}
-    )
+    stale = _integrate(clone, 3)
     assert stale["base_status"]["remote_unreachable"]
     assert (Path(stale["worktree"]) / "core.py").read_text() == "VERSION = 1\n"
 
     git(clone, "remote", "set-url", "origin", str(clone.parent / "remote.git"))
-    again = sprint_integration.integrate(
-        str(clone), {"branch": "fabrique/sprint-3", "merge": [SPEC["branch"]]}
-    )
+    again = _integrate(clone, 3)
 
     assert again["ok"], again
     assert again["base_status"]["base_behind_remote"] == 3
@@ -270,9 +273,7 @@ def test_an_integration_starts_from_the_remote_tip_and_an_older_one_gets_it_merg
     assert again["already_merged"] == [SPEC["branch"]]
     assert git(clone, "rev-parse", "main") == stale["start"]  # the person's main
 
-    fresh = sprint_integration.integrate(
-        str(clone), {"branch": "fabrique/sprint-4", "merge": [SPEC["branch"]]}
-    )
+    fresh = _integrate(clone, 4)
     assert fresh["start"] == git(upstream, "rev-parse", "main")
     assert fresh["base_merge"] is None
 
@@ -284,9 +285,7 @@ def test_the_publication_of_a_branch_behind_origin_is_refused_with_the_count(beh
     )
     git(clone, "remote", "set-url", "origin", str(clone.parent / "unused.git"))
     daemon.deliver_files(str(clone), _files(), SPEC)
-    stale = sprint_integration.integrate(
-        str(clone), {"branch": "fabrique/sprint-3", "merge": [SPEC["branch"]]}
-    )
+    stale = _integrate(clone, 3)
     git(clone, "remote", "set-url", "origin", str(clone.parent / "remote.git"))
 
     with pytest.raises(
@@ -299,12 +298,11 @@ def test_the_publication_of_a_branch_behind_origin_is_refused_with_the_count(beh
                 "commit": stale["commit"],
                 "base": "main",
                 "require_current_base": True,
+                "forge_policy": "publish",
             },
         )
 
-    current = sprint_integration.integrate(
-        str(clone), {"branch": "fabrique/sprint-3", "merge": [SPEC["branch"]]}
-    )
+    current = _integrate(clone, 3)
     published = git_workspace.publish(
         str(clone),
         {
@@ -312,6 +310,7 @@ def test_the_publication_of_a_branch_behind_origin_is_refused_with_the_count(beh
             "commit": current["commit"],
             "base": "main",
             "require_current_base": True,
+            "forge_policy": "publish",
         },
     )
     assert published["base_behind_remote"] == 0
@@ -502,7 +501,10 @@ def test_the_settings_read_the_base_status_viewer_reads_manager_edits(
     assert checked["base_status"]["state"] == "observed"
     assert checked["base_status"]["base_behind_remote"] == 424
     assert nats.subjects == [
-        ("workspace.git.base_status", {"workspace_root": "/srv/app", "base": ""})
+        (
+            "workspace.git.base_status",
+            {"workspace_root": "/srv/app", "base": "", "forge_policy": "none"},
+        )
     ]
     assert (
         test_client.put(url, json={"git_workflow": False}, headers=viewer).status_code
@@ -515,7 +517,7 @@ def test_the_settings_read_the_base_status_viewer_reads_manager_edits(
 
 
 def test_the_integration_is_published_only_against_a_current_base(sqlite_session):
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     sprint = Sprint(company_id=company.id, sprint_name="S", status="completed")
     sqlite_session.add(sprint)
     sqlite_session.commit()

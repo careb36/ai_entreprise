@@ -2720,6 +2720,24 @@
     "wizardNotRepo": "This folder is not a git repository: the agents write in the folder, without task branches. Run git init there to use them.",
     "wizardUnobserved": "The folder has not been inspected: the Git workflow stays off until the daemon sees a repository there."
   },
+  "forgePolicy": {
+    "title": "Forge policy",
+    "hint": "Whether this company's git may contact an outside forge (GitHub, GitLab, Bitbucket…). Task branches, the sprint's integration, its tests and the local merge always run on the computer that holds the project. Only an Owner changes this; each change is audited.",
+    "none": {
+      "label": "Local only",
+      "hint": "No remote is ever contacted: the base is not fetched before a new branch, and publishing is refused."
+    },
+    "fetch": {
+      "label": "Read the base from its remote",
+      "hint": "The base branch is fetched from its remote before a new branch starts. Publishing is refused."
+    },
+    "publish": {
+      "label": "Read and publish",
+      "hint": "Fetch the base, and let a Manager push a branch and open its pull or merge request."
+    },
+    "capped": "This deployment allows at most “{{ceiling}}” (FORGE_POLICY_MAX): “{{effective}}” is in force.",
+    "ownerOnly": "Only an Owner changes the forge policy."
+  },
   "graphSkeleton": {
     "loadingTopology": "Loading graph topology (<400ms Doherty threshold)",
     "loadingVisualization": "Loading graph visualization...",

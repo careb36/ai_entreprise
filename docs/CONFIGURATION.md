@@ -425,6 +425,16 @@ Copy `.env.example` to `.env` and fill in:
   the shell a host-mode command runs in. Unset: `/bin/zsh` when it exists, else
   `/bin/sh`; on Windows `COMSPEC` (else `cmd.exe`), and a `powershell`/`pwsh`
   path runs with `-NoProfile -NonInteractive -Command`.
+- `FORGE_POLICY_MAX` — optional, default `publish`, read by the backend
+  (`config.py`, `services/platform/forge_policy_setting.py`) and, separately,
+  by the workspace daemon (`vscode-daemon/forge_gate.py`; unset there is
+  `publish`). The highest forge policy any company may have: `none`, `fetch`
+  or `publish` (issue #727). On the backend it caps each company's
+  `forge_policy` (the stored value is kept; the lower one is in force) and
+  refuses a wider value with 409. On the daemon it caps whatever a request
+  asks for, so `none` on a computer means it never fetches, pushes or reads a
+  request from a forge. An unknown value reads as `none`. An air-gapped
+  install sets `none` on both.
 - `FABRIQUE_SANDBOX_RUNTIME` — daemon side, default unset
   (`vscode-daemon/sandbox.py`): the container runtime of `DELIVERY_SANDBOX=container`,
   a command name or path. Unset, the first of `docker` and `podman` on the
