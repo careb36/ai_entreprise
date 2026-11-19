@@ -61,3 +61,12 @@ def code_graph(
     )
     observed_at = graph.pop("observed_at", None)
     return graph, observed_at
+
+
+def entries(session: Session, company_id: int, architecture: Any) -> dict[str, Any]:
+    """The snapshot's ``code_graph`` and ``code_graph_observed_at`` entries.
+
+    ``code_graph_observed_at`` is shown, never an input of any digest.
+    """
+    graph, observed_at = code_graph(session, company_id, architecture)
+    return {"code_graph": graph, "code_graph_observed_at": observed_at}

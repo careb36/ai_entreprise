@@ -17,7 +17,7 @@ export function sectionForPath(pathname: string): Section | null {
   if (under('/sprints') || under('/task')) return 'sprints'
   if (under('/generate')) return 'generate'
   if (under('/memory')) return 'memory'
-  if (under('/agents') || under('/company') || under('/companies') || under('/support')) return 'company'
+  if (under('/agents') || under('/company') || under('/companies') || under('/support') || under('/bench')) return 'company'
   return null
 }
 

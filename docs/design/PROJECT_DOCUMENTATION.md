@@ -61,6 +61,7 @@ Brown, c4model.com, CC BY 4.0).
 | Governance | Executing | Lessons learned register (`lessons.md`) | retrospectives, procedures |
 | Governance | Monitoring and Controlling | Change log (`changes.md`) | specification and architecture versions, carry-over events |
 | Governance | Monitoring and Controlling | Check results by domain (`checks.md`) | all of the above |
+| Governance | Executing | ITIL transition set (`transition.md`, #696) | per release: the integration's tasks, its suite run, publication and local merge, review, the Verifier's readings at integration, undo audit rows, the sprint's hold events; one person section |
 | Governance | Closing | Final report (`final_report.md`, phase 2) | specifications, sprints, task events, verifications, effort, model usage, carries, published integrations; three person sections |
 | Scope | Planning | Scope statement (`scope.md`) | specification, tasks |
 | Scope | Planning | Work breakdown structure (`wbs.md`) | specification, tasks |
@@ -103,6 +104,7 @@ the index:
 | Communications management plan | Stakeholders outside the company and what they need to know; meetings, reports and cadence agreed with people (phase 2) |
 | Stakeholder register | Stakeholders outside the company: interest, influence, expectations and engagement (#691) |
 | Final report | Acceptance by the sponsor, benefits realisation outlook, handover notes (phase 2) |
+| ITIL transition set | Handover of each release: who takes it over, what they receive, workarounds for its known errors (#696) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
 author recorded in the audit, is the first item of phase 2. The TechWriter's
@@ -145,6 +147,48 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
+
+#### More computed checks per domain (#692)
+
+Five checks join the table, in `project_docs/domain_checks.py`, over the
+snapshot key `check_basis` (`project_docs/collect_checks.py`: each sprint's
+`duration_days`, the tasks accepted into a sprint from an intake request, and
+each business unit's token quota with its digest; a unit's name is free text
+and is not read). Each reads only what the platform wrote; none reads a
+retrospective, an agent message or a delivery's text.
+
+| Domain | Outcome (our wording) | Result | How it is computed | Function | Cites | Not computable when |
+|---|---|---|---|---|---|---|
+| Governance | Work starts on an approved plan | met / not met | each sprint planned from a specification (`Sprint.specification_id`): its first task event against that specification version's `approved_at` (`history`); a version never approved counts as not met; sprints not planned from one are counted apart | `domain_checks.approved_first` | the sprint and the specification version, each with its digest | no sprint planned from a specification has started, or a started sprint's version is no longer in the bounded history (counted, never assumed approved) |
+| Scope | A sprint's scope holds once it is planned | measured | the tasks that joined a sprint after it was planned, accepted from an intake request (`intake_queue` writes a `note` task event under the actor `system` with `intake_item_id`; the same payload under another actor is a claim and is not read), over the sprints' tasks | `domain_checks.churn` | each such task event with its chain hash | no task is recorded, or `check_basis` was not read |
+| Schedule | Iterations finish by their planned end | measured | completed sprints whose last task event falls on or before `start_date + duration_days − 1` (a one-day sprint ends on its start date); sprints without a length are counted apart | `domain_checks.on_time` | the sprint, and its planned length with a digest | no sprint is completed, or no completed sprint has both a start date and `duration_days` |
+| Finance | Model usage stays within the configured quota | measured | the tokens counted against the business units' `token_quota_limit` this period (`token_quota_used`, which the LLM proxy adds from the usage the provider reported), with how many units reached it | `domain_checks.quota` | each unit's quota record with its digest | no business unit has a quota (0 is unlimited) |
+| Resources | Each sprint's work goes to the team chosen for it | met / not met | the tasks of the sprints that record a team (`Sprint.team`) are assigned to a role on it (canonical role names) | `domain_checks.sprint_team` | the sprints with their digest | no sprint records a team (it then runs with every hired role, which `team` already checks) |
+
+Limits worth knowing: `duration_days` is the length recorded now, which a
+Manager can edit after the sprint (each edit is audited as `sprint_updated`);
+the sprint's close is read as its last task event, since the sprint has no
+closing time of its own and the backend's effort observation is written at
+close. The quota is a token limit per period, reset by an Owner, so its figure
+moves with every model call and `checks.md` goes stale with it, as it already
+does with the spend.
+
+Stakeholders and Risk gain nothing here: each already has three computed
+checks, and what is left in them is in the list below.
+
+**Outcomes the records cannot decide** (each stays a person's section, a
+"not computable" line, or out of the table):
+
+| Domain | Outcome | Why not |
+|---|---|---|
+| Governance | Benefits are realised; the project is still justified | the business case and expected benefits are a person's (charter sections) |
+| Scope | The sponsor accepts the delivered scope | acceptance is a person's decision (final report section); the Verifier's readings are evidence for it, not the acceptance |
+| Schedule | The project finishes on its target date | no target release date is recorded (release plan section); sprints without `duration_days` have no planned end |
+| Finance | The project delivers within its budget | no budget in money is recorded; the token quota is a period limit on model calls, not the project's budget, and spend in dollars is only known where the provider reported usage |
+| Finance | Cost performance against a baseline | no cost baseline or planned value is recorded |
+| Stakeholders | People outside the company are engaged and satisfied | they are not in the records (register and communications sections) |
+| Resources | People's capacity and availability are planned | the records hold no capacity or calendar for people; agents are not scheduled resources |
+| Risk | Risks stay within the organisation's appetite; project-level risks are handled | the appetite and market, staffing and budget risks are a person's (risk register section) |
 
 The snapshot (`services/planning/project_docs/collect.py`) is the plain data
 every builder reads; "spec" is the company's newest approved specification
@@ -396,6 +440,35 @@ shows what the procedures that followed measured; the final report points
 there instead of repeating or counting what was said. A blocked task the
 platform carried to a later sprint is followed in that sprint (its new task),
 not counted as left open, and a carry reported by an agent is not read.
+
+### ITIL transition set (`transition.md`; Governance, Executing; inputs: transition, statements_transition)
+
+Issue #696. What each release changed and left behind, after the practices
+ITIL 4 (AXELOS / PeopleCert) names for moving a change into use: change
+enablement, release management, problem management with its known errors,
+and the handover. Only the practice names are taken; the wording is ours.
+A release is a sprint integration that left the factory: published as one
+request, or merged locally into the base branch. `collect_transition` reads
+one snapshot key, `transition`, from the release context's tables;
+`transition` derives what each release delivered and its known errors;
+`transition_docs` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| Change record: what changed | the integration's `tasks` (state, commit, run, verification as recorded at integration), the tasks' `covers` read as requirements, the base and the integration commit | integration ref (its audit row's chain hash), task refs (digest of the entry) |
+| Change record: approved by | the integration's latest decision (`IntegrationReview`, `approve` or `request_changes`; else its latest review), its author reduced to the account's effective company role now, `former` or `no_account`; never the name, address or words | `review` ref (its audit row's chain hash) |
+| Change record: integration review | the review's event, outcome, commit (whether it is the integration's), `diff_sha256` the backend computed from the daemon's diff, files, segregation-of-duties outcome, the number of reviews | `review` ref |
+| Change record: suite result | the integration's status and the daemon's `test_run` (command, exit code, timeout, failing tests counted), the tested commit | `suite` ref (digest of the kept facts) |
+| Change record: published | `publication` (how, base, the daemon's commit, the `sprint_published` audit row) and `details.local_merge` (base, fast-forward or merge commit, the commit after, who merged as a role, the `sprint_merged_locally` audit row); never the request's address | `release` and `merge` refs (audit rows' chain hashes) |
+| Change record: undone | `run_delivery_undone` audit rows naming a run of the release; a delivery on a Git branch is undone by discarding the branch, which the platform does not record, and the record says so | `undo` ref (audit row's chain hash) |
+| Release notes | per release, the tasks merged or already in, the requirements they cover, and the done tasks left out with their state | task refs |
+| Known errors | a delivery the release carries whose reading at integration was refuted, unverifiable or high risk; a hold open in its sprint at release time: the newest `blocked` or `risk_hold` event of a task whose status after its newest event then was `blocked`, or an `escalated` one with no later `decided`, on a task the release does not deliver and the platform (actor `system`) had not carried by then | verification ref (artifact digest), event ref (chain hash) |
+| Handover | `transition.handover`, a person's statement | person, **claim** |
+
+A review's words, retrospectives and agent messages are not inputs: a claim
+can neither appear in the set nor make it stale. The approver's role is the
+account's role now, not at the time of the review, as in the stakeholder
+register.
 Acceptance, the benefits after closure and the handover are what only a
 person can say at closure, so they are person sections, never computed.
 
@@ -609,8 +682,11 @@ the audit key once approved (phase 4, with export)?
   draft a person stays accountable for. Taken from a summary in our own words,
   never from the book's text; the book forbids use for AI training and no
   model read it.
-- **COBIT** (ISACA) and **ITIL** (AXELOS / PeopleCert): named as later phases;
-  nothing taken.
+- **ITIL 4** (AXELOS / PeopleCert): the names of the practices the transition
+  set follows (change enablement, release management, problem management and
+  its known errors, the handover; #696), summarised in our own words; no text,
+  definition or table of ITIL is reproduced.
+- **COBIT** (ISACA): named as a later phase; nothing taken.
 
 ## Extension points and next phases
 
@@ -633,12 +709,13 @@ completed project's requirements, readings, measurements, releases and open
 holds, with the lessons left to their register since retrospectives are
 claims (all done: `status_report.md`, `release_plan.md`, `final_report.md`).
 The communications and quality plans, first planned for phase 3, are done
-too (`communications_plan.md`, `quality_plan.md`). Then more computed checks
-per domain (backlog rates). The stakeholder register from members, teams and
+too (`communications_plan.md`, `quality_plan.md`). More computed checks per
+domain are done too (#692: approval before work, backlog churn, iterations on
+time, usage against the quota, sprint teams). The stakeholder register from members, teams and
 approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
-manifest of the pack), the COBIT governance matrix and the ITIL transition set
-(phase 5), and bench grading of packs against person-written expectations.
+manifest of the pack), the COBIT governance matrix (phase 5; the ITIL transition set is done,
+`transition.md`, #696), and bench grading of packs against person-written expectations.
 The C4 code level from the stored code graph is built (issue #693, under
 "Architecture diagrams, C4").
 

@@ -5,29 +5,28 @@ drift check can hash exactly what each document read. It holds no personal
 data: who approved a document or wrote a draft is reduced to a role ("PO", "a
 person"), and people are counted by their company role, never named.
 
-Keys: ``project``, ``specification`` (the newest approved one),
-``specifications`` (every approved one, oldest first, with the ids of its
-versions: a pack documents them all, ``specs``), ``architecture`` (the
-company's current version; issue #329, F3), ``stack``,
-``sprints`` (each with its ``tasks``), ``events`` (the task events the
-issue log, risk register and change log read), ``verifications`` (the
-Verifier's verdict and risk tier per delivery), ``history`` (every version of
-the specifications and architectures), ``roles``, ``members``,
-``retrospectives``, ``procedures``, ``integrations`` (with the commit each
-task was merged at), ``wstg_observations`` (the WSTG items the Verifier's
-checks observed), ``wstg_reviews`` (a person's recorded reviews, without
-the reviewer's name), ``effort`` and ``costs`` (the backend's effort
-observation per task and each sprint's reported model usage,
-``collect_status``), ``iteration_plans``, ``carries`` and ``releases``
-(each sprint's scope and team source, the platform's carries, the published
-integrations; ``collect_release``), ``quality_basis`` and ``communications``
-(the backend's quality definitions and the channels' configuration;
-``collect_plans``), ``stakeholders`` (the teams and approvals by role;
-``collect_stakeholders``), ``code_graph`` and
-``code_graph_observed_at`` (the stored code graph per architecture
-component, ``collect_code``) and ``statements_<document>`` (a person's current
-statement per person section, with the author's role and never their
-address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
+Keys: ``project``, ``specification`` (the newest approved one), ``specifications``
+(every approved one, oldest first, with the ids of its versions: a pack documents
+them all, ``specs``), ``architecture`` (the company's current version; issue #329,
+F3), ``stack``, ``sprints`` (each with its ``tasks``), ``events`` (the task events
+the issue log, risk register and change log read), ``verifications`` (the Verifier's
+verdict and risk tier per delivery), ``history`` (every version of the
+specifications and architectures), ``roles``, ``members``, ``retrospectives``,
+``procedures``, ``integrations`` (with the commit each task was merged at),
+``wstg_observations`` (the WSTG items the Verifier's checks observed),
+``wstg_reviews`` (a person's recorded reviews, without the reviewer's name),
+``effort`` and ``costs`` (the backend's effort observation per task and each
+sprint's reported model usage, ``collect_status``), ``iteration_plans``, ``carries``
+and ``releases`` (each sprint's scope and team source, the platform's carries, the
+published integrations; ``collect_release``), ``quality_basis`` and
+``communications`` (the backend's quality definitions and the channels'
+configuration; ``collect_plans``), ``stakeholders`` (the teams and approvals by
+role; ``collect_stakeholders``), ``check_basis`` (sprint lengths, intake tasks,
+token quotas; ``collect_checks``), ``transition`` (each release's records, by role;
+``collect_transition``), ``code_graph`` (``collect_code``) and
+``statements_<document>`` (a person's current statement per person section, with the
+author's role and never their address; ``statements``). Each list is bounded
+(``LIMIT``), newest records kept.
 """
 
 from __future__ import annotations
@@ -60,11 +59,13 @@ from sqlmodel import Session, select
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
 from services.planning.project_docs import (
+    collect_checks,
     collect_code,
     collect_plans,
     collect_release,
     collect_stakeholders,
     collect_status,
+    collect_transition,
     statements,
     texts,
 )
@@ -561,7 +562,6 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
     spec = current_specification(session, company.id)
     sprints = _sprints(session, company.id)
     arch = _architecture(current_architecture(session, company.id))
-    code, code_observed_at = collect_code.code_graph(session, company.id, arch)
     return {
         "project": {"company_id": company.id, "name": company.company_name},
         # Not an input of any document's digest: the lint compares it apart.
@@ -571,9 +571,7 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
             _listed(session, s) for s in approved_specifications(session, company.id)
         ][-LIMIT:],
         "architecture": arch,
-        "code_graph": code,
-        # Shown, not an input of any digest (``collect_code``).
-        "code_graph_observed_at": code_observed_at,
+        **collect_code.entries(session, company.id, arch),
         "stack": _stack(session, company.id),
         "sprints": sprints,
         "events": _events(session, company.id),
@@ -596,5 +594,7 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "quality_basis": collect_plans.quality_basis(),
         "communications": collect_plans.communications(session, company.id),
         "stakeholders": collect_stakeholders.stakeholders(session, company.id),
+        collect_checks.KEY: collect_checks.basis(session, company.id, sprints),
+        collect_transition.KEY: collect_transition.releases(session, company.id),
         **_person_statements(session, company.id),
     }

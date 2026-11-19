@@ -449,7 +449,55 @@ def _snapshot():
         "quality_basis": collect_plans.quality_basis(),
         "communications": _communications(),
         "stakeholders": _stakeholders(),
+        "transition": [_transition()],
     }
+
+
+def _transition():
+    """Integration 4 of sprint 7 as the transition set reads it (issue #696)."""
+    task = {"task_id": 41, "title": "Build list endpoint", "state": "merged"}
+    task.update(commit="c" * 40, run_id=30, verification_id=12, covers=["REQ-1.1"])
+    suite = {"status": "tests_passed", "command": "pytest", "exit_code": 0}
+    suite.update(timed_out=False, failing=0, tested_commit="b" * 40)
+    publication = {"how": "gh", "provider": "github", "base": "main"}
+    publication.update(commit="b" * 40, audit_log_id=77, chain_hash="f0" * 32)
+    review = {"id": 9, "event": "approve", "outcome": "approved", "commit": "a" * 40}
+    review.update(diff_sha256="d1" * 32, files=3, sod="passed", by="Owner")
+    review.update(
+        recorded_at="2026-11-04T11:10:00", on_commit=True, chain_hash="e0" * 32
+    )
+    return _hashed(
+        {
+            "integration_id": 4,
+            "sprint_id": 7,
+            "status": "tests_passed",
+            "base": "main",
+            "commit": "a" * 40,
+            "integration_chain_hash": "ab" * 32,
+            "released_at": "2026-11-04T11:30:00",
+            "tasks": [_hashed(task)],
+            "suite": _hashed(suite),
+            "publications": [_hashed({**publication, "at": "2026-11-04T11:30:00"})],
+            "merge": None,
+            "review": _hashed(review),
+            "reviews": 1,
+            "readings": [
+                {
+                    "verification_id": 12,
+                    "run_id": 30,
+                    "task_id": 41,
+                    "verdict": "verified",
+                }
+                | {"tier": "high", "artifact_sha256": "9" * 64}
+            ],
+            "undone": [],
+            "hold_events": [
+                {"id": 100, "task_id": 42, "kind": "blocked", "actor": "QA"}
+                | {"created_at": "2026-11-04T08:00:00", "task_status_then": "blocked"}
+                | {"chain_hash": "unsigned:" + "1" * 64}
+            ],
+        }
+    )
 
 
 def _empty():
