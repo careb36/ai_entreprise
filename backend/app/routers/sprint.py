@@ -9,7 +9,6 @@ New backlog items are dispatched to agents via the transactional outbox: an
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 from auth_policy import current_user_if_required, require_company_role
@@ -38,7 +37,7 @@ from services.models import run_cost
 from services.planning import arch_author, spec_check, spec_planning, sprint_team
 from services.platform import sod
 from services.release import integration_state
-from services.tasks import dependencies, sprint_board, task_events, task_filter
+from services.tasks import dependencies, sprint_board, task_filter
 from services.tasks.board import (
     count_architect_advice,
     count_console_advice,
@@ -528,20 +527,11 @@ async def update_backlog_item(
             sprint_team.check_assignees, sprint_team.team_of(sprint), [req.assignee]
         )
         item.assignee = req.assignee
-    if req.status or comment:
-        # A person's transition: its event first, the comment its rendering.
-        task_events.record(
-            session,
-            item,
-            task_events.person_kind(req.status, comment),
-            task_events.PERSON,
-            status=req.status or None,
-            text=comment or None,
-            created_at=str(datetime.now(UTC).replace(tzinfo=None)),
-        )
-    item.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    session.add(item)
-    started = board_moves.start_moved_task(session, item, sprint, user, starts)
+    # A person's transition: its event first, the comment its rendering; a
+    # send-back from chat writes it through the same function.
+    _event, started = board_moves.record_person_change(
+        session, item, sprint, user, status=req.status, comment=comment, starts=starts
+    )
     session.commit()
     session.refresh(item)
     return {

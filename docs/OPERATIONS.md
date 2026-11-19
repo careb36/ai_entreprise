@@ -38,20 +38,29 @@ Factory leaves local or cloud execution of its Droids to the operator.
 
 ### Check the model keys
 
-The proxy's own checks do not prove a key can pay for an answer:
+The proxy records what each provider answered, but a key check is not
+always a credit check:
 
-- At startup the proxy asks each provider whose key is set to authenticate
-  (`llm-proxy/provider_keys.py`): a 1-token chat completion for DeepSeek and
-  Qwen, a model listing for Gemini and Nebius. Only a 401 or 403, or a body
-  that says `invalid_api_key`, counts as invalid; any other answer logs
-  `<provider> API key validated successfully`. A key whose account is out of
-  credit usually answers 402 (or another non-401/403 status), so it looks
-  validated, and a listing succeeds without credit too. Even an invalid key only logs `API KEY VALIDATION FAILED`: the
-  proxy starts anyway. A network failure logs `Could not validate …`.
-- The proxy's `GET /health` is not a provider check: it always answers
-  `"status": "healthy", "database": "connected"` (both fixed strings) and
-  lists only the Gemini catalogue. The backend's `/health/deep` only checks
-  that the proxy answers.
+- At startup the proxy asks each provider whether its key works
+  (`llm-proxy/provider_keys.py`) and logs one line per provider:
+  `provider <name>: ok (HTTP 200, checked …)`, or `no_credit` (402, or the
+  provider's quota or billing error), `invalid_key` (401/403), `rate_limited`,
+  `unreachable` (timeout or 5xx), `unexpected`, or `not_configured` for a key
+  that is empty or still the `.env.example` placeholder, which is never sent.
+  The proxy starts whatever the outcome, and logs an error when no provider
+  answered.
+- `curl -s localhost:5100/v1/providers | jq` lists each provider's `status`,
+  `observed_at`, `http_status`, `source` and `checked`. `checked: key`
+  (Gemini and Nebius, a model listing) proves the key, not the credit;
+  `key_and_credit` (DeepSeek, Qwen, or any request the proxy served) proves
+  both. After topping up an account,
+  `curl -s 'localhost:5100/v1/providers?refresh=1'` checks again (at most once
+  every 30 s). A request refused for lack of credit or for its key updates the
+  entry as it happens, and a served request records `ok`.
+- The proxy's `GET /health` carries the same `providers` block; its
+  `"database": "connected"` is still a fixed string. The backend's
+  `/health/deep` shows the block under `llm_proxy` without changing its
+  overall status.
 - `GET /v1/models` lists the ids the chat endpoint routes. A provider other
   than Gemini is listed only when its key is set and its catalogue was
   fetched (at startup, then hourly), so a missing provider here means a
@@ -162,6 +171,28 @@ id IN (12, 31)` and their `company_members` rows), keep one, and either give
 the others a different address (`UPDATE users SET email = 'ana+old@example.com'
 WHERE id = 31`) or move their memberships to the kept account and delete them.
 Back up first (`scripts/backup.sh`), then run `alembic upgrade head` again.
+
+### The SSO identity migration stops on duplicates
+
+Migration `0050` adds a unique index on `sso_identities (user_id, issuer)`:
+one single sign-on identity per account and provider (`docs/design/SSO.md`,
+T33). The application has always refused a second one, so this should find
+nothing; if an account already holds two at one provider (a past race), it
+changes nothing and stops with:
+
+```
+migration 0050 stopped: these accounts hold more than one SSO identity at the
+same provider (user 7 at https://idp.example.com: identity ids 3, 9). Nothing
+was changed. ...
+```
+
+It never deletes an identity: an operator decides. Look at them (`SELECT id,
+subject, email, created_at, last_login_at FROM sso_identities WHERE id IN
+(3, 9)`), keep the one the person signs in with (usually the most recent
+`last_login_at`) and delete the others (`DELETE FROM sso_identities WHERE id =
+9`); the person can link again from their Account page if the wrong one was
+kept. Back up first (`scripts/backup.sh`), then run `alembic upgrade head`
+again.
 
 ## Upgrade
 
@@ -465,7 +496,12 @@ api.slack.com/apps:
 **People.** Each member links their own account on the same page (*Link my
 Slack account* gives a ten-minute code to type as `/fabrique link CODE`, or
 `@Fabrique link CODE` in Teams). Only a linked account with the Manager role
-or above decides; a Viewer's click is refused and recorded.
+or above decides; a Viewer's click is refused and recorded. Two kinds of
+message are posted: a delivery held for acceptance (Approve, Send back) and a
+task blocked for a person's triage (Send back only, as on the board). A
+send-back with a reason is `/fabrique sendback CODE <reason>` in Slack (the
+code is on the message) or `@Fabrique sendback CODE <reason>` in Teams; the
+Slack button sends it back without one. The slash command needs no new scope.
 
 **Rotating the secrets.** Each is changed on the page by an Owner; an empty
 field keeps the stored value, and every change is audited by field name.
@@ -545,7 +581,10 @@ https address, or run as a stdio wrapper.
   `degraded` when NATS is, or Neo4j while it is enabled (API reads work, but
   without NATS no sprint moves), and `healthy` otherwise. Each component
   carries its `reason`. Neo4j switched off (`NEO4J_ENABLED=false`) is
-  reported as `disabled`, is not probed and degrades nothing.
+  reported as `disabled`, is not probed and degrades nothing. The
+  `llm_proxy` component carries the proxy's `providers` block as it is:
+  the proxy being up does not mean a provider can serve (a key without
+  credit is `no_credit`), and this does not change the severity.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,
