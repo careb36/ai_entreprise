@@ -17,11 +17,11 @@ the CHANGELOG says how.
 ``sprint_integrations.forge_policy`` records the policy an integration ran
 under; rows recorded before this migration keep NULL (not observed).
 
-Follows 0051 (code graph, #438). Open PR #711 takes 0052 and #703 takes
-0053: rechain ``down_revision`` onto the newest of them at merge.
+Follows 0052 (team membership history, #711); planned #703 takes 0054
+after this one.
 
-Revision ID: 0054
-Revises: 0051
+Revision ID: 0053
+Revises: 0052
 Create Date: 2026-11-19 20:00:00 UTC
 """
 
@@ -32,8 +32,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0054"
-down_revision = "0051"
+revision = "0053"
+down_revision = "0052"
 branch_labels = None
 depends_on = None
 

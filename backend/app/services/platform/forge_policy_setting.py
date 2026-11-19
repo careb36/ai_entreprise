@@ -3,7 +3,7 @@ and changed by an Owner, audited (issue #727; the values are
 ``services/contracts/forge_policy.py``).
 
 ``companies.forge_policy`` is ``none`` for a new company and ``publish`` for
-every company that existed before migration 0054. What is in force is that
+every company that existed before migration 0053. What is in force is that
 value capped by the deployment's ``FORGE_POLICY_MAX``, so an air-gapped
 install holds every company at ``none`` whatever is stored.
 

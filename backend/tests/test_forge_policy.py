@@ -404,7 +404,7 @@ def test_existing_companies_read_publish_after_the_migration_and_a_new_one_none(
     config = migrations.alembic_config()
     with engine.begin() as connection:
         config.attributes["connection"] = connection
-        command.upgrade(config, "0051")
+        command.upgrade(config, "0052")
     with engine.begin() as connection:
         connection.execute(
             text(

@@ -166,7 +166,7 @@ def test_the_migration_gives_existing_domains_a_legacy_record(tmp_path, monkeypa
         config.attributes["connection"] = connection
         command.upgrade(config, "0048")
     with engine.begin() as connection:
-        # In SQL: the model has columns later migrations add (0054).
+        # In SQL: the model has columns later migrations add (0053).
         connection.execute(
             text(
                 "INSERT INTO companies (company_name, default_scope_size, "

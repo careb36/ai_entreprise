@@ -479,7 +479,7 @@ def test_the_migration_backfills_the_creator_id_from_the_email(tmp_path, monkeyp
         config.attributes["connection"] = connection
         command.upgrade(config, "0047")
     with engine.begin() as connection:
-        # In SQL: the model has columns later migrations add (0054).
+        # In SQL: the model has columns later migrations add (0053).
         connection.execute(
             text(
                 "INSERT INTO companies (company_name, default_scope_size, "

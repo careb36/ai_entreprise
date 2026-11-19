@@ -215,6 +215,74 @@ describe('Bench page', () => {
     expect(screen.queryByRole('region', { name: 'HumanEval' })).not.toBeInTheDocument()
   })
 
+  it('shows the SWE-bench Lite section of a v6 card, an unmeasured instance never as 0', async () => {
+    const tokens = { measured: true, value: 5000, turns_reported: 3, turns_unreported: 0 }
+    const ran = (passed: number) => ({ measured: true, value: { passed, total: 2 } })
+    const notRun = { measured: false, reason: 'tests_not_run' }
+    const instance = (instance_id: string, outcome: unknown, extra: Record<string, unknown> = {}) => ({
+      instance_id, repo: 'pallets/flask', status: 'completed', outcome, reason: null,
+      fail_to_pass: ran(2), pass_to_pass: ran(2), wall_clock_seconds: 300, tokens, ...extra,
+    })
+    const swebench = {
+      dataset: { name: 'princeton-nlp/SWE-bench_Lite', revision: 'e'.repeat(40), split: 'test', source: 'example/lite', license: 'none declared', pinned: 3 },
+      graded: 3, measured: 2, resolved: 1, failed: 1, unmeasured: 1,
+      resolved_rate: { measured: true, value: 0.5 },
+      tokens: { measured: true, value: 15000, turns_reported: 9, turns_unreported: 0 },
+      instances: [
+        instance('pallets__flask-4992', { measured: true, value: 'pass' }),
+        instance('pallets__flask-5063', { measured: true, value: 'fail' }, { reason: 'a test failed', fail_to_pass: ran(0) }),
+        instance('psf__requests-3362', { measured: false, reason: 'grade_unmeasured', detail: 'no environment' }, {
+          fail_to_pass: notRun, pass_to_pass: notRun,
+        }),
+      ],
+      skipped: ['pytest-dev__pytest-11143'],
+    }
+    stubApi({ available: true, cards: [{ ...LATEST, schema_version: 6, humaneval: null, swebench }] })
+    renderPage()
+
+    const panel = await screen.findByRole('region', { name: 'SWE-bench Lite' })
+    const facts = within(panel).getByRole('group', { name: 'SWE-bench Lite' })
+    expect(within(facts).getByText('50%')).toBeInTheDocument()
+    expect(within(facts).getByText('15,000')).toBeInTheDocument()
+    expect(within(panel).getByText(/never graded: pytest-dev__pytest-11143/)).toBeInTheDocument()
+    expect(within(panel).getByText(/3 instances checked against their pinned sha256/)).toBeInTheDocument()
+
+    const table = within(panel).getByRole('table', { name: 'Each SWE-bench Lite instance of the latest scorecard' })
+    const resolved = within(table).getByRole('row', { name: /pallets__flask-4992/ })
+    expect(within(resolved).getByText('Resolved')).toBeInTheDocument()
+    expect(within(resolved).getAllByText('2/2')).toHaveLength(2)
+    const failed = within(table).getByRole('row', { name: /pallets__flask-5063/ })
+    expect(within(failed).getByText('Failed')).toBeInTheDocument()
+    expect(within(failed).getByText('a test failed')).toBeInTheDocument()
+    expect(within(failed).getByText('0/2')).toBeInTheDocument()
+    const unmeasured = within(table).getByRole('row', { name: /psf__requests-3362/ })
+    expect(within(unmeasured).getAllByText('Not measured')).toHaveLength(3)
+    expect(within(unmeasured).getByText('no environment')).toBeInTheDocument()
+    expect(within(unmeasured).queryByText(/^0/)).not.toBeInTheDocument()
+  })
+
+  it('shows a resolve rate with nothing measured as not measured, and no section without the block', async () => {
+    const swebench = {
+      dataset: { name: 'lite', revision: 'e'.repeat(40), split: 'test', source: 'x', license: 'none', pinned: 1 },
+      graded: 1, measured: 0, resolved: 0, failed: 0, unmeasured: 1,
+      resolved_rate: { measured: false, reason: 'no_instances_measured' },
+      tokens: { measured: false, reason: 'no_reported_turns', turns_reported: 0, turns_unreported: 1 },
+      instances: [], skipped: [],
+    }
+    stubApi({ available: true, cards: [{ ...LATEST, schema_version: 6, humaneval: null, swebench }] })
+    const { unmount } = renderPage()
+    const facts = within(await screen.findByRole('region', { name: 'SWE-bench Lite' })).getByRole('group', { name: 'SWE-bench Lite' })
+    expect(within(facts).getAllByText('Not measured')).toHaveLength(2)
+    expect(within(facts).queryByText('0%')).not.toBeInTheDocument()
+    unmount()
+
+    queryClient.clear()
+    stubApi({ available: true, cards: [{ ...LATEST, swebench: null }] })
+    renderPage()
+    await screen.findByRole('region', { name: /Latest scorecard/ })
+    expect(screen.queryByRole('region', { name: 'SWE-bench Lite' })).not.toBeInTheDocument()
+  })
+
   it('says when the backend finds no scorecards folder', async () => {
     stubApi({ available: false, cards: [] })
     renderPage()

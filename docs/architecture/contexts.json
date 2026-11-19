@@ -338,6 +338,7 @@
         "test_bench_routing.py",
         "test_bench_scorecard.py",
         "test_bench_specs.py",
+        "test_bench_swebench.py",
         "test_scorecard_history.py",
         "test_scorecard_schema_parity.py",
         "test_verificador_benchmark.py"
@@ -502,6 +503,9 @@
         "planning"
       ],
       "test_bench_specs.py": [
+        "planning"
+      ],
+      "test_bench_swebench.py": [
         "planning"
       ],
       "test_board.py": [
@@ -1164,6 +1168,9 @@
         "models",
         "repo"
       ],
+      "test_scorecard_swebench.py": [
+        "models"
+      ],
       "test_scrum_master.py": [
         "loop"
       ],
@@ -1188,6 +1195,9 @@
       ],
       "test_security_tests_router.py": [
         "planning"
+      ],
+      "test_self_host_sandbox_mode.py": [
+        "repo"
       ],
       "test_self_hosting.py": [
         "loop"
@@ -1334,6 +1344,9 @@
       ],
       "test_task_views.py": [
         "loop"
+      ],
+      "test_team_history.py": [
+        "models"
       ],
       "test_teams.py": [
         "management"

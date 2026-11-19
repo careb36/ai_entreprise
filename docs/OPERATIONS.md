@@ -945,7 +945,7 @@ yet, and the head's is never run).
 A company's git contacts an outside forge only as its forge policy allows
 (issue #727; `docs/contexts/release.md`, The forge policy): `none` (never),
 `fetch` (the base is fetched before a new branch) or `publish` (fetch, plus
-push and the request's comments). A company created after migration `0054`
+push and the request's comments). A company created after migration `0053`
 starts at `none`; every company that existed then was set to `publish`.
 
 - **Lower it** (a company whose code must not leave the computer that holds

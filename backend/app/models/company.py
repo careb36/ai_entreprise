@@ -98,7 +98,7 @@ class Company(SQLModel, table=True):
     # Whether the company's git may contact a forge (issue #727,
     # services/contracts/forge_policy.py): ``none`` (never), ``fetch`` (read
     # the base) or ``publish``. A new company starts at ``none``; migration
-    # 0054 set every company that existed then to ``publish``. An Owner writes
+    # 0053 set every company that existed then to ``publish``. An Owner writes
     # it, audited (services/platform/forge_policy_setting.py).
     forge_policy: str = "none"
 

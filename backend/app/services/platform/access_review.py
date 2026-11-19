@@ -240,7 +240,9 @@ def history(session: Session, company_id: int, limit: int = 20) -> list[dict]:
     ]
 
 
-def _remove_member(session: Session, company_id: int, user_id: int) -> str:
+def _remove_member(
+    session: Session, company_id: int, user_id: int, by: str | None = None
+) -> str:
     member = session.exec(
         select(CompanyMember).where(
             CompanyMember.company_id == company_id, CompanyMember.user_id == user_id
@@ -258,7 +260,7 @@ def _remove_member(session: Session, company_id: int, user_id: int) -> str:
         if len(owners) <= 1:
             raise ReviewRefused(409, "The company's last Owner cannot be removed")
     session.delete(member)
-    teams.drop_memberships(session, company_id, user_id)
+    teams.drop_memberships(session, company_id, user_id, by=by)
     return member.human_role
 
 
@@ -294,7 +296,7 @@ def complete(
         if item["decision"] != "remove":
             continue
         if item["kind"] == "member":
-            _remove_member(session, company_id, item["id"])
+            _remove_member(session, company_id, item["id"], by=f"human:{by.email}")
             removed_users.append(item["id"])
         else:
             token = session.get(ApiToken, item["id"])

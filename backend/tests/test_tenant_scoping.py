@@ -21,6 +21,7 @@ GLOBAL_TABLES = {
     "session_families": "a person's browser session, like users: it spans every company the person belongs to",
     "refresh_tokens": "a session family's rotations; each names its family, which names the person",
     "chat_interactions": "a replay store of chat platforms' interaction ids; each names its connection, which carries company_id",
+    "team_history_start": "one row for the deployment: the moment migration 0052 started the team membership history, the same for every company",
 }
 
 # Tables whose company_id may be empty, and why.
