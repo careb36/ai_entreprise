@@ -11,6 +11,7 @@ OpenHands with OpenHands (design only, no code taken).
 | `render_docs.py` | Renders `docs/ARCHITECTURE.md` and `docs/adr/0012`… from `docs/architecture/architecture.json`; `--write` writes them. |
 | `fixtures/issue-535-specification.json` | Issue #535 written as a specification, in the PO's shape (EARS-style criteria, after Kiro; design only). It specifies the issue and does not implement it. |
 | `fixtures/issue-535-architecture.json` | The Architect's revision of La Fabrique's architecture for that specification: the covers of #535's requirements, the interfaces and the decision it adds. The product keeps #469's covers (`earlier_covers`). |
+| `sandbox_mode.py` | `--container-mode` and the `sandbox` step: which sandbox the run's code actually ran in, from the daemon's replies (issue #701). |
 | `spec_source.py` | What the `issue` step runs on: #535 by default, or a `--spec` file checked with the product's `spec_check`; the `measure` step. |
 | `specs/folder-lint-specification.json` | The first manual iteration's finding (`docs/design/rsi-loop.md`, §7): the lint after an edit runs the edited file's folder's linter. EARS-style criteria and its `target_measure`. `folder-lint-architecture.json` beside it is the revision. |
 | `measures/test_folder_lint.py` | That finding's target measure: one test per criterion, written by a person. It fails on `main` (2026-11-16) and should pass once the sprint's change is in. |
@@ -49,9 +50,43 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
 | `issue` | Posts and approves the #535 specification (with `--spec FILE`, that file instead, see below); opens the next version of La Fabrique's architecture for it (`POST /v1/companies/{id}/architecture/revisions`, which keeps each module's #469 covers), writes the fixture's change into it and approves it, so both specifications share one architecture record; asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`), and reports its `integration_state`. |
+| `sandbox` | Reads the sandbox the daemon reported in its reply to each test run of the sprint (`GET /v1/agent_runs?sprint_id=…`, then each run's verifications, `evidence.test_run.sandbox`) and labels the run with it, apart from what was asked (below). |
 | `review` | Waits while the sprint's `integration_state` reads `integrating` (completed is not finished before that), then lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` records an approving review of the integration (its text the `--accept` comment, else a default; reported under `integration_review`, refused like any approval by the person who started the sprint) and then merges the integration into `main` locally (refused while its suite fails, and, when the company requires an approval, without one). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
 | `measure` | Asked by name only, never part of `all`, and only with `--spec`. Runs the file's `target_measure` (this repository's copy) with pytest on the `backend/` of `--build` (the snapshot by default), in the workspace daemon's container sandbox (below), from the image `--grading-image` names (default `FABRIQUE_GRADING_IMAGE`). The report keeps the exit status, `result` (`pass`, `fail` or `unmeasured`, with `reason`), `passed`, `isolation`, the sandbox applied and the sha256 of the output, computed by the harness. The exit status is 3 when the measure fails and 4 when it is unmeasured. No API call. |
+
+### Container mode (`--container-mode`, issue #701)
+
+The first run used the host (retrospective F8), and its report could not have
+said otherwise: `company.sandbox` is the mode the harness asked the company
+for, configuration rather than what ran. `--container-mode` runs the harness
+the way the e2e's `e2e (container)` job does (`E2E_SANDBOX=container
+scripts/e2e/run.sh`): the company's sandbox `container`, `--profile
+sprint-tests` with the sandbox image's own `python` (`python -m pytest -q -p
+no:cacheprovider tests`; `--profile` and `--test-command` still override), and
+the `sandbox` step after `wait`. The stack's side is the owner's, as in the
+e2e: `DELIVERY_SANDBOX=container` and `DELIVERY_SANDBOX_IMAGE` on the backend,
+and the image on the daemon's computer (the e2e builds `fabrique-e2e-sandbox:1`
+with `printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n'
+| docker build -t fabrique-e2e-sandbox:1 -`).
+
+The report's `sandbox` keeps `asked` (the company's setting) and `observed`
+(from the daemon's replies, `observed_by: daemon`) in separate fields:
+`container`, `host`, `bwrap`, `mixed` when replies disagree, a mode with
+`(not isolated)` when the reply said so, or `not observed` when no reply
+carried a sandbox (an older daemon, or no test ran). `container_mode` is true
+only when every reply reported an isolated container; `modes` counts the
+replies per mode and `images` lists the content IDs the daemon observed. When
+`observed` differs from `asked`, `note` says the run is labelled with the
+observed mode, not the asked one. A `--container-mode` run that is not
+container mode exits with status 5 and adds the reason to `notes`. The
+daemon's announced abilities (`workspace.status`) are a claim about what it
+can honour and never label a run.
+
+```bash
+python3 scripts/self_host/self_host.py --api http://localhost:8000 \
+  --checkout ~/src/la-fabrique-self --container-mode
+```
 
 ### A finding's specification (`--spec`)
 
