@@ -7,8 +7,116 @@ snapshot and a pack read back for the drift lint. The tests are
 """
 
 from services.planning.project_docs import (
+    collect_plans,
     pack,
 )
+from services.planning.project_docs.refs import digest
+
+
+def _hashed(entry):
+    return {**entry, "sha256": digest(entry)}
+
+
+def _communications():
+    """A webhook and a Slack connection on, the brief off for want of a mail server."""
+    return {
+        "webhook": _hashed(
+            {
+                "id": 2,
+                "enabled": True,
+                "events": ["sprint_closed", "task_done"],
+                "updated_at": "2026-11-02T09:00:00",
+            }
+        ),
+        "chat": [
+            _hashed(
+                {
+                    "id": 5,
+                    "provider": "slack",
+                    "enabled": True,
+                    "tested_at": "2026-11-02T09:30:00",
+                    "test_ok": True,
+                    "updated_at": "2026-11-02T09:30:00",
+                    "linked_members": 2,
+                }
+            )
+        ],
+        "brief": _hashed(
+            {
+                "policy_id": 3,
+                "policy_updated_at": "2026-11-02T10:00:00",
+                "manager_agent": True,
+                "mail_configured": False,
+                "interval_hours": 24.0,
+            }
+        ),
+        "anchors": _hashed(
+            {
+                "id": 1,
+                "enabled": False,
+                "cadence_minutes": 60,
+                "publish_webhook": False,
+                "tsa": False,
+                "updated_at": "2026-11-02T10:30:00",
+            }
+        ),
+    }
+
+
+def _stakeholders():
+    """One Manager team of two; approvals by a Manager, the agent and a former member."""
+    return {
+        "teams": [
+            _hashed(
+                {
+                    "id": 4,
+                    "role": "Manager",
+                    "members": 2,
+                    "created_at": "2026-10-29T09:00:00",
+                }
+            )
+        ],
+        "approvals": [
+            _hashed(
+                {
+                    "kind": "specification",
+                    "id": 2,
+                    "version": 1,
+                    "approved_at": "2026-10-30T11:00:00",
+                    "by": "former",
+                }
+            ),
+            _hashed(
+                {
+                    "kind": "specification",
+                    "id": 3,
+                    "version": 2,
+                    "approved_at": "2026-11-01T10:00:00",
+                    "by": "Manager",
+                }
+            ),
+            _hashed(
+                {
+                    "kind": "architecture",
+                    "id": 5,
+                    "version": 1,
+                    "approved_at": "2026-11-02T10:00:00",
+                    "by": "agent",
+                }
+            ),
+        ],
+    }
+
+
+def _no_channels():
+    brief = {
+        "policy_id": None,
+        "policy_updated_at": None,
+        "manager_agent": False,
+        "mail_configured": False,
+        "interval_hours": 24.0,
+    }
+    return {"webhook": None, "chat": [], "brief": _hashed(brief), "anchors": None}
 
 
 def _snapshot():
@@ -338,6 +446,9 @@ def _snapshot():
                 "audit_chain_hash": "f0" * 32,
             }
         ],
+        "quality_basis": collect_plans.quality_basis(),
+        "communications": _communications(),
+        "stakeholders": _stakeholders(),
     }
 
 
@@ -361,6 +472,9 @@ def _empty():
         "iteration_plans": [],
         "carries": [],
         "releases": [],
+        "quality_basis": collect_plans.quality_basis(),
+        "communications": _no_channels(),
+        "stakeholders": {"teams": [], "approvals": []},
     }
 
 

@@ -304,3 +304,59 @@ def test_settings_come_from_the_environment_with_safe_defaults():
         ]
         == 0
     )
+
+
+# The janitor's connection: no password, no start (issue found in PR #675).
+
+
+def test_the_janitor_refuses_to_start_without_a_database_password(monkeypatch):
+    """WHEN POSTGRES_PASSWORD is unset THE janitor SHALL refuse to start with
+    an error naming the variable, instead of a known placeholder password."""
+    from janitor import main
+
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    with pytest.raises(main.MissingDatabasePassword, match="POSTGRES_PASSWORD"):
+        main.database_password()
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_the_janitor_refuses_a_blank_database_password(monkeypatch, blank):
+    from janitor import main
+
+    monkeypatch.setenv("POSTGRES_PASSWORD", blank)
+    with pytest.raises(main.MissingDatabasePassword):
+        main.database_password()
+
+
+def test_the_janitor_never_connects_without_a_password(monkeypatch):
+    """No connection is attempted, so no default can reach the database."""
+    from janitor import main
+
+    calls = []
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.setattr(main.psycopg2, "connect", lambda **kw: calls.append(kw))
+    with pytest.raises(main.MissingDatabasePassword):
+        main.get_db_connection()
+    assert calls == []
+
+
+def test_the_janitor_connects_with_the_password_it_is_given(monkeypatch):
+    from janitor import main
+
+    given = "pw-" + "from-the-environment"
+    calls = []
+    monkeypatch.setenv("POSTGRES_PASSWORD", given)
+    monkeypatch.setattr(main.psycopg2, "connect", lambda **kw: calls.append(kw))
+    main.get_db_connection()
+    assert calls[0]["password"] == given
+
+
+def test_the_janitor_startup_exits_with_a_clear_message(monkeypatch, caplog):
+    """The check runs before the daily loop, whose errors are only logged."""
+    from janitor import main
+
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    with pytest.raises(SystemExit) as exited:
+        main.check_configuration()
+    assert exited.value.code == 1
+    assert "POSTGRES_PASSWORD" in caplog.text
