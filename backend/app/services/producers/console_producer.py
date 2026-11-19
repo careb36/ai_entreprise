@@ -229,6 +229,10 @@ BASE_OBSERVATIONS = (
     "base_not_on_remote",
     "started_from",
     "remote_unreachable",
+    # Under the company's forge policy (issue #727).
+    "base_remote_not_contacted",
+    "forge_policy",
+    "remote_contacted",
 )
 
 

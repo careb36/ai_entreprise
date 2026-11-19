@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type AccessDecision, type SodPolicyInput } from '../services/api'
+import { api, type AccessDecision, type ForgePolicy, type SodPolicyInput } from '../services/api'
 
 const policyKey = (companyId: number | null) => ['sod-policy', companyId] as const
 const reportKey = (companyId: number | null) => ['sod-report', companyId] as const
@@ -94,5 +94,25 @@ export function useSetProtectedPaths(companyId: number | null) {
   return useMutation({
     mutationFn: (enabled: boolean) => api.setProtectedPaths(companyId as number, enabled),
     onSuccess: data => client.setQueryData(protectedKey(companyId), data),
+  })
+}
+
+const forgeKey = (companyId: number | null) => ['forge-policy', companyId] as const
+
+/** The company's forge policy (issue #727): any member reads it. */
+export function useForgePolicy(companyId: number | null) {
+  return useQuery({
+    queryKey: forgeKey(companyId),
+    queryFn: () => api.getForgePolicy(companyId as number),
+    enabled: companyId !== null,
+  })
+}
+
+/** Change the forge policy: an Owner's, audited. */
+export function useSetForgePolicy(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (policy: ForgePolicy) => api.setForgePolicy(companyId as number, policy),
+    onSuccess: data => client.setQueryData(forgeKey(companyId), data),
   })
 }

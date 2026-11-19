@@ -81,8 +81,9 @@ def suite(monkeypatch, tmp_path):
     return command
 
 
-def _sprint(session, root, *, on=True):
-    company = _company(session, on=on)
+def _sprint(session, root, *, on=True, forge="publish"):
+    # A company that publishes, as every company did before issue #727.
+    company = _company(session, on=on, forge=forge)
     session.add(ProjectDiscovery(company_id=company.id, project_path=str(root)))
     sprint = Sprint(company_id=company.id, sprint_name="Auth", status="completed")
     session.add(sprint)

@@ -153,6 +153,17 @@ export interface ProtectedPathsSetting {
   patterns: { pattern: string; why: string }[]
 }
 
+/** Whether the company's git may contact a forge (issue #727): the stored value, the one in force and the deployment's ceiling. */
+export type ForgePolicy = 'none' | 'fetch' | 'publish'
+
+export interface ForgePolicySetting {
+  company_id: number
+  forge_policy: ForgePolicy
+  effective: ForgePolicy
+  ceiling: ForgePolicy
+  policies: ForgePolicy[]
+}
+
 // The policy, the exception, the review and the inventory are a signed-in
 // Owner's (never an API token's); the report is a Manager's. All audited.
 export const dutiesEndpoints = (http: Http) => ({
@@ -184,4 +195,11 @@ export const dutiesEndpoints = (http: Http) => ({
 
   setProtectedPaths: (companyId: number, enabled: boolean) =>
     http.put<ProtectedPathsSetting>(`/v1/companies/${companyId}/protected_paths`, { enabled }),
+
+  // Any member reads the forge policy; only an Owner changes it (audited).
+  getForgePolicy: (companyId: number) =>
+    http.get<ForgePolicySetting>(`/v1/companies/${companyId}/forge_policy`),
+
+  setForgePolicy: (companyId: number, forgePolicy: ForgePolicy) =>
+    http.put<ForgePolicySetting>(`/v1/companies/${companyId}/forge_policy`, { forge_policy: forgePolicy }),
 })

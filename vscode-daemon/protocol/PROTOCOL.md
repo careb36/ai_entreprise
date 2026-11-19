@@ -212,13 +212,13 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git` | `ok`, `worktree`, `branch`, `head`, `guard`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
-| `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`? | `ok`, the branch, commit and request URL |
-| `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
-| `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
-| `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`? | `is_repo`, and how the base stands against its remote |
-| `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider` | `ok`, `url`, `comments`, `truncated` |
+| `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`?, `forge_policy`? (§5.3) | `ok`, the branch, commit and request URL, `forge_policy`, `remote_contacted` |
+| `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`?, `forge_policy`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
+| `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`?, `forge_policy`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
+| `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted` |
+| `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
-| `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge` | `ok`, the integration branch and its merges, or the conflict |
+| `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge`, `forge_policy`? (§5.3) | `ok`, the integration branch and its merges, or the conflict, `forge_policy`, `remote_contacted` |
 | `workspace.deliver` | JetStream, consumed | `daemon.py` | — | A delivery queued while the daemon was offline: `job_id`, `workspace_root`, `files`, `git`? |
 | `workspace.delivered` | JetStream, published | `daemon.py` | — | The `workspace.generate` reply with `job_id`, `company_id`, `sprint_id`, `item_id`, `host` |
 | `glassroom.*` | published | `daemon.py` | — | A status line on `glassroom.<sprint_id>` |
@@ -340,6 +340,35 @@ with the company's sandbox, its network setting and the names in
 daemon treats `assistant` as `test`. Both are additive: protocol version 1.
 The application check (`workspace.app.check`) already normalized a missing
 `sandbox` the same way.
+
+### 5.3 The forge policy (issue #727)
+
+Every `workspace.git.*` request, and the `git` part of `workspace.generate`
+and `workspace.console.prepare`, carries `forge_policy`: `none`, `fetch` or
+`publish`, the company's setting capped by the backend's `FORGE_POLICY_MAX`
+(`services/platform/forge_policy_setting.py`). The daemon applies it in
+`forge_gate.py`, capped again by its own `FORGE_POLICY_MAX`:
+
+| Policy | The base fetched before a new branch (`git_base`) | `workspace.git.publish` (push, `gh`/`glab`) | `workspace.git.reviews` |
+| --- | --- | --- | --- |
+| `none` | No: the local base, `base_remote_not_contacted` names the upstream | Refused: 409, `code: "forge_disabled"`, nothing runs | Refused: 409, `code: "forge_disabled"` |
+| `fetch` | Yes, as before | Refused, as above | Refused, as above |
+| `publish` | Yes | As before | As before |
+
+The observation names what was applied: `forge_policy` and `remote_contacted`
+on the base's observation (the `git` answer of a delivery, `base_status` of
+an integration and `workspace.git.base_status`), at the top of the
+integration's reply, and on a publication. `workspace.git.merge` and
+`workspace.git.diff` never contact a remote; they receive the field like
+every git request.
+
+**Fail closed.** A request without `forge_policy`, or with a value the daemon
+does not know, is `none`. This is a deliberate change for a backend from
+before #727: its deliveries start from the local base and its publications
+are refused until it is upgraded, so neither an outdated backend nor a
+compromised one that leaves the field out can widen contact (NIST SP 800-53
+AC-6, CM-7). The field is announced as the `forge_policy` feature of each of
+these subjects (§2.1).
 
 ## 6. Conformance fixtures
 
