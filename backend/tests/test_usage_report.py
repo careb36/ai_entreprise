@@ -455,9 +455,10 @@ def test_the_csv_document(sqlite_session):
     assert rows[1] == [f'# company: {acme.id} (@Acme, "Ltd")']
     assert rows[2] == ["# period: 2026-11-02 to 2026-11-14 inclusive, UTC, by week"]
     assert rows[3] == ["# generated: 2026-11-15T12:00:00Z"]
-    header = rows[5]
+    assert rows[5][0].startswith("# teams: ")
+    header = rows[6]
     assert header[:3] == ["dimension", "key", "label"] and "cost_usd" in header
-    body = [dict(zip(header, r, strict=True)) for r in rows[6:]]
+    body = [dict(zip(header, r, strict=True)) for r in rows[7:]]
     total = body[0]
     assert (total["dimension"], total["tasks"], total["cost_usd"]) == (
         "total",
