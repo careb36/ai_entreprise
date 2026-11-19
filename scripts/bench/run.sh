@@ -3,6 +3,18 @@
 # a real stack and record a scorecard graded by tests a person wrote.
 #
 #   scripts/bench/run.sh [--out DIR] [--graders SHA] [SPEC_DIR...]
+#   scripts/bench/run.sh --humaneval[=IDS] [--out DIR]
+#
+# --humaneval runs HumanEval problems instead of the reference specifications
+# (scripts/bench/humaneval.py): the dataset downloaded from openai/human-eval
+# at a pinned commit and refused unless its sha256 is the pinned one, each
+# problem posted as a one-requirement specification starting from its prompt
+# (seed/solution.py), and graded with HumanEval's own tests in the same
+# sandbox, never shown to the factory. IDS: default (ten fixed problems; with
+# the fake, the ones it has answers for), all, or ids (0,2,HumanEval/7). The
+# card (in bench/scorecards/humaneval unless --out) carries the humaneval
+# block: pass@1, each problem's outcome, tokens. Never with SPEC_DIR or
+# --graders, and never part of the default run.
 #
 # Without SPEC_DIR, every bench/specs/*/ holding a spec.json. With --graders,
 # the specifications, their acceptance tests, the fake's answers and the
@@ -95,6 +107,9 @@
 #                                    2). scripts/bench/ablate.sh sets it, one
 #                                    section per run. Empty: nothing is off,
 #                                    whatever PROMPT_SECTIONS_OFF says outside.
+#   BENCH_HUMANEVAL_CACHE [empty]    a folder that keeps the checked HumanEval
+#                                    dataset between runs; checked again on use
+#   BENCH_HUMANEVAL_URL [empty]      a mirror of the dataset; the sha256 pin stays
 #   BENCH_GRADE_IN_PROCESS [empty]   1: grade on BENCH_PYTHON itself, the
 #                                    project's code in the runner's Python, for
 #                                    local development only; the card's criteria
@@ -109,19 +124,32 @@
 # written, whatever the models scored: compare.py judges the numbers.
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
-OUT_DIR="$REPO/bench/scorecards"
+OUT_DIR=""
 GRADERS_REV=""
+HUMANEVAL=""
+HE_IDS=default
 SPECS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out=*) OUT_DIR="${1#--out=}"; shift ;;
     --out) [ $# -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
+    --humaneval) HUMANEVAL=1; shift ;;
+    --humaneval=*) HUMANEVAL=1; HE_IDS="${1#--humaneval=}"; shift ;;
     --graders=*) GRADERS_REV="${1#--graders=}"; [ -n "$GRADERS_REV" ] || { echo "--graders requires a commit" >&2; exit 2; }; shift ;;
     --graders) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--graders requires a commit" >&2; exit 2; }; GRADERS_REV="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;
     *) SPECS+=("$(cd "$1" 2>/dev/null && pwd || echo "$1")"); shift ;;
   esac
 done
+if [ -n "$HUMANEVAL" ]; then
+  # A run of its own, refused before anything starts when mixed.
+  [ ${#SPECS[@]} -eq 0 ] || { echo "--humaneval runs HumanEval problems only: no SPEC_DIR" >&2; exit 2; }
+  [ -z "$GRADERS_REV" ] || { echo "--humaneval is not taken with --graders: HumanEval's tests come from the pinned dataset" >&2; exit 2; }
+  [[ "$HE_IDS" =~ ^(default|all|(HumanEval/)?[0-9]{1,4}(,(HumanEval/)?[0-9]{1,4})*)$ ]] \
+    || { echo "--humaneval=$HE_IDS: default, all, or task ids such as 0,2,HumanEval/7" >&2; exit 2; }
+  OUT_DIR=${OUT_DIR:-$REPO/bench/scorecards/humaneval}
+fi
+OUT_DIR=${OUT_DIR:-$REPO/bench/scorecards}
 case "$OUT_DIR" in /*) ;; *) OUT_DIR="$PWD/$OUT_DIR" ;; esac
 
 PG_HOST=${BENCH_POSTGRES_HOST:-${E2E_POSTGRES_HOST:-127.0.0.1}}
@@ -176,6 +204,23 @@ if [ -n "$GRADERS_REV" ]; then
   DAEMON_SHA256=$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/graders-daemon.json")
   echo "graders: $("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d["sha"], "sha256", d["sha256"])' "$WORK/graders.json")"
   for i in "${!SPECS[@]}"; do SPECS[i]="$SPECS_ROOT/$(basename "${SPECS[i]}")"; done
+fi
+HE_CARD=()
+if [ -n "$HUMANEVAL" ]; then
+  # The dataset fetched and checked against its pin, each problem written as
+  # a specification folder (spec.json, seed/, acceptance/, fake/ when the
+  # fake has an answer) under BENCH_WORKDIR, never in the repository.
+  HE_FLAGS=(--dest "$WORK/humaneval" --ids "$HE_IDS")
+  [ -n "$LLM_URL" ] || HE_FLAGS+=(--fake)
+  [ -z "${BENCH_HUMANEVAL_CACHE:-}" ] || HE_FLAGS+=(--cache "$BENCH_HUMANEVAL_CACHE")
+  [ -z "${BENCH_HUMANEVAL_URL:-}" ] || HE_FLAGS+=(--url "$BENCH_HUMANEVAL_URL")
+  rm -f "$WORK/humaneval/problems.json"
+  HE_SPECS=$("$PY" "$REPO/scripts/bench/humaneval.py" prepare "${HE_FLAGS[@]}") \
+    || { echo "HumanEval: the dataset could not be prepared"; exit 2; }
+  mapfile -t SPECS <<< "$HE_SPECS"
+  SPECS_ROOT="$WORK/humaneval/specs"
+  HE_CARD=(--humaneval "$WORK/humaneval/problems.json")
+  echo "HumanEval: ${#SPECS[@]} problem(s), dataset sha256 checked against its pin"
 fi
 if [ ${#SPECS[@]} -eq 0 ]; then
   for d in "$SPECS_ROOT"/*/; do [ -f "$d/spec.json" ] && SPECS+=("${d%/}"); done
@@ -367,13 +412,20 @@ ENTRIES=("$WORK"/entries/*.json)
   || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
 CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
-  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} "${ENTRIES[@]}") \
+  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} ${HE_CARD[@]+"${HE_CARD[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ -n "$CUT" ]; then
   echo "BENCH CUT (token budget $BUDGET exceeded; ${#SKIPPED[@]} specification(s) skipped, the run not judged)"
+elif [ "$LLM_LABEL" = fake ] && [ -n "$HUMANEVAL" ]; then
+  # The fake answers every problem it was given: anything less is a broken circuit.
+  if "$PY" -c 'import json, sys; h = json.load(open(sys.argv[1]))["humaneval"]; sys.exit(not (h["passed"] == h["graded"] == len(h["subset"]) > 0))' "$CARD"; then
+    echo "BENCH PASSED (fake LLM: every HumanEval problem passed its own tests)"
+  else
+    echo "BENCH FAILED (fake LLM: the HumanEval circuit did not run green; logs in $WORK)"; exit 1
+  fi
 elif [ "$LLM_LABEL" = fake ]; then
   # The fake gets every spec right: anything less is a broken circuit.
   if "$PY" -c 'import json, sys; t = json.load(open(sys.argv[1]))["totals"]; sys.exit(not (t["specs_completed"] == t["specs"] and t["criteria_passed"] == t["criteria_total"] > 0))' "$CARD"; then

@@ -1217,6 +1217,9 @@
       "test_sprint_integration_request.py": [
         "management"
       ],
+      "test_sprint_integration_state.py": [
+        "release"
+      ],
       "test_sprint_list.py": [
         "loop"
       ],
