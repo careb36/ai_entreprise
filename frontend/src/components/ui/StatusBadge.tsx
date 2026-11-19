@@ -1,6 +1,16 @@
-import type { LucideIcon } from 'lucide-react'
+import { CircleDashed, type LucideIcon } from 'lucide-react'
 
 export type StatusTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'brand'
+
+/** How one value of a status vocabulary looks: its icon and its tone (the word is the caller's). */
+export type StatusLook = { icon: LucideIcon; tone: StatusTone }
+
+const UNKNOWN_LOOK: StatusLook = { icon: CircleDashed, tone: 'neutral' }
+
+/** The look of `status` in `looks`, or the neutral dashed icon for a value the map does not know. */
+export function statusLook(looks: Record<string, StatusLook>, status: string): StatusLook {
+  return looks[status] ?? UNKNOWN_LOOK
+}
 
 const TONES: Record<StatusTone, string> = {
   neutral: 'border-surface-700 bg-surface-800 text-gray-300',

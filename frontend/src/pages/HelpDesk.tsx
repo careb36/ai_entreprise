@@ -5,8 +5,7 @@ import {
 } from 'lucide-react'
 import { useSupportAgentRecord, useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
 import { useAuthStore } from '../store/useAuthStore'
-import { CountPill, EmptyState, PageHeader, Panel, Toolbar } from '../components/ui'
-import { TicketStatusBadge } from '../components/TicketStatusBadge'
+import { CountPill, EmptyState, PageHeader, Panel, TicketStatusBadge, Toolbar } from '../components/ui'
 import {
   api,
   ApiError,

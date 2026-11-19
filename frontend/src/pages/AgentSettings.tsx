@@ -14,8 +14,7 @@ import { useConfirmDelete } from './agentSettings/useConfirmDelete'
 import { Toolbar } from './agentSettings/Toolbar'
 import { AgentCreator } from './agentSettings/AgentCreator'
 import { RoleGroups } from './agentSettings/RoleGroups'
-import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
-import { LoadError } from './admin/AdminParts'
+import { CountPill, EmptyState, LoadError, PageHeader, Panel } from '../components/ui'
 
 export default function AgentSettings() {
   const { t } = useTranslation()
@@ -166,7 +165,7 @@ export default function AgentSettings() {
               {[0, 1, 2].map(index => <div key={index} className="skeleton h-14 rounded-xl" />)}
             </div>
           ) : isError ? (
-            <LoadError message={t('agentsConfig.loadError')} onRetry={() => refetch()} />
+            <LoadError onRetry={() => refetch()}>{t('agentsConfig.loadError')}</LoadError>
           ) : visibleAgents.length === 0 ? (
             filtered
               ? <EmptyState icon={SearchX} title={t('agentsConfig.emptyFiltered')} dashed />

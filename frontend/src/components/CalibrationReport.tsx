@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCalibration, type CalibrationNumbers, type CalibrationReport as Report } from '../services/calibration'
 import type { Translate } from '../i18n/translate'
-import { Panel, SegmentedFilter } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, SegmentedFilter, TABLE, TD, TH, TR } from './ui'
 
 type Split = 'band' | 'role' | 'producer' | 'model' | 'sprint'
 const SPLITS: Split[] = ['band', 'role', 'producer', 'model', 'sprint']

@@ -17,10 +17,9 @@ import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, 
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
 import { ArchitectureHistory, ArchitectureVersionLine } from '../components/ArchitectureHistory'
 import { FindingList, Where } from '../components/Findings'
-import { LoadErrorAlert, LoadingLine, READABLE_TEXT, Spinner } from '../components/knowledge/PageStates'
 import { SourcesConsulted } from '../components/SourcesConsulted'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
-import { CountPill, PageHeader, Panel } from '../components/ui'
+import { CountPill, LoadError, LoadingLine, PageHeader, Panel, READABLE_TEXT, Spinner } from '../components/ui'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
 import { ApiError, errorDetail } from '../services/api'
@@ -424,9 +423,9 @@ export default function ArchitectureDetail() {
   if (failed || !specification || (!isNew && !architecture)) {
     return (
       <div className="page-container max-w-4xl space-y-3">
-        <LoadErrorAlert onRetry={() => { specQuery.refetch(); query.refetch() }}>
+        <LoadError onRetry={() => { specQuery.refetch(); query.refetch() }}>
           {t('architectures.loadOneError', { message: failed?.error ? errorDetail(failed.error) : '' })}
-        </LoadErrorAlert>
+        </LoadError>
         <Link to={specificationPath(specificationId)} className="btn-tool">{t('architectures.back')}</Link>
       </div>
     )

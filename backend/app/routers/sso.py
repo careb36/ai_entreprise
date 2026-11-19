@@ -6,7 +6,9 @@ Endpoints:
   a domain; sets an HttpOnly binding cookie and redirects to the provider.
 - ``GET  /v1/auth/sso/callback``    — the provider's redirect; validates and
   redirects to the frontend's ``/login/sso`` with a one-time handoff code, or
-  with an ``error`` code the frontend translates.
+  with an ``error`` code the frontend translates. A link begun inside a
+  signed-in session (``routers/sso_link.py``) lands on ``/account`` instead,
+  with ``sso_link`` or ``sso_link_error``.
 - ``POST /v1/auth/sso/exchange``    — trades the handoff code for the same
   browser session ``/v1/auth/login`` starts (HttpOnly cookies, issue #524).
 
@@ -26,26 +28,39 @@ from logging_config import logger
 from pydantic import Field
 from schemas import STRICT, RequestModel
 from security import limiter
-from services.platform import oidc, sso_flow
+from services.platform import oidc, sso_flow, sso_link
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1/auth/sso", tags=["Auth"])
 
 BINDING_COOKIE = "fabrique_sso_binding"
 COOKIE_PATH = "/v1/auth/sso"
+LINK_RETURN_PATH = "/account"
 
 
 def _rate_limit() -> str:
     return settings.SSO_RATE_LIMIT
 
 
-def _frontend(**params: str) -> RedirectResponse:
+def _frontend(path: str = "/login/sso", **params: str) -> RedirectResponse:
     base = settings.SSO_FRONTEND_URL.rstrip("/")
-    response = RedirectResponse(
-        f"{base}/login/sso?{urlencode(params)}", status_code=302
-    )
+    response = RedirectResponse(f"{base}{path}?{urlencode(params)}", status_code=302)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def set_binding(response: Response, binding: str) -> None:
+    """The HttpOnly cookie that ties a flow's state to this browser. Lax, so
+    the provider's top-level redirect back to the callback carries it."""
+    response.set_cookie(
+        BINDING_COOKIE,
+        binding,
+        max_age=int(sso_flow.STATE_TTL.total_seconds()),
+        path=COOKIE_PATH,
+        httponly=True,
+        secure=settings.SSO_CALLBACK_URL.startswith("https://"),
+        samesite="lax",
+    )
 
 
 class ExchangeRequest(RequestModel):
@@ -70,15 +85,7 @@ def sso_start(
         return _frontend(error=exc.code)
     response = RedirectResponse(url, status_code=302)
     response.headers["Cache-Control"] = "no-store"
-    response.set_cookie(
-        BINDING_COOKIE,
-        binding,
-        max_age=int(sso_flow.STATE_TTL.total_seconds()),
-        path=COOKIE_PATH,
-        httponly=True,
-        secure=settings.SSO_CALLBACK_URL.startswith("https://"),
-        samesite="lax",
-    )
+    set_binding(response, binding)
     return response
 
 
@@ -91,18 +98,30 @@ def sso_callback(
     error: str | None = None,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
+    binding = request.cookies.get(BINDING_COOKIE)
     try:
-        handoff = sso_flow.complete(
-            session,
-            state=state,
-            code=code,
-            error=error,
-            binding=request.cookies.get(BINDING_COOKIE),
-        )
-        response = _frontend(code=handoff)
+        row = sso_flow.take_state(session, state)
     except oidc.SsoError as exc:
         logger.info("sso callback refused: %s (%s)", exc.code, exc)
-        response = _frontend(error=exc.code)
+        row, response = None, _frontend(error=exc.code)
+    if row is not None and row.kind == "link":
+        try:
+            outcome = sso_link.complete(
+                session, row, code=code, error=error, binding=binding
+            )
+            response = _frontend(LINK_RETURN_PATH, sso_link=outcome)
+        except oidc.SsoError as exc:
+            logger.info("sso link refused: %s (%s)", exc.code, exc)
+            response = _frontend(LINK_RETURN_PATH, sso_link_error=exc.code)
+    elif row is not None:
+        try:
+            handoff = sso_flow.finish_login(
+                session, row, code=code, error=error, binding=binding
+            )
+            response = _frontend(code=handoff)
+        except oidc.SsoError as exc:
+            logger.info("sso callback refused: %s (%s)", exc.code, exc)
+            response = _frontend(error=exc.code)
     response.delete_cookie(BINDING_COOKIE, path=COOKIE_PATH)
     return response
 

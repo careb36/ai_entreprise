@@ -10,8 +10,7 @@ import {
   type GitHubInclusionRule,
 } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
-import { PageHeader, Panel } from '../components/ui'
-import { AccessNotice, ButtonSpinner } from './admin/AdminParts'
+import { AccessNotice, PageHeader, Panel, Spinner } from '../components/ui'
 
 const INCLUSION_RULES: GitHubInclusionRule[] = ['all', 'bots_only', 'non_bots']
 const WEBHOOK_PATH = '/v1/integrations/github/webhook'
@@ -115,7 +114,7 @@ function BindingForm({ companyId }: { companyId: number }) {
           )}
           <div className="border-t border-surface-700 pt-3">
             <button type="submit" disabled={bind.isPending || !owner.trim() || !repo.trim() || !secret.trim()} className="btn-primary btn-sm">
-              {bind.isPending ? <ButtonSpinner /> : <Plug size={13} aria-hidden="true" />}
+              {bind.isPending ? <Spinner size={13} /> : <Plug size={13} aria-hidden="true" />}
               {bind.isPending ? t('github.binding', { defaultValue: 'Connecting…' }) : t('github.bind', { defaultValue: 'Connect' })}
             </button>
           </div>
@@ -222,7 +221,7 @@ function BackfillForm({ companyId }: { companyId: number }) {
           )}
           <div className="border-t border-surface-700 pt-3">
             <button type="submit" disabled={backfill.isPending || !owner.trim() || !repo.trim()} className="btn-tool border border-surface-700">
-              {backfill.isPending ? <ButtonSpinner /> : <Download size={13} aria-hidden="true" />}
+              {backfill.isPending ? <Spinner size={13} /> : <Download size={13} aria-hidden="true" />}
               {backfill.isPending ? t('github.importing', { defaultValue: 'Importing…' }) : t('github.import', { defaultValue: 'Import' })}
             </button>
           </div>
