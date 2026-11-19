@@ -22,6 +22,10 @@ from opentelemetry import propagate
 
 logger = logging.getLogger("fabrique-backend")
 
+# The model a call names when its caller names none: the default team's Flash
+# model (``FLASH_MODEL`` in ``services/models/model_factory.py``).
+DEFAULT_MODEL = "deepseek-flash"
+
 
 def _json_body(response: Any) -> dict[str, Any] | None:
     """The proxy's JSON error body (provider, status, message), if it sent one."""
@@ -101,7 +105,7 @@ class LLMProxyClient:
     def chat(
         self,
         messages: list,
-        model: str = "gemini-pro",
+        model: str = DEFAULT_MODEL,
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,
@@ -171,7 +175,7 @@ class LLMProxyClient:
     async def chat_async(
         self,
         messages: list,
-        model: str = "gemini-pro",
+        model: str = DEFAULT_MODEL,
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,

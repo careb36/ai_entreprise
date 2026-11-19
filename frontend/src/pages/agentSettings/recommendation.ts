@@ -6,7 +6,15 @@ export type Recommendation = {
   reasonKey: string
 }
 
+// The default team's two models (backend services/models/model_factory.py):
+// DeepSeek Pro where a mistake is expensive, DeepSeek Flash for the rest.
+export const DEEPSEEK_PRO = 'deepseek-v4-pro'
+export const DEEPSEEK_FLASH = 'deepseek-flash'
+const PRO_ROLES = new Set(['architect', 'po', 'product owner', 'security', 'secops', 'reviewer'])
+
 export const AUTO_RECOMMENDED_MODEL_IDS = new Set([
+  DEEPSEEK_PRO,
+  DEEPSEEK_FLASH,
   'deepseek-coder',
   'deepseek-chat',
   'deepseek-reasoner',
@@ -37,6 +45,10 @@ function pickModels(models: ModelCatalogEntry[], preferredIds: string[]): ModelC
 
 /**
  * Returns ordered model IDs based on role + seniority.
+ *
+ * The default team's DeepSeek model for the role comes first when the live
+ * catalogue lists it (Pro for the Architect, PO, SecOps and Reviewer, Flash for
+ * every other role); the lists below follow as alternatives.
  *
  * Seniority tiers:
  *   Staff / Senior  → strongest reasoning models first (higher cost, highest quality)
@@ -152,7 +164,9 @@ export function recommendModelForRole(
     return defaults
   })()
 
-  const ordered = pickModels(models, plan.ids)
+  // The default team's model leads; the others stay as alternatives.
+  const lead = PRO_ROLES.has(normalizedRole) ? DEEPSEEK_PRO : DEEPSEEK_FLASH
+  const ordered = pickModels(models, [lead, ...plan.ids])
   return {
     primary: ordered[0] ?? null,
     alternatives: ordered.slice(1, 4),

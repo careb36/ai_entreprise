@@ -5,16 +5,30 @@ Every environment variable of the backend, the LLM proxy, the broker and the wor
 ## Required Environment Variables
 
 Copy `.env.example` to `.env` and fill in:
-- `QWEN_API_KEY`, `DEEPSEEK_API_KEY` — secrets, set in `.env`; read by the LLM
-  proxy (`llm-proxy/app.py`), which compose gives them to (the backend never
-  holds a provider key). The default team needs both: the role defaults in
-  `services/models/model_factory.py` (`ROLE_MODEL_MAP`) put PO, Architect,
-  ScrumMaster, SecOps, TechWriter and Designer on Qwen, and Developer, QA,
-  BackendDeveloper, FrontendDeveloper, DevOps, DataEngineer and the
-  EngramProcessor on DeepSeek. With `AGENT_MODEL` (below) on one provider's
-  model only that provider's key is needed. Unset, the proxy logs
-  `QWEN_API_KEY is not set` (or `DEEPSEEK_…`) at startup and lists none of that
-  provider's models.
+- `DEEPSEEK_API_KEY` — secret, set in `.env`; read by the LLM proxy
+  (`llm-proxy/app.py`), which compose gives it to (the backend never holds a
+  provider key). The only key the default team needs: the role defaults in
+  `services/models/model_factory.py` (`ROLE_MODEL_MAP`) put the PO, Architect
+  and SecOps, and the Reviewer agent, on DeepSeek Pro (`deepseek-v4-pro`), and
+  every other role (ScrumMaster, Developer, QA, TechWriter, BackendDeveloper,
+  FrontendDeveloper, DevOps, Designer, DataEngineer, the EngramProcessor) and
+  the Manager and Support agents on DeepSeek Flash (`deepseek-flash`). Unset,
+  the proxy logs `DEEPSEEK_API_KEY is not set` at startup and lists none of
+  DeepSeek's models, so no default role can run.
+
+  **Where the data goes.** DeepSeek's API is operated from, and processes
+  requests in, China. A prompt can carry what the agents read: specifications,
+  code, tickets. Where that includes personal data (yours, your users' or a
+  client's), sending it is a transfer to a third country under GDPR arts.
+  44–49 (a transfer impact assessment and a transfer mechanism), and a data
+  protection impact assessment (art. 35) is likely to apply. DeepSeek's models
+  are open weights: the alternative is to serve them on a host in the EU or
+  the US, or on your own hardware, and give the company a provider connection
+  to it (the Models page; `AGENT_MODEL_<ROLE>` or an agent's model then names
+  it), which keeps the prompts under your control.
+- `QWEN_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. No
+  default role runs on Qwen. It serves `qwen*`/`qwq-*`/`qvq-*` model ids an
+  agent, a role variable or a policy names.
 - `GEMINI_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. No
   default role runs on Gemini. It serves `gemini-*`/`gemma-*` model ids an agent,
   a role variable or a policy names, and the proxy's `/v1/embeddings` (Gemini's
@@ -849,8 +863,8 @@ Copy `.env.example` to `.env` and fill in:
   run (`BENCH_EDIT_FORMAT`, `scripts/bench/edit_formats.sh`). Unset: every
   model runs on `auto`.
 - `AGENT_MODEL` — backend, optional, default empty. One model id for every
-  role (`AGENT_MODEL=<a DeepSeek model id>` runs the whole team on DeepSeek,
-  and then only `DEEPSEEK_API_KEY` is needed). Read by
+  role instead of the DeepSeek defaults (the key of that model's provider is
+  then the one needed). Read by
   `ModelFactory.model_for_role` (`services/models/model_factory.py`), the
   single source of role defaults for the task worker, the ScrumMaster, the
   Support and Reviewer agents, the PO's drafts and the LangGraph producer.
@@ -864,7 +878,9 @@ Copy `.env.example` to `.env` and fill in:
   `AGENT_MODEL_FRONTEND_DEVELOPER`, `AGENT_MODEL_DEVOPS`,
   `AGENT_MODEL_DESIGNER`, `AGENT_MODEL_DATA_ENGINEER` and
   `AGENT_MODEL_ENGRAM_PROCESSOR`; a coding role without its own (backend,
-  frontend, DevOps, data) reads `AGENT_MODEL_DEVELOPER`. `docker-compose.yml`
+  frontend, DevOps, data) reads `AGENT_MODEL_DEVELOPER`, and the Reviewer
+  agent reads QA's settings (`AGENT_MODEL_QA`, `NEMOTRON_ROLES=qa`) though its
+  own default is DeepSeek Pro. `docker-compose.yml`
   passes only `AGENT_MODEL` and the first seven plus
   `AGENT_MODEL_ENGRAM_PROCESSOR` from `.env` to the backend; the others reach
   it only by adding them to the backend's `environment` in compose. The order,

@@ -13,7 +13,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 ### The LLM proxy client
 
-**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. `chat()` / `chat_async()` take a `model` id (default `"gemini-pro"`), a `role`, and an optional `bu_id`.
+**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. `chat()` / `chat_async()` take a `model` id (default `DEFAULT_MODEL`, `"deepseek-flash"`), a `role`, and an optional `bu_id`.
 
 ### The LLM proxy
 
@@ -47,20 +47,76 @@ The proxy is a set of sibling modules, each with one job; `app.py` is the entry 
 
 **`backend/app/services/models/usage_report.py`** / **`usage_csv.py`** / **`routers/usage.py`** — The usage report (issue #512, phase 5; [`docs/design/TEAMS_AND_USAGE.md`](../design/TEAMS_AND_USAGE.md)). `GET /v1/companies/{id}/usage` (Manager, so a team can grant it) and `GET /v1/companies/{id}/usage.csv` (Manager, audited `usage_report_exported` with the range, period and generation time) take `since` and `until` (UTC dates, inclusive, at most 366 days; the last 30 days by default) and `period` (`day`, `week` from Monday, `month`), and return `totals` and rows `by_period`, `by_person`, `by_team`, `by_role`, `by_producer`, `by_model`, each with `tasks`, `rework`, `runs`, `verified`, `refuted`, `unverified`, `approvals`, `changes_requested`, `turns`, `reported_turns`, `estimated_turns`, `unavailable_turns`, `input_tokens`, `output_tokens`, `reported_tokens`, `estimated_tokens`, `cost_cents` and `cost_unknown_turns`. Every number is read back from the records: tasks created in the range (rework from their `NEEDS WORK:` requests; producer and model of their latest run), runs ingested in it (the model the proxy reported, the latest verdict of `verifications`), the LLM turns' audit rows priced by `run_cost.turn_cost` (only `reported` turns carry tokens and cents; estimated, unavailable and unpriced turns are `cost_unknown_turns`, never 0; `cost_cents` is `None` when no turn was priced) and people's reviews (`run_reviews` by `author_user_id`). A person is who started the task's sprint (`sprints.started_by_user_id`, from the session) or who reviewed; anything else is unattributed (`key: null`). A person's teams are those they were in at the fact's own observed time (`usage_report.teams_at` over `teams.membership_periods`, issue #702); work from before the history started (`teams.history_started_at`, migration `0052`) keeps today's teams (`teams.teams_of`), and `team_history` (`started_at`, `current_teams_cover`) and the CSV's `# teams:` row say which period that covers; a person in two teams counts in both. The same records and `now` give the same JSON and CSV (sorted keys, unattributed last, cents rounded to six places). `usage_csv.render` writes comment rows naming the company, range, period, time zone and generation time, then a header and one row per dimension and key, prefixing `'` to every text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return (CSV injection). The **Usage** page (`/company/usage`, `pages/Usage.tsx`) shows it with the export.
 
+### The default team
+
+The default team runs on DeepSeek alone, through the proxy, so a deployment
+needs only `DEEPSEEK_API_KEY` (`docs/CONFIGURATION.md`). Qwen, Gemini and
+Nebius stay wired and optional: an agent, a role variable, a company choice or
+a policy may still name their models.
+
+| Role | Default model |
+|---|---|
+| PO, Architect, SecOps | DeepSeek Pro, `deepseek-v4-pro` (`PRO_MODEL`) |
+| Reviewer agent (judges a run; reads QA's settings) | DeepSeek Pro (`REVIEWER_MODEL`) |
+| ScrumMaster, Developer, QA, TechWriter, BackendDeveloper, FrontendDeveloper, DevOps, Designer, DataEngineer, EngramProcessor | DeepSeek Flash, `deepseek-flash` (`FLASH_MODEL`) |
+| Manager agent (as the ScrumMaster), Support agent (as the TechWriter), the support chat, the discovery orchestrator's fallback, `LLMProxyClient`'s default | DeepSeek Flash |
+
+`tests/test_model_factory.py` pins each role's default and checks that no
+default needs a key other than DeepSeek's.
+
+**The model ids.** From DeepSeek's pricing page
+(https://api-docs.deepseek.com/quick_start/pricing, read 2026-11-19):
+`deepseek-flash` is DeepSeek-V4.1-Flash-1017 and `deepseek-v4-pro` is
+DeepSeek-V4-Pro-0813; both have a 1M-token context, up to 384K output tokens,
+JSON output and tool calls (vision: Flash only). The older names
+`deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` are still accepted but
+retired: DeepSeek serves them with DeepSeek-V4.1-Flash-1017 at the Flash price,
+and `model_prices` prices `deepseek-v4-flash` as `deepseek-flash`. The proxy
+sends a model only when DeepSeek's live `/models` list has it
+(`llm-proxy/routing.py`, `resolve`); an id missing there is refused as
+`unknown_model`, never replaced, so if DeepSeek ever drops a name, set
+`AGENT_MODEL_<ROLE>` (or `AGENT_MODEL`) to an id `GET /v1/models` lists.
+
+**Thinking mode.** DeepSeek's thinking mode is on by default
+(https://api-docs.deepseek.com/guides/thinking_mode). Neither the backend nor
+the proxy sets the `thinking` field, so every role, the EngramProcessor's JSON
+extraction included, runs with DeepSeek's default, as `deepseek-v4-pro` did
+before; a caller that sets `thinking` has it forwarded unchanged
+(`llm-proxy/tests/test_deepseek_defaults.py`). Thinking tokens are billed as
+output.
+
+**Prices.** `model_prices.PUBLISHED_PRICES` holds DeepSeek's published price
+per million tokens for the two models, which models.dev lags: Flash $0.30
+input (cache miss) and $1.20 output, Pro $1.32 and $3.96. These are the **peak**
+prices, so a cost report never under-states. Peak hours are 01:00–04:00 and
+06:00–10:00 UTC, Monday to Friday, except Chinese public holidays; every other
+hour (weekends and those holidays in full) is off-peak at half the price
+(Flash $0.15 / $0.60, Pro $0.66 / $1.98). A cache hit costs Flash $0.006 and
+Pro $0.044 per million input tokens at peak (half off-peak); the cost report
+does not split cache hits and prices all input as a miss. Concurrency limits:
+Flash 2500, Pro 500 requests. Time-of-day pricing and scheduling around
+off-peak hours are not built here.
+
+**Where the data goes.** DeepSeek's API processes requests in China. For
+personal or client data that is a transfer to a third country (GDPR arts.
+44–49) and likely calls for a DPIA (art. 35); the open weights served on an EU
+or US host, or self-hosted, through a provider connection are the alternative
+(`docs/CONFIGURATION.md`, `DEEPSEEK_API_KEY`).
+
 ### Model routing
 
 Every LLM call goes through the proxy client (`backend/app/llm_proxy_client.py`).
 `LLMProxyClient.chat()` / `chat_async()` take a `model` id (default
-`"gemini-pro"`), a `role`, and an optional `bu_id`. There is no
+`"deepseek-flash"`), a `role`, and an optional `bu_id`. There is no
 `model_preference` parameter: the `fast` / `powerful` tiers are an internal
 fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
 `backend/app/services/models/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`); every caller
 reads them through `default_model_for_role` → `ModelFactory.model_for_role`,
 which applies, most specific first, `AGENT_MODEL_<ROLE>` (for BackendDeveloper,
 FrontendDeveloper, DevOps and DataEngineer, then `AGENT_MODEL_DEVELOPER`; their
-map default is the Developer's, the Designer's the deciding roles'), `NEMOTRON_ROLES`,
-`AGENT_MODEL` (one model for the whole team, e.g. DeepSeek alone), then the
-map. Above those sit the company's own choice and the agent's: an agent's
+map default is the Developer's), `NEMOTRON_ROLES`, `AGENT_MODEL` (one model for
+the whole team), then the map (the Reviewer reads QA's settings, then its own
+default, `REVIEWER_MODEL`). Above those sit the company's own choice and the agent's: an agent's
 `model` (the Agents page) wins, then the company's model for the role
 (`Company.role_models`), then its default (`Company.default_model`;
 `services/models/company_models.py`, `GET`/`PUT /v1/companies/{id}/model_settings`,

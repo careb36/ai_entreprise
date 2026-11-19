@@ -13,14 +13,18 @@ Factory leaves local or cloud execution of its Droids to the operator.
    `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and the model
    keys, or plan a provider connection per company. The default team
    (`ROLE_MODEL_MAP` in `backend/app/services/models/model_factory.py`) runs
-   on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter, Designer) and
-   DeepSeek (Developer, QA and the other coding roles, the EngramProcessor),
-   so it needs `QWEN_API_KEY` and `DEEPSEEK_API_KEY`. `AGENT_MODEL` set to one
-   provider's model needs only that provider's key. Optional:
-   `GEMINI_API_KEY` (no default role uses it; Gemini model ids and the
-   proxy's embeddings, which fall back to a local vector without it) and
-   `NEBIUS_API_KEY` (only for `NEMOTRON_ROLES` or `nvidia/…` ids). The keys
-   go to the LLM proxy only. `docs/CONFIGURATION.md` lists every variable.
+   on DeepSeek alone: DeepSeek Pro (`deepseek-v4-pro`) for the PO, Architect,
+   SecOps and the Reviewer agent, DeepSeek Flash (`deepseek-flash`) for every
+   other role and agent, so it needs only `DEEPSEEK_API_KEY`. `AGENT_MODEL`
+   set to another provider's model needs that provider's key instead.
+   Optional: `QWEN_API_KEY` (no default role uses it), `GEMINI_API_KEY` (no
+   default role uses it; Gemini model ids and the proxy's embeddings, which
+   fall back to a local vector without it) and `NEBIUS_API_KEY` (only for
+   `NEMOTRON_ROLES` or `nvidia/…` ids). The keys go to the LLM proxy only.
+   DeepSeek's API processes requests in China: before personal or client
+   data goes through it, see `DEEPSEEK_API_KEY` in `docs/CONFIGURATION.md`
+   (GDPR arts. 44–49 and 35, and serving the open weights yourself through a
+   provider connection). `docs/CONFIGURATION.md` lists every variable.
 2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
    the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
    on by default: the backend does not wait for it and connects once it
@@ -85,8 +89,8 @@ one model of each other provider: the answer then has another
 `served_model` and `provider`, and `fallback_from` holds the failed call's
 `provider`, `model`, `status` and `message`. With no fallback left the proxy
 answers 429 or 502 with `"error": "upstream_error"` and the same fields. Do
-it once per provider the team uses (one Qwen and one DeepSeek id for the
-default team).
+it once per model the team uses (`deepseek-v4-pro` and `deepseek-flash` for
+the default team).
 
 The browser's session lives in `HttpOnly; Secure; SameSite=Strict` cookies
 (issue #524): serve the frontend and the API over https (a browser accepts
@@ -816,10 +820,9 @@ balance), and puts the task back to `todo` instead of blocking it. Add
 credit, or change the role's model on the company's Models page, then call
 `POST /v1/sprints/{id}/resume`. The company gets no follow-up sprint of its
 own while one is paused.
-On the default team the provider is Qwen (`QWEN_API_KEY`: PO, Architect,
-ScrumMaster, SecOps, TechWriter, Designer) or DeepSeek (`DEEPSEEK_API_KEY`:
-Developer, QA and the other coding roles); Gemini or Nebius only where a
-role, an agent or `AGENT_MODEL` names one of their models. Before resuming,
+On the default team the provider is DeepSeek (`DEEPSEEK_API_KEY`, every
+role); Qwen, Gemini or Nebius only where a role, an agent or `AGENT_MODEL`
+names one of their models. Before resuming,
 check the key with the 1-token request in Deploy, Check the model keys: the
 proxy's startup log says "validated successfully" for a key without credit,
 and its `/health` says nothing about providers. While another provider still

@@ -227,7 +227,7 @@ flowchart TB
     BE <--> NATS[("NATS JetStream")]
     NATS <--> D["Workspace daemon<br/>on your computer: files, git, tests, sandbox"]
     BE --> PX["LLM proxy<br/>budgets, routing, provider status"]
-    PX --> PR["Qwen · DeepSeek · Gemini · Nebius"]
+    PX --> PR["DeepSeek (default) · Qwen · Gemini · Nebius"]
     BE -.->|optional| NEO[("Neo4j knowledge graph")]
 ```
 
@@ -257,8 +257,8 @@ runs the workspace daemon. Node.js 24+ only for frontend development.
 ```bash
 cp .env.example .env
 # Set at least POSTGRES_PASSWORD, NEO4J_PASSWORD (and NEO4J_AUTH),
-# JWT_SECRET_KEY, FERNET_SECRET_KEY, AUDIT_SIGNING_KEY,
-# QWEN_API_KEY and DEEPSEEK_API_KEY.
+# JWT_SECRET_KEY, FERNET_SECRET_KEY, AUDIT_SIGNING_KEY and DEEPSEEK_API_KEY
+# (the only model key the default team needs).
 
 docker compose up -d          # backend :8000, frontend :5173, LLM proxy :5100
 ./scripts/start-daemon.sh     # on the computer that holds your projects
@@ -278,9 +278,16 @@ docker compose up -d          # backend :8000, frontend :5173, LLM proxy :5100
 4. **Plan**: write a specification, or plan a sprint from a goal, and follow
    it on the board.
 
-The default team runs on Qwen and DeepSeek. `AGENT_MODEL` puts every role on
-one model (then only that provider's key is needed), `AGENT_MODEL_<ROLE>` sets
-one role, and the **Agents** page changes a role's model per company.
+The default team runs on DeepSeek alone: DeepSeek Pro (`deepseek-v4-pro`) for
+the PO, Architect, SecOps and the Reviewer agent, where a mistake is
+expensive, and DeepSeek Flash (`deepseek-flash`) for every other role. Qwen,
+Gemini and Nebius stay optional. `AGENT_MODEL` puts every role on one model
+(then that provider's key is needed), `AGENT_MODEL_<ROLE>` sets one role, and
+the **Agents** page changes a role's model per company. DeepSeek's API
+processes requests in China; for personal or client data, read
+`DEEPSEEK_API_KEY` in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) (GDPR
+transfer assessment and DPIA, or the open weights on a host you choose through
+a provider connection).
 
 Neo4j is optional and on by default. Compose runs its Enterprise image under
 an evaluation licence, so for production either license it or turn it off:

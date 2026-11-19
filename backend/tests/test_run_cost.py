@@ -102,6 +102,27 @@ def test_a_known_provider_that_does_not_price_the_model_is_not_priced_by_another
     )
 
 
+def test_the_default_team_is_priced_at_deepseeks_published_peak_price():
+    """DeepSeek's pricing page (read 2026-11-19), peak hours, cache miss."""
+    flash, reason = model_prices.price_for("deepseek-flash", "deepseek")
+    assert reason is None
+    assert (flash["input"], flash["output"]) == (0.30, 1.20)
+    pro, _ = model_prices.price_for("deepseek-v4-pro", "deepseek")
+    assert (pro["input"], pro["output"]) == (1.32, 3.96)
+    # The retired Flash name is served, and billed, as deepseek-flash.
+    legacy, _ = model_prices.price_for("deepseek-v4-flash", "deepseek")
+    assert (legacy["model"], legacy["input"], legacy["output"]) == (
+        "deepseek-flash",
+        0.30,
+        1.20,
+    )
+    # Another provider's copy of the same name keeps its own price.
+    assert model_prices.price_for("deepseek-flash", "gemini") == (
+        None,
+        model_prices.PRICE_UNKNOWN,
+    )
+
+
 def test_cents_are_dollars_per_million_times_one_hundred():
     price = {"input": 1.0, "output": 4.0}
     assert model_prices.cents(1_000_000, 0, price) == pytest.approx(100.0)
