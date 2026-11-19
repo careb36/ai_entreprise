@@ -253,7 +253,9 @@ There is no tagged release yet: the project has not been versioned since the
 original scaffold, and `main` is the web product. The changes above are the
 accumulated work between the initial scaffold and the current head. Releases
 are `vX.Y.Z` tags on `main`; how one is cut is in
-[docs/OPERATIONS.md](docs/OPERATIONS.md#releasing). Every pull request adds
-its line under `[Unreleased]`.
+[docs/OPERATIONS.md](docs/OPERATIONS.md#releasing). A pull request records
+its change as a fragment in [changelog.d/](changelog.d/README.md), and the
+fragments are folded into `[Unreleased]` when a release is cut;
+`python3 scripts/release_notes.py unreleased` shows them folded in.
 
 [unreleased]: https://github.com/careb36/le-fabrique/commits/main

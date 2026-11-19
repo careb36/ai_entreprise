@@ -105,8 +105,20 @@ was retired on 2026-10-29 along with the release pull request it existed for.
 `archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work
 `main` had already rewritten. `main` carries none of `vr/`.
 
-Each pull request adds its line under `[Unreleased]` in `CHANGELOG.md`;
-releases are `vX.Y.Z` tags on `main` (`docs/OPERATIONS.md`, Releasing).
+Each pull request records its change as one new file,
+`changelog.d/<issue>-<slug>.md`: the first line is the Keep a Changelog
+section (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or
+`Security`), the rest is the entry as it will read under it
+(`changelog.d/README.md` has the format and an example). Leave
+`CHANGELOG.md` itself alone: two pull requests never write the same
+fragment, so they never conflict, where a shared line at the top of the file
+made every merge into `main` conflict with every open pull request (issue
+#731). `python3 scripts/check_changelog.py` checks the fragments (it runs in
+`scripts/check.sh` and the backend tests), and `python3
+scripts/release_notes.py unreleased` prints the unreleased changes with the
+fragments folded in. The fragments are collected into `CHANGELOG.md` when a
+release is cut; releases are `vX.Y.Z` tags on `main` (`docs/OPERATIONS.md`,
+Releasing).
 
 ---
 

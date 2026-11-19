@@ -21,7 +21,12 @@ SCRIPT = REPO / "scripts" / "check.sh"
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
 
-RULE_STEPS = ["backend dependency rule", "frontend layer rule", "file sizes"]
+RULE_STEPS = [
+    "backend dependency rule",
+    "frontend layer rule",
+    "file sizes",
+    "changelog fragments",
+]
 
 
 def _run(*args: str, **env: str) -> subprocess.CompletedProcess[str]:
