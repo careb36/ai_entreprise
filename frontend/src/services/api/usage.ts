@@ -35,6 +35,14 @@ export interface UsageRow extends UsageNumbers {
   label: string | null
 }
 
+/** Which teams the report used (issue #702): each person's team at the time
+ *  of the work, except before the membership history started, where today's
+ *  teams apply to `current_teams_cover` (null when the history covers it all). */
+export interface UsageTeamHistory {
+  started_at: string | null
+  current_teams_cover: { since: string; before: string } | null
+}
+
 export interface UsageReport {
   company_id: number
   since: string
@@ -43,6 +51,7 @@ export interface UsageReport {
   timezone: 'UTC'
   generated_at: string
   columns: string[]
+  team_history?: UsageTeamHistory
   totals: UsageNumbers
   by_period: UsageRow[]
   by_person: UsageRow[]

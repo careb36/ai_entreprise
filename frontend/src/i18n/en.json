@@ -3307,6 +3307,10 @@
     "empty": "Nothing recorded in this range.",
     "generated": "Generated {{at}} from the records.",
     "costNote": "The cost counts only turns the proxy reported and the catalogue prices; the others are counted apart, never as zero. A person in two teams counts in both.",
+    "teamHistory": {
+      "atTheTime": "Each person's team is the one they were in at the time of the work.",
+      "partly": "Work from {{since}} to before {{before}} keeps each person's team as it is today: the team history started then. After it, each person's team is the one they were in at the time of the work."
+    },
     "rowCount_one": "{{count}} row",
     "rowCount_other": "{{count}} rows"
   },
