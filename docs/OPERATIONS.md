@@ -163,6 +163,28 @@ the others a different address (`UPDATE users SET email = 'ana+old@example.com'
 WHERE id = 31`) or move their memberships to the kept account and delete them.
 Back up first (`scripts/backup.sh`), then run `alembic upgrade head` again.
 
+### The SSO identity migration stops on duplicates
+
+Migration `0050` adds a unique index on `sso_identities (user_id, issuer)`:
+one single sign-on identity per account and provider (`docs/design/SSO.md`,
+T33). The application has always refused a second one, so this should find
+nothing; if an account already holds two at one provider (a past race), it
+changes nothing and stops with:
+
+```
+migration 0050 stopped: these accounts hold more than one SSO identity at the
+same provider (user 7 at https://idp.example.com: identity ids 3, 9). Nothing
+was changed. ...
+```
+
+It never deletes an identity: an operator decides. Look at them (`SELECT id,
+subject, email, created_at, last_login_at FROM sso_identities WHERE id IN
+(3, 9)`), keep the one the person signs in with (usually the most recent
+`last_login_at`) and delete the others (`DELETE FROM sso_identities WHERE id =
+9`); the person can link again from their Account page if the wrong one was
+kept. Back up first (`scripts/backup.sh`), then run `alembic upgrade head`
+again.
+
 ## Upgrade
 
 1. Back up with `scripts/backup.sh` (below). The baseline migration is
@@ -465,7 +487,12 @@ api.slack.com/apps:
 **People.** Each member links their own account on the same page (*Link my
 Slack account* gives a ten-minute code to type as `/fabrique link CODE`, or
 `@Fabrique link CODE` in Teams). Only a linked account with the Manager role
-or above decides; a Viewer's click is refused and recorded.
+or above decides; a Viewer's click is refused and recorded. Two kinds of
+message are posted: a delivery held for acceptance (Approve, Send back) and a
+task blocked for a person's triage (Send back only, as on the board). A
+send-back with a reason is `/fabrique sendback CODE <reason>` in Slack (the
+code is on the message) or `@Fabrique sendback CODE <reason>` in Teams; the
+Slack button sends it back without one. The slash command needs no new scope.
 
 **Rotating the secrets.** Each is changed on the page by an Owner; an empty
 field keeps the stored value, and every change is audited by field name.

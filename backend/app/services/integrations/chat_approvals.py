@@ -1,15 +1,18 @@
 """Approvals in Slack or Teams: what is posted, when, and what a click may still decide.
 
-The approval point wired here is the risk hold: QA approved a delivery that
+Two approval points are wired. The risk hold: QA approved a delivery that
 waits for a person's acceptance (a high risk tier, or every approval at
 autonomy level 1; ``services/loop/worker/qa_review.py`` writes the
-``risk_hold`` task event). A ``before_flush`` listener (``install``) sees that
-event and queues one ``chat_approval_post`` outbox row per enabled connection
-of the company, in the same transaction, so a rolled-back hold posts nothing.
-The outbox processor calls ``deliver``, which reads the approval point again
-from the record (``approval_point``: still held, the run and its latest
-version, the Verifier's verdict and the checks that did not pass) and posts
-it. Updates after a decision and Slack's ephemeral refusals go through the
+``risk_hold`` task event); Approve or Send back. The triage block: a task
+blocked until a person acts, without a hold (the inbox's blocked task); Send
+back only, as on the board. A ``before_flush`` listener (``install``) sees a
+new ``risk_hold`` event or an event that blocks a task and queues one
+``chat_approval_post`` outbox row per enabled connection of the company, in
+the same transaction, so a rolled-back change posts nothing. The outbox
+processor calls ``deliver``, which reads the point again from the record
+(``current_point``: still waiting, the run and its latest version, the
+Verifier's verdict and the checks that did not pass) and posts it; a block
+the worker still retries or reviews on its own posts nothing. Updates after a decision and Slack's ephemeral refusals go through the
 same outbox (``chat_approval_update``, ``chat_ephemeral``) and are retried
 like any delivery.
 
@@ -50,6 +53,9 @@ POST = "chat_approval_post"
 UPDATE = "chat_approval_update"
 EPHEMERAL = "chat_ephemeral"
 EVENT_TYPES = (POST, UPDATE, EPHEMERAL)
+# The approval points: what a message was posted for, read from the record.
+RISK_HOLD = "risk_hold"
+TRIAGE = "triage"
 PASSING = {"pass", "passed", "verified", "skipped", "ok"}
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 # A claim not finished by then (the process stopped between the claim and the
@@ -102,24 +108,28 @@ def _failing_checks(verification: Verification | None) -> list[dict[str, str]]:
     return failing
 
 
-def approval_point(
+def _blocked_in(
     session: Session, item: BacklogItem | None, company_id: int
-) -> dict[str, Any] | None:
-    """What a person would accept for *item* now, or ``None`` when nothing waits."""
+) -> Sprint | None:
+    """*item*'s sprint when *item* is blocked in a sprint of *company_id*."""
     if item is None or item.id is None or item.status != "blocked":
         return None
     sprint = session.get(Sprint, item.sprint_id)
     if sprint is None or sprint.company_id != company_id:
         return None
-    events = task_events.for_task(session, item.id)
-    hold = task_projection.risk_hold_from_events(events)
-    if not isinstance(hold, TaskEvent) or not hold.chain_hash:
-        return None
-    if not task_projection.awaits_risk_acceptance(session, item):
-        return None
-    run = task_run(session, company_id, item.id)
-    if run is None:
-        return None
+    return sprint
+
+
+def _point(
+    session: Session,
+    company_id: int,
+    kind: str,
+    item: BacklogItem,
+    sprint: Sprint,
+    run: AgentRun,
+    event: TaskEvent,
+    note: str,
+) -> dict[str, Any]:
     verification = session.exec(
         select(Verification)
         .where(
@@ -130,15 +140,16 @@ def approval_point(
     ).first()
     app = _app_url()
     return {
+        "kind": kind,
         "company_id": company_id,
         "task_id": item.id,
         "title": item.title,
         "sprint_name": sprint.sprint_name,
         "run_id": run.id,
         "run_version": run.version,
-        "hold_event_id": hold.id,
-        "head": hold.chain_hash,
-        "hold_note": (hold.payload or {}).get("text") or "Held for a person",
+        "hold_event_id": event.id,
+        "head": event.chain_hash,
+        "hold_note": note,
         "verdict": verification.verdict if verification else "not verified yet",
         "failing_checks": _failing_checks(verification),
         "task_url": f"{app}/sprints/{sprint.id}/tasks/{item.id}",
@@ -146,19 +157,108 @@ def approval_point(
     }
 
 
+def approval_point(
+    session: Session, item: BacklogItem | None, company_id: int
+) -> dict[str, Any] | None:
+    """What a person would accept for *item* now, or ``None`` when nothing waits."""
+    sprint = _blocked_in(session, item, company_id)
+    if sprint is None or item is None:
+        return None
+    events = task_events.for_task(session, item.id)
+    hold = task_projection.risk_hold_from_events(events)
+    if not isinstance(hold, TaskEvent) or not hold.chain_hash:
+        return None
+    if not task_projection.awaits_risk_acceptance(session, item):
+        return None
+    run = task_run(session, company_id, item.id)
+    if run is None:
+        return None
+    note = (hold.payload or {}).get("text") or "Held for a person"
+    return _point(session, company_id, RISK_HOLD, item, sprint, run, hold, note)
+
+
+def triage_point(
+    session: Session, item: BacklogItem | None, company_id: int
+) -> dict[str, Any] | None:
+    """A task blocked until a person acts, without a risk hold, or ``None``.
+
+    The inbox's blocked task (``routers/inbox.py``): nothing the worker does
+    on its own moves it, it is not frozen, not carried to another sprint and
+    not in an archived sprint. The message is posted for the event that
+    blocked it (the latest that set ``blocked``); a note added since leaves
+    the message current, a new block or any other move makes it stale. A
+    task with no in-house run stays in the web inbox.
+    """
+    sprint = _blocked_in(session, item, company_id)
+    if sprint is None or item is None or sprint.archived_at is not None:
+        return None
+    events = task_events.for_task(session, item.id)
+    record = task_projection.TaskRecord(item.comments, events, item.assignee)
+    if record.next_step() is not None or record.carried("to"):
+        return None
+    if record.awaits_risk_acceptance():
+        return None  # the risk hold's own message
+    block = next(
+        (e for e in reversed(events) if e.task_status == "blocked" and e.chain_hash),
+        None,
+    )
+    run = task_run(session, company_id, item.id)
+    if block is None or run is None:
+        return None
+    note = record.block_reason() or "Blocked until a person acts"
+    return _point(session, company_id, TRIAGE, item, sprint, run, block, note)
+
+
+def current_point(
+    session: Session, item: BacklogItem | None, company_id: int
+) -> dict[str, Any] | None:
+    """What waits for a person on *item* now: a risk hold, a triage block or nothing."""
+    return approval_point(session, item, company_id) or triage_point(
+        session, item, company_id
+    )
+
+
+def kind_of(session: Session, message: ChatApprovalMessage) -> str:
+    """The point *message* was posted for, from the event it names in the record."""
+    event = session.get(TaskEvent, message.hold_event_id)
+    return (
+        RISK_HOLD if event is not None and event.event_type == "risk_hold" else TRIAGE
+    )
+
+
 # ---------------------------------------------------------------------------
 # Watching the session for a new hold
 # ---------------------------------------------------------------------------
 
 
+def _post_pending(session: OrmSession, connection_id: int, task_id: int) -> bool:
+    """Whether a post for *task_id* to *connection_id* already waits to be delivered."""
+    rows = list(
+        session.execute(
+            select(OutboxEvent).where(
+                OutboxEvent.aggregate_id == str(connection_id),
+                OutboxEvent.event_type == POST,
+                OutboxEvent.status == "pending",
+            )
+        ).scalars()
+    ) + [o for o in session.new if isinstance(o, OutboxEvent) and o.event_type == POST]
+    return any(
+        (r.payload or {}).get("connection_id") == connection_id
+        and (r.payload or {}).get("task_id") == task_id
+        for r in rows
+    )
+
+
 def _before_flush(session: OrmSession, _context: Any, _instances: Any) -> None:
     try:
         with session.no_autoflush:
+            # A hold, or any event that blocks a task: whether it waits for a
+            # person is read again from the record when the post is delivered.
             holds = [
                 obj
                 for obj in session.new
                 if isinstance(obj, TaskEvent)
-                and obj.event_type == "risk_hold"
+                and (obj.event_type == "risk_hold" or obj.task_status == "blocked")
                 and obj.task_id is not None
             ]
             for hold in holds:
@@ -173,6 +273,8 @@ def _before_flush(session: OrmSession, _context: Any, _instances: Any) -> None:
                     .all()
                 )
                 for connection in connections:
+                    if _post_pending(session, connection.id, hold.task_id):
+                        continue  # its delivery reads the record as it is then
                     session.add(
                         OutboxEvent(
                             aggregate_type="chat_connection",
@@ -192,7 +294,7 @@ _installed = False
 
 
 def install() -> None:
-    """Watch every session for a new risk hold (idempotent)."""
+    """Watch every session for a new risk hold or block (idempotent)."""
     global _installed
     if not _installed:
         event.listen(OrmSession, "before_flush", _before_flush)
@@ -251,8 +353,11 @@ def claim(
     *,
     head: str | None = None,
     run_version: int | None = None,
-) -> tuple[AgentRun, BacklogItem]:
-    """Take *message* for one decision, or raise ``StaleApproval``; commits the claim."""
+) -> tuple[AgentRun, BacklogItem, str]:
+    """Take *message* for one decision, or raise ``StaleApproval``; commits the claim.
+
+    Returns the run, the task and the point's kind (``RISK_HOLD`` or ``TRIAGE``).
+    """
     if message is None:
         raise StaleApproval("This approval is not known here.")
     now = _now()
@@ -269,9 +374,10 @@ def claim(
     ):
         raise StaleApproval("This button does not match the approval it belongs to.")
     item = session.get(BacklogItem, message.task_id)
-    point = approval_point(session, item, connection.company_id)
+    point = current_point(session, item, connection.company_id)
     if (
         point is None
+        or point["hold_event_id"] != message.hold_event_id
         or point["head"] != message.head_hash
         or point["run_id"] != message.run_id
         or point["run_version"] != message.run_version
@@ -303,7 +409,7 @@ def claim(
     if run is None or item is None:  # approval_point found both a moment ago
         release(session, message)
         raise StaleApproval("This approval is not known here.")
-    return run, item
+    return run, item, point["kind"]
 
 
 def release(session: Session, message: ChatApprovalMessage) -> None:
@@ -366,7 +472,7 @@ def _short_code(session: Session) -> str:
 
 async def _post(session: Session, connection: ChatConnection, task_id: int) -> None:
     item = session.get(BacklogItem, task_id)
-    point = approval_point(session, item, connection.company_id)
+    point = current_point(session, item, connection.company_id)
     if point is None:
         return  # decided or changed since: nothing waits, nothing to retry
     message = session.exec(
@@ -399,7 +505,7 @@ async def _post(session: Session, connection: ChatConnection, task_id: int) -> N
             credential,
             {
                 "channel": connection.channel,
-                "text": f"A delivery waits for a person's acceptance: {point['title']}",
+                "text": f"{chat_messages.heading(point)}: {point['title']}",
                 "blocks": chat_messages.slack_blocks(
                     point, message.id, message.short_code
                 ),

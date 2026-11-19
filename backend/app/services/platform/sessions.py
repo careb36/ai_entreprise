@@ -205,9 +205,11 @@ def revoke_users(
     user_ids: list[int],
     reason: str,
     method: str | None = None,
+    commit: bool = True,
 ) -> int:
     """Revoke the live families of *user_ids* (only those started by
-    *method*, when given); the number revoked."""
+    *method*, when given); the number revoked. With *commit* false the caller
+    commits, so the revocation joins its transaction (an audited unlink)."""
     if not user_ids:
         return 0
     query = select(SessionFamily).where(
@@ -222,5 +224,6 @@ def revoke_users(
         family.revoked_at = now
         family.revoked_reason = reason
         session.add(family)
-    session.commit()
+    if commit:
+        session.commit()
     return len(families)
