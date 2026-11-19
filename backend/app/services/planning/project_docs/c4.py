@@ -1,4 +1,5 @@
-"""C4 diagrams (context, containers, components) from the architecture record.
+"""C4 diagrams (context, containers, components) from the architecture record,
+and the code level from the stored code graph.
 
 The C4 model is Simon Brown's (c4model.com, CC BY 4.0); its four levels give
 the structure, and the content comes only from records:
@@ -12,8 +13,9 @@ the structure, and the content comes only from records:
 The architecture record has no field for people or for systems outside the
 project, so the context level shows what can be derived (an interface no
 module consumes is used from outside) and says what is not recorded. The code
-level is not built here: it needs the daemon's code graph
-(``services/tools/code_graph.py``) and is left for a later phase.
+level (``c4_code``, issue #693) is a section of the document, not a diagram:
+per component, the files the stored code graph holds under the module's path
+(the architecture's claim) and what was observed in them.
 
 A diagram is plain data the frontend draws (``nodes``, ``edges``, ``groups``; our labels, the
 notes and the titles in the pack's language, the names from the architecture
@@ -31,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from services.planning.project_docs import texts
+from services.planning.project_docs import c4_code, texts
 from services.planning.project_docs.layout import input_sha256, missing_line, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import (
@@ -42,6 +44,9 @@ from services.planning.project_docs.sanitize import (
 )
 
 C4_INPUTS = ("architecture", "stack")
+# The document also reads the stored code graph for its code level; the
+# diagrams do not, so a changed file leaves them current.
+DOCUMENT_INPUTS = (*C4_INPUTS, c4_code.INPUT)
 LEVELS = ("context", "container", "component")
 Tr = Callable[..., str]
 OUTSIDE_KINDS = ("http", "cli", "event")
@@ -375,13 +380,10 @@ def document(snapshot: dict[str, Any], built: list[dict[str, Any]]) -> dict[str,
             )
         body += [""] + [f"- {md_inline(note)}" for note in diagram["notes"]] + [""]
     if arch:
-        body += [
-            tr("c4.code_heading"),
-            "",
-            missing_line(lang, tr("c4.code_missing")),
-            "",
-        ]
-        missing.append(tr("section.code_level"))
+        code, observed = c4_code.section(snapshot, src, lang, tr)
+        body += code
+        if not observed:
+            missing.append(tr("section.code_level"))
     credit = tr("c4.credit")
     title = tr("title.c4")
     lines = [f"# {title}", "", f"_{tr('generated_note')} {credit}_", "", *body, ""]
@@ -396,6 +398,6 @@ def document(snapshot: dict[str, Any], built: list[dict[str, Any]]) -> dict[str,
         "persons": [],
         "domain": "",
         "focus_area": "",
-        "inputs": list(C4_INPUTS),
-        "input_sha256": input_sha256(snapshot, C4_INPUTS),
+        "inputs": list(DOCUMENT_INPUTS),
+        "input_sha256": input_sha256(snapshot, DOCUMENT_INPUTS),
     }
