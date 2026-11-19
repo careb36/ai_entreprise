@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import threading
 import time
+from types import SimpleNamespace
 
 import code_graph as daemon_graph  # the daemon's module, on sys.path via conftest
 import pytest
@@ -235,10 +236,16 @@ def test_a_sync_stops_at_its_time_budget(project, sqlite_session, monkeypatch):
     monkeypatch.setattr(code_graph_store, "PAGE_FILES", 1)
     monkeypatch.setattr(code_graph_store, "SYNC_BUDGET_SECONDS", 0.2)
     pages: list[int] = []
+    # A clock the daemon call advances: a loaded runner storing a page slowly
+    # must not change how many pages fit in the budget.
+    clock = [0.0]
+    monkeypatch.setattr(
+        code_graph_store, "time", SimpleNamespace(monotonic=lambda: clock[0])
+    )
 
     def slow(subject, payload, timeout):
         pages.append(len(payload["known"]))
-        time.sleep(0.15)
+        clock[0] += 0.15
         return daemon_graph.graph_report(payload["workspace_root"], payload)
 
     done = code_graph_store.sync(store, slow, company.id, str(project))
