@@ -13,6 +13,8 @@ vi.mock('../services/cost', async importOriginal => ({
 }))
 // The relations section reads its own data (components/TaskRelations.test.tsx).
 vi.mock('../components/TaskRelations', () => ({ TaskRelations: () => null }))
+// So do the run secrets (components/RunSecretsPanel.test.tsx).
+vi.mock('../components/RunSecretsPanel', () => ({ RunSecretsPanel: () => null }))
 vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),

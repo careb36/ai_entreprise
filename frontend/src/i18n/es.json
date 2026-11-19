@@ -39,7 +39,8 @@
     "invitations": "Invitaciones",
     "findings": "Hallazgos",
     "bench": "Banco de pruebas",
-    "account": "Cuenta"
+    "account": "Cuenta",
+    "apiTokens": "Tokens de API"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3117,6 +3118,30 @@
     "confirmNow": "Confirmar ahora",
     "add": "Añadir relación"
   },
+  "runSecrets": {
+    "title": "Secretos de ejecución",
+    "count_one": "{{count}} secreto",
+    "count_other": "{{count}} secretos",
+    "note": "Valores que la ejecución de esta tarea puede leer como variables de entorno. El backend los guarda cifrados; un valor no se vuelve a mostrar.",
+    "loading": "Cargando los secretos de ejecución",
+    "loadError": "No se pudieron cargar los secretos de ejecución: {{message}}",
+    "empty": "Esta tarea no tiene secretos de ejecución.",
+    "listLabel": "Secretos de ejecución de esta tarea",
+    "valueHidden": "valor oculto",
+    "delete": "Eliminar",
+    "deleteNamed": "Eliminar el secreto {{name}}",
+    "confirmDelete": "¿Eliminar {{name}}?",
+    "deleteConfirm": "Sí, eliminar",
+    "addTitle": "Agregar un secreto de ejecución",
+    "name": "Nombre",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Valor",
+    "nameHint": "Letras, dígitos y guiones bajos, sin empezar por un dígito.",
+    "nameInvalid": "Usa solo letras, dígitos y guiones bajos, y no empieces por un dígito.",
+    "add": "Agregar secreto",
+    "saved": "{{name}} guardado",
+    "addError": "No se pudo agregar el secreto: {{message}}"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -3550,6 +3575,55 @@
       "proxyPresent": "Token interno del proxy LLM: definido",
       "proxyMissing": "Token interno del proxy LLM: sin definir"
     }
+  },
+  "apiTokens": {
+    "title": "Tokens de API",
+    "subtitle": "Credenciales para scripts y trabajos de CI, enviadas como token Bearer. Un token actúa con el rol que se le dio, nunca superior al de quien lo creó.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Cargando los tokens",
+    "loadError": "No se pudieron cargar los tokens: {{message}}",
+    "empty": "Esta empresa no tiene tokens de API.",
+    "emptyManager": "Crea uno abajo cuando un script o un trabajo de CI necesite llamar a la API.",
+    "columns": {
+      "name": "Nombre",
+      "role": "Rol",
+      "state": "Estado",
+      "createdBy": "Creado por",
+      "expires": "Vence",
+      "lastUsed": "Último uso",
+      "actions": "Acciones"
+    },
+    "state": {
+      "active": "Activo",
+      "expired": "Vencido",
+      "revoked": "Revocado"
+    },
+    "never": "Nunca",
+    "neverUsed": "Sin uso todavía",
+    "revoke": "Revocar",
+    "revokeNamed": "Revocar el token {{name}}",
+    "confirmLabel": "Confirmar la revocación de {{name}}",
+    "confirmRevoke": "¿Revocarlo ahora? Las llamadas con él se detienen de inmediato.",
+    "revokeConfirm": "Sí, revocar",
+    "createTitle": "Crear un token",
+    "name": "Nombre",
+    "namePlaceholder": "ci-nocturno",
+    "role": "Rol",
+    "expiry": "Vence a los",
+    "days_one": "{{count}} día",
+    "days_other": "{{count}} días",
+    "createHint": "Todo token vence. Un token no puede crear otros tokens y su rol nunca es superior al tuyo.",
+    "create": "Crear token",
+    "forbidden": "Tu rol no puede crear un token con ese rol.",
+    "createError": "No se pudo crear el token: {{message}}",
+    "createdTitle": "Token {{name}} creado",
+    "createdOnce": "Cópialo ahora: se muestra solo esta vez y esta página no lo guarda. Guárdalo en tu gestor de secretos.",
+    "secretLabel": "Token",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "dismiss": "Descartar el token nuevo"
   },
   "taskViews": {
     "filters": "Filtros",

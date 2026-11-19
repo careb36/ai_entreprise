@@ -39,7 +39,8 @@
     "invitations": "Invitations",
     "findings": "Findings",
     "bench": "Bench",
-    "account": "Account"
+    "account": "Account",
+    "apiTokens": "API tokens"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3117,6 +3118,30 @@
     "confirmNow": "Confirm now",
     "add": "Add relation"
   },
+  "runSecrets": {
+    "title": "Run secrets",
+    "count_one": "{{count}} secret",
+    "count_other": "{{count}} secrets",
+    "note": "Values this task's run may read as environment variables. The backend stores them encrypted; a value is never shown again.",
+    "loading": "Loading the run secrets",
+    "loadError": "Could not load the run secrets: {{message}}",
+    "empty": "This task has no run secrets.",
+    "listLabel": "Run secrets of this task",
+    "valueHidden": "value hidden",
+    "delete": "Delete",
+    "deleteNamed": "Delete the secret {{name}}",
+    "confirmDelete": "Delete {{name}}?",
+    "deleteConfirm": "Yes, delete",
+    "addTitle": "Add a run secret",
+    "name": "Name",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Value",
+    "nameHint": "Letters, digits and underscores, not starting with a digit.",
+    "nameInvalid": "Use letters, digits and underscores only, and do not start with a digit.",
+    "add": "Add secret",
+    "saved": "{{name}} saved",
+    "addError": "Could not add the secret: {{message}}"
+  },
   "boardNotes": {
     "title": "Board notes",
     "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",
@@ -3550,6 +3575,55 @@
       "proxyPresent": "LLM proxy internal token: set",
       "proxyMissing": "LLM proxy internal token: not set"
     }
+  },
+  "apiTokens": {
+    "title": "API tokens",
+    "subtitle": "Credentials for scripts and CI jobs, sent as a Bearer token. A token acts with the role it was given, never more than its creator's.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Loading the tokens",
+    "loadError": "Could not load the tokens: {{message}}",
+    "empty": "This company has no API tokens.",
+    "emptyManager": "Create one below when a script or a CI job needs to call the API.",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "state": "State",
+      "createdBy": "Created by",
+      "expires": "Expires",
+      "lastUsed": "Last used",
+      "actions": "Actions"
+    },
+    "state": {
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "never": "Never",
+    "neverUsed": "Not used yet",
+    "revoke": "Revoke",
+    "revokeNamed": "Revoke the token {{name}}",
+    "confirmLabel": "Confirm revoking {{name}}",
+    "confirmRevoke": "Revoke it now? Calls with it stop at once.",
+    "revokeConfirm": "Yes, revoke",
+    "createTitle": "Create a token",
+    "name": "Name",
+    "namePlaceholder": "ci-nightly",
+    "role": "Role",
+    "expiry": "Expires after",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "createHint": "Every token expires. A token cannot create other tokens, and its role is never above yours.",
+    "create": "Create token",
+    "forbidden": "Your role cannot create a token with that role.",
+    "createError": "Could not create the token: {{message}}",
+    "createdTitle": "Token {{name}} created",
+    "createdOnce": "Copy it now: it is shown only this once and is not kept by this page. Store it in your secret manager.",
+    "secretLabel": "Token",
+    "copy": "Copy",
+    "copied": "Copied",
+    "dismiss": "Dismiss the new token"
   },
   "taskViews": {
     "filters": "Filters",
