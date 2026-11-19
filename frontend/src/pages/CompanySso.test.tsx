@@ -6,11 +6,13 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 
-/** Answers the group mapping's own request (issue #703) apart, so a test's
- * sequence of answers is the SSO settings' alone. */
+/** Answers the group mapping's and the members' identities' own requests
+ * (issue #703) apart, so a test's sequence of answers is the SSO settings' alone. */
 function skippingGroups(inner: (url: string, init?: RequestInit) => unknown) {
   return vi.fn(async (url: string, init?: RequestInit) =>
-    String(url).includes('/sso/group-mappings') ? response(404, { detail: 'no SSO connection' }) : inner(url, init))
+    String(url).includes('/sso/group-mappings') ? response(404, { detail: 'no SSO connection' })
+      : String(url).includes('/sso/identities') ? response(200, { identities: [] })
+        : inner(url, init))
 }
 
 function response(status: number, body: unknown = {}) {
