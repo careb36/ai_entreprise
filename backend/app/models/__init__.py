@@ -70,7 +70,7 @@ from .sso import (
 )
 from .support import BugReport
 from .task_relation import TaskRelation
-from .team import Team, TeamMember
+from .team import Team, TeamHistoryStart, TeamMember, TeamMembershipPeriod
 from .webhook import CompanyWebhook
 from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
@@ -140,7 +140,9 @@ __all__ = [
     "TaskEvent",
     "TaskRelation",
     "Team",
+    "TeamHistoryStart",
     "TeamMember",
+    "TeamMembershipPeriod",
     "User",
     "Verification",
     "WikiLink",

@@ -1344,6 +1344,9 @@
       "test_task_views.py": [
         "loop"
       ],
+      "test_team_history.py": [
+        "models"
+      ],
       "test_teams.py": [
         "management"
       ],

@@ -6,7 +6,9 @@ Owner) that applies to its members within the company; a member's effective
 role is the higher of their own and their teams' (``services/platform/teams.py``,
 read by ``auth_policy.require_company_role``). Only a signed-in human Owner
 reads or changes teams: an API token is refused, since a team grants roles.
-Every change is audited (``team_*``) with who made it.
+Every change is audited (``team_*``) with who made it, and every change to a
+membership opens or closes a period of the membership history
+(``teams.open_membership``, ``teams.close_memberships``; issue #702).
 
 - ``GET    /v1/companies/{id}/teams``                          the teams and the members
 - ``POST   /v1/companies/{id}/teams``                          create one
@@ -221,6 +223,9 @@ async def delete_team(
     actor = _owner(session, user, company_id)
     team = _team(session, company_id, team_id)
     members = sorted(_member_ids(session, team))
+    teams.close_memberships(
+        session, company_id, team_id=team.id, by=f"human:{actor.email}"
+    )
     session.exec(delete(TeamMember).where(TeamMember.team_id == team.id))
     session.delete(team)
     _audit(
@@ -264,6 +269,7 @@ async def add_team_member(
                 added_by=actor.email,
             )
         )
+        teams.open_membership(session, team, user_id, by=f"human:{actor.email}")
         _audit(
             session,
             company_id,
@@ -295,6 +301,13 @@ async def remove_team_member(
     if existing is None:
         raise HTTPException(status_code=404, detail="Not in this team")
     session.delete(existing)
+    teams.close_memberships(
+        session,
+        company_id,
+        team_id=team.id,
+        user_id=user_id,
+        by=f"human:{actor.email}",
+    )
     _audit(
         session,
         company_id,
