@@ -57,6 +57,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import forge_gate
 import git_workspace
 import project_lock
 import workspace_read
@@ -214,7 +215,8 @@ def _task_worktree(workspace_root: str, spec: Dict[str, Any]) -> tuple:
         raise git_workspace.GitError(f"the project is not a folder on this machine: {workspace_root}")
     root = Path(git_workspace._out(["rev-parse", "--show-toplevel"], folder))
     # A new branch starts from the base as its remote has it (git_base).
-    start, started = git_workspace.fresh_start(root, branch, str(spec.get("base") or "HEAD"))
+    start, started = git_workspace.fresh_start(root, branch, str(spec.get("base") or "HEAD"),
+                                               forge_gate.of(spec))
     return root, git_workspace.worktree_for(root, branch, start), branch, started
 
 

@@ -40,13 +40,17 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
    third-party tools without Security sign-off. No new dependency without
    Security review.
-3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
+3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline
+   or a failed `scripts/land.sh` check.
 4. **Every change traces to an issue.** PRs without a linked issue are closed.
 5. **Agents merge pull requests** — their own and each other's — once every
    check on the head commit is green. No PR waits for a human signature. What
    still does not happen: merging a red or still-running head, merging a head
    that moved after it was verified, or weakening branch protection to force a
-   merge through.
+   merge through. With local landing (section 4) the same holds of
+   `scripts/land.sh`: nothing lands on a failed or interrupted check, a
+   `main` that moved is merged and checked again, and nobody edits the script
+   or sets `LAND_OWNER` to force a change through.
 6. **Tests and observability ship with the change**, not after it.
 
 ### Licensing of contributions
@@ -94,12 +98,30 @@ are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) and [`AGENTS.md`](AGENTS.md)
 
 | Branch | What it is | Who merges into it |
 |--------|-----------|--------------------|
-| `main` | The web product, and the default branch | An agent or a person, with the head green (rule 5) |
+| `main` | The web product, and the default branch | An agent or a person, once `scripts/land.sh` passes on the merge (rule 5) |
 | `main_meta`, `develop_meta` | The Glassroom VR entry for the Meta VR Start Developer Competition (`vr/`) | As for `main` |
 | `archive/*` | Old lines of work kept for reference; nothing merges into them | Nobody |
 
-Work is trunk-based: one branch cut from `main`, one pull request into `main`,
-merged with a merge commit rather than a squash so the history keeps its shape.
+Work is trunk-based: one branch cut from `main`, landed on `main` with a
+merge commit rather than a squash so the history keeps its shape.
+
+**A branch is landed locally once `scripts/land.sh <branch>` passes** (issue
+#728). The script merges `main` and the branch in a clean worktree (a merge,
+never a rebase), runs `scripts/check.sh full` on that exact merge commit, and
+only then fast-forwards local `main` and writes a verification record
+(`.git/fabrique/verifications/<sha>.json` and a note under
+`refs/notes/verification`). `scripts/land.sh --push` mirrors `main` and the
+notes to GitHub, which is a backup and a place to read history, not the gate.
+A pull request is still welcome for review and discussion, but it is no longer
+what lets a change into `main`; the passing landing is. The record is a claim
+by the machine that ran it, and `scripts/land.sh --verify <sha>` on another
+machine, or CI after the push, is what confirms it. A change to a protected
+path (`backend/app/services/contracts/protected_paths.py`) is landed by the
+owner (`LAND_OWNER=1`, a guard against mistakes and not a security boundary).
+The details are in `docs/OPERATIONS.md`, Landing locally. Until the owner
+applies `docs/design/LOCAL_LANDING.md`, branch protection on GitHub still
+applies to `main`, and a landing whose push GitHub refuses goes in by pull
+request as before.
 There is no `develop` integration branch — it only ever mirrored `main`, and it
 was retired on 2026-10-29 along with the release pull request it existed for.
 `archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work

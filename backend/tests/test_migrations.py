@@ -136,7 +136,7 @@ def test_startup_runs_the_migrations_only_when_asked(db_file, monkeypatch):
 
 
 def test_the_migration_scripts_have_one_head_and_the_ini_points_at_them():
-    assert migrations.head_revision() == HEAD == "0052"
+    assert migrations.head_revision() == HEAD == "0053"
     assert migrations.ALEMBIC_INI.is_file()
     assert (
         migrations.BACKEND_DIR / "alembic" / "versions" / "0001_baseline.py"

@@ -25,6 +25,8 @@ PUBLISH = {
     "base": "",
     "title": "Add login",
     "body": "Evidence",
+    # The policy a company that publishes sends (issue #727).
+    "forge_policy": "publish",
 }
 
 
@@ -87,6 +89,8 @@ def test_without_gh_the_branch_is_pushed_and_the_answer_is_the_compare_page(
         "url": "https://github.com/ana/app/compare/main...fabrique%2Ftask-7?expand=1",
         "how": "compare",
         "updated": False,
+        "forge_policy": "publish",
+        "remote_contacted": True,
     }
     assert git(remote, "rev-parse", "refs/heads/fabrique/task-7") == commit
     assert "token" not in reply["url"]
@@ -298,7 +302,7 @@ def test_a_manager_publishes_a_run_with_its_evidence_and_a_viewer_reads_it(
 ):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     root, remote, _ = published_repo
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     run, info = _delivered_run(sqlite_session, company, root)
     manager = _member(sqlite_session, company.id, "Manager")
     viewer = _member(sqlite_session, company.id, "Viewer")
@@ -345,7 +349,7 @@ def test_a_run_without_a_branch_or_a_daemon_is_not_published(
 ):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     root, _, _ = published_repo
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     plain, _ = _delivered_run(sqlite_session, company, root, git=False)
     branched, _ = _delivered_run(sqlite_session, company, root, ref="task-8")
 
@@ -363,7 +367,7 @@ def test_a_run_without_a_branch_or_a_daemon_is_not_published(
         f"/v1/agent_runs/{branched.id}/publish", params={"company_id": company.id}
     )
     assert offline.status_code == 503
-    other = _company(sqlite_session)
+    other = _company(sqlite_session, forge="publish")
     assert (
         test_client.post(
             f"/v1/agent_runs/{branched.id}/publish", params={"company_id": other.id}

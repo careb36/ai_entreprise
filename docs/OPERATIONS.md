@@ -916,6 +916,84 @@ disk or memory pressure) keeps a wedged session. Cancel the stuck run, then
 follow "The runners stop taking jobs" above (`df -h /`, then restart the
 services).
 
+## Landing locally
+
+Changes reach `main` through `scripts/land.sh` on a machine that runs the
+checks, and GitHub is a mirror (issue #728; `CONTRIBUTING.md`, Branches).
+
+```bash
+scripts/land.sh my-branch            # merge, check, fast-forward local main, record
+scripts/land.sh my-branch --push     # the same, then mirror main and the notes
+scripts/land.sh --push               # mirror main and refs/notes/verification only
+scripts/land.sh --verify <sha>       # re-run the checks on <sha>, compare with its record
+```
+
+**What a landing does.** It fetches `main` from `origin`, merges `main` and the
+branch in a worktree it keeps at `.git/fabrique/worktree` (reset and cleaned
+first; a merge commit with `main` as first parent, never a rebase), runs
+`scripts/check.sh full` on that merge commit and, when it exits 0, writes the
+record and fast-forwards local `main` (through `git merge --ff-only` in the
+checkout that has `main`, or a compare-and-swap `git update-ref` when none
+does). While the checks run, a `main` that moves (locally or on `origin`) is
+merged and checked again, up to `LAND_MAX_ATTEMPTS` (default 3). One landing
+runs at a time: `.git/fabrique/land.lock` holds the process id and host, and a
+lock whose process is gone on the same host is taken over.
+
+**The record.** `.git/fabrique/verifications/<sha>.json` and the note of
+`<sha>` under `refs/notes/verification` (`git notes --ref=verification show
+<sha>`): the commit, tree and parents, `main` before, the branch and its head,
+the command, each step's status and seconds, overall status and duration, the
+SHA-256 of the log (`.git/fabrique/logs/`, not pushed), the tool versions, the
+host name and system, the OS account and git committer name (never an email),
+the blob id of the script that ran, and the protected paths with whether the
+owner overrode them. It is a claim by that machine and nothing signs it
+(`docs/POSITIONING.md`: a party's report of its own run is a claim, not an
+observation). It is the SLSA notion of provenance without its trust: who built
+what from which inputs with which tools, stated by the builder. Signing it is a
+follow-up. Pushing the notes publishes the host and account names with them.
+
+**Confirming a record.** `scripts/land.sh --verify <sha>` fetches the notes,
+checks `<sha>` out in the clean worktree, runs the same command and compares
+the status and each step's name and status with the record; the run's own
+record is written as `<sha>.verify.<time>.json` and the notes are not changed.
+Exit 0 means the record was reproduced on this machine. Run it on a second
+machine, or let CI after the push be the second opinion
+(`docs/design/LOCAL_LANDING.md`).
+
+**Protected paths.** A landing whose changes (the branch's diff against `main`
+and what `main` receives from the merge) touch a path of
+`backend/app/services/contracts/protected_paths.py`, with the evidence's tests
+from `docs/architecture/contexts.json`, both read from `main` as the
+protected-paths workflow reads them from the base, is refused unless
+`LAND_OWNER=1`, and a list that cannot be read refuses. **This is a guard
+against mistakes, not a security boundary**: anyone who can run the script can
+set the variable or edit the script. What holds against an agent is who may
+push `main` to GitHub, which is the owner's setting
+(`docs/design/LOCAL_LANDING.md`), and the record, which names the override.
+
+**Exit status.** 0 landed, pushed or verified; 1 the checks failed, the merge
+conflicted, `main` kept moving or a verification differs (`main` untouched); 2
+usage or environment (no such branch, `origin` unreachable without
+`LAND_OFFLINE=1`); 3 refused (protected path, local `main` and `origin/main`
+diverged, nothing to land, no record to push or verify); 4 another landing holds
+the lock.
+
+**Variables.** `LAND_CHECK_CMD` (default `scripts/check.sh full`),
+`LAND_OWNER`, `LAND_MAIN` (default `main`), `LAND_REMOTE` (default `origin`),
+`LAND_OFFLINE=1`, `LAND_WORKTREE`, `LAND_PYTHON` (default `python3`, which
+reads the protected list), `LAND_MAX_ATTEMPTS`.
+
+**When it goes wrong.** *The lock is held* and no landing runs: the owner line
+in `.git/fabrique/land.lock/owner` names the process and host; remove the
+folder once you have checked. *Diverged*: someone pushed `main` from another
+machine while yours had local landings; merge `origin/main` into local `main`
+by hand (never force), run the checks, and land again. *The push is refused*:
+`origin` moved on, or branch protection still requires pull requests; fetch,
+reconcile (`git notes --ref=verification merge` for the notes) and push again,
+or open the pull request. *The checkout of `main` could not fast-forward*:
+the record is already written; commit or stash the local changes in that
+checkout and run the `git merge --ff-only` the message prints.
+
 ## Protected paths
 
 `.github/workflows/protected-paths.yml` (status check `protected-paths`)
@@ -939,6 +1017,32 @@ does not either: a protected change the sole code owner opens is merged by an
 admin bypass, deliberately, or approved by another owner. The pull request
 that adds the check fails it by design (the base has no copy of the script
 yet, and the head's is never run).
+
+## Forge policy
+
+A company's git contacts an outside forge only as its forge policy allows
+(issue #727; `docs/contexts/release.md`, The forge policy): `none` (never),
+`fetch` (the base is fetched before a new branch) or `publish` (fetch, plus
+push and the request's comments). A company created after migration `0053`
+starts at `none`; every company that existed then was set to `publish`.
+
+- **Lower it** (a company whose code must not leave the computer that holds
+  it): an Owner picks *Local only* on the Models page, or
+  `PUT /v1/companies/{id}/forge_policy` with `{"forge_policy": "none"}`. The
+  change is audited as `forge_policy_changed` (`GET /v1/audit/verify` checks
+  the chain). Sprints keep integrating, testing and merging locally; publish
+  answers 409 `forge_disabled`.
+- **An air-gapped install** sets `FORGE_POLICY_MAX=none` on the backend and
+  on each daemon's computer. The backend then holds every company at `none`
+  whatever is stored (the Models page says so), refuses a wider value with
+  409, and the daemon refuses any remote operation even if a backend asks.
+- **Upgrade order.** The daemon reads a request without a policy as `none`:
+  a daemon newer than the backend fetches nothing and publishes nothing until
+  the backend is upgraded too. A daemon older than the backend ignores the
+  field and fetches as before (the backend still refuses publishing), so
+  upgrade the daemons to enforce the policy on their side.
+- **A publish answered `forge_disabled`** names the policy in force; raise it
+  only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
 
 ## Runner capacity
 

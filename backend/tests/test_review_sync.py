@@ -109,7 +109,9 @@ GITHUB_ANSWERS = {
 def test_github_comments_come_back_in_one_shape(bin_dir, tmp_path):
     _fake(bin_dir, "gh", GITHUB_ANSWERS)
 
-    reply = platform_reviews.fetch(str(tmp_path), {"provider": "github", "url": PR_URL})
+    reply = platform_reviews.fetch(
+        str(tmp_path), {"provider": "github", "url": PR_URL, "forge_policy": "publish"}
+    )
 
     assert reply["ok"] is True
     by_id = {c["external_id"]: c for c in reply["comments"]}
@@ -168,7 +170,9 @@ def test_gitlab_notes_come_back_without_the_systems(bin_dir, tmp_path):
         {"projects/team%2Fapp/merge_requests/4/discussions": json.dumps(discussions)},
     )
 
-    reply = platform_reviews.fetch(str(tmp_path), {"provider": "gitlab", "url": MR_URL})
+    reply = platform_reviews.fetch(
+        str(tmp_path), {"provider": "gitlab", "url": MR_URL, "forge_policy": "publish"}
+    )
 
     assert [
         (c["external_id"], c["kind"], c["path"], c["line"]) for c in reply["comments"]
@@ -181,7 +185,10 @@ def test_gitlab_notes_come_back_without_the_systems(bin_dir, tmp_path):
 
 def test_what_cannot_be_read_is_an_error_with_its_reason(bin_dir, tmp_path):
     with pytest.raises(platform_reviews.ReviewsError) as missing:
-        platform_reviews.fetch(str(tmp_path), {"provider": "github", "url": PR_URL})
+        platform_reviews.fetch(
+            str(tmp_path),
+            {"provider": "github", "url": PR_URL, "forge_policy": "publish"},
+        )
     assert (
         missing.value.status == 409 and "gh is not installed" in missing.value.message
     )
@@ -191,12 +198,16 @@ def test_what_cannot_be_read_is_an_error_with_its_reason(bin_dir, tmp_path):
             {
                 "provider": "github",
                 "url": "https://github.com/ana/app/compare/main...x",
+                "forge_policy": "publish",
             },
         )
     assert wrong.value.status == 422
     _fake(bin_dir, "gh", {})  # every call fails
     with pytest.raises(platform_reviews.ReviewsError, match="gh api failed"):
-        platform_reviews.fetch(str(tmp_path), {"provider": "github", "url": PR_URL})
+        platform_reviews.fetch(
+            str(tmp_path),
+            {"provider": "github", "url": PR_URL, "forge_policy": "publish"},
+        )
 
 
 def test_a_reply_too_big_for_one_message_keeps_what_fits_and_says_so():
@@ -301,7 +312,7 @@ def _reply(body="Name this better."):
 def test_a_manager_brings_the_comments_once_and_a_viewer_reads_them(
     sqlite_session, test_client, monkeypatch
 ):
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     run, publication = _published_run(sqlite_session, company)
     manager = _member(sqlite_session, company.id, "Manager")
     viewer = _member(sqlite_session, company.id, "Viewer")
@@ -348,7 +359,7 @@ def test_a_manager_brings_the_comments_once_and_a_viewer_reads_them(
 def test_a_comment_a_review_carried_keeps_what_it_said_then(
     sqlite_session, test_client, monkeypatch
 ):
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     run, publication = _published_run(sqlite_session, company)
     daemon = _Daemon(_reply())
     monkeypatch.setattr(test_client.app.state, "nats_client", daemon)
@@ -394,7 +405,7 @@ def test_the_feedback_says_who_wrote_it_and_where():
 def test_a_publication_without_a_request_or_from_elsewhere_is_refused(
     sqlite_session, test_client, monkeypatch
 ):
-    company = _company(sqlite_session)
+    company = _company(sqlite_session, forge="publish")
     run, compare = _published_run(
         sqlite_session,
         company,
@@ -408,7 +419,7 @@ def test_a_publication_without_a_request_or_from_elsewhere_is_refused(
         params={"company_id": company.id},
     )
     assert refused.status_code == 409
-    other = _company(sqlite_session)
+    other = _company(sqlite_session, forge="publish")
     _other_run, other_publication = _published_run(sqlite_session, other)
     assert (
         test_client.post(

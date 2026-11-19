@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+import forge_gate
+
 CLI_TIMEOUT_SECONDS = 60
 MAX_ITEMS = 500
 MAX_BODY_CHARS = 4000
@@ -36,10 +38,11 @@ _GITLAB = re.compile(r"^/(?P<project>.+?)/-/merge_requests/(?P<iid>\d+)/?$")
 
 
 class ReviewsError(Exception):
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, code: str = ""):
         super().__init__(message)
         self.status = status
         self.message = message
+        self.code = code
 
 
 def _pages(text: str) -> list[Any]:
@@ -152,6 +155,11 @@ def _gitlab(host: str, project: str, iid: str, url: str, cwd: Path) -> list[dict
 
 def fetch(workspace_root: str, spec: dict[str, Any]) -> dict[str, Any]:
     """The comments on the request at ``spec['url']``, read with the person's CLI login."""
+    policy = forge_gate.of(spec)
+    if not forge_gate.allows_publish(policy):
+        # Reading a request's comments is contact with the forge (issue #727).
+        raise ReviewsError(409, forge_gate.refusal_message(policy, "read a request's comments"),
+                           forge_gate.FORGE_DISABLED)
     url = str(spec.get("url") or "")
     parts = urlsplit(url)
     if parts.scheme != "https" or not parts.hostname:
@@ -200,7 +208,7 @@ async def handle_reviews(nc, msg, reply, request_body) -> None:
     try:
         body = await asyncio.to_thread(fetch, str(data.get("workspace_root") or ""), data)
     except ReviewsError as e:
-        body = {"error": {"status": e.status, "message": e.message}}
+        body = {"error": {"status": e.status, "message": e.message, **({"code": e.code} if e.code else {})}}
     else:
         body = fit(body, int(getattr(nc, "max_payload", 0) or 0))
     await reply(nc, msg, body)

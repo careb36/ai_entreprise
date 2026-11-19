@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+import forge_gate
 import git_base
 from git_workspace import GitError, merge_one, run_git, valid_branch, worktree_for
 
@@ -172,7 +173,8 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     root = Path(run_git(["rev-parse", "--show-toplevel"], folder).stdout.strip())
     base = str(spec.get("base") or "HEAD")
     # The base as its remote has it when the local copy is behind (git_base).
-    base_commit, base_status = git_base.start_point(root, base)
+    policy = forge_gate.of(spec)
+    base_commit, base_status = git_base.start_point(root, base, policy)
     worktree = worktree_for(root, branch, base_commit)
     start = _head(worktree)
     merged, already, missing, refused = [], [], [], []
@@ -232,6 +234,9 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         # Where the base stood here and at its remote, and its merge into an older branch.
         "base_status": base_status,
         "base_merge": base_merge,
+        # The forge policy applied, and whether a remote was contacted (issue #727).
+        "forge_policy": policy,
+        "remote_contacted": bool(base_status.get("remote_contacted")),
     }
 
 

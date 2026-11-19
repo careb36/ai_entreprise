@@ -28,6 +28,12 @@ this machine, no shell, no prompt, bounded in time), the way
 What was observed goes on the answer: ``base_commit`` (where the branch
 started), ``base_ref``, ``base_remote`` and ``base_remote_commit``, and
 ``base_behind_remote`` (how far the local base was behind) when it was.
+
+**Only when the forge policy allows it** (``forge_gate``, issue #727): with
+``none``, the default for a request that names no policy, nothing is fetched
+and the branch starts from the local base, as for a repository kept only on
+this machine; the answer says ``remote_contacted: false``, ``forge_policy``
+and, when the base has an upstream, ``base_remote_not_contacted``.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import forge_gate
 from git_workspace import GitError, run_git, valid_branch
 
 # A fetch is one branch; a remote that does not answer in this time is offline.
@@ -99,13 +106,21 @@ def _count(root: Path, left: str, right: str) -> int:
     return int(run_git(["rev-list", "--count", f"{left}..{right}"], root).stdout.strip() or 0)
 
 
-def observe(root: Path, base: str, fetch_timeout: Optional[float] = None) -> Dict[str, Any]:
-    """The base as it is here and at its remote: never refuses, only observes.
+def observe(root: Path, base: str, fetch_timeout: Optional[float] = None,
+            policy: str = forge_gate.NONE) -> Dict[str, Any]:
+    """The base as it is here and, when *policy* allows a fetch, at its remote.
 
     ``base_commit`` is the local base; with a remote that answered,
     ``base_remote_commit`` and how many commits each side has that the other
-    lacks (``base_behind_remote``, ``base_ahead_of_remote``).
+    lacks (``base_behind_remote``, ``base_ahead_of_remote``). Never refuses,
+    only observes; ``forge_policy`` and ``remote_contacted`` say what was applied.
     """
+    contacted: list = []
+    observed = _observe(root, base, fetch_timeout, policy, contacted)
+    return {**observed, "forge_policy": policy, "remote_contacted": bool(contacted)}
+
+
+def _observe(root: Path, base: str, fetch_timeout: Optional[float], policy: str, contacted: list) -> Dict[str, Any]:
     name = base if base and base != "HEAD" else ""
     if not name:
         head = run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], root, check=False)
@@ -122,8 +137,13 @@ def observe(root: Path, base: str, fetch_timeout: Optional[float] = None) -> Dic
     if upstream is None:
         return observed  # a repository kept only on this machine
     remote, there = upstream
+    if not forge_gate.allows_fetch(policy):
+        # The forge policy keeps git local: the base as it is here.
+        observed["base_remote_not_contacted"] = f"{remote}/{there}"
+        return observed
     tracking = f"refs/remotes/{remote}/{there}"
     observed["base_remote"] = f"{remote}/{there}"
+    contacted.append(remote)
     try:
         fetched = run_git(["fetch", "--no-tags", "--quiet", remote, f"+refs/heads/{there}:{tracking}"],
                           root, check=False, timeout=fetch_timeout or FETCH_TIMEOUT_SECONDS)
@@ -147,13 +167,14 @@ def observe(root: Path, base: str, fetch_timeout: Optional[float] = None) -> Dic
     return observed
 
 
-def start_point(root: Path, base: str) -> Tuple[str, Dict[str, Any]]:
+def start_point(root: Path, base: str, policy: str = forge_gate.NONE) -> Tuple[str, Dict[str, Any]]:
     """The commit a new branch starts from, and the observation to keep with it.
 
     The remote tip on a fast-forward, the local base otherwise; diverged is a
-    ``GitError`` naming both counts (see the module's docstring).
+    ``GitError`` naming both counts (see the module's docstring). The remote
+    is read only when *policy* allows a fetch.
     """
-    observed = observe(root, base)
+    observed = observe(root, base, policy=policy)
     behind = observed.get("base_behind_remote") or 0
     ahead = observed.get("base_ahead_of_remote") or 0
     if behind and ahead:
@@ -172,8 +193,10 @@ def start_point(root: Path, base: str) -> Tuple[str, Dict[str, Any]]:
     return observed["base_commit"], observed
 
 
-def behind_remote_at_publish(root: Path, base: str, commit: str) -> int:
+def behind_remote_at_publish(root: Path, base: str, commit: str, policy: str = forge_gate.NONE) -> int:
     """How many commits of ``origin/<base>`` *commit* lacks, fetched now; unreadable is a ``GitError``."""
+    if not forge_gate.allows_fetch(policy):
+        raise GitError(forge_gate.refusal_message(policy, f"fetch origin/{base}"))
     tracking = f"refs/remotes/origin/{base}"
     fetched = run_git(["fetch", "--no-tags", "--quiet", "origin", f"+refs/heads/{base}:{tracking}"],
                       root, check=False, timeout=FETCH_TIMEOUT_SECONDS)
@@ -183,7 +206,7 @@ def behind_remote_at_publish(root: Path, base: str, commit: str) -> int:
     return _count(root, commit, tracking)
 
 
-def status(workspace_root: str, base: str) -> Dict[str, Any]:
+def status(workspace_root: str, base: str, policy: str = forge_gate.NONE) -> Dict[str, Any]:
     """``workspace.git.base_status``: whether the folder is a repository, and its base against the remote."""
     folder = Path(workspace_root).expanduser()
     if not folder.is_dir():
@@ -193,14 +216,15 @@ def status(workspace_root: str, base: str) -> Dict[str, Any]:
         return {"is_repo": False}
     if base and not valid_branch(base):
         raise GitError(f"not a branch name: {base!r}")
-    return {"is_repo": True, "repository": str(root), **observe(root, base, STATUS_FETCH_TIMEOUT_SECONDS)}
+    return {"is_repo": True, "repository": str(root), **observe(root, base, STATUS_FETCH_TIMEOUT_SECONDS, policy)}
 
 
 async def handle_status(nc, msg, reply, request_body) -> None:
     """``workspace.git.base_status`` → the observation, or ``{"error": {status, message}}``."""
     data = request_body(msg)
     try:
-        body = await asyncio.to_thread(status, str(data.get("workspace_root") or ""), str(data.get("base") or ""))
+        body = await asyncio.to_thread(status, str(data.get("workspace_root") or ""), str(data.get("base") or ""),
+                                       forge_gate.of(data))
     except GitError as e:
         body = {"error": {"status": 409, "message": str(e)}}
     await reply(nc, msg, body)

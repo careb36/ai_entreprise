@@ -95,6 +95,12 @@ class Company(SQLModel, table=True):
     # (services/platform/protected_paths_setting.py). Off by default; only a
     # signed-in Owner changes it, audited, never the Manager agent.
     protected_paths_enabled: bool = False
+    # Whether the company's git may contact a forge (issue #727,
+    # services/contracts/forge_policy.py): ``none`` (never), ``fetch`` (read
+    # the base) or ``publish``. A new company starts at ``none``; migration
+    # 0053 set every company that existed then to ``publish``. An Owner writes
+    # it, audited (services/platform/forge_policy_setting.py).
+    forge_policy: str = "none"
 
 
 class Agent(SQLModel, table=True):

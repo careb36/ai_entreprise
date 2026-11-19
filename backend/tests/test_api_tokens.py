@@ -467,7 +467,7 @@ def test_minting_over_http_records_the_creators_id(
 def test_the_migration_backfills_the_creator_id_from_the_email(tmp_path, monkeypatch):
     import migrations
     from sqlalchemy import text
-    from sqlmodel import Session, create_engine
+    from sqlmodel import create_engine
 
     from alembic import command
 
@@ -478,9 +478,14 @@ def test_the_migration_backfills_the_creator_id_from_the_email(tmp_path, monkeyp
     with engine.begin() as connection:
         config.attributes["connection"] = connection
         command.upgrade(config, "0047")
-    with Session(engine) as session:
-        session.add(Company(company_name="Acme", autonomy_level=2))
-        session.commit()
+    with engine.begin() as connection:
+        # In SQL: the model has columns later migrations add (0053).
+        connection.execute(
+            text(
+                "INSERT INTO companies (company_name, default_scope_size, "
+                "autonomy_level, git_workflow) VALUES ('Acme', 'M', 2, 1)"
+            )
+        )
     with engine.begin() as connection:
         connection.execute(
             text(

@@ -53,11 +53,35 @@
           "sandbox_environment",
           "security_probe"
         ],
+        "workspace.console.prepare": [
+          "forge_policy"
+        ],
         "workspace.execute": [
           "full_log",
           "purpose_assistant",
           "sandbox_environment",
           "sandbox_floor"
+        ],
+        "workspace.generate": [
+          "forge_policy"
+        ],
+        "workspace.git.base_status": [
+          "forge_policy"
+        ],
+        "workspace.git.diff": [
+          "forge_policy"
+        ],
+        "workspace.git.integrate": [
+          "forge_policy"
+        ],
+        "workspace.git.merge": [
+          "forge_policy"
+        ],
+        "workspace.git.publish": [
+          "forge_policy"
+        ],
+        "workspace.git.reviews": [
+          "forge_policy"
         ]
       }
     }

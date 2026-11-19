@@ -99,7 +99,10 @@ def _refused(exc: Exception) -> HTTPException:
             integration_review.IntegrationReviewRefused,
         ),
     ):
-        return HTTPException(status_code=exc.status, detail=exc.detail)
+        # A forge_disabled refusal answers with its code (issue #727).
+        return HTTPException(
+            status_code=exc.status, detail=getattr(exc, "body", exc.detail)
+        )
     if isinstance(exc, DaemonUnavailable):
         return HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL)
     return HTTPException(status_code=exc.status, detail=exc.message)

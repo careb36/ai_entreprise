@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # may set its own (``Company.delivery_sandbox``). The daemon reports what
     # it applied, and the Verifier records it (``sandbox``).
     DELIVERY_SANDBOX: str = "host"
+    # The highest forge policy any company may have (services/contracts/
+    # forge_policy.py): ``none``, ``fetch`` or ``publish``; an air-gapped
+    # install sets ``none``. An unknown value reads as ``none``.
+    FORGE_POLICY_MAX: str = "publish"
     DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
     DELIVERY_SANDBOX_NETWORK: bool = False
     DELIVERY_SANDBOX_CPUS: float = 2.0

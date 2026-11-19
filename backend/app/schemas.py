@@ -299,6 +299,14 @@ class IntegrationReviewSetting(RequestModel):
     required: bool
 
 
+class ForgePolicySetting(RequestModel):
+    """Payload for ``PUT /v1/companies/{id}/forge_policy`` (an Owner)."""
+
+    model_config = STRICT
+
+    forge_policy: Literal["none", "fetch", "publish"]
+
+
 class ProtectedPathsSetting(RequestModel):
     """Payload for ``PUT /v1/companies/{id}/protected_paths`` (a signed-in Owner)."""
 

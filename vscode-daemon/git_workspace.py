@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import quote, urlsplit
 
+import forge_gate
+
 GIT_TIMEOUT_SECONDS = 60
 WORKTREES_DIR = "fabrique-worktrees"
 # A branch name La Fabrique writes: letters, digits, '/', '-', '_' and '.'.
@@ -37,6 +39,18 @@ COMMITTER = ("La Fabrique", "fabrique@localhost")
 
 class GitError(Exception):
     """A git command that failed, with git's own words."""
+
+
+class ForgeDisabled(GitError):
+    """A remote operation the request's forge policy does not allow (``forge_gate``)."""
+
+    code = forge_gate.FORGE_DISABLED
+
+
+def error_body(e: Exception, status: int = 409) -> Dict[str, Any]:
+    """The ``{"error": ...}`` answer for *e*, with its ``code`` when it has one."""
+    code = getattr(e, "code", None)
+    return {"error": {"status": status, "message": str(e), **({"code": code} if code else {})}}
 
 
 def run_git(
@@ -85,13 +99,15 @@ def has_branch(root: Path, branch: str) -> bool:
     return run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], root, check=False).returncode == 0
 
 
-def fresh_start(root: Path, branch: str, base: str) -> tuple:
-    """``(start point, observation)``: the base checked against its remote when *branch* is new (``git_base``)."""
+def fresh_start(root: Path, branch: str, base: str, policy: str = forge_gate.NONE) -> tuple:
+    """``(start point, observation)``: the base checked against its remote, when
+    *branch* is new and the forge *policy* allows a fetch (``git_base``)."""
     if has_branch(root, branch):
-        return base, {}  # started at an earlier delivery, whose evidence says from where
+        # Started at an earlier delivery, whose evidence says from where.
+        return base, {"forge_policy": policy, "remote_contacted": False}
     import git_base  # git_base reads git through this module
 
-    return git_base.start_point(root, base)
+    return git_base.start_point(root, base, policy)
 
 
 def admin_dir(worktree: Path) -> Path:
@@ -217,7 +233,7 @@ def deliver(
         }
     root = Path(_out(["rev-parse", "--show-toplevel"], folder))
     base = str(spec.get("base") or "HEAD")
-    start, started = fresh_start(root, branch, base)
+    start, started = fresh_start(root, branch, base, forge_gate.of(spec))
     worktree = worktree_for(root, branch, start)
     merged = merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
     parent = _out(["rev-parse", "HEAD"], worktree)
@@ -382,7 +398,13 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     (GitLab) installed and logged in, the open request's description is
     updated, or a draft is opened, with *spec*'s ``title`` and ``body``;
     without them, the answer is the page where the person opens it by hand.
+
+    Refused, before anything runs, unless the forge policy is ``publish``
+    (``forge_gate``; ``ForgeDisabled``).
     """
+    policy = forge_gate.of(spec)
+    if not forge_gate.allows_publish(policy):
+        raise ForgeDisabled(forge_gate.refusal_message(policy, "push or open a request"))
     branch = str(spec.get("branch") or "")
     if not (valid_branch(branch) and branch.startswith(TASK_BRANCH_PREFIX)):
         raise GitError(f"not a branch name La Fabrique writes: {branch!r}")
@@ -403,7 +425,7 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     if spec.get("require_current_base"):
         import git_base
 
-        behind = git_base.behind_remote_at_publish(root, base, tip)
+        behind = git_base.behind_remote_at_publish(root, base, tip, policy)
         if behind:
             raise GitError(f"{branch} is {behind} commit(s) behind origin/{base}: integrate the sprint again, "
                            f"which merges origin/{base} into it first")
@@ -423,6 +445,8 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         "url": url or compare_url(provider, web_url, base, branch),
         "how": ("gh" if provider == "github" else "glab") if url else "compare",
         "updated": updated,
+        "forge_policy": policy,
+        "remote_contacted": True,
         # Checked against origin/<base> just before the push, when asked.
         **({"base_behind_remote": behind} if behind is not None else {}),
     }
@@ -436,7 +460,7 @@ async def handle_publish(nc, msg, reply, request_body) -> None:
     try:
         body = await asyncio.to_thread(publish, str(data.get("workspace_root") or ""), data)
     except GitError as e:
-        body = {"error": {"status": 409, "message": str(e)}}
+        body = error_body(e)
     await reply(nc, msg, body)
 
 

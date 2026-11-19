@@ -3,6 +3,7 @@ import { Boxes, CircleCheck, Cpu, Plug } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { CalibrationReport } from '../components/CalibrationReport'
 import ConsoleProducers from '../components/ConsoleProducers'
+import ForgePolicyPanel from '../components/ForgePolicyPanel'
 import GitWorkflowPanel from '../components/GitWorkflowPanel'
 import ModelChoices from '../components/ModelChoices'
 import ModelConnections from '../components/ModelConnections'
@@ -55,6 +56,7 @@ export default function Models() {
           <RoutingPolicy companyId={companyId} canManage={canManage} />
           <CalibrationReport companyId={companyId} />
           <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
+          <ForgePolicyPanel companyId={companyId} isOwner={role === 'Owner'} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>
       )}
