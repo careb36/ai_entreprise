@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Panel } from '../ui'
-import { TABLE, TD, TH, TR } from '../adminTable'
+import { Panel, TABLE, TD, TH, TR } from '../ui'
 import { formatCount, formatShare } from '../../lib/benchFormat'
 import type { BenchPromptSection } from '../../services/api'
 

@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, CheckCircle2, Clock, Scissors, XCircle } from 'lucide-react'
-import { Panel, StatusBadge, type StatusTone } from '../ui'
-import { TABLE, TD, TH, TR } from '../adminTable'
+import { Panel, StatusBadge, type StatusTone, TABLE, TD, TH, TR } from '../ui'
 import { MeasureValue } from './MeasureValue'
 import { formatCents, formatCount, formatRatio, formatShare, formatStamp } from '../../lib/benchFormat'
 import type { BenchCriteria, BenchSpecStatus, BenchValidCard } from '../../services/api'

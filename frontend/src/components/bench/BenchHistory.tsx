@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, FileWarning, XCircle } from 'lucide-react'
-import { CountPill, Panel, StatusBadge } from '../ui'
-import { TABLE, TD, TH, TR } from '../adminTable'
+import { CountPill, Panel, StatusBadge, TABLE, TD, TH, TR } from '../ui'
 import { MeasureValue } from './MeasureValue'
 import { SpecStatusBadge, useCriteriaFormat } from './BenchLatestCard'
 import { formatCents, formatCount, formatStamp } from '../../lib/benchFormat'

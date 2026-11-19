@@ -3,8 +3,7 @@ import { FlaskConical, FolderX } from 'lucide-react'
 import { BenchCardsTable, BenchSpecHistory } from '../components/bench/BenchHistory'
 import { BenchLatestCard } from '../components/bench/BenchLatestCard'
 import { PromptSectionsTable } from '../components/bench/PromptSectionsTable'
-import { LoadErrorAlert, LoadingLine } from '../components/knowledge/PageStates'
-import { EmptyState, PageHeader } from '../components/ui'
+import { EmptyState, LoadError, LoadingLine, PageHeader } from '../components/ui'
 import { useBenchScorecards } from '../hooks/useBench'
 import { errorDetail, type BenchValidCard } from '../services/api'
 
@@ -28,7 +27,7 @@ export default function Bench() {
       {query.isPending ? (
         <LoadingLine>{t('bench.loading')}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('bench.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('bench.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : !query.data.available ? (
         <EmptyState icon={FolderX} title={t('bench.unavailable')} description={t('bench.unavailableHint')} dashed />
       ) : cards.length === 0 ? (
