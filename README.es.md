@@ -11,13 +11,37 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-### Pruebas, no promesas, para cada línea de código que escribe un agente de IA
+### Proyectos de TI de cualquier tipo, a cargo de una empresa de agentes de IA: pruebas, no promesas, de lo que hacen
 
 > **Idiomas:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
 </div>
 
 ---
+
+La Fabrique es una plataforma para llevar adelante proyectos de TI con una
+empresa de agentes de IA: software, ciencia de datos, machine learning, deep
+learning y lo que cada proyecto necesite. Los agentes planifican el trabajo,
+lo construyen y lo documentan, y la plataforma registra evidencia verificable
+de lo que hicieron de verdad.
+
+**Qué está construido hoy y qué es dirección.**
+
+- **Construido:** el loop ejecuta tareas de software de punta a punta, desde
+  una especificación hasta los archivos en disco, los tests, la revisión y una
+  pull request. El **paquete de documentación** arma los documentos de gestión
+  de un proyecto a partir de sus registros (según la Guía del PMBOK, con
+  diagramas C4 y documentos de seguridad según OWASP WSTG), y cada afirmación
+  que contiene cita un registro. El [bench](bench/README.md) evalúa la fábrica
+  con especificaciones de referencia y tests escritos por una persona.
+- **Dirección, todavía no construido:** tipos de proyecto para ciencia de
+  datos, machine learning y deep learning, con sus propios entregables y su
+  propia evidencia; automatización más allá del loop de software; e
+  investigación. Hoy las herramientas de investigación solo les permiten a los
+  roles que deciden leer fuentes oficiales. Cómo se aplican las reglas de
+  evidencia a ese trabajo, y qué sigue abierto, está en
+  [`docs/POSITIONING.md`](docs/POSITIONING.md#scope-2026-11-19-it-projects-of-any-kind)
+  (en inglés).
 
 Los agentes de IA escriben código más rápido de lo que cualquier equipo puede
 leerlo. La velocidad ya no es el cuello de botella. Lo que falta es una

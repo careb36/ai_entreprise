@@ -11,13 +11,34 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-### Proof, not promises, for every line of code an AI agent writes
+### IT projects of any kind, run by a company of AI agents: proof, not promises, for what they do
 
 > **Languages:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
 </div>
 
 ---
+
+La Fabrique is a platform for running IT projects with a company of AI agents:
+software, data science, machine learning, deep learning and whatever else a
+project calls for. The agents plan the work, build it and document it, and the
+platform records verifiable evidence of what they actually did.
+
+**What is built today, and what is direction.**
+
+- **Built:** the loop runs software tasks end to end, from a specification to
+  the files on disk, the tests, the review and a pull request. The
+  **documentation pack** compiles a project's management documents from its
+  records (after the PMBOK Guide, with C4 diagrams and OWASP WSTG security
+  documents), and every statement in it cites a record. The
+  [bench](bench/README.md) grades the factory on reference specifications with
+  tests a person wrote.
+- **Direction, not built:** project types for data science, machine learning
+  and deep learning, with their own deliverables and evidence; automation
+  beyond the software loop; and research. Today the research tools only let
+  the roles that decide read official sources. How the evidence rules apply to
+  that work, and what is still open, is in
+  [`docs/POSITIONING.md`](docs/POSITIONING.md#scope-2026-11-19-it-projects-of-any-kind).
 
 AI agents write code faster than any team can read it. Speed is no longer the
 bottleneck. What teams lack is a trustworthy answer to one question:
