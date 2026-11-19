@@ -23,7 +23,7 @@ The proxy is a set of sibling modules, each with one job; `app.py` is the entry 
 
 | Module | Its job |
 |---|---|
-| `app.py` | The configuration (each provider's key, read with `os.getenv`, and URL; `LLM_UPSTREAM_TIMEOUT_SECONDS`), the live catalogue sets and their hourly refresh, and the HTTP routes (`/health`, `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`). It passes this state to the modules below at call time, so a test that replaces a key, a catalogue set, a refresh or `track_usage_in_db` on `app` is seen everywhere. |
+| `app.py` | The configuration (each provider's key, read with `os.getenv`, and URL; `LLM_UPSTREAM_TIMEOUT_SECONDS`), the live catalogue sets and their hourly refresh, and the HTTP routes (`/health`, `/v1/providers`, `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`). It passes this state to the modules below at call time, so a test that replaces a key, a catalogue set, a refresh or `track_usage_in_db` on `app` is seen everywhere. |
 | `routing.py` | Which provider and model serve a requested id (prefix and catalogue, the deprecated Gemini aliases) and the fallback on 429/5xx: one catalogue model per other provider within the request's time budget. |
 | `catalogue.py` | The provider prefixes, tier rules and deprecated ids; fetching one provider's model list (a failed refresh keeps the previous one); the `/v1/models` entries and the recommended orchestrator. |
 | `providers.py` | One chat completion on a deployment provider: Gemini through `gemini.py`, the OpenAI-compatible ones (DeepSeek, Qwen, Nebius) directly. |
@@ -33,7 +33,8 @@ The proxy is a set of sibling modules, each with one job; `app.py` is the entry 
 | `usage.py` | How an answer's token count is known (`reported` or `estimated`). |
 | `quota.py` | Per-business-unit token quotas in Postgres: the 429 once a unit has used its limit, `X-Quota-Warning` from 80 %, and charging each call. |
 | `embedding.py` | `/v1/embeddings`: Gemini's embedding model when a key is set, else a deterministic local vector. |
-| `provider_keys.py` | Asking each provider to authenticate at startup, so a bad key fails loudly. |
+| `provider_keys.py` | Asking each provider whether its key works, at startup and on `GET /v1/providers?refresh=1` (5 s, at most once every 30 s): a one-token chat call for DeepSeek and Qwen (key and credit), a model listing for Gemini and Nebius (the key only). An empty key or an `.env.example` placeholder is `not_configured` and never sent; the proxy starts whatever the outcome, with one log line per provider and never the key. |
+| `provider_status.py` | What the proxy last observed of each provider, as an observation: `status` (`ok`, `invalid_key`, `no_credit`, `rate_limited`, `unreachable`, `unexpected`, `not_configured`, or `not_observed`), `observed_at`, `http_status`, `source` (`startup`, `refresh`, `request`), `checked` (`key` or `key_and_credit`) and a redacted `detail`. A request refused for lack of credit or for its key is recorded, a served one records `ok`; the fallback decides as before (`upstream.CREDIT_PHRASES`). Served by `GET /v1/providers` and in `/health` as `providers`. |
 | `telemetry.py` | OpenTelemetry: spans for Flask and outbound `requests`, exported only when an OTLP endpoint is configured. |
 
 ### What a run, a task and a sprint cost
