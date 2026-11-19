@@ -47,7 +47,8 @@
     "selfImprovement": "Automejora",
     "project": "Ajustes del proyecto",
     "notifications": "Notificaciones",
-    "auditTrail": "Registro de auditoría"
+    "auditTrail": "Registro de auditoría",
+    "modelCatalog": "Catálogo de modelos"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3645,6 +3646,21 @@
       "modules": "Módulos"
     }
   },
+  "sprintEvents": {
+    "title": "Eventos del sprint",
+    "count_one": "{{count}} evento",
+    "count_other": "{{count}} eventos",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "loading": "Cargando los eventos del sprint",
+    "loadError": "No se pudieron cargar los eventos del sprint: {{message}}",
+    "empty": "Todavía no hay eventos registrados para este sprint.",
+    "filters": "Filtrar los eventos",
+    "type": "Tipo",
+    "allTypes": "Todos los tipos",
+    "listLabel": "Los eventos del sprint, del más antiguo al más reciente",
+    "payload": "Detalles"
+  },
   "auditAnchors": {
     "title": "Anclajes de auditoría",
     "subtitle": "La cabeza de la cadena de auditoría registrada fuera de La Fabrique, donde no puede reescribirla.",
@@ -4727,6 +4743,42 @@
         "unusable": "Inutilizable"
       }
     }
+  },
+  "modelCatalog": {
+    "title": "Catálogo de modelos",
+    "subtitle": "Lo que el catálogo público registra sobre los modelos de cada proveedor: capacidades, límites y precios de lista. Una referencia, no una promesa de que un proveedor sirva un modelo a esta empresa.",
+    "loading": "Cargando el catálogo",
+    "loadError": "No se pudo cargar el catálogo: {{message}}",
+    "choose": "Elegir un proveedor",
+    "provider": "Proveedor",
+    "pick": "Elige…",
+    "providerOption_one": "{{name}} ({{count}} modelo)",
+    "providerOption_other": "{{name}} ({{count}} modelos)",
+    "filter": "Filtrar modelos",
+    "none": "Elige un proveedor para ver sus modelos.",
+    "source": "Fuente: {{origin}}",
+    "loadingProvider": "Cargando los modelos del proveedor",
+    "baseUrl": "Endpoint compatible con OpenAI: {{url}}",
+    "noBaseUrl": "No se conoce un endpoint compatible con OpenAI para este proveedor.",
+    "noModels": "Ningún modelo coincide.",
+    "caption": "Modelos de {{name}}",
+    "columns": {
+      "model": "Modelo",
+      "context": "Contexto (tokens)",
+      "price": "Precio por millón de tokens"
+    },
+    "capabilities": {
+      "tool_call": "Herramientas",
+      "reasoning": "Razonamiento",
+      "structured_output": "Salida estructurada",
+      "attachment": "Adjuntos",
+      "open_weights": "Pesos abiertos"
+    },
+    "yes": "{{capability}}: sí",
+    "no": "{{capability}}: no",
+    "unknown": "{{capability}}: sin registrar",
+    "price": "{{input}} de entrada, {{output}} de salida",
+    "claimNote": "Son los registros del catálogo. Solo una conexión validada en la página Modelos muestra lo que un proveedor realmente sirve."
   },
   "account": {
     "title": "Cuenta",

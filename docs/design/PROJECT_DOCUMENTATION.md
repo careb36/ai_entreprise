@@ -783,7 +783,11 @@ sha256 added as files of their own) and a manifest file written beside the
 pack (`docs/project/MANIFEST.json`) when an approved pack is written, compared
 with the daemon's reported hashes.
 
-### Export to DOCX and PDF (waiting on a dependency decision)
+### Export to DOCX and PDF
+
+**Decision (2026-11-19, delegated by the owner):** DOCX with **python-docx** (MIT, with lxml, BSD) and PDF with **WeasyPrint** (BSD-3-Clause), both pinned by hash in the lock. WeasyPrint is chosen over reportlab and fpdf2 for the standards it can produce: **PDF/A-3b** for long-term archiving of audit evidence (ISO 19005-3) and **PDF/UA-1** for accessible documents (ISO 14289-1), with real typography and fonts for every script the packs are written in. Its native libraries (Pango, HarfBuzz) go into the backend image from the distribution's packages, and the image's SBOM and vulnerability scan cover them. fpdf2 is ruled out by its copyleft licence; the standard library alone is ruled out because a hand-written PDF writer cannot meet PDF/A or PDF/UA. Export runs in the backend from the stored pack, never from client input, and each export's sha256 enters the manifest.
+
+The options weighed:
 
 Nothing in `backend/pyproject.toml` or `poetry.lock` writes DOCX or PDF (no
 python-docx, lxml, reportlab, fpdf2, WeasyPrint, Markdown parser or Pillow).

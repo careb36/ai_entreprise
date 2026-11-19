@@ -35,6 +35,7 @@ import SelfImprovement from '../pages/SelfImprovement'
 import Notifications from '../pages/Notifications'
 import ProjectSettings from '../pages/ProjectSettings'
 import AuditTrail from '../pages/AuditTrail'
+import ModelCatalog from '../pages/ModelCatalog'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
 import HelpDesk from '../pages/HelpDesk'
@@ -111,6 +112,7 @@ export function AppRoutes() {
         <Route path="/company/findings" element={<CompanyFindings />} />
         <Route path="/company/findings/:id" element={<CompanyFindingDetail />} />
         <Route path="/bench" element={<Bench />} />
+        <Route path="/company/model-catalog" element={<ModelCatalog />} />
         <Route path="/company/wiki" element={<Wiki />} />
         <Route path="/company/models" element={<Models />} />
         <Route path="/company/specifications" element={<Specifications />} />

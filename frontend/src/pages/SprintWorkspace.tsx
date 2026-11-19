@@ -10,6 +10,7 @@
  * another company stays read-only.
  */
 import React, { useEffect } from 'react'
+import { SprintEventLog } from '../components/SprintEventLog'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MonitorPlay, Radio, RefreshCw } from 'lucide-react'
@@ -244,6 +245,7 @@ export const SprintWorkspace: React.FC = () => {
           ) : (
             <div className="space-y-4">
               <SprintOverview sprintId={sprintId} />
+              <SprintEventLog sprintId={sprintId} />
               <SprintProgress sprintId={sprintId} live={board.sprint.status === 'active'}
                 specificationId={board.sprint.specification_id} />
               <SprintIntegration sprintId={sprintId} companyId={board.sprint.company_id}

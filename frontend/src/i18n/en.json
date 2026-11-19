@@ -47,7 +47,8 @@
     "selfImprovement": "Self-improvement",
     "project": "Project settings",
     "notifications": "Notifications",
-    "auditTrail": "Audit trail"
+    "auditTrail": "Audit trail",
+    "modelCatalog": "Model catalog"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3645,6 +3646,21 @@
       "modules": "Modules"
     }
   },
+  "sprintEvents": {
+    "title": "Sprint events",
+    "count_one": "{{count}} event",
+    "count_other": "{{count}} events",
+    "show": "Show",
+    "hide": "Hide",
+    "loading": "Loading the sprint's events",
+    "loadError": "Could not load the sprint's events: {{message}}",
+    "empty": "No event recorded for this sprint yet.",
+    "filters": "Filter the events",
+    "type": "Type",
+    "allTypes": "All types",
+    "listLabel": "The sprint's events, oldest first",
+    "payload": "Details"
+  },
   "auditAnchors": {
     "title": "Audit anchors",
     "subtitle": "The head of the audit chain recorded outside La Fabrique, where it cannot rewrite it.",
@@ -4727,6 +4743,42 @@
         "unusable": "Unusable"
       }
     }
+  },
+  "modelCatalog": {
+    "title": "Model catalog",
+    "subtitle": "What the public catalogue records about each provider's models: capabilities, limits and list prices. A reference, not a promise that a provider serves a model to this company.",
+    "loading": "Loading the catalogue",
+    "loadError": "Could not load the catalogue: {{message}}",
+    "choose": "Choose a provider",
+    "provider": "Provider",
+    "pick": "Choose…",
+    "providerOption_one": "{{name}} ({{count}} model)",
+    "providerOption_other": "{{name}} ({{count}} models)",
+    "filter": "Filter models",
+    "none": "Choose a provider to see its models.",
+    "source": "Source: {{origin}}",
+    "loadingProvider": "Loading the provider's models",
+    "baseUrl": "OpenAI-compatible endpoint: {{url}}",
+    "noBaseUrl": "No OpenAI-compatible endpoint is known for this provider.",
+    "noModels": "No model matches.",
+    "caption": "Models of {{name}}",
+    "columns": {
+      "model": "Model",
+      "context": "Context (tokens)",
+      "price": "Price per million tokens"
+    },
+    "capabilities": {
+      "tool_call": "Tools",
+      "reasoning": "Reasoning",
+      "structured_output": "Structured output",
+      "attachment": "Attachments",
+      "open_weights": "Open weights"
+    },
+    "yes": "{{capability}}: yes",
+    "no": "{{capability}}: no",
+    "unknown": "{{capability}}: not recorded",
+    "price": "{{input}} in, {{output}} out",
+    "claimNote": "These are the catalogue's records. Only a validated connection on the Models page shows what a provider actually serves."
   },
   "account": {
     "title": "Account",
