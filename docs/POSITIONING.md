@@ -336,8 +336,7 @@ The owner set the scope on 2026-11-19:
 > La Fabrique is a platform to manage IT projects, not only software
 > development. The idea is to do whatever we come up with: for example a data
 > science project, a machine learning one, deep learning, and so on. It also
-> documents the work, and later evolutions are automation (like what Claude
-> does) and research.
+> documents the work, and later evolutions are automation and research.
 
 ### What is built and what is not
 
@@ -375,21 +374,50 @@ design rule holds for non-software work as written.
 - **No model decides whether a model is good enough** (rule 5). A threshold is
   a person's decision, and the check against it is deterministic.
 
-### Open design questions
+### Decisions (2026-11-19)
 
-Recorded here, not answered:
+The owner asked that open questions be settled for a corporate product, with
+the highest recognised standards. The six questions this scope raised are
+decided as follows; each is built when its project type is.
 
-1. What an observation is for a data science or machine learning deliverable:
-   re-running the evaluation, re-running the training, or both; what
-   tolerance nondeterministic training gets; what compute the sandbox needs.
-2. Who holds the evaluation data, so that the producing agent never sees the
-   held-out set it is measured on.
-3. Datasets as deliverables: how one is identified (digest, schema, lineage,
-   licence) and how personal data in it is kept out of the record.
-4. Notebooks as deliverables: whether the platform runs them top to bottom,
-   and whether a saved output can ever be more than a claim.
-5. What "done" and an acceptance criterion mean for an experiment whose
-   honest outcome can be negative.
-6. Which standards (`docs/STANDARDS.md`) and which documents (a model card, a
-   datasheet for a dataset) these project types are held to, and what
-   automation and research deliver and how it is observed.
+1. **What an observation is for a data science or machine learning
+   deliverable.** The platform always re-runs the evaluation itself, in the
+   sandbox, from a pinned environment, and records the command, its exit status
+   and the digest of its output. It also re-runs the training when the run is
+   at the high risk tier or is itself the deliverable being accepted. A person
+   states the tolerance per metric in the specification before the run; a
+   re-run outside it is `refuted`. Seeds and the environment are pinned and
+   recorded by the platform. A run that needs compute or data the platform does
+   not have is `unverifiable`, never `verified`. Accelerators are a sandbox
+   capability the daemon announces, never one an agent claims.
+2. **Who holds the evaluation data.** The platform. Held-out sets live outside
+   any producer's workspace; the producing agent never has read access to them,
+   and the evaluation runs in a separate sandbox that mounts them read-only.
+   Every access is audited and every digest is computed by the platform, as the
+   bench already keeps its graders out of the factory's reach.
+3. **Datasets as deliverables.** A dataset is identified by the digest the
+   platform computes, its schema, its lineage (sources and the recorded
+   commands that transformed them) and its licence, and it comes with a
+   datasheet (Gebru et al., *Datasheets for Datasets*). Its data is classified
+   before use. Personal data never enters the evidence record, which holds only
+   digests and counts; a dataset holding personal data needs a data protection
+   impact assessment (GDPR, art. 35) and the Owner's approval, and follows a
+   retention policy.
+4. **Notebooks as deliverables.** The platform executes a notebook top to
+   bottom in a clean kernel in the sandbox. Outputs saved in the file are always
+   claims; only the outputs of the platform's own execution are observations.
+5. **"Done" for an experiment.** The acceptance criteria are about the
+   measurement, not the hoped-for result: the hypothesis, the metric, the
+   threshold and the evaluation data are fixed before the run
+   (pre-registration). A negative result that was measured correctly is done.
+   Whether it meets the business threshold is a separate decision, by a person.
+6. **Standards and documents.** These project types are held to model cards
+   (Mitchell et al., *Model Cards for Model Reporting*) and datasheets; to the
+   NIST AI Risk Management Framework 1.0; to ISO/IEC 42001 (AI management
+   system), ISO/IEC 23894 (AI risk management) and ISO/IEC 5338 (AI system life
+   cycle); and to the EU AI Act's risk classification where it applies.
+   Research delivers reports in which every statement cites a source the
+   platform fetched, recorded as an observation of what came back. Automation
+   delivers workflows the sandbox executes with each run recorded
+   (`docs/WORKFLOWS.md`). These enter `docs/STANDARDS.md` when the project types
+   are built.

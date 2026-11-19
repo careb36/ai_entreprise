@@ -42,7 +42,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > and research. The evidence rules apply unchanged: an agent's reported
 > metric is a claim, and a metric is an observation only when the platform
 > measured it. See the amendment "Scope (2026-11-19)" at the end of
-> `docs/POSITIONING.md`, which also lists the open design questions.
+> `docs/POSITIONING.md`, which also records the owner's decisions on the questions it raises.
 
 ## Running the System
 
