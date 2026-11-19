@@ -40,6 +40,7 @@
     "findings": "Findings",
     "bench": "Bench",
     "account": "Account",
+    "apiTokens": "API tokens",
     "auditTrail": "Audit trail"
   },
   "dashboard": {
@@ -3144,6 +3145,30 @@
     "legacy": "imported",
     "payload": "Details"
   },
+  "runSecrets": {
+    "title": "Run secrets",
+    "count_one": "{{count}} secret",
+    "count_other": "{{count}} secrets",
+    "note": "Values this task's run may read as environment variables. The backend stores them encrypted; a value is never shown again.",
+    "loading": "Loading the run secrets",
+    "loadError": "Could not load the run secrets: {{message}}",
+    "empty": "This task has no run secrets.",
+    "listLabel": "Run secrets of this task",
+    "valueHidden": "value hidden",
+    "delete": "Delete",
+    "deleteNamed": "Delete the secret {{name}}",
+    "confirmDelete": "Delete {{name}}?",
+    "deleteConfirm": "Yes, delete",
+    "addTitle": "Add a run secret",
+    "name": "Name",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Value",
+    "nameHint": "Letters, digits and underscores, not starting with a digit.",
+    "nameInvalid": "Use letters, digits and underscores only, and do not start with a digit.",
+    "add": "Add secret",
+    "saved": "{{name}} saved",
+    "addError": "Could not add the secret: {{message}}"
+  },
   "boardNotes": {
     "title": "Board notes",
     "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",
@@ -3641,6 +3666,55 @@
       "proxyMissing": "LLM proxy internal token: not set"
     }
   },
+  "apiTokens": {
+    "title": "API tokens",
+    "subtitle": "Credentials for scripts and CI jobs, sent as a Bearer token. A token acts with the role it was given, never more than its creator's.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Loading the tokens",
+    "loadError": "Could not load the tokens: {{message}}",
+    "empty": "This company has no API tokens.",
+    "emptyManager": "Create one below when a script or a CI job needs to call the API.",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "state": "State",
+      "createdBy": "Created by",
+      "expires": "Expires",
+      "lastUsed": "Last used",
+      "actions": "Actions"
+    },
+    "state": {
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "never": "Never",
+    "neverUsed": "Not used yet",
+    "revoke": "Revoke",
+    "revokeNamed": "Revoke the token {{name}}",
+    "confirmLabel": "Confirm revoking {{name}}",
+    "confirmRevoke": "Revoke it now? Calls with it stop at once.",
+    "revokeConfirm": "Yes, revoke",
+    "createTitle": "Create a token",
+    "name": "Name",
+    "namePlaceholder": "ci-nightly",
+    "role": "Role",
+    "expiry": "Expires after",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "createHint": "Every token expires. A token cannot create other tokens, and its role is never above yours.",
+    "create": "Create token",
+    "forbidden": "Your role cannot create a token with that role.",
+    "createError": "Could not create the token: {{message}}",
+    "createdTitle": "Token {{name}} created",
+    "createdOnce": "Copy it now: it is shown only this once and is not kept by this page. Store it in your secret manager.",
+    "secretLabel": "Token",
+    "copy": "Copy",
+    "copied": "Copied",
+    "dismiss": "Dismiss the new token"
+  },
   "taskViews": {
     "filters": "Filters",
     "join": "Match",
@@ -3962,7 +4036,9 @@
       "no_prompt_measure": "no prompt was measured",
       "no_problems_graded": "no HumanEval problem was graded",
       "no_instances_measured": "no SWE-bench instance was measured",
-      "tests_not_run": "the instance's tests did not run"
+      "tests_not_run": "the instance's tests did not run",
+      "format_unmeasured": "the run could not measure this model and format",
+      "no_delivery_observed": "no delivery was observed in any format"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -4078,6 +4154,29 @@
       "outcomes": {
         "pass": "Resolved",
         "fail": "Failed"
+      }
+    },
+    "editFormats": {
+      "title": "Edit format per model",
+      "note": "Each model run once per edit format on the same specifications, graded by the acceptance tests a person wrote. How a format was used is what the backend read in each answer and the daemon applied, never the model's account. An unusable format (no delivery well formed) is never a pass, whatever the tests said. Shown, never judged: one run per row is one sample.",
+      "requested": "Format this run asked for: {{format}}",
+      "deliveries": "This run's deliveries: {{wellFormed}} of {{observed}} observed well formed ({{missing}} without an observation, counted apart).",
+      "wellFormedShare": "Well-formed share",
+      "caption": "Each model and edit format of the latest scorecard",
+      "model": "Model",
+      "format": "Format",
+      "outcome": "Outcome",
+      "criteria": "Criteria",
+      "wellFormed": "Well formed",
+      "malformed": "Malformed blocks",
+      "offFormat": "Off format",
+      "refused": "Refused by the daemon",
+      "rework": "Rework",
+      "ratio": "{{passed}}/{{total}}",
+      "outcomes": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "unusable": "Unusable"
       }
     }
   },

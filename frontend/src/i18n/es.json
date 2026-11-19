@@ -40,6 +40,7 @@
     "findings": "Hallazgos",
     "bench": "Banco de pruebas",
     "account": "Cuenta",
+    "apiTokens": "Tokens de API",
     "auditTrail": "Registro de auditoría"
   },
   "dashboard": {
@@ -3144,6 +3145,30 @@
     "legacy": "importado",
     "payload": "Detalles"
   },
+  "runSecrets": {
+    "title": "Secretos de ejecución",
+    "count_one": "{{count}} secreto",
+    "count_other": "{{count}} secretos",
+    "note": "Valores que la ejecución de esta tarea puede leer como variables de entorno. El backend los guarda cifrados; un valor no se vuelve a mostrar.",
+    "loading": "Cargando los secretos de ejecución",
+    "loadError": "No se pudieron cargar los secretos de ejecución: {{message}}",
+    "empty": "Esta tarea no tiene secretos de ejecución.",
+    "listLabel": "Secretos de ejecución de esta tarea",
+    "valueHidden": "valor oculto",
+    "delete": "Eliminar",
+    "deleteNamed": "Eliminar el secreto {{name}}",
+    "confirmDelete": "¿Eliminar {{name}}?",
+    "deleteConfirm": "Sí, eliminar",
+    "addTitle": "Agregar un secreto de ejecución",
+    "name": "Nombre",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Valor",
+    "nameHint": "Letras, dígitos y guiones bajos, sin empezar por un dígito.",
+    "nameInvalid": "Usa solo letras, dígitos y guiones bajos, y no empieces por un dígito.",
+    "add": "Agregar secreto",
+    "saved": "{{name}} guardado",
+    "addError": "No se pudo agregar el secreto: {{message}}"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -3641,6 +3666,55 @@
       "proxyMissing": "Token interno del proxy LLM: sin definir"
     }
   },
+  "apiTokens": {
+    "title": "Tokens de API",
+    "subtitle": "Credenciales para scripts y trabajos de CI, enviadas como token Bearer. Un token actúa con el rol que se le dio, nunca superior al de quien lo creó.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Cargando los tokens",
+    "loadError": "No se pudieron cargar los tokens: {{message}}",
+    "empty": "Esta empresa no tiene tokens de API.",
+    "emptyManager": "Crea uno abajo cuando un script o un trabajo de CI necesite llamar a la API.",
+    "columns": {
+      "name": "Nombre",
+      "role": "Rol",
+      "state": "Estado",
+      "createdBy": "Creado por",
+      "expires": "Vence",
+      "lastUsed": "Último uso",
+      "actions": "Acciones"
+    },
+    "state": {
+      "active": "Activo",
+      "expired": "Vencido",
+      "revoked": "Revocado"
+    },
+    "never": "Nunca",
+    "neverUsed": "Sin uso todavía",
+    "revoke": "Revocar",
+    "revokeNamed": "Revocar el token {{name}}",
+    "confirmLabel": "Confirmar la revocación de {{name}}",
+    "confirmRevoke": "¿Revocarlo ahora? Las llamadas con él se detienen de inmediato.",
+    "revokeConfirm": "Sí, revocar",
+    "createTitle": "Crear un token",
+    "name": "Nombre",
+    "namePlaceholder": "ci-nocturno",
+    "role": "Rol",
+    "expiry": "Vence a los",
+    "days_one": "{{count}} día",
+    "days_other": "{{count}} días",
+    "createHint": "Todo token vence. Un token no puede crear otros tokens y su rol nunca es superior al tuyo.",
+    "create": "Crear token",
+    "forbidden": "Tu rol no puede crear un token con ese rol.",
+    "createError": "No se pudo crear el token: {{message}}",
+    "createdTitle": "Token {{name}} creado",
+    "createdOnce": "Cópialo ahora: se muestra solo esta vez y esta página no lo guarda. Guárdalo en tu gestor de secretos.",
+    "secretLabel": "Token",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "dismiss": "Descartar el token nuevo"
+  },
   "taskViews": {
     "filters": "Filtros",
     "join": "Cumplir",
@@ -3962,7 +4036,9 @@
       "no_prompt_measure": "no se midió ningún prompt",
       "no_problems_graded": "no se calificó ningún problema de HumanEval",
       "no_instances_measured": "no se midió ninguna instancia de SWE-bench",
-      "tests_not_run": "las pruebas de la instancia no se ejecutaron"
+      "tests_not_run": "las pruebas de la instancia no se ejecutaron",
+      "format_unmeasured": "la corrida no pudo medir este modelo y formato",
+      "no_delivery_observed": "no se observó ninguna entrega en ningún formato"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -4078,6 +4154,29 @@
       "outcomes": {
         "pass": "Resuelta",
         "fail": "Fallida"
+      }
+    },
+    "editFormats": {
+      "title": "Formato de edición por modelo",
+      "note": "Cada modelo se ejecuta una vez por formato de edición sobre las mismas especificaciones, calificado por las pruebas de aceptación que escribió una persona. Cómo se usó un formato es lo que el backend leyó en cada respuesta y el daemon aplicó, nunca lo que dice el modelo. Un formato inutilizable (ninguna entrega bien formada) nunca es un aprobado, digan lo que digan las pruebas. Se muestra, no se juzga: cada fila es una sola corrida.",
+      "requested": "Formato que pidió esta corrida: {{format}}",
+      "deliveries": "Entregas de esta corrida: {{wellFormed}} de {{observed}} observadas bien formadas ({{missing}} sin observación, contadas aparte).",
+      "wellFormedShare": "Proporción bien formada",
+      "caption": "Cada modelo y formato de edición de la última ficha",
+      "model": "Modelo",
+      "format": "Formato",
+      "outcome": "Resultado",
+      "criteria": "Criterios",
+      "wellFormed": "Bien formadas",
+      "malformed": "Bloques mal formados",
+      "offFormat": "Fuera de formato",
+      "refused": "Rechazadas por el daemon",
+      "rework": "Retrabajo",
+      "ratio": "{{passed}}/{{total}}",
+      "outcomes": {
+        "pass": "Aprobado",
+        "fail": "Fallido",
+        "unusable": "Inutilizable"
       }
     }
   },

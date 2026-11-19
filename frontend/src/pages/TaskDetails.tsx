@@ -15,6 +15,7 @@ import { parseRouteId } from '../lib/routeId'
 import { carryOverLineage } from '../lib/carryOver'
 import { TaskCostCard } from '../components/CostSummary'
 import { TaskRelations } from '../components/TaskRelations'
+import { RunSecretsPanel } from '../components/RunSecretsPanel'
 import { TaskEventLog } from '../components/TaskEventLog'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { CountPill, EmptyState, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
@@ -312,6 +313,7 @@ export default function TaskDetails() {
 
       {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
       {companyId !== null && <TaskRelations taskId={task.id} />}
+      {companyId !== null && <RunSecretsPanel companyId={companyId} taskId={task.id} />}
       {companyId !== null && <TaskCostCard taskId={task.id} />}
       {companyId !== null && <TaskEventLog taskId={task.id} />}
 
