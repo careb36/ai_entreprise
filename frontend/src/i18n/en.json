@@ -46,7 +46,8 @@
     "mcp": "MCP servers",
     "selfImprovement": "Self-improvement",
     "project": "Project settings",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "auditTrail": "Audit trail"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3506,6 +3507,32 @@
     "confirmNow": "Confirm now",
     "add": "Add relation"
   },
+  "taskEvents": {
+    "title": "Event log",
+    "count_one": "{{count}} event",
+    "count_other": "{{count}} events",
+    "show": "Show",
+    "hide": "Hide",
+    "loading": "Loading the event log",
+    "loadError": "Could not load the event log: {{message}}",
+    "chain": {
+      "intact": "Chain intact",
+      "broken": "Chain broken",
+      "empty": "No chained events"
+    },
+    "source": {
+      "events": "The board reads these events.",
+      "comments": "The board reads the older comments for this task."
+    },
+    "break": "Event {{seq}}: {{reason}}",
+    "empty": "This task has no events yet.",
+    "listLabel": "Events of this task, oldest first",
+    "by": "by {{actor}}",
+    "status": "status {{status}}",
+    "run": "run {{id}}",
+    "legacy": "imported",
+    "payload": "Details"
+  },
   "runSecrets": {
     "title": "Run secrets",
     "count_one": "{{count}} secret",
@@ -3625,10 +3652,73 @@
       "kind": "Kind",
       "seq": "Row",
       "state": "State",
-      "anchoredAt": "Anchored at"
+      "anchoredAt": "Anchored at",
+      "receipt": "Receipt"
     },
     "anchorCount_one": "{{count}} anchor",
-    "anchorCount_other": "{{count}} anchors"
+    "anchorCount_other": "{{count}} anchors",
+    "export": "Receipt",
+    "exportNamed": "Download the receipt of the anchor at row {{seq}}"
+  },
+  "auditTrail": {
+    "title": "Audit trail",
+    "subtitle": "The company's audit chain as the backend verifies it, and its head to counter-sign with your own key.",
+    "chainTitle": "Chain verification",
+    "verify": "Verify the chain",
+    "verifyAgain": "Verify again",
+    "verifyHint": "The backend walks every row of the company's audit chain and reports where it breaks. It runs only when you ask.",
+    "verifying": "Walking the chain…",
+    "verifyError": "Could not verify the chain: {{message}}",
+    "status": {
+      "intact": "Intact",
+      "broken": "Broken",
+      "empty": "Empty"
+    },
+    "statusText": {
+      "intact": "Every row links to the one before it and its hash matches.",
+      "broken": "Some rows do not match: the chain was altered, reordered or cut. The rows are listed below.",
+      "empty": "The company has no audited rows yet."
+    },
+    "rows": "Rows",
+    "headSeq": "Head row",
+    "mode": "Hashes",
+    "modes": {
+      "hmac-sha256": "Keyed (HMAC-SHA256)",
+      "unsigned": "Unkeyed (SHA-256)",
+      "mixed": "Keyed and unkeyed"
+    },
+    "headHash": "Head hash",
+    "headHint": "Record the head row and hash outside the factory: a later walk that ends earlier means newest rows were dropped.",
+    "breaksTitle": "Where the chain breaks",
+    "breakCount_one": "{{count}} problem",
+    "breakCount_other": "{{count}} problems",
+    "columns": {
+      "seq": "Row",
+      "reason": "Problem"
+    },
+    "reasons": {
+      "gap": "A row is missing, repeated or renumbered",
+      "prev_mismatch": "The link to the previous row does not match",
+      "hash_mismatch": "The row or its place was altered",
+      "key_missing": "A keyed hash with no key configured to check it",
+      "downgrade": "An unkeyed row after a keyed one"
+    },
+    "anchorsLink": "See the anchors",
+    "signTitle": "Counter-sign the head with your key",
+    "signIntro": "Fetch the statement of the chain's head, sign it outside the factory with the Ed25519 key an owner registered, and paste the signature. Your private key never comes to this page; the backend checks the signature against the registered public keys.",
+    "getStatement": "Get the statement",
+    "refreshStatement": "Get a newer statement",
+    "statementError": "Could not get the statement: {{message}}",
+    "statementLabel": "Statement of row {{seq}}",
+    "copyStatement": "Copy",
+    "copied": "Copied",
+    "signHow": "Save it as statement.json exactly as shown and sign it, for example:",
+    "signatureLabel": "Signature (base64)",
+    "signatureHint": "The base64 signature your signing job produced.",
+    "signatureShape": "This is not base64: use letters, digits, + and /, with up to two = at the end.",
+    "submitSignature": "Submit the signature",
+    "signed": "Row {{seq}} is anchored with your key",
+    "signError": "The signature was refused: {{message}}"
   },
   "sprintProgress": {
     "title": "Claimed done versus verified",

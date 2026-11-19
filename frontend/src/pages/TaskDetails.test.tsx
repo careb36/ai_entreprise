@@ -15,6 +15,8 @@ vi.mock('../services/cost', async importOriginal => ({
 vi.mock('../components/TaskRelations', () => ({ TaskRelations: () => null }))
 // So do the run secrets (components/RunSecretsPanel.test.tsx).
 vi.mock('../components/RunSecretsPanel', () => ({ RunSecretsPanel: () => null }))
+// So does the event log (components/TaskEventLog.test.tsx).
+vi.mock('../components/TaskEventLog', () => ({ TaskEventLog: () => null }))
 vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),

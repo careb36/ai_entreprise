@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Anchor, CircleAlert, CircleCheck, CircleDashed, Hourglass, MessageSquareQuote, ShieldCheck, ShieldX, TriangleAlert,
+  Anchor, CircleAlert, CircleCheck, CircleDashed, Download, Hourglass, MessageSquareQuote, ShieldCheck, ShieldX, TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
@@ -17,6 +17,8 @@ import {
   type AnchorState,
   type CoverageStatus,
 } from '../services/auditAnchors'
+import { useExportAnchor } from '../services/auditTrail'
+import { saveJson } from '../lib/saveJson'
 import { useAppStore } from '../store/useAppStore'
 import { AccessNotice, CountPill, FormActions, LoadError, LoadingRows, PageHeader, Panel, SavedNote, Spinner, StatusBadge, type StatusTone, TABLE, TD, TH, TR } from '../components/ui'
 
@@ -157,6 +159,7 @@ function CoverageCard({ coverage }: { coverage: AnchorCoverage }) {
                 <th className={`${TH} text-right`}>{t('auditAnchors.columns.seq')}</th>
                 <th className={TH}>{t('auditAnchors.columns.state')}</th>
                 <th className={TH}>{t('auditAnchors.columns.anchoredAt')}</th>
+                <th className={TH}><span className="sr-only">{t('auditAnchors.columns.receipt')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -166,6 +169,7 @@ function CoverageCard({ coverage }: { coverage: AnchorCoverage }) {
                   <td className={`${TD} text-right tabular-nums`}>{a.seq}</td>
                   <td className={TD} title={a.problem ?? undefined}><AnchorStateBadge state={a.state} /></td>
                   <td className={`${TD} tabular-nums text-gray-400`}>{a.anchored_at}</td>
+                  <td className={`${TD} text-right`}><ExportReceipt anchorId={a.id} seq={a.seq} /></td>
                 </tr>
               ))}
             </tbody>
@@ -173,6 +177,23 @@ function CoverageCard({ coverage }: { coverage: AnchorCoverage }) {
         </div>
       )}
     </Panel>
+  )
+}
+
+/** The anchor's statement and proof as a JSON file, to verify outside the factory. */
+function ExportReceipt({ anchorId, seq }: { anchorId: number; seq: number }) {
+  const { t } = useTranslation()
+  const companyId = useAppStore(state => state.companyId)
+  const exporter = useExportAnchor(companyId)
+  return (
+    <>
+      <button type="button" className="btn-tool" disabled={exporter.isPending}
+        aria-label={t('auditAnchors.exportNamed', { seq })}
+        onClick={() => exporter.mutate(anchorId, { onSuccess: data => saveJson(`audit-anchor-${companyId}-${anchorId}.json`, data) })}>
+        {exporter.isPending ? <Spinner size={13} /> : <Download size={13} aria-hidden="true" />}{t('auditAnchors.export')}
+      </button>
+      {exporter.isError && <span role="alert" className="block text-xs text-red-300">{errorDetail(exporter.error)}</span>}
+    </>
   )
 }
 

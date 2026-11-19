@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AuditAnchors from './AuditAnchors'
@@ -107,5 +107,29 @@ describe('AuditAnchors', () => {
     expect(await screen.findByText('1 anchor(s) queued.')).toBeInTheDocument()
     const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!
     expect(new URL(post[0]).searchParams.get('company_id')).toBe('4')
+  })
+
+  it('downloads an anchor\'s receipt as a file, from the backend\'s export', async () => {
+    const base = routed()
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (new URL(url).pathname === '/v1/audit/anchors/1/export') {
+        return response(200, { id: 1, kind: 'tsa', seq: 4, chain_hash: 'h4', status: 'verified', statement: '{}', token: 'tok', tsa_cert_pem: null, signature: null, public_key: null, receipt_body: null })
+      }
+      return base(url, init)
+    })
+    vi.stubGlobal('fetch', fetch)
+    const createObjectURL = vi.fn(() => 'blob:receipt')
+    const revokeObjectURL = vi.fn()
+    const saved = { create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+    Object.assign(URL, { createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    renderAs('Manager')
+    fireEvent.click(await screen.findByRole('button', { name: 'Download the receipt of the anchor at row 4' }))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    expect(new URL(String(fetch.mock.calls.find(([u]) => String(u).includes('/export'))?.[0])).searchParams.get('company_id')).toBe('4')
+    expect(createObjectURL).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:receipt')
+    click.mockRestore()
+    Object.assign(URL, { createObjectURL: saved.create, revokeObjectURL: saved.revoke })
   })
 })
