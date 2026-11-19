@@ -34,6 +34,8 @@ Subcommands, used by ``scripts/bench/run.sh``:
   ``--humaneval FILE`` (``run.sh --humaneval``, schema v5) takes the index
   ``humaneval.py prepare`` wrote: the problems' entries leave ``specs`` and
   become the ``humaneval`` block (pass@1, each problem's outcome, tokens).
+  ``--swebench FILE`` (``run.sh --swebench``, schema v6) does the same with
+  the index ``swebench.py prepare`` wrote: the ``swebench`` block.
 
 The pure functions are what ``backend/tests/test_bench_*.py`` check.
 
@@ -59,6 +61,7 @@ import budget
 import graders
 import humaneval_card
 import prompt_weight
+import swebench_card
 from bench_grade import (  # noqa: F401 - the grade, re-exported
     GRADER_CONFTEST,
     criteria_from_junit,
@@ -218,6 +221,8 @@ def summarize_spec(
         "models": {role: sorted(set(m)) for role, m in sorted(models.items())},
         "routing": list(routing or []),
         "prompt": prompt or prompt_weight.empty(),
+        # A SWE-bench grade's details (swebench_grade.py), for its block.
+        **({"swebench": graded["swebench"]} if graded.get("swebench") else {}),
     }
 
 
@@ -232,6 +237,7 @@ def build_scorecard(
     graders_record: dict[str, Any] | None = None,
     sections_off: list[str] | None = None,
     humaneval_block: dict[str, Any] | None = None,
+    swebench_block: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them, and
     the run-level block (``run``), the graders' commit, the prompt sections
@@ -268,6 +274,7 @@ def build_scorecard(
         **({"graders": graders_record} if graders_record else {}),
         **({"sections_off": list(sections_off)} if sections_off else {}),
         **({"humaneval": humaneval_block} if humaneval_block is not None else {}),
+        **({"swebench": swebench_block} if swebench_block is not None else {}),
     }
 
 
@@ -342,6 +349,7 @@ def render_markdown(card: dict[str, Any]) -> str:
     lines += prompt_weight.render_lines(card)
     lines += ablation.render_lines(card)
     lines += humaneval_card.render_lines(card)
+    lines += swebench_card.render_lines(card)
     return "\n".join(lines) + "\n"
 
 
@@ -464,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--graders", type=Path, help="the graders' record (graders.py)")
     w.add_argument("--sections-off", default="", help="the prompt sections turned off")
     w.add_argument("--humaneval", type=Path, help="the HumanEval index (humaneval.py prepare)")
+    w.add_argument("--swebench", type=Path, help="the SWE-bench index (swebench.py prepare)")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -483,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     index = json.loads(args.humaneval.read_text()) if args.humaneval else None
     specs, he_entries = humaneval_card.split(entries, index)
+    swe_index = json.loads(args.swebench.read_text()) if args.swebench else None
+    specs, swe_entries = swebench_card.split(specs, swe_index)
     card = build_scorecard(
         specs,
         stamp=args.stamp,
@@ -498,6 +509,7 @@ def main(argv: list[str] | None = None) -> int:
         graders_record=json.loads(args.graders.read_text()) if args.graders else None,
         sections_off=off,
         humaneval_block=humaneval_card.block(he_entries, index, args.skipped) if index else None,
+        swebench_block=swebench_card.block(swe_entries, swe_index, args.skipped) if swe_index else None,
     )
     problems = validate(card)
     if problems:

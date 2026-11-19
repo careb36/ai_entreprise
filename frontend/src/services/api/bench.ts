@@ -14,6 +14,8 @@ export type BenchUnmeasuredReason =
   | 'not_in_card'
   | 'no_prompt_measure'
   | 'no_problems_graded'
+  | 'no_instances_measured'
+  | 'tests_not_run'
 
 export type BenchMeasure<T> =
   | { measured: true; value: T }
@@ -93,6 +95,33 @@ export interface BenchHumanEval {
   skipped: string[]
 }
 
+/** A SWE-bench Lite instance (schema v6): its outcome from its own tests run by the scorer, or unmeasured with the card's reason. */
+export interface BenchSweBenchInstance {
+  instance_id: string
+  repo: string
+  status: BenchSpecStatus
+  outcome: BenchMeasure<'pass' | 'fail'>
+  reason: string | null
+  fail_to_pass: BenchMeasure<{ passed: number; total: number }>
+  pass_to_pass: BenchMeasure<{ passed: number; total: number }>
+  wall_clock_seconds: number | null
+  tokens: BenchTokens
+}
+
+/** The card's `swebench` block (schema v6); the resolve rate leaves unmeasured instances out and is unmeasured when none was measured. */
+export interface BenchSweBench {
+  dataset: { name: string; revision: string; split: string; source: string; license: string; pinned: number }
+  graded: number
+  measured: number
+  resolved: number
+  failed: number
+  unmeasured: number
+  resolved_rate: BenchMeasure<number>
+  tokens: BenchTokens
+  instances: BenchSweBenchInstance[]
+  skipped: string[]
+}
+
 interface BenchCardBase {
   file: string
   folder: '' | 'real' | 'ablation'
@@ -114,6 +143,7 @@ export interface BenchValidCard extends BenchCardBase {
   specs: BenchSpec[]
   prompt_sections: BenchPromptSection[] | null
   humaneval: BenchHumanEval | null
+  swebench: BenchSweBench | null
 }
 
 export interface BenchRejectedCard extends BenchCardBase { status: 'invalid' | 'unreadable' }
