@@ -13,6 +13,9 @@ the lines they are about, and the next review a Manager submits carries the
 open ones to whoever must act. A review submitted on the platform decides
 nothing here; its state (``CHANGES_REQUESTED``, ``APPROVED``) is kept beside
 its text.
+
+Reading the forge is contact with it: only a company whose forge policy is
+``publish`` reads comments back (issue #727; 409 ``forge_disabled`` otherwise).
 """
 
 from __future__ import annotations
@@ -24,13 +27,14 @@ from models.review import ReviewComment, RunPublication
 from sqlmodel import Session, select
 
 from services.evidence.review_changes import run_changes
+from services.platform import forge_policy_setting
 
 SOURCES = ("github", "gitlab")
 MAX_BODY_CHARS = 4000
 
 
 class SyncRefused(Exception):
-    def __init__(self, status: int, detail: str):
+    def __init__(self, status: int, detail: Any):
         super().__init__(detail)
         self.status = status
         self.detail = detail
@@ -40,6 +44,12 @@ def sync_spec(
     session: Session, run: AgentRun, publication: RunPublication
 ) -> dict[str, Any]:
     """The ``workspace.git.reviews`` request for *publication*, or why there is none."""
+    try:
+        policy = forge_policy_setting.require_publish(
+            session, run.company_id, "read review comments from a forge"
+        )
+    except forge_policy_setting.ForgePolicyRefused as refused:
+        raise SyncRefused(refused.status, refused.detail) from refused
     if (
         publication.provider not in SOURCES
         or publication.how == "compare"
@@ -55,6 +65,7 @@ def sync_spec(
         "workspace_root": git.get("repository") or "",
         "provider": publication.provider,
         "url": publication.url,
+        "forge_policy": policy,
     }
 
 

@@ -27,6 +27,7 @@ from services.loop import console_host, task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import quality_gate
 from services.producers import console_assistants, console_clis, console_producer
+from sqlmodel import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 import console_producer_helpers
@@ -182,12 +183,18 @@ def test_the_clis_word_that_tests_pass_is_held_to_a_test_run(world, cli_path):
     assert verification.verdict != "verified"
 
 
+@pytest.mark.parametrize("forge", ["fetch", "none"])
 @pytest.mark.parametrize("delivers", [True, False], ids=["changed", "failed"])
 def test_the_base_the_branch_started_from_is_kept_on_the_console_run(
-    world, cli_path, repo, tmp_path, delivers
+    world, cli_path, repo, tmp_path, delivers, forge
 ):
     main = git(repo, "rev-parse", "main")
     git(repo, "remote", "add", "origin", (tmp_path / "nowhere.git").as_uri())
+    with Session(world["engine"]) as session:
+        company = session.get(Company, world["sprint"]["company_id"])
+        company.forge_policy = forge
+        session.add(company)
+        session.commit()
     fake_cli(cli_path, "claude", EDIT_CALC if delivers else "echo 'Done.'\n")
     nats = _DaemonOverNATS()
     item, agent, sprint = world["item"], world["agent"], world["sprint"]
@@ -205,8 +212,15 @@ def test_the_base_the_branch_started_from_is_kept_on_the_console_run(
     evidence = runs[0][1].evidence["console_run"]
     assert evidence["base_ref"] == "main" and evidence["base_commit"] == main
     assert evidence["started_from"] == "main"
-    assert evidence["base_remote"] == "origin/main"
-    assert evidence["remote_unreachable"]
+    assert evidence["forge_policy"] == forge
+    if forge == "fetch":
+        assert evidence["base_remote"] == "origin/main"
+        assert evidence["remote_unreachable"] and evidence["remote_contacted"] is True
+    else:
+        # The forge policy keeps git local (issue #727): no fetch was tried.
+        assert evidence["base_remote"] is None and "remote_unreachable" not in evidence
+        assert evidence["base_remote_not_contacted"] == "origin/main"
+        assert evidence["remote_contacted"] is False
 
 
 def test_a_cli_that_times_out_is_refuted_and_its_half_work_discarded(

@@ -23,6 +23,15 @@
         },
         "commit": {
           "type": "string"
+        },
+        "forge_policy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fetch",
+            "publish"
+          ],
+          "description": "The company's forge policy (issue #727, PROTOCOL.md section 5.3). Missing or unknown reads as none; capped by the daemon's FORGE_POLICY_MAX."
         }
       },
       "required": [

@@ -932,6 +932,7 @@ def test_a_branch_is_published_only_with_the_switch_on_and_a_remote(
         "url": "https://example.com/a/b/compare",
     }
     company = _company(sqlite_session)
+    company.forge_policy = "publish"  # the forge is allowed (issue #727)
     _delivered(sqlite_session, company)
     _policy(sqlite_session, company, "publish")
     _cycle(sqlite_session, company, answer("publish", "publish"))
@@ -943,8 +944,7 @@ def test_a_branch_is_published_only_with_the_switch_on_and_a_remote(
     sqlite_session.commit()
     _, _run = _delivered(sqlite_session, company)
     _cycle(sqlite_session, company, answer("publish", "publish"))
-    # The first branch's situation was decided already (no switch); the
-    # second one is published.
+    # The first branch was decided already (no switch); the second is published.
     assert [s for s, _ in calls] == ["workspace.inspect", "workspace.git.publish"]
     row = _rows(sqlite_session, company)[-1]
     assert row.outcome == "published"

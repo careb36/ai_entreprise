@@ -39,6 +39,7 @@ from services.contracts import wiki, wiki_lint, wiki_templates
 from services.evidence import touched
 from services.learning import retrospective, wiki_compile, wiki_store
 from services.planning import arch_author
+from services.platform import forge_policy_setting
 from services.platform.agent_service import AgentService
 from services.tasks import sprint_board
 from services.workspace import git_workflow, workspace_daemon
@@ -240,6 +241,7 @@ async def write_pages(
             "branch": WIKI_BRANCH,
             "base": company.get("git_base_branch") or "",
             "message": f"Update the project wiki\n\nFabrique-Sprint: {sprint_id}\n",
+            "forge_policy": company.get("forge_policy") or "none",
         }
     request: dict[str, Any] = {
         "workspace_root": company["root"],
@@ -293,6 +295,9 @@ def _compile(sprint_id: int, retro_metrics: dict[str, Any] | None) -> dict[str, 
             "id": inputs["company_id"],
             "git_workflow": bool(company and company.git_workflow),
             "git_base_branch": company.git_base_branch if company else None,
+            "forge_policy": forge_policy_setting.effective(
+                session, inputs["company_id"]
+            ),
             "write_to_repo": wiki_store.write_to_repo(session, inputs["company_id"]),
         }
         summary["cited"] = cited_paths(session, inputs["company_id"])
