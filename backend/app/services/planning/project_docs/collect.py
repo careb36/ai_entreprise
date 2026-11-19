@@ -23,7 +23,8 @@ observation per task and each sprint's reported model usage,
 integrations; ``collect_release``), ``quality_basis`` and ``communications``
 (the backend's quality definitions and the channels' configuration;
 ``collect_plans``), ``stakeholders`` (the teams and approvals by role;
-``collect_stakeholders``) and ``statements_<document>`` (a person's current
+``collect_stakeholders``), ``check_basis`` (sprint lengths, intake tasks, token
+quotas; ``collect_checks``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -58,6 +59,7 @@ from sqlmodel import Session, select
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
 from services.planning.project_docs import (
+    collect_checks,
     collect_plans,
     collect_release,
     collect_stakeholders,
@@ -588,5 +590,6 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "quality_basis": collect_plans.quality_basis(),
         "communications": collect_plans.communications(session, company.id),
         "stakeholders": collect_stakeholders.stakeholders(session, company.id),
+        collect_checks.KEY: collect_checks.basis(session, company.id, sprints),
         **_person_statements(session, company.id),
     }

@@ -146,6 +146,48 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
 
+#### More computed checks per domain (#692)
+
+Five checks join the table, in `project_docs/domain_checks.py`, over the
+snapshot key `check_basis` (`project_docs/collect_checks.py`: each sprint's
+`duration_days`, the tasks accepted into a sprint from an intake request, and
+each business unit's token quota with its digest; a unit's name is free text
+and is not read). Each reads only what the platform wrote; none reads a
+retrospective, an agent message or a delivery's text.
+
+| Domain | Outcome (our wording) | Result | How it is computed | Function | Cites | Not computable when |
+|---|---|---|---|---|---|---|
+| Governance | Work starts on an approved plan | met / not met | each sprint planned from a specification (`Sprint.specification_id`): its first task event against that specification version's `approved_at` (`history`); a version never approved counts as not met; sprints not planned from one are counted apart | `domain_checks.approved_first` | the sprint and the specification version, each with its digest | no sprint planned from a specification has started, or a started sprint's version is no longer in the bounded history (counted, never assumed approved) |
+| Scope | A sprint's scope holds once it is planned | measured | the tasks that joined a sprint after it was planned, accepted from an intake request (`intake_queue` writes a `note` task event under the actor `system` with `intake_item_id`; the same payload under another actor is a claim and is not read), over the sprints' tasks | `domain_checks.churn` | each such task event with its chain hash | no task is recorded, or `check_basis` was not read |
+| Schedule | Iterations finish by their planned end | measured | completed sprints whose last task event falls on or before `start_date + duration_days − 1` (a one-day sprint ends on its start date); sprints without a length are counted apart | `domain_checks.on_time` | the sprint, and its planned length with a digest | no sprint is completed, or no completed sprint has both a start date and `duration_days` |
+| Finance | Model usage stays within the configured quota | measured | the tokens counted against the business units' `token_quota_limit` this period (`token_quota_used`, which the LLM proxy adds from the usage the provider reported), with how many units reached it | `domain_checks.quota` | each unit's quota record with its digest | no business unit has a quota (0 is unlimited) |
+| Resources | Each sprint's work goes to the team chosen for it | met / not met | the tasks of the sprints that record a team (`Sprint.team`) are assigned to a role on it (canonical role names) | `domain_checks.sprint_team` | the sprints with their digest | no sprint records a team (it then runs with every hired role, which `team` already checks) |
+
+Limits worth knowing: `duration_days` is the length recorded now, which a
+Manager can edit after the sprint (each edit is audited as `sprint_updated`);
+the sprint's close is read as its last task event, since the sprint has no
+closing time of its own and the backend's effort observation is written at
+close. The quota is a token limit per period, reset by an Owner, so its figure
+moves with every model call and `checks.md` goes stale with it, as it already
+does with the spend.
+
+Stakeholders and Risk gain nothing here: each already has three computed
+checks, and what is left in them is in the list below.
+
+**Outcomes the records cannot decide** (each stays a person's section, a
+"not computable" line, or out of the table):
+
+| Domain | Outcome | Why not |
+|---|---|---|
+| Governance | Benefits are realised; the project is still justified | the business case and expected benefits are a person's (charter sections) |
+| Scope | The sponsor accepts the delivered scope | acceptance is a person's decision (final report section); the Verifier's readings are evidence for it, not the acceptance |
+| Schedule | The project finishes on its target date | no target release date is recorded (release plan section); sprints without `duration_days` have no planned end |
+| Finance | The project delivers within its budget | no budget in money is recorded; the token quota is a period limit on model calls, not the project's budget, and spend in dollars is only known where the provider reported usage |
+| Finance | Cost performance against a baseline | no cost baseline or planned value is recorded |
+| Stakeholders | People outside the company are engaged and satisfied | they are not in the records (register and communications sections) |
+| Resources | People's capacity and availability are planned | the records hold no capacity or calendar for people; agents are not scheduled resources |
+| Risk | Risks stay within the organisation's appetite; project-level risks are handled | the appetite and market, staffing and budget risks are a person's (risk register section) |
+
 The snapshot (`services/planning/project_docs/collect.py`) is the plain data
 every builder reads; "spec" is the company's newest approved specification
 (else its newest), "arch" that specification's newest approved architecture
@@ -610,8 +652,9 @@ completed project's requirements, readings, measurements, releases and open
 holds, with the lessons left to their register since retrospectives are
 claims (all done: `status_report.md`, `release_plan.md`, `final_report.md`).
 The communications and quality plans, first planned for phase 3, are done
-too (`communications_plan.md`, `quality_plan.md`). Then more computed checks
-per domain (backlog rates). The stakeholder register from members, teams and
+too (`communications_plan.md`, `quality_plan.md`). More computed checks per
+domain are done too (#692: approval before work, backlog churn, iterations on
+time, usage against the quota, sprint teams). The stakeholder register from members, teams and
 approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
 manifest of the pack), the COBIT governance matrix and the ITIL transition set

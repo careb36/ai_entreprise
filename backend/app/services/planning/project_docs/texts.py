@@ -18,6 +18,8 @@ from collections.abc import Callable
 from typing import Any
 
 from services.planning.project_docs import (
+    texts_checks_en,
+    texts_checks_es,
     texts_en,
     texts_es,
     texts_final_en,
@@ -41,10 +43,11 @@ DEFAULT_LANGUAGE = "en"
 # (``status_docs``), the release and iteration plan's (``release_docs``) and
 # the final report's (``final_docs``) live in their own modules; so do the
 # quality and communications plans' (``texts_plans_*``) and the stakeholder
-# register's (``texts_stakeholders_*``).
+# register's (``texts_stakeholders_*``) and the domain checks' (``texts_checks_*``).
 TEXTS: dict[str, dict[str, str]] = {
     "en": {
         **texts_plans_en.TEXTS,
+        **texts_checks_en.TEXTS,
         **texts_stakeholders_en.TEXTS,
         **texts_en.TEXTS,
         **texts_wstg_en.TEXTS,
@@ -54,6 +57,7 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "es": {
         **texts_plans_es.TEXTS,
+        **texts_checks_es.TEXTS,
         **texts_stakeholders_es.TEXTS,
         **texts_es.TEXTS,
         **texts_wstg_es.TEXTS,
