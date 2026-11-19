@@ -201,6 +201,11 @@ class Settings(BaseSettings):
     # the files around the task's modules and earlier writes, from the
     # daemon's parse, and the recent runs that wrote them; 0 leaves it out.
     CODE_GRAPH_MAX_CHARS: int = 2500
+    # Where the code graph the daemon reports is kept (issue #438, second slice;
+    # ``services/tools/code_graph_store.py``): "postgres" (the tables), "neo4j"
+    # (the knowledge graph, only while NEO4J_ENABLED; else Postgres) or "off"
+    # (nothing stored; the section is computed on demand, as before).
+    CODE_GRAPH_STORE: str = "postgres"
     # The sprint board in every task prompt (``services/loop/worker/sprint_notes.py``,
     # issue #439): the notes of the sprint relevant to the task, newest first,
     # within this many characters; 0 leaves the section out.
