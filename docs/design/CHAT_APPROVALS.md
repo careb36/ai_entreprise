@@ -39,11 +39,23 @@ check (`require_company_role(..., "Manager")`), is audited as that person with
 **Approval points wired:** the risk hold (`risk_hold` task event, written by
 `services/loop/worker/qa_review.py`) — Approve accepts it (`approve` →
 `approved_by_person`, task done), Send back returns it to To do with a
-`NEEDS WORK:` note. Not wired in this phase: another producer's run waiting
-for approval, a task blocked for triage without a hold (only "Send back"
-applies, no "Approve"), publishing a branch (needs the daemon, not a click),
-and the Owner-only decisions of `docs/WORKFLOWS.md` (not built). Those stay in
-the web inbox.
+`NEEDS WORK:` note. **The triage block** (added after the first phase): a task
+blocked until a person acts without a hold, the inbox's blocked task
+(`chat_approvals.triage_point`: nothing the worker does moves it, not frozen,
+not carried over, not archived, with an in-house run). It offers Send back
+only, as the board does; `approve` is refused. The send-back goes through the
+board's own function (`services/loop/board_moves.send_back`, which `PATCH
+/v1/backlog/{id}` uses as well): the same `sent_back` task event written as
+the person, with the note `Sent back to work by a person via <platform>:
+<reason>` (the marker restarts the rework budgets), and the task queued again.
+A reason is given with Slack's `/fabrique sendback CODE <reason>` or Teams'
+`@Fabrique sendback CODE <reason>`; the Slack button sends it back without
+one. The message names the event that blocked the task (the latest that set
+`blocked`) and its chain hash: a note added since leaves it current, a new
+block or any move makes it stale. Not wired: another producer's run waiting
+for approval, publishing a branch (needs the daemon, not a click), and the
+Owner-only decisions of `docs/WORKFLOWS.md` (not built). Those stay in the web
+inbox, as does a blocked task with no in-house run.
 
 **Identity link.** A person signed in to La Fabrique asks for a one-time code
 in Settings → Chat approvals (10 characters, ~50 bits, sha256 stored, 10
@@ -102,11 +114,22 @@ inbound webhook is GitHub's, and its outgoing one carries no credential.
 | C11 | B9 | D | Flood of inbound requests | M | L | Low | New: rate limit per address (`CHAT_RATE_LIMIT`), body cap 64 KiB, signature checked before any query beyond the connection lookup |
 | C12 | B1 | E | Non-Owner or API token changes the connection (points the channel elsewhere, swaps the secret) | L | H | High | New: config endpoints require a signed-in Owner, API tokens refused (as SSO); audited. Test |
 | C13 | B5 | T | Agent-written text (title, check names) breaks message formatting or injects mentions | M | L | Low | New: Slack `mrkdwn` escaped (`&`, `<`, `>`), Teams card text in `TextBlock`s (no markdown links from data), lengths capped |
+| C15 | B9 | E | `approve` on a triage block (no delivery to accept) marks it done in chat | M | H | High | New: the kind is read from the record (the event the message names: `risk_hold` or not, `chat_approvals.kind_of`), never from the request; `approve` on a triage block is refused before the claim and audited. Test |
+| C16 | B9 | S | Slack's `/fabrique sendback CODE` acts with the short code alone (the button also carries the head tag and run version) | M | M | Medium | Same layers as Teams already had: signature and timestamp, replay key `command:{trigger_id}`, workspace, link, Manager role, then the message must still match the record (the block's event and chain hash, the run's version). The code only names the message; it grants nothing. Tests: unlinked, Viewer, forged signature |
+| C17 | B9 | T | The chat send-back diverges from the board's (another event kind, budgets not restarted, task not queued) | L | M | Medium | New: one function for both, `board_moves.send_back` over `record_person_change`; the test compares the event with the board's (`sent_back`, actor person, author `user`, the marker) |
+| C18 | B9 | I | A triage message shows the block's reason, which can be a reviewer's or a gate's words | M | L | Low | The inbox's own text (`block_reason`), labelled "as recorded", escaped and capped at 200 characters; never the run's claims |
 | C14 | — | E | Assume breach: the signing secret leaks | L | H | High | Layered: a forged request still needs a linked chat user id of a Manager and a current approval id and head; rotation documented (`docs/OPERATIONS.md`); every decision audited |
 
 ## Tests that prove the mitigations
 
-`backend/tests/test_chat_approvals.py` and `test_chat_inbound.py`: valid,
+`backend/tests/test_chat_send_back.py` for the triage block: posted with Send
+back only, not posted while the worker still moves the task or when it is
+frozen; sent back from the Slack button, the Slack command and Teams with the
+board's event and the task queued; `approve` refused; a forged signature on a
+button, a command and a mention refused with the replay store untouched; a
+replay acting once; an unlinked user and a Viewer refused (the Viewer by the
+board's PATCH too); a task the board already sent back leaving the message
+stale. `backend/tests/test_chat_approvals.py` and `test_chat_inbound.py`: valid,
 invalid and missing signatures for both providers, stale timestamps, replayed
 interactions, unlinked and wrong-workspace users, a Viewer refused, a Manager
 allowed, a changed head refused with the task untouched, the audit rows, the
@@ -126,6 +149,14 @@ record check refuses it if the first decision did commit); and the same hold
 posted to both platforms kept its buttons on the other one after a decision
 (now marked out of date with the outcome).
 
+The `sdl-review` pass on the triage send-back (webhooks, authentication) found
+one Low finding, fixed before the commit: the audit row's task event was read
+as the task's latest event after the move, which a concurrent writer could
+change; `board_moves.send_back` now returns the event it wrote. Kept as
+residual: between the claim's record check and the send-back no task lock is
+held, the board's own exposure (the worker could act in that moment; the
+claim's conditional update still keeps two chat decisions from both acting).
+
 ## Residual risks
 
 - A stolen link code claimed within ten minutes binds the attacker's chat
@@ -143,6 +174,7 @@ posted to both platforms kept its buttons on the other one after a decision
 ## Open questions
 
 - Should approvals in chat require Owner rather than Manager (the web allows a
-  Manager)? Kept equal to the web here.
+  Manager)? Kept equal to the web here, and for the triage send-back equal to
+  the board's `PATCH /v1/backlog/{id}` (Manager).
 - Should a person's chat link expire, or end when they leave the company? It
   ends with the membership: the role check fails without one.

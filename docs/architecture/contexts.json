@@ -550,6 +550,10 @@
         "integrations",
         "release"
       ],
+      "test_chat_send_back.py": [
+        "integrations",
+        "loop"
+      ],
       "test_changed_paths.py": [
         "repo"
       ],
