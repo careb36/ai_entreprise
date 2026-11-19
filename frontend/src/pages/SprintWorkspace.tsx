@@ -24,6 +24,7 @@ import SprintOverview from './Dashboard'
 import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { AutonomyControl, SprintControls, SprintStatusBanner } from '../components/SprintControls'
+import { BaseBehindNotice } from '../components/BaseSyncAction'
 import RunWindowBadge from '../components/RunWindowBadge'
 import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintRelations } from '../components/SprintRelations'
@@ -214,6 +215,7 @@ export const SprintWorkspace: React.FC = () => {
         )}
         {board && <SprintTeamChips team={board.sprint.team} source={board.sprint.team_source} />}
         {board && <SprintStatusBanner sprint={board.sprint} />}
+        {board?.sprint.status === 'planned' && <BaseBehindNotice companyId={board.sprint.company_id} canManage={canManage} />}
         {board && <RunWindowBadge sprint={board.sprint} />}
         <div className="flex flex-wrap items-end gap-2 border-b border-surface-700">
           <SprintTabs sprintId={sprintId} selected={tab} />

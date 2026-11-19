@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.git.sync_base",
+  "title": "workspace.git.sync_base",
+  "description": "Fast-forward the local base branch to its remote's tip, or refuse changing nothing and say why (git_sync.py, issue #745).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.git.sync_base",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "base": {
+          "type": "string",
+          "description": "The local branch to bring up to date; empty: the one checked out."
+        },
+        "forge_policy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fetch",
+            "publish"
+          ],
+          "description": "The company's forge policy (issue #727, PROTOCOL.md section 5.3). Missing or unknown reads as none, which refuses with forge_disabled and contacts nothing; capped by the daemon's FORGE_POLICY_MAX."
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "description": "True for updated, up_to_date and ahead; false for a refusal, which changed nothing."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "updated",
+            "up_to_date",
+            "ahead",
+            "forge_disabled",
+            "not_a_repository",
+            "not_a_branch",
+            "no_remote",
+            "base_not_on_remote",
+            "operation_in_progress",
+            "dirty",
+            "remote_unreachable",
+            "diverged",
+            "not_moved"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "remote": {
+          "type": "string"
+        },
+        "remote_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The remote's URL without credentials."
+        },
+        "before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_commit": {
+          "type": "string"
+        },
+        "behind": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ahead": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "forge_policy": {
+          "type": "string"
+        },
+        "remote_contacted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "outcome",
+        "forge_policy",
+        "remote_contacted"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

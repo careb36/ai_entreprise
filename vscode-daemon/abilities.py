@@ -47,6 +47,7 @@ SUBJECTS = (
     "workspace.git.merge",
     "workspace.git.publish",
     "workspace.git.reviews",
+    "workspace.git.sync_base",
     "workspace.graph",
     "workspace.hash",
     "workspace.inspect",
@@ -74,6 +75,7 @@ FEATURES = {
     "workspace.git.merge": _FORGE,
     "workspace.git.publish": _FORGE,
     "workspace.git.reviews": _FORGE,
+    "workspace.git.sync_base": _FORGE,
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }

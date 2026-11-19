@@ -1086,6 +1086,34 @@ starts at `none`; every company that existed then was set to `publish`.
   upgrade the daemons to enforce the policy on their side.
 - **A publish answered `forge_disabled`** names the policy in force; raise it
   only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
+- **At creation** (issue #745) the New company form asks the Owner for the
+  policy: `fetch` is pre-selected only for a folder with a remote, and the
+  choice is audited as `forge_policy_changed` with `at: creation`, `none`
+  included.
+
+### Bring a local copy up to date
+
+A local clone weeks behind its remote makes a new company read old files.
+Under `fetch` or `publish`, the Owner ticks *Bring my local copy up to date*
+on the New company form, or a Manager presses *Bring the local copy up to
+date* on the company's Git settings (also offered on the board of a planned
+sprint whose local base is behind; `POST /v1/companies/{id}/git/sync_base`).
+The daemon only fast-forwards the base branch (`workspace.git.sync_base`): no
+merge commit, rebase or reset, so no commit is lost. Each attempt is recorded
+as `base_sync_observed` with the old and new commit and the outcome. When it
+refuses, nothing changed; act on the outcome:
+
+- `dirty`: commit or stash the changes to tracked files in the checkout
+  that has the base, then try again.
+- `operation_in_progress`: finish or abort the rebase, merge, cherry-pick or
+  revert (`git rebase --abort`, `git merge --abort`…).
+- `diverged`: both sides have commits; decide by hand (`git pull --rebase`
+  or a merge) — La Fabrique never chooses which commits to keep.
+- `remote_unreachable`: the daemon's computer could not read the remote with
+  the person's git credentials (offline, credentials, VPN); `git fetch` in a
+  terminal there shows the same reason.
+- `forge_disabled`: the company's policy is `none`, or a ceiling
+  (`FORGE_POLICY_MAX` on the backend or the daemon) holds it there.
 
 ## Run window
 

@@ -701,6 +701,9 @@
     "POST /v1/companies/{company_id}/documentation": {
       "access": "Manager"
     },
+    "POST /v1/companies/{company_id}/git/sync_base": {
+      "access": "Manager"
+    },
     "POST /v1/companies/{company_id}/intake": {
       "access": "Viewer"
     },
@@ -972,6 +975,13 @@
     },
     "POST /v1/wiki_versions/{version_id}/reject": {
       "access": "Manager"
+    },
+    "POST /v1/workspace/git_check": {
+      "access": "authenticated",
+      "why": "As inspect: the New company form reads the chosen folder before a company exists; the remote is read only when the person asks, capped by FORGE_POLICY_MAX (issue #745).",
+      "body": {
+        "project_path": "/srv/authz"
+      }
     },
     "PUT /v1/architectures/{arch_id}": {
       "access": "Manager"

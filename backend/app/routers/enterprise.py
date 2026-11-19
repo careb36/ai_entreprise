@@ -35,7 +35,7 @@ from schemas import (
 from services.loop import foundation_setup
 from services.loop.company_service import CompanyService
 from services.planning.discovery_service import DiscoveryService
-from services.platform import memory_graph
+from services.platform import forge_policy_setting, memory_graph
 from services.release import git_setup
 from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
@@ -47,6 +47,7 @@ from services.workspace.workspace_daemon import (
 )
 from sqlmodel import Session
 
+from routers import company_sync
 from routers.enterprise_agents import (  # noqa: F401 - re-exported
     _ROLE_RESPONSIBILITIES,
     _agent_company,
@@ -78,13 +79,16 @@ async def init_company(
     """Bootstrap a new company (CompanyService); its Git workflow and its foundation sprint follow the folder, as the daemon observed it (``services/release/git_setup.py``, ``services/loop/foundation_setup.py``)."""
     require_authenticated(user)
     base = git_setup.clean_base(req.git_base_branch)
+    nats = getattr(request.app.state, "nats_client", None)
+    # The Owner's forge policy, checked against the ceiling before anything
+    # is created; with "Bring my local copy up to date", the local base is
+    # fast-forwarded first, so what follows reads the current files (#745).
+    synced = await company_sync.before_creation(nats, req, base)
     # One inspection of the folder serves both observations — the Git
     # workflow (a repository or not) and the foundation sprint (a repository
     # with code or not). Both are the daemon's; the request's own word only
     # asks for the sprint or declines it.
-    observed = await foundation_setup.observe_folder(
-        getattr(request.app.state, "nats_client", None), req.project_path
-    )
+    observed = await foundation_setup.observe_folder(nats, req.project_path)
     foundation = foundation_setup.decide(observed, req.foundation_sprint)
     service = CompanyService(session)
     try:
@@ -111,12 +115,16 @@ async def init_company(
         # The decision and its reason, with the daemon's observation beside
         # it (services/loop/foundation_setup.py).
         result["foundation_sprint"] = foundation
-        return result
     except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.
         logger.error(f"Company initialization failed: {exc}")
+        if synced is not None:
+            # Fast-forwarded with no company to record it on: say so in the log.
+            logger.warning(f"init_company: the local base sync was {synced}")
         raise HTTPException(
             status_code=500, detail="Internal server error during initialization"
         )
+    # The Owner's choice and what the daemon observed, on the new company's record.
+    return company_sync.after_creation(session, user, result, req, synced)
 
 
 @router.post("/approve_task", tags=["Enterprise"])
@@ -179,6 +187,9 @@ async def get_capabilities(request: Request) -> dict[str, bool | str | None]:
         "support_agent": bool(settings.SUPPORT_AGENT_ENABLED),
         # Where GitHub can reach this backend; null when not configured.
         "public_api_url": (settings.PUBLIC_API_URL or "").rstrip("/") or None,
+        # The widest forge policy a company may choose here (FORGE_POLICY_MAX):
+        # the New company form offers nothing above it (issue #745).
+        "forge_policy_max": forge_policy_setting.ceiling(),
     }
 
 

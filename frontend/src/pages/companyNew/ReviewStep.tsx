@@ -4,7 +4,8 @@ import { Bot, Factory, Globe, Pencil, RefreshCw } from 'lucide-react'
 import type { WorkspaceInspection } from '../../services/api'
 import type { GitWorkflowChoice } from '../../services/workControl'
 import { StartChoice } from '../../components/SprintControls'
-import { GitSetupChoice } from '../../components/GitWorkflowPanel'
+import { GitSetupChoice, gitChoiceFor } from '../../components/GitWorkflowPanel'
+import { RemoteSyncChoice, type RemoteChoice } from '../../components/RemoteSyncChoice'
 import {
   DEFAULT_TIER, PERM_LEVELS, SENIORITIES, TIER_META, localizedAutonomy, localizedPermission, localizedRoles,
   resourceSummary,
@@ -31,7 +32,8 @@ function Summary({ title, onEdit, editLabel, children }: { title: ReactNode; onE
 /** Step 5: everything chosen, with a way back to each step, and the button that creates the company. */
 export function ReviewStep({
   companyName, companyDesc, scopeSize, timezone, autonomyLevel, startNow, setStartNow, inspected, gitChoice,
-  setGitChoice, permissions, agents, availableModels, mutationError, loading, handleSubmit, setStep,
+  setGitChoice, remoteChoice, setRemoteChoice, permissions, agents, availableModels, mutationError, loading,
+  handleSubmit, setStep,
 }: {
   companyName: string
   companyDesc: string
@@ -43,6 +45,8 @@ export function ReviewStep({
   inspected: WorkspaceInspection | null
   gitChoice: GitWorkflowChoice | null
   setGitChoice: (choice: GitWorkflowChoice) => void
+  remoteChoice: RemoteChoice | null
+  setRemoteChoice: (choice: RemoteChoice) => void
   permissions: Permissions
   agents: Agent[]
   availableModels: ModelInfo[]
@@ -82,6 +86,8 @@ export function ReviewStep({
           </div>
           <StartChoice checked={startNow} humanLed={autonomyLevel === 1} onChange={setStartNow} />
           <GitSetupChoice inspection={inspected} choice={gitChoice} onChange={setGitChoice} />
+          <RemoteSyncChoice inspection={inspected} base={gitChoiceFor(inspected, gitChoice).git_base_branch}
+            choice={remoteChoice} onChange={setRemoteChoice} />
         </Summary>
 
         <Summary title={t('companyNew.permissions')} onEdit={() => setStep(3)} editLabel={t('companyNew.edit')}>

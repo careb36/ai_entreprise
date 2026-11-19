@@ -215,7 +215,8 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`?, `forge_policy`? (§5.3) | `ok`, the branch, commit and request URL, `forge_policy`, `remote_contacted` |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`?, `forge_policy`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
 | `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`?, `forge_policy`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
-| `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted` |
+| `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
+| `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
 | `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge`, `forge_policy`? (§5.3) | `ok`, the integration branch and its merges, or the conflict, `forge_policy`, `remote_contacted` |
@@ -369,6 +370,30 @@ are refused until it is upgraded, so neither an outdated backend nor a
 compromised one that leaves the field out can widen contact (NIST SP 800-53
 AC-6, CM-7). The field is announced as the `forge_policy` feature of each of
 these subjects (§2.1).
+
+`workspace.git.sync_base` (§5.4) is a remote operation like the fetch of the
+base: under `none` it refuses with `outcome: "forge_disabled"` and
+`remote_contacted: false`, and runs no remote command.
+
+### 5.4 Bringing the local base up to date (issue #745)
+
+`workspace.git.sync_base` fast-forwards the person's local base branch to its
+remote's tip, and nothing else: `git fetch` of that one branch into a
+temporary ref (deleted at once), then `git update-ref` with the old value
+expected when no worktree has the base checked out, or `git merge --ff-only`
+in the checkout that has it. No merge commit, no rebase, no reset; no shell,
+no prompt, bounded in time, with the person's own git credentials.
+
+Before contacting the remote it refuses, changing nothing, when a rebase,
+merge, cherry-pick or revert is unfinished (`operation_in_progress`) or the
+base's checkout has uncommitted changes to tracked files (`dirty`). After the
+fetch it refuses when both sides moved (`diverged`, with `behind` and
+`ahead`) or the remote could not be read (`remote_unreachable`). A refusal is
+`ok: false` with the `outcome` and a `reason`, never an `error`: the refs and
+the index are as they were. `updated` names `before` and `after`;
+`up_to_date` and `ahead` move nothing. The remote-tracking branch is updated
+only when the outcome is not a refusal. The reply is the daemon's
+observation; the backend records it on the company (`base_sync_observed`).
 
 ## 6. Conformance fixtures
 

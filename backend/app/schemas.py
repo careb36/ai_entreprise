@@ -131,6 +131,10 @@ class CompanyInitRequest(RequestModel):
     # The language of the project's documentation packs, from the creator's
     # interface language; empty: English (services/planning/project_docs/texts.py).
     doc_language: Literal["en", "es"] | None = None
+    # The Owner's forge policy (audited; empty: ``none``) and whether the daemon
+    # fast-forwards the local base to its remote first (issue #745, base_sync.py).
+    forge_policy: Literal["none", "fetch", "publish"] | None = None
+    sync_base: bool = False
 
 
 # How many tasks a sprint of each scope may hold, and the ceiling for any.

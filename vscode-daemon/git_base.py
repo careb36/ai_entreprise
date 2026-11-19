@@ -34,6 +34,11 @@ started), ``base_ref``, ``base_remote`` and ``base_remote_commit``, and
 and the branch starts from the local base, as for a repository kept only on
 this machine; the answer says ``remote_contacted: false``, ``forge_policy``
 and, when the base has an upstream, ``base_remote_not_contacted``.
+
+``workspace.git.base_status`` also says, read locally whatever the policy,
+the checkout's ``current_branch``, whether it is ``clean``, any
+``operation_in_progress`` and the base remote's ``remote_url`` without
+credentials (``git_local.py``, issue #745).
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import forge_gate
+import git_local
 from git_workspace import GitError, run_git, valid_branch
 
 # A fetch is one branch; a remote that does not answer in this time is offline.
@@ -216,7 +222,12 @@ def status(workspace_root: str, base: str, policy: str = forge_gate.NONE) -> Dic
         return {"is_repo": False}
     if base and not valid_branch(base):
         raise GitError(f"not a branch name: {base!r}")
-    return {"is_repo": True, "repository": str(root), **observe(root, base, STATUS_FETCH_TIMEOUT_SECONDS, policy)}
+    observed = observe(root, base, STATUS_FETCH_TIMEOUT_SECONDS, policy)
+    # How the person's checkout stands, read locally whatever the policy
+    # (issue #745): what the New company form shows before anything moves.
+    upstream = upstream_of(root, observed["base_ref"]) if observed.get("base_ref") != "HEAD" else None
+    remote = git_local.remote_url(root, upstream[0]) if upstream else None
+    return {"is_repo": True, "repository": str(root), **observed, **git_local.state(folder), "remote_url": remote}
 
 
 async def handle_status(nc, msg, reply, request_body) -> None:

@@ -1,4 +1,5 @@
 import type { Http } from './client'
+import type { ForgePolicy } from './duties'
 import type { WorkspaceInspection } from './workspace'
 
 export interface CompanyInfo {
@@ -33,6 +34,31 @@ export interface InitCompanyRequest {
    * field is only the person's word.
    */
   foundation_sprint?: boolean | null
+  /** The Owner's forge policy, audited at creation (issue #745); omitted: `none`. */
+  forge_policy?: ForgePolicy | null
+  /** Fast-forward the local base to its remote before the company reads the folder; needs `fetch` or above. */
+  sync_base?: boolean
+}
+
+/**
+ * What the workspace daemon observed when asked to bring the local base up to
+ * date (`workspace.git.sync_base`, issue #745): a fast-forward or a refusal
+ * that changed nothing, with the reason. An observation, not a claim.
+ */
+export interface BaseSyncResult {
+  ok: boolean
+  /** updated | up_to_date | ahead, or a refusal: forge_disabled | dirty | operation_in_progress | diverged | remote_unreachable | … */
+  outcome: string
+  reason?: string
+  base?: string
+  remote?: string
+  remote_url?: string | null
+  before?: string | null
+  after?: string | null
+  behind?: number
+  ahead?: number
+  forge_policy?: ForgePolicy
+  remote_contacted?: boolean | null
 }
 
 /** Whether the foundation sprint was planned, and why (retrospective F8). */
@@ -54,6 +80,8 @@ export interface InitCompanyResponse {
   task_count: number
   message: string
   foundation_sprint?: FoundationSprintOutcome
+  /** Present when the Owner asked to bring the local copy up to date. */
+  base_sync?: BaseSyncResult
 }
 
 export interface DetectedStack {

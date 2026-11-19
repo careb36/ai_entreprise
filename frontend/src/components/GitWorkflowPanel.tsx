@@ -16,6 +16,7 @@ import { CircleCheck, Loader2 } from 'lucide-react'
 import { errorDetail, type WorkspaceInspection } from '../services/api'
 import { type GitBaseStatus, type GitWorkflowChoice, useGitWorkflow, useSetGitWorkflow } from '../services/workControl'
 import { Panel } from './ui'
+import { BaseSyncButton } from './BaseSyncAction'
 
 /** What the wizard sends: the person's choice, else what the inspection observed. */
 export function gitChoiceFor(inspection: WorkspaceInspection | null | undefined, choice: GitWorkflowChoice | null): GitWorkflowChoice {
@@ -128,6 +129,8 @@ export default function GitWorkflowPanel({ companyId, canManage }: { companyId: 
     <Panel title={t('gitSettings.title')}>
       <div className="space-y-3 p-3">
         <BaseStatusNotes status={status} />
+        {/* A fast-forward of the local base to its remote, held to the forge policy (issue #745). */}
+        {canManage && status?.state === 'observed' && status.is_repo && <BaseSyncButton companyId={companyId} />}
         <div className="max-w-md">
           <ChoiceFields value={draft} disabled={!canManage || save.isPending} repo={repo}
             onChange={value => { setSaved(false); setDraft(value) }} />

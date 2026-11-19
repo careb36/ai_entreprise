@@ -32,6 +32,7 @@
         "workspace.git.merge",
         "workspace.git.publish",
         "workspace.git.reviews",
+        "workspace.git.sync_base",
         "workspace.graph",
         "workspace.hash",
         "workspace.inspect",
@@ -81,6 +82,9 @@
           "forge_policy"
         ],
         "workspace.git.reviews": [
+          "forge_policy"
+        ],
+        "workspace.git.sync_base": [
           "forge_policy"
         ]
       }

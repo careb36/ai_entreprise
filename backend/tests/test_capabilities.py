@@ -16,6 +16,7 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "PUBLIC_API_URL", None)
     monkeypatch.setattr(settings, "SUPPORT_AGENT_ENABLED", False)
     monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "FORGE_POLICY_MAX", "publish")
 
 
 def _state_setter(name, initial):
@@ -63,6 +64,7 @@ def test_default_capabilities(test_client, default_settings):
         "auth_required": True,
         "support_agent": False,
         "public_api_url": None,
+        "forge_policy_max": "publish",
     }
 
 
