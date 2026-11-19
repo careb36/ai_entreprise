@@ -2849,6 +2849,35 @@
         "unavailable": "El DNS no respondió; no cambió nada. Vuelve a intentarlo más tarde.",
         "verified_elsewhere": "El registro verificado de otra empresa para este dominio sigue publicado."
       }
+    },
+    "groups": {
+      "title": "Grupos asignados a equipos",
+      "intro": "En cada inicio de sesión por SSO, los grupos del ID token fijan la pertenencia de la persona a los equipos gestionados por SSO asignados aquí, y a ningún otro. Si falta el claim, no cambia nada; una lista vacía quita.",
+      "enabled": "Aplicar los grupos del proveedor de identidad al iniciar sesión",
+      "claim": "Claim que trae los grupos",
+      "proposedClaim": "Recomendado para este proveedor: {{claim}}",
+      "cap": "Rol más alto que puede otorgar un grupo",
+      "capWarning": "Quien pueda editar estos grupos en su proveedor de identidad podrá hacer Managers de los equipos asignados. Cada par hacia un equipo Manager sigue necesitando la aprobación de un segundo Owner.",
+      "entraGuids": "Los grupos de Entra se nombran por su object id (un GUID), no por su nombre visible.",
+      "googleUnavailable": "El ID token de Google no trae grupos. Asignarlos requiere la sincronización con Directory, que aún no está disponible.",
+      "overage": "El inicio de sesión del {{when}} traía demasiados grupos para el token (el overage de Entra, origen {{host}}), así que no cambió nada. Use roles de aplicación (el claim roles) o limite el claim a los grupos asignados a la aplicación.",
+      "noSsoTeams": "Ningún equipo está gestionado por SSO todavía. Pase primero un equipo a SSO en la página Equipos.",
+      "pairs": "Pares de grupo y equipo",
+      "value": "Valor del grupo",
+      "team": "Equipo",
+      "removePair": "Quitar este par",
+      "addPair": "Agregar un par",
+      "save": "Guardar la asignación",
+      "saved": "Asignación guardada",
+      "pending": "Pares Manager a la espera de un segundo Owner",
+      "fourEyes": "Un par que otorga Manager solo tiene efecto cuando otro Owner lo aprueba. Las aprobaciones vencen a los 7 días.",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "withdraw": "Retirar",
+      "confirmAlone": "Confirmar a solas",
+      "aloneWarning": "Solo se permite mientras usted sea el único Owner de la empresa. El par queda marcado en la revisión de accesos hasta que un segundo Owner lo confirme.",
+      "typeTeam": "Escriba el nombre del equipo para confirmar: {{name}}",
+      "reason": "Motivo (de 10 a 500 caracteres)"
     }
   },
   "documentation": {
@@ -3279,7 +3308,23 @@
     "effectiveRole": "Rol efectivo",
     "inTeams": "Equipos",
     "memberCount_one": "{{count}} miembro",
-    "memberCount_other": "{{count}} miembros"
+    "memberCount_other": "{{count}} miembros",
+    "sso": {
+      "managedBySso": "Gestionado por SSO",
+      "managedByOwner": "Gestionado a mano",
+      "switchToSso": "Gestionar por SSO",
+      "switchToOwner": "Gestionar a mano",
+      "confirmConvert": "¿Pasar {{name}} a SSO? Sus {{count}} miembros actuales se conservan como excepciones manuales, que la asignación nunca quita y que cada revisión de accesos lista.",
+      "confirmBack": "¿Volver a gestionar {{name}} a mano? Sus miembros se quedan; sus excepciones manuales terminan y sus exclusiones se levantan.",
+      "membersFromIdp": "Los miembros vienen de los grupos del proveedor de identidad. Para sacar a alguien ya, exclúyalo.",
+      "manualException": "Excepción manual",
+      "endException": "Terminar excepción",
+      "exclude": "Excluir",
+      "excludeReason": "¿Por qué excluir a {{name}} de este equipo? (de 10 a 500 caracteres; se avisa a los demás Owners)",
+      "exclusions": "Excluidos: la asignación no vuelve a agregar a estas personas hasta que un Owner levante la exclusión.",
+      "lift": "Levantar",
+      "liftReason": "¿Por qué levantar la exclusión de {{name}}? (de 10 a 500 caracteres)"
+    }
   },
   "usage": {
     "title": "Uso",
@@ -3477,7 +3522,10 @@
       "history": "Revisiones anteriores",
       "noHistory": "Todavía no se ha completado ninguna revisión.",
       "doneOnTime": "{{when}}: completada por {{by}}, {{removed}} quitadas.",
-      "doneLate": "{{when}}: completada tarde por {{by}}, {{removed}} quitadas."
+      "doneLate": "{{when}}: completada tarde por {{by}}, {{removed}} quitadas.",
+      "ssoExclusion": "Excluido de {{team}} por {{by}} hace {{days}} días: {{reason}}",
+      "ssoException": "Conservado a mano en el equipo SSO {{team}} (lo fijó {{by}} hace {{days}} días)",
+      "ssoManagerPair": "El grupo {{value}} otorga Manager en {{team}}, confirmado a solas por {{by}}: un segundo Owner lo confirma o lo quita"
     },
     "report": {
       "title": "Informe de aprobaciones y funciones",

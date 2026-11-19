@@ -15,7 +15,7 @@ import { FormActions, Panel, SavedNote } from './ui'
 export function SsoGroupMappings({ companyId }: { companyId: number | null }) {
   const { t } = useTranslation()
   const view = useGroupMappings(companyId, true)
-  if (!view.data) return null
+  if (!view.data || !Array.isArray(view.data.mappings)) return null
   return (
     <div className="mt-4">
       <Panel title={t('sso.groups.title')}>
