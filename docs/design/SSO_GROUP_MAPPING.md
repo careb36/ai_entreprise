@@ -6,8 +6,8 @@ practice 3 · Depends on: single sign-on ([`SSO.md`](SSO.md)), teams and the
 team membership history ([`TEAMS_AND_USAGE.md`](TEAMS_AND_USAGE.md), the
 history added by PR #711, migration `0052`), segregation of duties and the
 access review ([`SEGREGATION_OF_DUTIES.md`](SEGREGATION_OF_DUTIES.md), #543) ·
-Migration: `0053`, after `0051` (PR #681) and `0052` (PR #711); nothing here
-is built yet · Amended 2026-11-19 with the owner's decisions on the seven open
+Migration: `0054`, after `0052` (PR #711) and `0053` (the forge policy, PR
+#730); built by the PR that closes #703 · Amended 2026-11-19 with the owner's decisions on the seven open
 questions, for a corporate-scale product (see "Decisions (2026-11-19)"; G19–G22
 added).
 
@@ -133,7 +133,7 @@ account is taken over, the mapping gives the attacker no power the Owner did
 not have, and a new Manager pair still needs a second Owner (G19); in a
 single-Owner company the confirmation is flagged in the access review.
 
-## Data model (migration `0053`)
+## Data model (migration `0054`)
 
 - `sso_connections`: `groups_enabled` (bool, default false),
   `groups_claim` (text, default `groups`, proposed `roles` for the `entra`

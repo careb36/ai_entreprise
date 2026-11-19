@@ -27,6 +27,7 @@ import CompanyFindingDetail from '../pages/CompanyFindingDetail'
 import CompanyFindings from '../pages/CompanyFindings'
 import Usage from '../pages/Usage'
 import AuditAnchors from '../pages/AuditAnchors'
+import ApiTokens from '../pages/ApiTokens'
 import SecurityTests from '../pages/SecurityTests'
 import ExecutionSettings from '../pages/ExecutionSettings'
 import McpServers from '../pages/McpServers'
@@ -99,6 +100,7 @@ export function AppRoutes() {
         <Route path="/company/self-improvement" element={<SelfImprovement />} />
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
+        <Route path="/company/api-tokens" element={<ApiTokens />} />
         <Route path="/company/procedures" element={<Procedures />} />
         <Route path="/company/findings" element={<CompanyFindings />} />
         <Route path="/company/findings/:id" element={<CompanyFindingDetail />} />

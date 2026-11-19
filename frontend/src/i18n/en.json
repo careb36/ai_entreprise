@@ -40,6 +40,7 @@
     "findings": "Findings",
     "bench": "Bench",
     "account": "Account",
+    "apiTokens": "API tokens",
     "securityTests": "Security tests",
     "execution": "Execution",
     "mcp": "MCP servers",
@@ -3033,6 +3034,35 @@
         "unavailable": "DNS did not answer; nothing changed. Try again later.",
         "verified_elsewhere": "Another company's verified record of this domain is still published."
       }
+    },
+    "groups": {
+      "title": "Groups mapped to teams",
+      "intro": "On each SSO sign-in, the groups in the ID token set the person's membership in the SSO-managed teams mapped below, and in no other team. An absent claim changes nothing; an empty list removes.",
+      "enabled": "Apply the identity provider's groups at sign-in",
+      "claim": "Claim that carries the groups",
+      "proposedClaim": "Recommended for this provider: {{claim}}",
+      "cap": "Highest role a group may grant",
+      "capWarning": "Anyone who can edit these groups at your identity provider can make people Managers of the mapped teams. Each pair to a Manager team still needs a second Owner's approval.",
+      "entraGuids": "Entra groups are named by their object id (a GUID), not their display name.",
+      "googleUnavailable": "Google's ID token carries no groups. Mapping them needs the Directory sync, which is not available yet.",
+      "overage": "The sign-in on {{when}} carried too many groups for the token (Entra's overage, source {{host}}), so nothing changed. Use app roles (the roles claim) or limit the claim to groups assigned to the application.",
+      "noSsoTeams": "No team is managed by SSO yet. Switch a team to SSO on the Teams page first.",
+      "pairs": "Group and team pairs",
+      "value": "Group value",
+      "team": "Team",
+      "removePair": "Remove this pair",
+      "addPair": "Add a pair",
+      "save": "Save the mapping",
+      "saved": "Mapping saved",
+      "pending": "Manager pairs waiting for a second Owner",
+      "fourEyes": "A pair that grants Manager takes effect only once another Owner approves it. Approvals expire after 7 days.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "withdraw": "Withdraw",
+      "confirmAlone": "Confirm alone",
+      "aloneWarning": "Only allowed while you are the company's only Owner. The pair stays flagged in the access review until a second Owner confirms it.",
+      "typeTeam": "Type the team's name to confirm: {{name}}",
+      "reason": "Reason (10 to 500 characters)"
     }
   },
   "documentation": {
@@ -3301,6 +3331,30 @@
     "confirmNow": "Confirm now",
     "add": "Add relation"
   },
+  "runSecrets": {
+    "title": "Run secrets",
+    "count_one": "{{count}} secret",
+    "count_other": "{{count}} secrets",
+    "note": "Values this task's run may read as environment variables. The backend stores them encrypted; a value is never shown again.",
+    "loading": "Loading the run secrets",
+    "loadError": "Could not load the run secrets: {{message}}",
+    "empty": "This task has no run secrets.",
+    "listLabel": "Run secrets of this task",
+    "valueHidden": "value hidden",
+    "delete": "Delete",
+    "deleteNamed": "Delete the secret {{name}}",
+    "confirmDelete": "Delete {{name}}?",
+    "deleteConfirm": "Yes, delete",
+    "addTitle": "Add a run secret",
+    "name": "Name",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Value",
+    "nameHint": "Letters, digits and underscores, not starting with a digit.",
+    "nameInvalid": "Use letters, digits and underscores only, and do not start with a digit.",
+    "add": "Add secret",
+    "saved": "{{name}} saved",
+    "addError": "Could not add the secret: {{message}}"
+  },
   "boardNotes": {
     "title": "Board notes",
     "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",
@@ -3463,7 +3517,23 @@
     "effectiveRole": "Effective role",
     "inTeams": "Teams",
     "memberCount_one": "{{count}} member",
-    "memberCount_other": "{{count}} members"
+    "memberCount_other": "{{count}} members",
+    "sso": {
+      "managedBySso": "Managed by SSO",
+      "managedByOwner": "Managed by hand",
+      "switchToSso": "Manage by SSO",
+      "switchToOwner": "Manage by hand",
+      "confirmConvert": "Switch {{name}} to SSO? Its {{count}} current members are kept as manual exceptions, which the mapping never removes and every access review lists.",
+      "confirmBack": "Manage {{name}} by hand again? Its members stay; its manual exceptions end and its exclusions are lifted.",
+      "membersFromIdp": "Members come from the identity provider's groups. To take someone out now, exclude them.",
+      "manualException": "Manual exception",
+      "endException": "End exception",
+      "exclude": "Exclude",
+      "excludeReason": "Why exclude {{name}} from this team? (10 to 500 characters; the other Owners are notified)",
+      "exclusions": "Excluded: the mapping does not add these people back until an Owner lifts the exclusion.",
+      "lift": "Lift",
+      "liftReason": "Why lift the exclusion of {{name}}? (10 to 500 characters)"
+    }
   },
   "usage": {
     "title": "Usage",
@@ -3661,7 +3731,10 @@
       "history": "Earlier reviews",
       "noHistory": "No review has been completed yet.",
       "doneOnTime": "{{when}}: completed by {{by}}, {{removed}} removed.",
-      "doneLate": "{{when}}: completed late by {{by}}, {{removed}} removed."
+      "doneLate": "{{when}}: completed late by {{by}}, {{removed}} removed.",
+      "ssoExclusion": "Excluded from {{team}} by {{by}}, {{days}} days ago: {{reason}}",
+      "ssoException": "Kept by hand in SSO team {{team}} (set by {{by}}, {{days}} days ago)",
+      "ssoManagerPair": "Group {{value}} grants Manager in {{team}}, confirmed alone by {{by}}: a second Owner confirms or removes it"
     },
     "report": {
       "title": "Approvals and duties report",
@@ -3734,6 +3807,55 @@
       "proxyPresent": "LLM proxy internal token: set",
       "proxyMissing": "LLM proxy internal token: not set"
     }
+  },
+  "apiTokens": {
+    "title": "API tokens",
+    "subtitle": "Credentials for scripts and CI jobs, sent as a Bearer token. A token acts with the role it was given, never more than its creator's.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Loading the tokens",
+    "loadError": "Could not load the tokens: {{message}}",
+    "empty": "This company has no API tokens.",
+    "emptyManager": "Create one below when a script or a CI job needs to call the API.",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "state": "State",
+      "createdBy": "Created by",
+      "expires": "Expires",
+      "lastUsed": "Last used",
+      "actions": "Actions"
+    },
+    "state": {
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "never": "Never",
+    "neverUsed": "Not used yet",
+    "revoke": "Revoke",
+    "revokeNamed": "Revoke the token {{name}}",
+    "confirmLabel": "Confirm revoking {{name}}",
+    "confirmRevoke": "Revoke it now? Calls with it stop at once.",
+    "revokeConfirm": "Yes, revoke",
+    "createTitle": "Create a token",
+    "name": "Name",
+    "namePlaceholder": "ci-nightly",
+    "role": "Role",
+    "expiry": "Expires after",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "createHint": "Every token expires. A token cannot create other tokens, and its role is never above yours.",
+    "create": "Create token",
+    "forbidden": "Your role cannot create a token with that role.",
+    "createError": "Could not create the token: {{message}}",
+    "createdTitle": "Token {{name}} created",
+    "createdOnce": "Copy it now: it is shown only this once and is not kept by this page. Store it in your secret manager.",
+    "secretLabel": "Token",
+    "copy": "Copy",
+    "copied": "Copied",
+    "dismiss": "Dismiss the new token"
   },
   "taskViews": {
     "filters": "Filters",
@@ -3880,6 +4002,24 @@
       "add": "Add a comment on {{path}}, line {{line}}"
     },
     "counts": "+{{additions}} −{{deletions}}"
+  },
+  "integrationActions": {
+    "integrate": "Integrate now",
+    "integrateAgain": "Integrate again",
+    "publish": "Publish as one request",
+    "publishAgain": "Publish again",
+    "merge": "Merge locally",
+    "confirmLabel": "Confirm the local merge",
+    "confirmMerge": "Merge the integration into {{base}} on the project's computer? Nothing is pushed.",
+    "mergeConfirm": "Yes, merge",
+    "forgeHolds": "Publishing is off: the company's forge policy is “{{policy}}”. An owner changes it on Duties and access.",
+    "reviewHolds": "The company requires a person's approving review of this integration before it is merged.",
+    "hint": "Integrating merges the done task branches into {{branch}} in order and runs the suite on the result. The person who started the sprint cannot merge it.",
+    "integrated": "Integrated. The plan below shows the result.",
+    "published": "Published by {{name}} at {{commit}} onto {{base}}.",
+    "openRequest": "Open the request",
+    "newTab": "(opens in a new tab)",
+    "merged": "Merged locally by {{name}}, {{when}}."
   },
   "promptWeight": {
     "none": "No prompt measure recorded for these runs.",

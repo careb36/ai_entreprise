@@ -7,6 +7,7 @@ import { errorDetail, type SsoConnection, type SsoConnectionInput, type SsoPrese
 import { useAppStore } from '../store/useAppStore'
 import { AccessNotice, FormActions, LoadError, LoadingRows, PageHeader, Panel, SavedNote, Spinner } from '../components/ui'
 import { SsoDomains } from '../components/SsoDomains'
+import { SsoGroupMappings } from '../components/SsoGroupMappings'
 
 const PRESETS: SsoPreset[] = ['generic', 'google', 'entra']
 
@@ -50,6 +51,7 @@ export default function CompanySso() {
         />
       ) : null}
       {role === 'Owner' && !!settings.data?.domains?.length && <SsoDomains companyId={companyId} domains={settings.data.domains} />}
+      {role === 'Owner' && !!settings.data?.connection && <SsoGroupMappings companyId={companyId} />}
     </div>
   )
 }

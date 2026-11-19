@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { GitBranch, RefreshCw } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { integrationApi } from '../services/integration'
+import { IntegrationActions } from './IntegrationActions'
 import { IntegrationReview } from './IntegrationReview'
 import { Panel } from './ui'
 
@@ -61,6 +62,7 @@ export function SprintIntegration({ sprintId, companyId, canReview = false, canC
             )}
           </p>
         )}
+        {companyId !== undefined && <IntegrationActions plan={data} companyId={companyId} canManage={canReview} />}
         {integration?.latest && companyId !== undefined && (
           <IntegrationReview sprintId={sprintId} companyId={companyId} canReview={canReview} canConfigure={canConfigure} />
         )}

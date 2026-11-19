@@ -20,7 +20,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column, Index, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Column, Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -28,8 +28,17 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+GROUP_ROLE_CAP_CHECK = "ck_sso_connections_group_role_cap"
+
+
 class SsoConnection(SQLModel, table=True):
     __tablename__ = "sso_connections"
+    __table_args__ = (
+        # A group mapping never reaches Owner (issue #703, G1).
+        CheckConstraint(
+            "group_role_cap IN ('Viewer', 'Manager')", name=GROUP_ROLE_CAP_CHECK
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", unique=True, index=True)
@@ -50,6 +59,10 @@ class SsoConnection(SQLModel, table=True):
     tested_at: datetime | None = None
     test_ok: bool | None = None
     test_detail: str | None = None
+    # Groups mapped to teams (issue #703; docs/design/SSO_GROUP_MAPPING.md).
+    groups_enabled: bool = False
+    groups_claim: str = "groups"
+    group_role_cap: str = "Viewer"  # "Viewer" | "Manager"; never "Owner"
     created_by: str | None = None
     created_at: datetime | None = Field(default_factory=_utcnow)
     updated_at: datetime | None = Field(default_factory=_utcnow)
