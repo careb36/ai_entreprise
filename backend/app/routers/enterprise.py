@@ -189,17 +189,18 @@ async def list_models(request: Request):
 
     Proxies the ``/v1/models`` response from the internal LLM proxy so that
     the frontend can build a dynamic model selector without hardcoding model
-    names or tiers.  The proxy refreshes its catalogue from the Gemini API
-    every hour and classifies models by capability tier.
+    names or tiers.  The proxy refreshes each configured provider's
+    catalogue (DeepSeek by default; Gemini, Qwen and Nebius when their keys
+    are set) every hour and classifies models by capability tier.
 
     Response shape::
 
         {
           "models": [
-            {"id": "gemini-2.5-pro", "provider": "gemini", "tier": "strategic", "description": "..."},
+            {"id": "deepseek-v4-pro", "provider": "deepseek", "tier": "strategic", "description": "..."},
             ...
           ],
-          "orchestrator": "gemini-2.5-flash",
+          "orchestrator": "deepseek-flash",
           "refreshed_at": 1712345678.0
         }
     """
