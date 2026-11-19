@@ -5,6 +5,7 @@ Endpoints (issue #530, ``docs/design/PROJECT_DOCUMENTATION.md``):
 - ``POST /v1/companies/{id}/documentation``           — compile a new draft pack (Manager).
 - ``GET  /v1/documentation/{pack_id}``                — one pack with its documents, diagrams and lint (Viewer).
 - ``GET  /v1/documentation/{pack_id}/documents/{key}`` — one document as Markdown (Viewer).
+- ``GET  /v1/documentation/{pack_id}/manifest``         — the signed manifest (Viewer; ``documentation_manifest.py``).
 - ``POST /v1/documentation/{pack_id}/approve``        — approve a draft; refused while it drifts (Owner).
 - ``POST /v1/documentation/{pack_id}/write``          — write an approved pack to ``docs/project/`` (Manager).
 - ``GET  /v1/companies/{id}/doc_language``            — the language packs are written in (Viewer).
@@ -29,6 +30,7 @@ from schemas import RequestModel
 from services.planning import document_approval
 from services.planning.project_docs import collect, texts
 from services.planning.project_docs import pack as packs
+from services.planning.project_docs import pack_manifest as manifests
 from services.platform.agent_service import AgentService
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
@@ -200,7 +202,9 @@ async def compile_pack(
             packs.write_prose, packs.prose_request(session, company, snapshot)
         )
     pack = packs.compile_pack(session, company, snapshot, _actor(user), prose)
-    session.commit()
+    session.flush()
+    # The manifest's digest enters the audit chain; this commits the pack too.
+    manifests.record(session, pack, _actor(user))
     session.refresh(pack)
     return serialize(pack, packs.lint(pack, snapshot))
 

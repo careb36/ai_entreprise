@@ -928,6 +928,9 @@
       "test_project_docs_language.py": [
         "planning"
       ],
+      "test_project_docs_manifest.py": [
+        "planning"
+      ],
       "test_project_docs_pmbok.py": [
         "planning"
       ],

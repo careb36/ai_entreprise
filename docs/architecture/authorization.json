@@ -364,6 +364,9 @@
     "GET /v1/documentation/{pack_id}/documents/{key}": {
       "access": "Viewer"
     },
+    "GET /v1/documentation/{pack_id}/manifest": {
+      "access": "Viewer"
+    },
     "GET /v1/enterprise/lineage": {
       "access": "Viewer"
     },
