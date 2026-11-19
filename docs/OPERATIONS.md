@@ -502,6 +502,32 @@ https address, or run as a stdio wrapper.
   `fabrique_sprints_created_total`, `fabrique_sprints_completed_total`,
   `fabrique_errors_total` and `fabrique_active_connections`. Each replica
   exposes its own counters, so scrape every replica and add them up.
+- The SSO re-checks (issue #684, `docs/design/SSO.md`, T20–T21) are counted
+  there too. The backend re-checks one thing about SSO on its own: each
+  allowed domain's DNS record. Sign-ins validate the ID token when they
+  happen, and the legacy-domain grace is read from the clock when a domain
+  is used, so neither is a re-check and neither has a counter.
+  - `fabrique_sso_domain_rechecks_total{trigger, outcome, reason}`: one per
+    re-check lookup. `trigger` is `recheck` (the schedule,
+    `SSO_DOMAIN_RECHECK_HOURS`) or `conflict` (a newer proof by another
+    company looked the older claim up again); an Owner's own check is not
+    counted. `outcome="ok"` with `reason="verified"` when the record still
+    holds the token; otherwise `outcome="failed"` with `reason` one of
+    `not_found` (no such name: the domain is unverified), `no_match` (no
+    string holds the token: unverified), `unavailable` (timeout, SERVFAIL or
+    no resolver: the status is kept), `verified_elsewhere` or `other`.
+  - `fabrique_sso_domain_recheck_cycles_total{outcome}`: one per cycle of the
+    scheduled loop that this replica ran under the `sso-domain-recheck` lock
+    (a replica that did not hold the lock counts nothing); `failed` when the
+    cycle raised (the database, for instance), which before was only a log
+    line.
+
+  No label names a company, a domain or a person, and every series exists
+  from zero. Which domain failed, and what DNS answered, is in
+  `sso_domain_checks` and the audit chain. Worth alerting on: a rise of
+  `reason="unavailable"` (the resolver, or `SSO_DNS_NAMESERVERS`, is broken:
+  nothing is being re-checked), any `failed` cycle, and `not_found` or
+  `no_match`, each of which unverified a domain.
 
 ## Run La Fabrique on itself
 

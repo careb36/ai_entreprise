@@ -218,6 +218,10 @@ another company verified; the domain lookup on the login page; migration
   ISC licence, since the standard library resolves only addresses): it
   returns the TXT strings and raises `DnsNameNotFound` or `DnsUnavailable`,
   never dnspython's exceptions. Router: `routers/sso_domains.py` (Owner).
+  Each re-check (`recheck` or `conflict`) and each cycle of the loop is
+  counted for `/metrics` by outcome and a fixed set of reasons, never by
+  company, domain or person (`sso_metrics.py`, issue #684;
+  `docs/OPERATIONS.md`, Read `/health` and `/metrics`).
   The record: `_la-fabrique-verify.<domain>` TXT
   `la-fabrique-domain-verification=<token>`: a token in a TXT record, as
   Google Workspace, Microsoft 365 and GitHub verify domains, under a prefix
