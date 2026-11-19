@@ -927,6 +927,9 @@
       "test_project_docs_pmbok.py": [
         "planning"
       ],
+      "test_project_docs_plans.py": [
+        "planning"
+      ],
       "test_project_docs_release.py": [
         "planning"
       ],

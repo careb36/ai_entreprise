@@ -64,10 +64,12 @@ Brown, c4model.com, CC BY 4.0).
 | Governance | Closing | Final report (`final_report.md`, phase 2) | specifications, sprints, task events, verifications, effort, model usage, carries, published integrations; three person sections |
 | Scope | Planning | Scope statement (`scope.md`) | specification, tasks |
 | Scope | Planning | Work breakdown structure (`wbs.md`) | specification, tasks |
+| Scope | Planning | Quality management plan (`quality_plan.md`, phase 2) | the backend's standards catalogue, gate checks and risk tiers, specification quality targets, the status report's figures; one person section |
 | Scope | Monitoring and Controlling | Requirements traceability matrix (`traceability.md`) | specification, tasks, verifications, integrations |
 | Schedule | Planning | Schedule and milestones (`schedule.md`) | approvals, sprints, integrations |
 | Schedule | Planning | Release and iteration plan (`release_plan.md`, phase 2) | sprints and their plan, specifications, carries, published integrations; one person section |
 | Resources | Planning | Responsibility assignment, RACI (`raci.md`) | roster, members, tasks, factory rules |
+| Stakeholders | Planning | Communications management plan (`communications_plan.md`, phase 2) | members, the channels' configuration records, factory rules; two person sections |
 | Risk | Planning | Risk register (`risks.md`) | verifications, holds; one person section |
 | Scope | Monitoring and Controlling | Security test checklist, OWASP WSTG (`wstg_checklist.md`, CC BY-SA 4.0) | specification, architecture, stack discovery, the Verifier's WSTG items, people's recorded reviews |
 | Risk | Monitoring and Controlling | Security test report (`security_report.md`, CC BY-SA 4.0) | the same |
@@ -96,6 +98,8 @@ the index:
 | Risk register | Risk appetite and project-level risks (market, staffing, budget) |
 | Check results | Finance (within budget), Stakeholders (outside the company) |
 | Release and iteration plan | Target release dates and scope ahead (phase 2) |
+| Quality management plan | Quality objectives and acceptance thresholds (phase 2) |
+| Communications management plan | Stakeholders outside the company and what they need to know; meetings, reports and cadence agreed with people (phase 2) |
 | Final report | Acceptance by the sponsor, benefits realisation outlook, handover notes (phase 2) |
 
 Phase 1 renders the templates; letting an Owner or Manager fill them, with the
@@ -131,6 +135,9 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Resources | The effort each task took is observed, not reported | every task of a completed sprint has an `effort_observed` event (phase 2) |
 | Scope | Requirements are delivered by the iterations | requirements a done task covers, over the documented specifications' requirements (measured; phase 2) |
 | Schedule | Completed iterations leave the factory as releases | completed sprints whose integration was published as a request (measured; phase 2) |
+| Scope | Deliveries are verified by the evidence | the Verifier's readings with the verdict verified, over every reading (measured; phase 2) |
+| Scope | The specification names a quality target for every area | the quality areas the specification check expects against the documented specifications' quality attributes (STD-PO-1; met or not met; phase 2) |
+| Stakeholders | The company is told about its work outside the product | the notification webhook, Slack, Teams and the brief by mail that are on, from their configuration records (measured; phase 2) |
 | Risk | Nothing is left on hold when the project closes | holds and high-risk readings whose task is neither done nor carried: met / not met once every sprint is closed, measured while one runs (phase 2) |
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
@@ -298,6 +305,49 @@ are the ITIL release and deployment plan of phase 5. Retrospectives and agent
 messages are not inputs. A date ahead is never computed: the plan shows the
 dates the records hold (a sprint's start, its first and last event, a
 publication), and the dates the project commits to are the person section's.
+
+### Quality management plan (`quality_plan.md`; Scope, Planning; inputs: specification, quality_basis, sprints, events, verifications, effort, costs, statements_quality_plan, and specifications when there are several)
+
+Phase 2 (planned for phase 3, brought forward). How quality is defined, built
+in and checked, from what the backend applies rather than from a document a
+model could rewrite. `collect_plans.quality_basis` reads the definitions from
+the code, with no database, and hashes each entry; `quality_docs` renders.
+PMBOK 8 has no quality domain: quality planning sits in Scope, beside the
+WSTG checklist.
+
+| Field | Source | Kind |
+|---|---|---|
+| Standards: id, area, roles bound, title, checked without a model (and how) | `services/evidence/standards.catalogue()`, the catalogue `docs/STANDARDS.md` is held to (`test_standards.py`) | `standard` ref (digest of the entry) |
+| Specification quality targets, areas without one | each documented specification's `quality`; `standards.missing_quality_areas` over `standards.QUALITY_AREAS` (STD-PO-1) | specification ref (digest) |
+| Gate before QA: check, problem named, what the loop asks for | `delivery_gate`'s table of refuting checks and `CODE_PROBLEMS` (the code is fixed, or the task is run again in full), plus `delivery unconfirmed` | `gate` ref (digest of the row) |
+| Risk tiers by area | `risk.classify` called on one path per area, so the tier is the one the classifier computes | `risk_rule` ref (digest of the row) |
+| Measured outcomes | `performance.totals`: readings by verdict, first-pass, rework, returns by a person, review failures, high-risk readings, risk holds | verification, task event (chain hash) refs |
+| Quality objectives and acceptance thresholds | `quality_plan.objectives`, a person's statement | person, **claim** |
+
+The gate's table is read from `delivery_gate`'s private constant: the evidence
+is a protected path, so a public alias waits for an Owner's change there. A
+changed standard, gate row or classifier rule changes its digest and makes the
+plan, and the check results, stale.
+
+### Communications management plan (`communications_plan.md`; Stakeholders, Planning; inputs: members, communications, statements_communications_plan)
+
+Phase 2. Who is told what, through which channel and when. The channels are
+the platform's own; none is invented. `collect_plans.communications` reads the
+configuration records; `comms_docs` renders.
+
+| Field | Source | Kind |
+|---|---|---|
+| Who is in the company | `members` (counts by company role), with what each role receives and decides as the routes enforce it | membership ref (digest), rule ref |
+| Board, review inbox, documentation pack, audit log | fixed by the platform: always on | rule ref |
+| Notification webhook | `CompanyWebhook`: on or off and the events chosen; never the URL or secret | `webhook` ref (digest) |
+| Slack, Microsoft Teams | `ChatConnection`: on or off, the last test; the number of linked chat accounts; never a workspace, channel, credential or key | `chat` ref (digest) |
+| Client's brief by mail | a `ManagerPolicy` row, `MANAGER_AGENT_ENABLED`, whether `SMTP_HOST` is set, `MANAGER_BRIEF_INTERVAL_HOURS` | `brief` ref (digest) |
+| Audit anchors | `AuditAnchorSettings`: on or off, cadence, webhook, whether a timestamp authority is set; never its URL or certificate | `anchors` ref (digest) |
+| Stakeholders outside the company; meetings and cadence | `communications_plan.stakeholders`, `communications_plan.cadence`, a person's statements | person, **claim** |
+
+Delivery counters (`last_status`, outbox rows) change at every post and are
+left out, so a delivery never makes the plan stale; the pack's own approval is
+not read either, so approving a pack cannot make it stale.
 
 ### Final report (`final_report.md`; Governance, Closing; inputs: specification, sprints, events, verifications, carries, releases, effort, costs, statements_final_report, and specifications when there are several)
 
@@ -537,10 +587,10 @@ release and iteration plan as its own document, and the final report from a
 completed project's requirements, readings, measurements, releases and open
 holds, with the lessons left to their register since retrospectives are
 claims (all done: `status_report.md`, `release_plan.md`, `final_report.md`).
-Then more computed checks per domain (backlog rates, a
-stakeholder register from members plus a person's external list). After that: communications and quality plans
-(phase 3, the quality plan from `docs/STANDARDS.md` and the Verifier's
-checks), DOCX/PDF export and organisation templates (phase 4, with a signed
+The communications and quality plans, first planned for phase 3, are done
+too (`communications_plan.md`, `quality_plan.md`). Then more computed checks
+per domain (backlog rates, a stakeholder register from members plus a
+person's external list). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
 manifest of the pack), the COBIT governance matrix and the ITIL transition set
 (phase 5), and bench grading of packs against person-written expectations.
 The C4 code level from the daemon's code graph (`workspace.related`) fits
