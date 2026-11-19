@@ -34,8 +34,11 @@ A person is the account that started the task's sprint
 turns, and the reviewer for a decision; anything without one (a sprint the
 platform opened, one from before migration 0029, a run not about a task) is
 unattributed (``None``), never guessed. A person's teams are the teams they
-belong to when the report is made; a person in two teams counts in both, so
-the team rows may sum to more than the total.
+were in at the fact's own observed time (``team_membership_periods``, issue
+#702; ``teams_at``); a fact from before the history started (migration 0052,
+``team_history_start``) keeps the teams they belong to when the report is
+made, and ``team_history`` says which part of the range that covers. A person
+in two teams counts in both, so the team rows may sum to more than the total.
 
 Times are UTC: a naive timestamp is read as UTC, an aware one converted.
 The same records and the same ``now`` give the same report, byte for byte:
@@ -188,10 +191,16 @@ def aggregate(
         numbers = fact["numbers"]
         add(totals, numbers)
         person = fact.get("person")
+        if "teams" in fact:
+            team_keys = fact["teams"] or [None]
+        else:
+            team_keys = (
+                (teams_of.get(person) or [None]) if person is not None else [None]
+            )
         keys = {
             "period": [bucket(fact["at"], period)],
             "person": [person],
-            "team": (teams_of.get(person) or [None]) if person is not None else [None],
+            "team": team_keys,
             "role": [fact.get("role") or None],
             "producer": [fact.get("producer") or None],
             "model": [fact.get("model") or None],
@@ -217,6 +226,55 @@ def aggregate(
             for key in sorted(rows, key=_order)
         ]
     return out
+
+
+def teams_at(
+    person: int | None,
+    at: datetime,
+    *,
+    current: dict[int, list[int]],
+    periods: dict[int, list[tuple[int, datetime, datetime | None]]],
+    started: datetime | None,
+) -> list[int]:
+    """Pure: the teams *person* was in at *at*, sorted.
+
+    A period ``(team_id, start, end)`` holds from its start (inclusive) to its
+    end (exclusive; ``None``: still open). Before *started*, or with no
+    history at all (``None``), today's teams (*current*) are the answer.
+    """
+    if person is None:
+        return []
+    moment = naive_utc(at)
+    if started is None or moment < started:
+        return sorted(current.get(person, []))
+    return sorted(
+        {
+            team_id
+            for team_id, start, end in periods.get(person, [])
+            if naive_utc(start) <= moment and (end is None or moment < naive_utc(end))
+        }
+    )
+
+
+def history_note(
+    started: datetime | None, start: datetime, end: datetime, since: date
+) -> dict[str, Any]:
+    """Pure: when the history started and the part of the range ``[start,
+    end)`` that keeps today's teams (``None`` when the history covers it)."""
+
+    def stamp(moment: datetime) -> str:
+        return moment.replace(microsecond=0).isoformat() + "Z"
+
+    started = naive_utc(started)
+    before = end if started is None else min(started, end)
+    return {
+        "started_at": stamp(started) if started else None,
+        "current_teams_cover": (
+            {"since": since.isoformat(), "before": stamp(before)}
+            if before > start
+            else None
+        ),
+    }
 
 
 def _within(moment: datetime | None, start: datetime, end: datetime) -> bool:
@@ -427,6 +485,22 @@ def report(
 
     teams_of = teams.teams_of(session, company_id)
     person_ids = sorted({f["person"] for f in facts if f["person"] is not None})
+    started = naive_utc(teams.history_started_at(session))
+    periods: dict[int, list[tuple[int, datetime, datetime | None]]] = {}
+    old_names: dict[int, str] = {}
+    for row in teams.membership_periods(session, company_id, person_ids):
+        periods.setdefault(row.user_id, []).append(
+            (row.team_id, row.started_at, row.ended_at)
+        )
+        old_names[row.team_id] = row.team_name
+    for fact in facts:
+        fact["teams"] = teams_at(
+            fact["person"],
+            fact["at"],
+            current=teams_of,
+            periods=periods,
+            started=started,
+        )
     people = {
         user.id: (user.full_name or "").strip() or f"#{user.id}"
         for user in (
@@ -435,7 +509,7 @@ def report(
             else []
         )
     }
-    team_names = {
+    team_names = old_names | {
         team.id: team.name
         for team in session.exec(
             select(Team).where(Team.company_id == company_id)
@@ -449,6 +523,7 @@ def report(
         "timezone": "UTC",
         "generated_at": naive_utc(now).replace(microsecond=0).isoformat() + "Z",
         "columns": list(COLUMNS),
+        "team_history": history_note(started, start, end, since),
         **aggregate(
             facts,
             period=period,

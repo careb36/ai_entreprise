@@ -75,7 +75,7 @@ Brown, c4model.com, CC BY 4.0).
 | Risk | Planning | Risk register (`risks.md`) | verifications, holds; one person section |
 | Scope | Monitoring and Controlling | Security test checklist, OWASP WSTG (`wstg_checklist.md`, CC BY-SA 4.0) | specification, architecture, stack discovery, the Verifier's WSTG items, people's recorded reviews |
 | Risk | Monitoring and Controlling | Security test report (`security_report.md`, CC BY-SA 4.0) | the same |
-| (C4) | - | Architecture diagrams (`c4.md`) | architecture, stack discovery |
+| (C4) | - | Architecture diagrams (`c4.md`) | architecture, stack discovery, stored code graph |
 
 Finance and Stakeholders have no document of their own in phase 1: what they
 need (a budget, external stakeholders) is not recorded, and the check results
@@ -472,18 +472,41 @@ register.
 Acceptance, the benefits after closure and the handover are what only a
 person can say at closure, so they are person sections, never computed.
 
-### Architecture diagrams, C4 (`c4.md`; inputs: architecture, stack)
+### Architecture diagrams, C4 (`c4.md`; inputs: architecture, stack, code graph)
 
 | Level | Elements | Source |
 |---|---|---|
 | Context | the system (arch `title`, `overview`); "Users of X" for an `http`, `cli` or `event` interface no module consumes; databases and infrastructure | architecture, interface, discovery refs |
 | Container | each module (the record does not say which are deployed apart; the note says so), databases and infrastructure inside the boundary; `depends_on` and interface consumers as lines | module, interface, discovery refs |
 | Component | per module, its core and the interfaces it provides; consumers as lines | module, interface refs |
-| Code | not compiled in phase 1 | "No source recorded" line |
+| Code (issue #693) | per module, a **Claim.** line (its path, the architecture's `implements` edge) and an **Observed.** table of the files the stored code graph holds under that path with the sha256 the daemon reported and the names each defines; then the references between the components' files (a name one uses and another defines) | module ref marked as a claim; a `code_file` ref per file with the daemon's sha256 |
 
 Each diagram carries `nodes`, `edges`, `groups`, `notes`, its Mermaid source
 and `input_sha256`; the document carries the three Mermaid blocks with an
 element table each.
+
+**The code level** (`c4_code`, `collect_code`, issue #693) is a section of
+the document, not a fourth diagram. `collect_code` reads the stored code
+graph of the folder the task worker stores it for (`docs/design/CODE_GRAPH.md`,
+slice 2) through the tools context's interface (`services/tools/code_level`),
+and never asks the daemon: the pack shows the graph as the daemon last
+reported it, with that time. The snapshot's `code_graph` keeps the two kinds
+of statement in separate fields: `claims` (each module's `implements` edge
+to its path, from the architecture the pack documents) and `observed` (the
+stored files under those paths, their sha256 as the daemon computed it on
+the machine that holds them, the names they define and the references
+among them, resolved with the daemon's rule; bounded, with counts of what
+was left out). The document says which is which before the first
+component. Nothing stored, the store `off` or no claimed path holding a
+stored file give "not observed" and the section is listed in `missing`; a
+component whose path holds no stored file says so; nothing is inferred.
+`code_graph` is an input of the document's digest and not of the diagrams'
+(they do not read it), so a cited file whose sha256 changes makes `c4.md`
+stale and leaves the diagrams current; the time of the last report is shown
+but not hashed, so a sync that changed no cited file does not. The project
+folder is not put in the snapshot (it may carry a person's name), and file
+paths and names, parsed from files agents may have written, pass
+`md_inline` like any record text.
 
 ### The index (`README.md`)
 
@@ -693,8 +716,8 @@ approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
 manifest of the pack), the COBIT governance matrix (phase 5; the ITIL transition set is done,
 `transition.md`, #696), and bench grading of packs against person-written expectations.
-The C4 code level from the daemon's code graph (`workspace.related`) fits
-phase 2 when a daemon is connected.
+The C4 code level from the stored code graph is built (issue #693, under
+"Architecture diagrams, C4").
 
 ## Later phases: audit-ready documents
 

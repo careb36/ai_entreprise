@@ -49,7 +49,7 @@ def test_the_c4_levels_come_from_the_architecture_and_the_stack():
     )
     doc = c4.document(_snapshot(), diagrams)
     assert doc["markdown"].count("```mermaid") == 3
-    assert "code level is not compiled yet" in doc["markdown"]
+    assert "not observed: no code graph" in doc["markdown"]
 
 
 def test_the_lint_flags_exactly_the_documents_whose_records_changed():

@@ -136,7 +136,7 @@ from models.sso import (
 )
 from models.support import BugReport
 from models.task_relation import TaskRelation
-from models.team import Team, TeamMember
+from models.team import Team, TeamHistoryStart, TeamMember, TeamMembershipPeriod
 from models.webhook import CompanyWebhook
 from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 from sqlalchemy.pool import StaticPool
@@ -438,6 +438,8 @@ SQLModel.metadata.create_all(
         TaskRelation.__table__,
         Team.__table__,
         TeamMember.__table__,
+        TeamMembershipPeriod.__table__,
+        TeamHistoryStart.__table__,
         SodPolicy.__table__,
         AccessReview.__table__,
         IntegrationReview.__table__,
