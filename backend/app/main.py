@@ -26,6 +26,7 @@ from routers.api_tokens import router as api_tokens_router
 from routers.architectures import router as architectures_router
 from routers.audit_anchors import router as audit_anchors_router
 from routers.auth import router as auth_router
+from routers.bench import router as bench_router
 from routers.board_moves import router as board_moves_router
 from routers.board_notes import router as board_notes_router
 from routers.chat_approvals import router as chat_approvals_router
@@ -214,6 +215,7 @@ app.include_router(access_review_router)
 app.include_router(teams_router)
 app.include_router(invitations_router)
 app.include_router(usage_router)
+app.include_router(bench_router)
 
 # Register exception handlers
 register_exception_handlers(app)

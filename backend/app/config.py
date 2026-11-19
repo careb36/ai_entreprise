@@ -155,6 +155,9 @@ class Settings(BaseSettings):
     RSI_CYCLE_TOKEN_BUDGET: int = 0  # 0: the cap, twice the first sprint
     # Where the backend reads a cycle record's kept files to hash them itself.
     RSI_FILES_ROOT: str = ""
+    # The checkout whose bench/scorecards the /bench page reads (read-only);
+    # empty: the backend's own checkout, when it has one.
+    BENCH_REPOSITORY_DIR: str = ""
     CONSOLE_ASSISTANTS_ENABLED: bool = True
     # The Support agent triages new help-desk tickets (suggested severity and
     # category, a first reply to the reporter). Off by default: reporting a

@@ -3,6 +3,7 @@
 import { createHttp } from './api/client'
 import { agentEndpoints } from './api/agents'
 import { analyticsEndpoints } from './api/analytics'
+import { benchEndpoints } from './api/bench'
 import { authEndpoints } from './api/auth'
 import { chatEndpoints } from './api/chat'
 import { boardNoteEndpoints } from './api/boardNotes'
@@ -30,6 +31,7 @@ export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, se
 export type { SessionHooks } from './api/client'
 export * from './api/agents'
 export * from './api/analytics'
+export * from './api/bench'
 export * from './api/auth'
 export * from './api/chat'
 export * from './api/boardNotes'
@@ -85,6 +87,7 @@ const endpoints = {
   ...usageEndpoints(http),
   ...dutiesEndpoints(http),
   ...findingEndpoints(http),
+  ...benchEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)
