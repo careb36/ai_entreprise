@@ -36,6 +36,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
   become the ``humaneval`` block (pass@1, each problem's outcome, tokens).
   ``--swebench FILE`` (``run.sh --swebench``, schema v6) does the same with
   the index ``swebench.py prepare`` wrote: the ``swebench`` block.
+  ``--edit-format F`` (``run.sh`` with ``BENCH_EDIT_FORMAT``, schema v7)
+  records the edit format the run asked every model for; ``collect`` sums
+  each delivery's observed format per spec (``edit_format_card.py``).
 
 The pure functions are what ``backend/tests/test_bench_*.py`` check.
 
@@ -58,6 +61,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ablation
 import budget
+import edit_format_card
 import graders
 import humaneval_card
 import prompt_weight
@@ -69,7 +73,7 @@ from bench_grade import (  # noqa: F401 - the grade, re-exported
     criterion_of_test,
     grade,
 )
-from readers import difficulty_estimates, prompt_sections, reported_tokens
+from readers import difficulty_estimates, edit_formats, prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
 
 __all__ = [
@@ -168,6 +172,7 @@ def summarize_spec(
     error: str | None = None,
     routing: list[dict[str, Any]] | None = None,
     prompt: dict[str, Any] | None = None,
+    edit_format: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One spec's entry from what was observed.
 
@@ -223,6 +228,8 @@ def summarize_spec(
         "prompt": prompt or prompt_weight.empty(),
         # A SWE-bench grade's details (swebench_grade.py), for its block.
         **({"swebench": graded["swebench"]} if graded.get("swebench") else {}),
+        # Each delivery's observed edit format, summed (#689, schema v7).
+        **({"edit_format": edit_format} if edit_format is not None else {}),
     }
 
 
@@ -238,6 +245,7 @@ def build_scorecard(
     sections_off: list[str] | None = None,
     humaneval_block: dict[str, Any] | None = None,
     swebench_block: dict[str, Any] | None = None,
+    edit_format: str | None = None,
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them, and
     the run-level block (``run``), the graders' commit, the prompt sections
@@ -275,6 +283,7 @@ def build_scorecard(
         **({"sections_off": list(sections_off)} if sections_off else {}),
         **({"humaneval": humaneval_block} if humaneval_block is not None else {}),
         **({"swebench": swebench_block} if swebench_block is not None else {}),
+        **({"edit_format": edit_format} if edit_format else {}),
     }
 
 
@@ -297,6 +306,7 @@ def render_markdown(card: dict[str, Any]) -> str:
         "tokens count only the turns whose usage the provider reported.",
         *graders.render_lines(card),
         *budget.render_lines(card),
+        *edit_format_card.run_line(card),
         *(
             [
                 "Sections off in every Developer prompt: "
@@ -350,6 +360,7 @@ def render_markdown(card: dict[str, Any]) -> str:
     lines += ablation.render_lines(card)
     lines += humaneval_card.render_lines(card)
     lines += swebench_card.render_lines(card)
+    lines += edit_format_card.render_lines(card)
     return "\n".join(lines) + "\n"
 
 
@@ -381,7 +392,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     status, verified, error = args.status, None, args.error or None
     tokens: dict[str, int] = {}
     models: dict[str, list[str]] = {}
-    routing, prompt, estimates = [], None, {}
+    routing, prompt, estimates, formats = [], None, {}, None
     try:
         if args.sprint:
             board = _get(args.api, f"/v1/sprints/{args.sprint}/board")
@@ -405,6 +416,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
             tokens, models, turns = reported_tokens(dsn, args.company)
             measures = prompt_sections(dsn, args.company)
             estimates = difficulty_estimates(dsn, args.company)
+            formats = edit_format_card.spec_summary(edit_formats(dsn, args.company))
             prompt = prompt_weight.weigh(
                 [measures[i["id"]] for i in items if i["id"] in measures]
             )
@@ -426,6 +438,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         error=error,
         routing=routing,
         prompt=prompt,
+        edit_format=formats,
     )
 
 
@@ -473,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--sections-off", default="", help="the prompt sections turned off")
     w.add_argument("--humaneval", type=Path, help="the HumanEval index (humaneval.py prepare)")
     w.add_argument("--swebench", type=Path, help="the SWE-bench index (swebench.py prepare)")
+    w.add_argument("--edit-format", default="", help="the edit format the run asked for")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -489,6 +503,13 @@ def main(argv: list[str] | None = None) -> int:
         off = ablation.parse_names(args.sections_off) if args.sections_off else []
     except ValueError as exc:
         print(f"--sections-off: {exc}", file=sys.stderr)
+        return 2
+    try:
+        fmt = edit_format_card.parse_formats(args.edit_format) if args.edit_format else [""]
+        if len(fmt) != 1:
+            raise ValueError("one edit format per run")
+    except ValueError as exc:
+        print(f"--edit-format: {exc}", file=sys.stderr)
         return 2
     index = json.loads(args.humaneval.read_text()) if args.humaneval else None
     specs, he_entries = humaneval_card.split(entries, index)
@@ -510,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
         sections_off=off,
         humaneval_block=humaneval_card.block(he_entries, index, args.skipped) if index else None,
         swebench_block=swebench_card.block(swe_entries, swe_index, args.skipped) if swe_index else None,
+        edit_format=fmt[0] or None,
     )
     problems = validate(card)
     if problems:

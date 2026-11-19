@@ -460,7 +460,7 @@ def test_swebench_results_are_a_block_apart_from_the_specs(tmp_path):
     status, out = _write(tmp_path, [*entries, _entry("01-a")], _index(1, 2, 3))
     card = json.loads((out / "20260101T000000Z.json").read_text())
     assert (
-        status == 0 and card["schema_version"] == 6 and scorecard.validate(card) == []
+        status == 0 and card["schema_version"] >= 6 and scorecard.validate(card) == []
     )
     assert [s["name"] for s in card["specs"]] == ["01-a"]
     block = card["swebench"]

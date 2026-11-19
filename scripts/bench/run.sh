@@ -118,6 +118,15 @@
 #                                    2). scripts/bench/ablate.sh sets it, one
 #                                    section per run. Empty: nothing is off,
 #                                    whatever PROMPT_SECTIONS_OFF says outside.
+#   BENCH_EDIT_FORMAT [empty]        the edit format every model is asked for
+#                                    (auto, whole or search_replace; the backend's
+#                                    services/models/edit_format.py): passed to the
+#                                    backend as EDIT_FORMAT_BY_MODEL {"*": format}
+#                                    and recorded on the card (edit_format). An
+#                                    unknown one stops the run (exit 2).
+#                                    scripts/bench/edit_formats.sh sets it, one
+#                                    format per run. Empty: auto, whatever
+#                                    EDIT_FORMAT_BY_MODEL says outside.
 #   BENCH_HUMANEVAL_CACHE [empty]    a folder that keeps the checked HumanEval
 #                                    dataset between runs; checked again on use
 #   BENCH_HUMANEVAL_URL [empty]      a mirror of the dataset; the sha256 pin stays
@@ -201,6 +210,15 @@ if [ -n "$SECTIONS_OFF" ]; then
   SECTIONS_OFF=$("$PY" "$REPO/scripts/bench/ablation.py" parse --names "$SECTIONS_OFF") \
     || { echo "BENCH_SECTIONS_OFF names a section the backend would not turn off"; exit 2; }
   echo "prompt sections off: $SECTIONS_OFF"
+fi
+EDIT_FORMAT=${BENCH_EDIT_FORMAT:-}
+EDIT_FORMAT_MAP=""
+if [ -n "$EDIT_FORMAT" ]; then
+  EDIT_FORMAT=$("$PY" "$REPO/scripts/bench/edit_format_card.py" parse --formats "$EDIT_FORMAT") \
+    && [ "$(echo "$EDIT_FORMAT" | wc -l)" -eq 1 ] && [ "$EDIT_FORMAT" != each ] \
+    || { echo "BENCH_EDIT_FORMAT names no single edit format the backend knows"; exit 2; }
+  EDIT_FORMAT_MAP="{\"*\": \"$EDIT_FORMAT\"}"
+  echo "edit format: $EDIT_FORMAT"
 fi
 BUDGET=${BENCH_TOKEN_BUDGET:-}
 case "$BUDGET" in ''|*[!0-9]*|0) [ -z "$BUDGET" ] || { echo "BENCH_TOKEN_BUDGET must be a positive integer of tokens, or empty"; exit 2; } ;; esac
@@ -344,7 +362,7 @@ PGENV=(POSTGRES_HOST="$PG_HOST" POSTGRES_PORT="$PG_PORT" POSTGRES_USER="$PG_USER
     CONSOLE_ASSISTANTS_ENABLED=false SUPPORT_AGENT_ENABLED=false REVIEWER_AGENT_ENABLED=false \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_SANDBOX=host \
     RESEARCH_TOOLS_ENABLED="$RESEARCH" AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false \
-    AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" PROMPT_SECTIONS_OFF="$SECTIONS_OFF" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
+    AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" PROMPT_SECTIONS_OFF="$SECTIONS_OFF" EDIT_FORMAT_BY_MODEL="$EDIT_FORMAT_MAP" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
 for _ in $(seq 1 60); do healthy && break; sleep 1; done
 healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
@@ -463,7 +481,7 @@ ENTRIES=("$WORK"/entries/*.json)
   || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
 CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
-  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} ${HE_CARD[@]+"${HE_CARD[@]}"} ${SWE_CARD[@]+"${SWE_CARD[@]}"} "${ENTRIES[@]}") \
+  --budget "$BUDGET" --sections-off "$SECTIONS_OFF" --edit-format "$EDIT_FORMAT" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} ${GRADERS_FLAG[@]+"${GRADERS_FLAG[@]}"} ${HE_CARD[@]+"${HE_CARD[@]}"} ${SWE_CARD[@]+"${SWE_CARD[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"

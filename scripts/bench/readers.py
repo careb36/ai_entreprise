@@ -7,6 +7,8 @@
   (``prompt_sections`` in the stored verification evidence, issue #443).
 - ``difficulty_estimates``: each task's first ``estimated`` event (issue
   #319), the difficulty stored before its first attempt.
+- ``edit_formats``: each delivery's ``edit_format`` observation (issue
+  #689) and the edits the daemon refused.
 
 All read observations the backend stored; none estimates what is not there.
 """
@@ -90,4 +92,38 @@ def difficulty_estimates(dsn: dict[str, str], company_id: int) -> dict[int, Any]
         )
         for task_id, payload in cur.fetchall():
             out[int(task_id)] = payload if isinstance(payload, dict) else {}
+    return out
+
+
+def edit_formats(dsn: dict[str, str], company_id: int) -> list[dict[str, Any]]:
+    """Per delivery (every version of every task-worker run), the latest
+    verification's ``edit_format`` (issue #689: the format asked for and the
+    one the backend read in the answer) and how many of its files the daemon
+    refused as an edit (``workspace_writes`` with ``rejected_edit``). A run
+    without the observation (another producer, a backend from before #689)
+    is listed with ``edit_format`` None, never as a delivery in some format."""
+    import psycopg2  # the backend's environment has it
+
+    out: list[dict[str, Any]] = []
+    with psycopg2.connect(**dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT ON (r.id) r.id, v.evidence::jsonb -> 'edit_format', "
+            "v.evidence::jsonb -> 'workspace_writes' "
+            "FROM agent_runs r LEFT JOIN verifications v ON v.agent_run_id = r.id "
+            "WHERE r.company_id = %s AND r.external_ref LIKE 'task-%%' "
+            "ORDER BY r.id, v.id DESC",
+            (company_id,),
+        )
+        for _run_id, observed, writes in cur.fetchall():
+            rows = writes if isinstance(writes, list) else []
+            out.append(
+                {
+                    "edit_format": observed if isinstance(observed, dict) else None,
+                    "rejected_edits": sum(
+                        1
+                        for w in rows
+                        if isinstance(w, dict) and w.get("status") == "rejected_edit"
+                    ),
+                }
+            )
     return out

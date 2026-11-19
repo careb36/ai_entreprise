@@ -26,6 +26,7 @@ bench/
   scorecards/real/<stamp>.json, .md     the real-model references
   scorecards/humaneval/                 HumanEval cards (run.sh --humaneval)
   scorecards/swebench/                  SWE-bench Lite cards (run.sh --swebench)
+  scorecards/edit_formats/              edit format per model (edit_formats.sh)
   humaneval/fake/HumanEval_<n>/         the fake producer's answers for a few
                                         HumanEval problems (see "HumanEval
                                         through the factory"); never the dataset
@@ -54,6 +55,10 @@ bench/
   (`scripts/bench/repeated.py`, see "Repeated runs, medians and spread").
 - `scripts/bench/graders.py` takes the graders from a commit for
   `run.sh --graders` (see "Graders from a commit").
+- `scripts/bench/edit_formats.sh` runs the bench once per edit format per
+  model, and `scripts/bench/edit_format_card.py` writes one row per model
+  and format onto the first run's card (see "The best edit format per
+  model").
 - `scripts/bench/ablate.sh` runs the bench once as it is and once per prompt
   section with that section off, and `scripts/bench/ablation.py` writes each
   section's deltas onto the baseline's card (see "What each prompt section is
@@ -331,6 +336,59 @@ fake answers from each specification's `fake/` folder whatever the prompt
 says), so a fake ablation only checks the plumbing: the section's estimated
 tokens fall to zero in the arm and the prompt tokens drop by that much,
 while the criteria and rework deltas stay at zero.
+
+## The best edit format per model
+
+Issue #689 (#359, A.8). The format a model writes file changes in changes
+how often it succeeds; the method is Aider's edit-format benchmark (no code
+taken): the same specifications run once per edit format per model, graded
+by the same person-written tests, with how often the model used the format
+correctly beside the result.
+
+```bash
+BENCH_MODELS=model-a,model-b scripts/bench/edit_formats.sh each   # every format
+scripts/bench/edit_formats.sh whole,search_replace bench/specs/06-repo-shopcart
+BENCH_EDIT_FORMAT=search_replace scripts/bench/run.sh            # one run, one format
+```
+
+- The formats are the backend's (`services/models/edit_format.py`): `auto`
+  (whole files, with SEARCH/REPLACE edits allowed for an existing file: the
+  prompt as before, and the default), `whole` (whole files only) and
+  `search_replace` (SEARCH/REPLACE edits for every existing file, whole files
+  for new ones). An unknown one stops the run before anything starts (exit
+  2). A unified diff is not offered: the daemon does not apply one.
+- `run.sh` passes `BENCH_EDIT_FORMAT` to the backend as `EDIT_FORMAT_BY_MODEL`
+  `{"*": format}` (empty by default, so an outside setting cannot change a
+  nightly run unnoticed) and records it on the card (`edit_format`, schema
+  v7). `edit_formats.sh` runs `run.sh` once per model of `BENCH_MODELS`
+  (`AGENT_MODEL`, empty: one model labelled `default`) and format, each with
+  its own stack, and writes the first run's card with the `edit_formats`
+  block into `bench/scorecards/edit_formats/`, every run's card under
+  `runs/<run id>/<n>/`.
+- What a run used is observed, never claimed: the backend records on each
+  run's evidence the format it asked for and what it read in the answer's
+  file blocks and its own tool calls (`edit_format`: whole files, edit
+  blocks, malformed edit blocks, blocks off the format, edit-tool calls), and
+  the daemon's refusals stay in `workspace_writes` (`rejected_edit`).
+  `scorecard.py collect` sums every delivery per spec (`edit_format`); a run
+  without the observation (another producer, an older backend) is counted
+  apart (`missing`).
+- Each row's outcome (`scripts/bench/edit_format_card.py`): `pass` (every
+  criterion passed), `fail`, `unusable` when deliveries were observed and
+  none was well formed (a malformed edit block, a block off the format or an
+  edit the daemon refused in every one: never a pass, whatever the tests
+  said), or `unmeasured` with the reason (a grade that could not run, a run
+  the budget cut or that failed, no delivery observed, or deliveries the
+  backend ran under another format). Runs of another commit, policy or
+  graders, or a card not run under its arm's format, are refused (exit 2).
+- `compare.py` shows each model and format's outcome and criteria before →
+  after, or the table alone with no previous card, and never judges them.
+  Choosing defaults per model from real-model numbers comes later (#689);
+  nothing here sets one.
+
+With the fake, every format scores the same (the fake answers from each
+specification's `fake/` folder whatever the prompt says), so a fake run only
+checks the plumbing.
 
 ## The project wiki against vector memory alone
 

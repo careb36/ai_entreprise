@@ -5,8 +5,8 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/models/`
 - **Responsibility:** Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `effort`, `model_factory`, `model_routing`, `run_cost` (the reported tokens and cost of a task, a run or a sprint; `management/rsi_cycle` reads a cycle sprint's tokens through it). Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
-- **Modules:** `calibration`, `company_models`, `difficulty`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `usage_csv`, `usage_report`.
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `edit_format` (the edit format per model and the format a delivery was observed in; `loop/worker` reads it), `effort`, `model_factory`, `model_routing`, `run_cost` (the reported tokens and cost of a task, a run or a sprint; `management/rsi_cycle` reads a cycle sprint's tokens through it). Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
+- **Modules:** `calibration`, `company_models`, `difficulty`, `edit_format`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `usage_csv`, `usage_report`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `model_catalog` (the models.dev fetch) and `provider_client` (`list_models`, raising `ProviderUnreachable`; `provider_connections.validate` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
@@ -147,6 +147,31 @@ company's **Models** page (`/company/models`, `pages/Models.tsx`,
 `components/ModelConnections.tsx`, `components/ModelChoices.tsx`) is where a
 Manager connects, validates and removes providers and picks the default and
 per-role models with the suggestions beside them; a Viewer reads it.
+
+### The edit format per model
+
+**`backend/app/services/models/edit_format.py`** — The format a model writes
+file changes in (issue #689; #359, A.8; the method of Aider's edit-format
+benchmark, no code taken). `EDIT_FORMAT_BY_MODEL` (JSON, `{"<model>":
+"<format>", "*": "<format>"}`) maps the model the task worker requests, after
+difficulty routing, to `auto` (the default: whole files, with SEARCH/REPLACE
+edits allowed for an existing file, the prompt every task had before),
+`whole` (whole files only) or `search_replace` (SEARCH/REPLACE edits for an
+existing file, whole files for new ones); a model it does not name takes
+`*`, else `auto`, and a value that cannot be read is dropped with a warning.
+`loop/worker/execute` puts the format's instructions in the Developer
+prompt's `output_format` section (`prompt.file_instructions`), and
+`loop/worker/record` puts `edit_format` on the run's evidence: the format
+asked for and where it came from, and what the backend read in the answer's
+file blocks and its own tool calls (`observe`): whole files, edit blocks,
+malformed edit blocks, blocks off the format (an edit block under `whole`),
+`workspace__edit` calls and their errors, the formats used and
+`well_formed`. What the model says about its format is a claim and is never
+read; a format a model could not use is recorded as such. The daemon's
+refusals (`workspace_writes` with `rejected_edit`) stay beside it. No
+column: it lives in the evidence JSON. The bench varies it per run
+(`scripts/bench/edit_formats.sh`, `bench/README.md`); choosing defaults from
+real-model numbers comes later.
 
 ### Calibration: the estimate scored against observed effort
 

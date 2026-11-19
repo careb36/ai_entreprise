@@ -57,6 +57,18 @@ skipped, the resolve rate over the instances measured (null when none was)
 and the tokens reported (``swebench_card.py``). The instances are not in
 ``specs`` and do not move the totals. Version 1 to 5 cards are still read,
 without it.
+
+Version 7 (issue #689, the edit format per model, ``edit_format_card.py``)
+adds three optional fields and nothing else: ``edit_format``, the format a
+run asked every model for (``run.sh`` with ``BENCH_EDIT_FORMAT``; absent
+when none was set), per spec ``edit_format``, its deliveries' observations
+summed (the format asked for, well-formed deliveries, malformed edit blocks,
+blocks off the format, edits the daemon refused, runs without an
+observation counted apart), and ``edit_formats``, on the card
+``edit_formats.sh`` writes: one row per model and format with its outcome
+(``pass``, ``fail``, ``unusable`` or ``unmeasured`` with its reason; an
+unusable format is never a pass). Version 1 to 6 cards are still read,
+without them.
 """
 
 import math
@@ -67,12 +79,13 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ablation  # the sibling modules, by path
 import budget
+import edit_format_card
 import graders
 import humaneval_card
 import swebench_card
 
-SCHEMA_VERSION = 6
-READABLE_VERSIONS = (1, 2, 3, 4, 5, 6)
+SCHEMA_VERSION = 7
+READABLE_VERSIONS = (1, 2, 3, 4, 5, 6, 7)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
 SPEC_STATUSES = ("completed", "timeout", "error", budget.BUDGET_EXCEEDED)
 
@@ -236,7 +249,7 @@ def validate(card: Any) -> list[str]:
         problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
     keys = (
         ("stamp", "commit", "llm", "policy")
-        if version in (2, 3, 4, 5, 6)
+        if version in (2, 3, 4, 5, 6, 7)
         else ("stamp", "commit", "llm")
     )
     for key in keys:
@@ -299,9 +312,9 @@ def validate(card: Any) -> list[str]:
             problems.append(
                 f"{where}.tasks: done_first_attempt <= done <= total does not hold"
             )
-        if version in (2, 3, 4, 5, 6):
+        if version in (2, 3, 4, 5, 6, 7):
             problems.extend(_routing_problems(where, spec.get("routing")))
-        if version in (3, 4, 5, 6):
+        if version in (3, 4, 5, 6, 7):
             problems.extend(_prompt_problems(where, spec.get("prompt")))
     totals = card.get("totals")
     if not isinstance(totals, dict):
@@ -315,13 +328,14 @@ def validate(card: Any) -> list[str]:
             for k in _TOTAL_FIELDS
             if k in totals and not _number(totals[k])
         )
-        if version in (3, 4, 5, 6):
+        if version in (3, 4, 5, 6, 7):
             problems.extend(_prompt_problems("totals", totals.get("prompt")))
     problems.extend(budget.run_problems(card, _count))
     problems.extend(ablation.problems(card))
     problems.extend(graders.problems(card))
     problems.extend(humaneval_card.problems(card, SPEC_STATUSES))
     problems.extend(swebench_card.problems(card, SPEC_STATUSES))
+    problems.extend(edit_format_card.problems(card))
     if not budget.is_cut(card) and any(
         isinstance(s, dict) and s.get("status") == budget.BUDGET_EXCEEDED for s in specs
     ):

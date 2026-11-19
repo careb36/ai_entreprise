@@ -118,7 +118,7 @@ def test_the_scorecard_totals_and_its_schema():
 @pytest.mark.parametrize(
     ("change", "problem"),
     [
-        (lambda c: c.update(schema_version=7), "schema_version"),
+        (lambda c: c.update(schema_version=8), "schema_version"),
         (lambda c: c.update(commit=""), "commit"),
         (lambda c: c["specs"][0].update(status="done"), "status"),
         (lambda c: c["specs"][0]["criteria"].update(passed=7), "criteria.passed"),

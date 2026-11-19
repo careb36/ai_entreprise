@@ -809,6 +809,18 @@ Copy `.env.example` to `.env` and fill in:
   role defaults apply), a band that cannot be read is dropped with a warning;
   an agent's, a role's or the company's chosen model is never re-routed.
   Unset: every task runs on its role's model, as before.
+- `EDIT_FORMAT_BY_MODEL` — optional, empty by default (issue #689). The edit
+  format each model is asked for, JSON: `{"<model>": "search_replace", "*":
+  "whole"}`. The key is the model the task worker requests (after difficulty
+  routing); `*` covers every model not named. A format is `auto` (whole files,
+  with SEARCH/REPLACE edits allowed for an existing file: the prompt as
+  before), `whole` (whole files only) or `search_replace` (SEARCH/REPLACE edits
+  for an existing file, whole files for new ones;
+  `services/models/edit_format.py`). The run's evidence records the format
+  asked for and the one the backend read in the answer (`edit_format`). A
+  value that cannot be read is dropped with a warning. The bench sets it per
+  run (`BENCH_EDIT_FORMAT`, `scripts/bench/edit_formats.sh`). Unset: every
+  model runs on `auto`.
 - `AGENT_MODEL` — backend, optional, default empty. One model id for every
   role (`AGENT_MODEL=<a DeepSeek model id>` runs the whole team on DeepSeek,
   and then only `DEEPSEEK_API_KEY` is needed). Read by

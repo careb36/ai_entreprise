@@ -63,6 +63,7 @@
       ],
       "public": [
         "company_models",
+        "edit_format",
         "effort",
         "model_factory",
         "model_routing",
@@ -330,6 +331,7 @@
         "test_bench_broker.py",
         "test_bench_budget.py",
         "test_bench_compare.py",
+        "test_bench_edit_formats.py",
         "test_bench_graders.py",
         "test_bench_grading.py",
         "test_bench_prompt_weight.py",
@@ -479,6 +481,9 @@
       ],
       "test_bench_compare.py": [
         "planning"
+      ],
+      "test_bench_edit_formats.py": [
+        "repo"
       ],
       "test_bench_graders.py": [
         "planning",
@@ -680,6 +685,9 @@
       ],
       "test_edit_blocks.py": [
         "evidence",
+        "loop"
+      ],
+      "test_edit_format.py": [
         "loop"
       ],
       "test_edit_lint.py": [

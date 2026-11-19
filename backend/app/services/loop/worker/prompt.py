@@ -20,6 +20,7 @@ from sqlmodel import Session, select
 from services.contracts import edit_blocks
 from services.evidence import standards
 from services.learning import procedures, retrospective
+from services.models import edit_format as edit_formats
 from services.tasks.board import DELIVERY_GATE_AUTHOR, completed_tasks_context
 
 logger = setup_logger("fabrique-task-worker")
@@ -34,6 +35,41 @@ FILE_MANIFEST_INSTRUCTIONS = (
     "keep explanations outside the blocks. Files are written to the project exactly as "
     "given."
 ) + edit_blocks.INSTRUCTIONS
+
+_WHOLE_FILES_ONLY = (
+    "\n\n## Output format for files\n"
+    "When your deliverable creates or changes files, write each file in full as its own "
+    "fenced code block whose opening line carries the path relative to the project root, "
+    "for example:\n\n"
+    "```python path=src/example/module.py\n<entire file content>\n```\n\n"
+    "Use one block per file, give the complete content (not a diff, an excerpt or "
+    "SEARCH/REPLACE edits), and keep explanations outside the blocks. Files are written "
+    "to the project exactly as given."
+)
+_SEARCH_REPLACE = (
+    "\n\n## Output format for files\n"
+    "When your deliverable changes an existing file, send only the changes: a fenced "
+    "code block whose opening line carries the path relative to the project root and "
+    "`edit`, holding one or more blocks of the form\n"
+    "<<<<<<< SEARCH\n<exact lines from the current file>\n=======\n<their replacement>\n"
+    ">>>>>>> REPLACE\n"
+    "for example:\n\n"
+    "```python path=src/example/module.py edit\n<<<<<<< SEARCH\nold line\n=======\n"
+    "new line\n>>>>>>> REPLACE\n```\n\n"
+    "Each SEARCH text must match the current file exactly once (include enough "
+    "surrounding lines), and the edited file must still parse. Write a new file in "
+    "full, as a block with its path and no `edit`. Keep explanations outside the blocks."
+)
+
+
+def file_instructions(edit_format: str | None) -> str:
+    """The output format section for *edit_format* (``services/models/edit_format``):
+    ``auto`` (and anything else) is the format every task had before #689."""
+    by_format = {
+        edit_formats.WHOLE: _WHOLE_FILES_ONLY,
+        edit_formats.SEARCH_REPLACE: _SEARCH_REPLACE,
+    }
+    return by_format.get(str(edit_format or ""), FILE_MANIFEST_INSTRUCTIONS)
 
 
 # ---------------------------------------------------------------------------
