@@ -3897,6 +3897,11 @@
   },
   "bench": {
     "title": "Banco de pruebas",
+    "reference": {
+      "value": "Referencia del banco de pruebas: {{value}}",
+      "date": "ficha del {{date}}",
+      "link": "Ver el banco de pruebas"
+    },
     "subtitle": "Las fichas de resultados confirmadas: cada especificación de referencia pasada por la fábrica y calificada con pruebas de aceptación que escribió una persona, nunca por el modelo evaluado. Cada número es lo que observó el calificador.",
     "loading": "Cargando las fichas…",
     "loadError": "No se pudieron cargar las fichas: {{message}}",

@@ -11,6 +11,7 @@ import {
 import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { useCurrentRole, useSprints } from '../hooks/useQueries'
+import { useBenchScorecards } from '../hooks/useBench'
 import type { SprintSummary } from '../services/api'
 import { useSprintsWithArchived, type ManagedSprint } from '../services/sprintAdmin'
 import { CostLine } from '../components/CostSummary'
@@ -107,6 +108,7 @@ export default function Sprints() {
   const sprints = activeFirst<ManagedSprint>(shown.data ?? [])
   // The learning trend reads the company's listed sprints, never the archived ones.
   const trend = activeFirst<SprintSummary>(listed.data ?? [])
+  const bench = useBenchScorecards()
 
   return (
     <div className="page-container max-w-6xl space-y-6">
@@ -146,7 +148,7 @@ export default function Sprints() {
           </>} />
       ) : (
         <>
-          <LearningTrend sprints={trend} />
+          <LearningTrend sprints={trend} benchCards={bench.data?.cards} />
           <RoutingRecord companyId={companyId} />
           <GateRefutations companyId={companyId} />
           <MissingModuleMentions companyId={companyId} />
