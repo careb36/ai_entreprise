@@ -30,6 +30,8 @@ from typing import Any
 from services.contracts import roles as role_catalogue
 from services.planning.project_docs import (
     closure,
+    collect_checks,
+    domain_checks,
     iterations,
     performance,
     plan_checks,
@@ -441,7 +443,11 @@ def _person(_snapshot: dict, _src: Sources, tr: Tr) -> Result:
 
 
 CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
-    "Governance": [("lessons", lessons_during), ("decided", plan_decided)],
+    "Governance": [
+        ("lessons", lessons_during),
+        ("decided", plan_decided),
+        ("approved_first", domain_checks.approved_first),
+    ],
     "Scope": [
         ("understood", requirements_understood),
         ("stability", requirements_stability),
@@ -450,20 +456,30 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
         ("delivered", requirements_delivered),
         ("verified", plan_checks.verified),
         ("quality_targets", plan_checks.quality_targets),
+        ("churn", domain_checks.churn),
     ],
     "Schedule": [
         ("schedule", schedule_documented),
         ("carry_over", carry_over),
         ("released", iterations_released),
+        ("on_time", domain_checks.on_time),
     ],
-    "Finance": [("budget", _person), ("spend", spend_known)],
+    "Finance": [
+        ("budget", _person),
+        ("spend", spend_known),
+        ("quota", domain_checks.quota),
+    ],
     "Stakeholders": [
         ("people", people_recorded),
         ("external", _person),
         ("channels", plan_checks.channels),
         ("approvals", stakeholder_docs.approvals_check),
     ],
-    "Resources": [("team", work_to_hired_roles), ("effort", effort_observed)],
+    "Resources": [
+        ("team", work_to_hired_roles),
+        ("effort", effort_observed),
+        ("sprint_team", domain_checks.sprint_team),
+    ],
     "Risk": [
         ("risk", risk_on_every_delivery),
         ("security", security_tests_run),
@@ -472,6 +488,7 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
 }
 CHECK_INPUTS = (
     *plan_checks.INPUTS,
+    collect_checks.KEY,
     stakeholder_docs.KEY,
     "stack",
     "wstg_observations",

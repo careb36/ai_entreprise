@@ -44,6 +44,7 @@ from services.planning.project_docs import (
     stakeholder_docs,
     status_docs,
     texts,
+    transition_docs,
 )
 from services.planning.project_docs.layout import (
     DOMAINS,
@@ -136,6 +137,7 @@ def _index(snapshot: dict[str, Any], documents: list[dict[str, Any]]) -> dict[st
         tr("index.pmbok"),
         tr("index.c4"),
         tr("index.wstg"),
+        tr("index.itil"),
     ]
     title = tr("index.title")
     lines = [f"# {title}", "", f"_{tr('generated_note')}_", "", *body, ""]
@@ -177,6 +179,7 @@ def build_documents(
         control_docs.lessons(snapshot),
         status_docs.report(snapshot),
         final_docs.report(snapshot),
+        transition_docs.document(snapshot),
         checks.document(snapshot),
         security_docs.checklist(snapshot),
         security_docs.report(snapshot),

@@ -73,6 +73,9 @@ PLACEMENT: dict[str, tuple[str, str]] = {
     "checks": ("Governance", "Monitoring and Controlling"),
     "status_report": ("Governance", "Monitoring and Controlling"),
     "final_report": ("Governance", "Closing"),
+    # The ITIL transition set (#696): each release's change, notes, known
+    # errors and handover, as the work is executed.
+    "transition": ("Governance", "Executing"),
     # Security testing is quality (Scope); its findings are risk (issue #539).
     "wstg_checklist": ("Scope", "Monitoring and Controlling"),
     "security_report": ("Risk", "Monitoring and Controlling"),

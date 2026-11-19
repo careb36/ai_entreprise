@@ -38,6 +38,7 @@ import Models from '../pages/Models'
 import Specifications from '../pages/Specifications'
 import SpecificationDetail from '../pages/SpecificationDetail'
 import ArchitectureDetail from '../pages/ArchitectureDetail'
+import Bench from '../pages/Bench'
 
 // ── Legacy route redirects ────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ export function AppRoutes() {
         <Route path="/company/procedures" element={<Procedures />} />
         <Route path="/company/findings" element={<CompanyFindings />} />
         <Route path="/company/findings/:id" element={<CompanyFindingDetail />} />
+        <Route path="/bench" element={<Bench />} />
         <Route path="/company/wiki" element={<Wiki />} />
         <Route path="/company/models" element={<Models />} />
         <Route path="/company/specifications" element={<Specifications />} />

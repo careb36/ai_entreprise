@@ -13,7 +13,8 @@ A statement is a **claim** by the person who wrote it, never an observation:
   ``statements_risks``, ``statements_checks``,
   ``statements_status_report``, ``statements_release_plan``,
   ``statements_final_report``, ``statements_quality_plan``,
-  ``statements_communications_plan``, ``statements_stakeholder_register``),
+  ``statements_communications_plan``, ``statements_stakeholder_register``,
+  ``statements_transition``),
   never inside a compiled field, so a builder
   cannot mistake it for a record and a check result never reads it;
 - the pack quotes it under its section with the author's company role and the
@@ -100,6 +101,11 @@ SECTIONS: dict[str, tuple[str, str, str]] = {
         "person.handover",
         "person.handover_what",
     ),
+    "transition.handover": (
+        "transition",
+        "person.transition_handover",
+        "person.transition_handover_what",
+    ),
 }
 DOCUMENTS = (
     "charter",
@@ -111,6 +117,7 @@ DOCUMENTS = (
     "quality_plan",
     "communications_plan",
     "stakeholder_register",
+    "transition",
 )
 
 
