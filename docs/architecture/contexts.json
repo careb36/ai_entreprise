@@ -1164,6 +1164,9 @@
         "models",
         "repo"
       ],
+      "test_scorecard_swebench.py": [
+        "models"
+      ],
       "test_scrum_master.py": [
         "loop"
       ],

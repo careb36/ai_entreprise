@@ -3843,7 +3843,9 @@
       "cost_unknown": "the cost of some tasks is unknown; the bench prices no turn",
       "not_in_card": "this card's schema version does not record it",
       "no_prompt_measure": "no prompt was measured",
-      "no_problems_graded": "no HumanEval problem was graded"
+      "no_problems_graded": "no HumanEval problem was graded",
+      "no_instances_measured": "no SWE-bench instance was measured",
+      "tests_not_run": "the instance's tests did not run"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -3936,6 +3938,29 @@
       "outcomes": {
         "pass": "Pass",
         "fail": "Fail"
+      }
+    },
+    "swebench": {
+      "title": "SWE-bench Lite",
+      "note": "Each instance is graded by its own FAIL_TO_PASS and PASS_TO_PASS tests, run by the bench's scorer, never by the factory's report. An instance whose environment could not be built or did not reproduce it is unmeasured and left out of the resolve rate. The instances are not reference specifications and do not move the totals above.",
+      "resolvedRate": "Resolved",
+      "graded": "Graded",
+      "measured": "Measured",
+      "resolved": "Resolved instances",
+      "failed": "Failed",
+      "unmeasured": "Unmeasured, left out",
+      "tokens": "Tokens reported",
+      "dataset": "Dataset {{name}} at revision {{revision}} ({{split}}), read from {{source}}; {{pinned}} instances checked against their pinned sha256. Licence: {{license}}.",
+      "skipped": "Skipped by the token budget, never graded: {{instances}}",
+      "caption": "Each SWE-bench Lite instance of the latest scorecard",
+      "instance": "Instance",
+      "outcome": "Outcome",
+      "failToPass": "FAIL_TO_PASS",
+      "passToPass": "PASS_TO_PASS",
+      "tests": "{{passed}}/{{total}}",
+      "outcomes": {
+        "pass": "Resolved",
+        "fail": "Failed"
       }
     }
   },
