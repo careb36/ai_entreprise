@@ -6,8 +6,8 @@
  */
 import { useTranslation } from 'react-i18next'
 import { MessageSquareQuote } from 'lucide-react'
-import { READABLE_TEXT } from '../knowledge/PageStates'
 import type { PersonStatement } from '../../services/documentation'
+import { READABLE_TEXT } from '../ui'
 
 export function StatementClaim({ statement }: { statement: PersonStatement }) {
   const { t } = useTranslation()

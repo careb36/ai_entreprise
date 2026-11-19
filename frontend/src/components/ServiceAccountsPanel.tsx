@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useServiceAccounts } from '../hooks/useDuties'
 import { errorDetail, type ServiceAccount } from '../services/api'
 import type { Translate } from '../i18n/translate'
-import { Panel } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, TABLE, TD, TH, TR } from './ui'
 
 /**
  * The credentials that act without a person (issue #543): API tokens, the

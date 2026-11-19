@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Building2, FlaskConical } from 'lucide-react'
 import { FindingOutcomes, FindingStatusBadge } from '../components/FindingOutcomes'
-import { LoadErrorAlert, LoadingLine } from '../components/knowledge/PageStates'
-import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
+import { CountPill, EmptyState, LoadError, LoadingLine, PageHeader, Panel } from '../components/ui'
 import { useFindings } from '../hooks/useFindings'
 import { errorDetail, type LoopFinding } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
@@ -62,7 +61,7 @@ export default function CompanyFindings() {
       ) : query.isPending ? (
         <LoadingLine>{t('findings.loading')}</LoadingLine>
       ) : query.isError ? (
-        <LoadErrorAlert onRetry={() => query.refetch()}>{t('findings.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+        <LoadError onRetry={() => query.refetch()}>{t('findings.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : findings.length === 0 ? (
         <EmptyState icon={FlaskConical} title={t('findings.empty')} dashed />
       ) : (

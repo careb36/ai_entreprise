@@ -34,7 +34,12 @@ from database import engine
 from logging_config import logger
 from sqlmodel import Session, text
 
-from services.integrations import anchoring, chat_approvals, webhooks
+from services.integrations import (
+    anchoring,
+    chat_approvals,
+    chat_regressions,
+    webhooks,
+)
 
 
 async def process_outbox(nats_client) -> None:
@@ -111,6 +116,9 @@ async def process_outbox(nats_client) -> None:
                             await chat_approvals.deliver(
                                 session, event_type, payload, event_id
                             )
+                        elif event_type in chat_regressions.EVENT_TYPES:
+                            # Regressions, information only (issue #682).
+                            await chat_regressions.deliver(session, payload, event_id)
 
                         # Mark the event as successfully delivered.
                         session.exec(

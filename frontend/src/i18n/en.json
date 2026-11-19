@@ -2981,6 +2981,18 @@
         "release_plan_targets": {
           "title": "Target release dates and scope ahead",
           "what": "The dates the project commits to for its coming releases, what each coming release and iteration is to contain, and the scope decisions taken ahead, read against the plan above."
+        },
+        "final_report_acceptance": {
+          "title": "Acceptance by the sponsor",
+          "what": "Whether the sponsor accepts what was delivered, with any conditions or reservations, read against the delivery and the holds left open above."
+        },
+        "final_report_benefits": {
+          "title": "Benefits realisation outlook",
+          "what": "Which benefits the result is expected to bring after closure, when, and who will follow them up."
+        },
+        "final_report_handover": {
+          "title": "Handover notes",
+          "what": "Who takes the result over (operations, maintenance, the client), what they receive, and what they should know about the holds and risks left open."
         }
       }
     }

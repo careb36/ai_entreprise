@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useSodReport } from '../hooks/useDuties'
 import { Bot, CircleHelp, ShieldAlert, ShieldCheck, ShieldX, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { errorDetail, type SodApproval, type SodReport } from '../services/api'
-import { Panel, StatusBadge, type StatusTone } from './ui'
-import { TABLE, TD, TH, TR } from './adminTable'
+import { Panel, StatusBadge, type StatusTone, TABLE, TD, TH, TR } from './ui'
 
 const STATUSES = ['separated', 'exception', 'violation', 'unattributed', 'not_a_person'] as const
 
