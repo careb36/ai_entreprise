@@ -75,9 +75,13 @@ session, never the body; an API token starts a sprint unattributed) for its
 tasks, runs and turns, and the reviewer for a decision. A sprint the platform
 opened, one from before `0029`, or a run not about a task is **unattributed**,
 never guessed (`AgentRunApproval.approver_name` is a typed name, a claim, and
-is not read). A person's **teams** are those they belong to when the report is
-made; a person in two teams counts in both, so team rows may sum to more than
-the total (the page says so). The proxy sees only the backend's own model
+is not read). A person's **teams** are those they were in at the time of the
+work, read from the membership history below at the fact's own observed
+timestamp (the task's creation, the run's ingestion, the turn's audit row, the
+review); work from before the history started keeps the teams they belong to
+when the report is made, and the report says which period that covers
+(`team_history`). A person in two teams counts in both, so team rows may sum
+to more than the total (the page says so). The proxy sees only the backend's own model
 calls, so every turn is the task worker's producer; a console producer's
 usage is its provider's and is not observed (its rows show runs, no tokens).
 
@@ -87,6 +91,31 @@ unattributed last, cents rounded to six places; `tests/test_usage_report.py`
 builds it twice). Timestamps are read as UTC (an aware one converted), and
 rows are read a day wider than the range and filtered exactly in Python, so a
 row stored with an offset is not lost to a text comparison.
+
+**Team membership history** (issue #702). `team_membership_periods` records
+when a member was in a team: `team_id` and the team's name when the period
+opened (no foreign key, so a deleted team's periods stay), `user_id`,
+`started_at`/`started_by` and `ended_at`/`ended_by`. The backend writes it at
+the moment of the change, in the same transaction as the `team_members` row
+and its audit row (which are unchanged): `teams.open_membership` when an Owner
+adds a member, `teams.close_memberships` when the member is removed from the
+team, the team is deleted, or the person leaves the company
+(`teams.drop_memberships`: the member-removal route and the access review).
+The SSO group mapping (#703) will call the same two functions. A change never
+edits a period: it closes the open one and opens a new one. Only an open
+period's end is written, once, and no period is deleted; an ORM hook compares
+every update with the stored row and refuses anything else
+(`teams.HistoryRefused`), and a partial unique index allows one open period
+per team and person. `team_history_start` holds the moment migration `0052`
+ran; the migration opens one period per existing membership at that moment.
+The report gives a fact the teams whose period holds its timestamp (start
+inclusive, end exclusive; `usage_report.teams_at`, pure) and, before that
+moment or on a database without it, today's teams. `team_history` in the
+JSON says when the history started and which part of the range keeps today's
+teams (`current_teams_cover: {since, before}`, `null` when none does); the CSV
+says the same in a `# teams:` row, and the Usage page in a line under the
+table. Times are what the backend observed when it wrote the row, never a
+time a client sent (POSITIONING rules 1 and 6).
 
 **Taken from Aixle Flow** (Apache-2.0, design only, no code):
 `docs/design/project-teams.md` (a team is a named group of members of the same
@@ -137,6 +166,7 @@ name, a team name) wrote.
 | T10 | B1 | D | A huge range or many rows exhausts the worker | L | M | Low | At most 366 days; reads are by indexed company id and time; one query per table |
 | T11 | B5 | T | An agent's claim inflates or hides usage | L | M | Low | Only observations are read: the proxy's usage on the audit row, `AgentRun.model` as the proxy reported, verdicts from `verifications`; a producer's claims and `approver_name` are never read (POSITIONING rules 1, 2) |
 | T12 | B1 | S | A person attributed with a sprint they did not start | L | L | Low | `started_by_user_id` comes from the session, never the body; API tokens start unattributed |
+| T13 | B1 | T/R | Past usage moved to another team by rewriting the membership history (a back-dated start, a reopened period, a deleted one) | L | M | Low | No route takes a time or edits a period: the backend stamps its own clock; an ORM hook refuses any update but closing an open period once, and any delete (`teams.HistoryRefused`); the change that opened or closed a period is also an audit row; `tests/test_team_history.py::test_a_closed_period_is_never_edited_and_no_period_is_deleted` |
 
 Assume breach: if `require_company_role` were bypassed, the team routes still
 check `_owner` themselves and refuse tokens. If an Owner account is taken over,
@@ -170,8 +200,10 @@ The holder gets the same 401 as for a revoked or expired token, so a leaked
 token does not learn that its creator was demoted or left. The refusal is
 audited at most once per token, reason and hour, so a script retrying does
 not flood the chain.
-- A person's team in the report is today's, not the one at the time of the
-  work; the report says so.
+- Work from before migration `0052` keeps the person's team as it is today,
+  not the one at the time of the work; the report names that period. A team
+  change made by editing `team_members` by hand, outside the routes, writes
+  no period.
 
 ## Next
 
@@ -188,4 +220,5 @@ not flood the chain.
   groups).
 - **Personal notifications** from task events (read, snooze, preferences; the
   Plane study in the #512 comments): design only, not started.
-- A usage history that keeps the team a person was in at the time of the work.
+- ~~A usage history that keeps the team a person was in at the time of the
+  work~~: built (#702, above).

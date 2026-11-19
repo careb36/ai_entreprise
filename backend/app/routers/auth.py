@@ -331,7 +331,12 @@ async def remove_member(
             )
     role = member.human_role
     session.delete(member)
-    left_teams = teams.drop_memberships(session, company_id, user_id)
+    left_teams = teams.drop_memberships(
+        session,
+        company_id,
+        user_id,
+        by=f"human:{caller.email}" if caller else "human:anonymous",
+    )
     session.commit()
     ended = sessions.revoke_users(session, [user_id], "member_removed")
     AgentService().audit_interaction(
