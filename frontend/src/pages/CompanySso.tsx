@@ -5,9 +5,8 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { useDeleteSso, useSaveSso, useSsoSettings, useTestSso } from '../hooks/useSso'
 import { errorDetail, type SsoConnection, type SsoConnectionInput, type SsoPreset } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
-import { PageHeader, Panel } from '../components/ui'
+import { AccessNotice, FormActions, LoadError, LoadingRows, PageHeader, Panel, SavedNote, Spinner } from '../components/ui'
 import { SsoDomains } from '../components/SsoDomains'
-import { AccessNotice, ButtonSpinner, FormActions, LoadError, LoadingRows, SavedNote } from './admin/AdminParts'
 
 const PRESETS: SsoPreset[] = ['generic', 'google', 'entra']
 
@@ -40,7 +39,7 @@ export default function CompanySso() {
       ) : settings.isLoading ? (
         <LoadingRows rows={2} />
       ) : settings.isError ? (
-        <LoadError message={errorDetail(settings.error)} onRetry={() => settings.refetch()} />
+        <LoadError onRetry={() => settings.refetch()}>{errorDetail(settings.error)}</LoadError>
       ) : settings.data ? (
         <SsoForm
           key={settings.data.connection?.updated_at ?? 'new'}
@@ -214,13 +213,13 @@ function SsoForm({ mutations, initial, redirectUri, ownerSignedIn }: FormProps) 
 
       <FormActions>
         <button type="submit" className="btn-primary btn-sm" disabled={save.isPending}>
-          {save.isPending ? <ButtonSpinner /> : <Save size={13} aria-hidden="true" />}
+          {save.isPending ? <Spinner size={13} /> : <Save size={13} aria-hidden="true" />}
           {t('sso.save', { defaultValue: 'Save' })}
         </button>
         {initial && (
           <>
             <button type="button" className="btn-tool border border-surface-700" disabled={test.isPending} onClick={() => test.mutate()}>
-              {test.isPending ? <ButtonSpinner /> : <FlaskConical size={13} aria-hidden="true" />}
+              {test.isPending ? <Spinner size={13} /> : <FlaskConical size={13} aria-hidden="true" />}
               {t('sso.test', { defaultValue: 'Test connection' })}
             </button>
             <button type="button" className="btn-tool border border-surface-700 hover:text-red-300" disabled={remove.isPending}
