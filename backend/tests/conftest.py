@@ -83,6 +83,12 @@ from models.chat import (
     ChatInteraction,
     ChatLinkCode,
 )
+from models.code_graph import (
+    CodeGraphDefinition,
+    CodeGraphEdge,
+    CodeGraphFile,
+    CodeGraphReference,
+)
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -422,6 +428,10 @@ SQLModel.metadata.create_all(
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
         SprintBoardNote.__table__,
+        CodeGraphFile.__table__,
+        CodeGraphDefinition.__table__,
+        CodeGraphReference.__table__,
+        CodeGraphEdge.__table__,
         SavedView.__table__,
         SavedViewPreference.__table__,
         SprintProgressSnapshot.__table__,

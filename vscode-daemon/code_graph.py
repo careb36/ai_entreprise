@@ -29,10 +29,27 @@ project was larger than the walk reads (files, bytes), ``max_files`` cut the
 walk, or the deadline (``DEADLINE_SECONDS``, inside the backend's wait)
 stopped the parsing. Only paths, names and hashes leave the machine, never
 a file's contents.
+
+``workspace.graph`` (issue #438, second slice) reports the same parse for
+the backend to store: each file's sha256 with the definitions it holds
+(name, line, depth) and the names it uses (name, count), for the files whose
+sha256 differs from the one the backend says it holds. Request:
+``{"workspace_root", "known": {path: sha256} (at most REPORT_MAX_KNOWN),
+"max_files": default REPORT_DEFAULT_FILES, at most REPORT_MAX_FILES}``.
+Reply: ``{"files": [{"path", "sha256", "status", "defs", "refs",
+"truncated"}], "unchanged", "removed", "more", "partial"}``. A file whose
+sha256 the backend already holds is neither parsed nor sent; ``removed``
+names the known paths that are no longer candidate files (none when the
+file cap cut the listing, since a file past it may still be there);
+``more`` says the reply stopped at ``max_files``, ``REPORT_MAX_BYTES`` or
+the deadline and the backend should ask again with what it now holds. At
+most ``MAX_FILE_DEFS`` definitions and ``MAX_FILE_REFS`` names a file (the
+most used first), ``truncated`` saying so. Names, lines and hashes only.
 """
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Dict, List, Set, Tuple
 
@@ -46,6 +63,12 @@ MAX_NAMES = 8
 MAX_EDGES = 10
 # Inside the backend's wait (``services/tools/code_graph.TIMEOUT_SECONDS``).
 DEADLINE_SECONDS = 8.0
+REPORT_MAX_KNOWN = 5000
+REPORT_DEFAULT_FILES = 200
+REPORT_MAX_FILES = 500
+REPORT_MAX_BYTES = 512 * 1024
+MAX_FILE_DEFS = 300
+MAX_FILE_REFS = 300
 
 
 def _request(data: Dict[str, Any]) -> Tuple[List[str], int, int]:
@@ -182,5 +205,76 @@ async def handle_related(nc, msg, reply, request_body, resolve) -> None:
     await workspace_read._serve(nc, msg, reply, request_body, resolve, related)
 
 
+def _report_request(data: Dict[str, Any]) -> Tuple[Dict[str, str], int]:
+    known = data.get("known")
+    known = {} if known is None else known
+    if not isinstance(known, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in known.items()
+    ):
+        raise workspace_read.ReadError(400, "known must map paths to sha256.")
+    if len(known) > REPORT_MAX_KNOWN:
+        raise workspace_read.ReadError(400, f"At most {REPORT_MAX_KNOWN} known files may be sent.")
+    try:
+        max_files = int(data.get("max_files") or REPORT_DEFAULT_FILES)
+    except (TypeError, ValueError):
+        raise workspace_read.ReadError(400, "max_files must be a number.") from None
+    return known, max(1, min(max_files, REPORT_MAX_FILES))
+
+
+def _file_row(relative: str, digest: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+    defs = [[name, line, depth] for name, _sig, line, depth in entry.get("defs") or []]
+    refs = sorted((entry.get("refs") or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+    status = "unparsed" if entry.get("error") else "refs_skipped" if entry.get("refs_skipped") else "parsed"
+    return {
+        "path": relative, "sha256": digest, "status": status,
+        "defs": defs[:MAX_FILE_DEFS], "refs": [[name, count] for name, count in refs[:MAX_FILE_REFS]],
+        "truncated": len(defs) > MAX_FILE_DEFS or len(refs) > MAX_FILE_REFS,
+    }
+
+
+def graph_report(workspace_path: str, data: Dict[str, Any], resolve=None) -> Dict[str, Any]:
+    """The reply to ``workspace.graph``: the parse of each file whose sha256
+    the backend does not hold, and the known files that are gone."""
+    root = workspace_read._root(workspace_path)
+    known, max_files = _report_request(data)
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    files, files_capped = repo_map._candidates(root)
+    contents, too_large = repo_map.read_sources(files)
+    current = {relative for relative, _digest, _raw in contents}
+    if files_capped:
+        removed: List[str] = []
+    else:
+        # Past the byte cap a candidate is unread, not gone.
+        present = {relative for relative, _ in files} if too_large else current
+        removed = sorted(path for path in known if path not in present)
+    changed = [item for item in contents if known.get(item[0]) != item[1]]
+    cache_path, cache = repo_map._load_cache(root)
+    rows: List[Dict[str, Any]] = []
+    used = 0
+    more = late = False
+    for item in changed:
+        parsed, late = repo_map.parse_sources([item], cache, deadline)
+        if late:
+            more = True
+            break
+        row = _file_row(item[0], item[1], parsed[item[0]])
+        size = len(json.dumps(row))
+        if rows and (len(rows) >= max_files or used + size > REPORT_MAX_BYTES):
+            more = True
+            break
+        rows.append(row)
+        used += size
+    repo_map._save_cache(cache_path, cache)
+    return {
+        "files": rows, "unchanged": len(contents) - len(changed), "removed": removed,
+        "more": more, "partial": files_capped or too_large or late,
+    }
+
+
+async def handle_graph(nc, msg, reply, request_body, resolve) -> None:
+    """``workspace.graph`` → the parse of the files whose sha256 changed, for the backend to store."""
+    await workspace_read._serve(nc, msg, reply, request_body, resolve, graph_report)
+
+
 # (subject, handler) for the daemon's subscription loop.
-HANDLERS = (("workspace.related", handle_related),)
+HANDLERS = (("workspace.related", handle_related), ("workspace.graph", handle_graph))
