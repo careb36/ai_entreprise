@@ -541,6 +541,9 @@
       "test_chat_approvals.py": [
         "integrations"
       ],
+      "test_chat_regressions.py": [
+        "integrations"
+      ],
       "test_chat_inbound.py": [
         "integrations",
         "release"
@@ -913,6 +916,9 @@
         "planning"
       ],
       "test_project_docs_diagrams.py": [
+        "planning"
+      ],
+      "test_project_docs_final.py": [
         "planning"
       ],
       "test_project_docs_language.py": [
