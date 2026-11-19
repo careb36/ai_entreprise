@@ -235,16 +235,15 @@ unlink another company's.
   Password login itself is limited per address (`LOGIN_RATE_LIMIT`) and per
   account (`services/platform/login_throttle.py`).
 
-## Open questions
+## Decisions on the open questions (2026-11-19)
 
-1. Should a company be able to restrict sign-in to SSO for API tokens too?
-   (Today tokens are company-scoped and created by Managers; unaffected.)
-2. Multi-tenant Entra (`common`/`organizations`) is refused; needed?
-3. SCIM deprovisioning (phase 4?). Server-side sessions exist since #524.
-4. Should the grace for legacy domains default to off for new deployments
-   (nothing is legacy there anyway), and should its 30 days be shorter?
-5. Should a verified domain whose re-checks keep failing transiently (no
-   definite answer for days) lapse after a maximum age?
+The owner delegated these decisions on 2026-11-19 ("the app is corporate and must scale: decide with the highest standards"). #684 tracks them, #717 is SCIM.
+
+1. **API tokens under SSO-only sign-in: yes.** When a company requires SSO, a new API token can be minted only from a session that signed in through SSO, so a token is never stronger than the sign-in that made it. Tokens minted before the requirement keep working until they expire or are revoked, and the access review lists them as "minted without SSO". (NIST SP 800-63B §4 and 800-63C: credential issuance bound to the authenticated session; ISO/IEC 27001:2022 A.5.17.)
+2. **Multi-tenant Entra (`common`, `organizations`): still refused.** Each company's connection is pinned to its own tenant id, and a token from any other tenant is refused. This closes the cross-tenant confusion Microsoft documents for multi-tenant apps that do not validate `tid`. A future need for B2B guests would be a list of named, allowed tenants, never `common`.
+3. **SCIM deprovisioning: yes, deprovisioning first** (#717). Server-side sessions (#524) mean a deprovisioned account loses every session at once. Until SCIM lands, the reviewed directory sync (#716) is the stopgap.
+4. **Legacy domain grace: off for new deployments, 14 days elsewhere.** `SSO_LEGACY_DOMAIN_GRACE` defaults to `false` when the deployment has no legacy domain, which is every new one. Where it is on, `SSO_LEGACY_DOMAIN_GRACE_DAYS` becomes 14, down from 30. Unverified ownership is a standing risk, so its window should be short.
+5. **A verified domain whose re-checks never get a definite answer: lapses after 14 days.** A transient failure still changes nothing on the day. After 14 days without a definite positive answer the domain becomes unverified (`lapsed_unconfirmed`), the Owners are notified (personal notifications, #683) and the change is audited. Every failed re-check is counted in `/metrics` by reason (#684). (ISO/IEC 27001:2022 A.8.16 monitoring; fail closed on prolonged uncertainty.)
 
 ## Design
 
