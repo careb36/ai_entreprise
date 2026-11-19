@@ -10,6 +10,15 @@ export function useTaskRelations(taskId: number) {
   })
 }
 
+/** The relations of a sprint's tasks and their numbers; read when asked (`enabled`). */
+export function useSprintRelations(sprintId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: QUERY_KEYS.sprintRelations(sprintId),
+    queryFn: () => api.getSprintRelations(sprintId),
+    enabled,
+  })
+}
+
 /** A change to a relation; both of its tasks show it, so every task's list is read again. */
 function useRelationChange<T>(change: (input: T) => Promise<unknown>) {
   const queryClient = useQueryClient()
