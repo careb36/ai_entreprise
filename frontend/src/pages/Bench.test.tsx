@@ -158,6 +158,63 @@ describe('Bench page', () => {
     expect(screen.queryByRole('region', { name: 'Prompt weight by section' })).not.toBeInTheDocument()
   })
 
+  it('shows the HumanEval section of a v5 card, an unmeasured problem and pass@1 never as 0', async () => {
+    const heTokens = { measured: true, value: 900, turns_reported: 2, turns_unreported: 0 }
+    const problem = (task_id: string, outcome: unknown) => ({
+      task_id, entry_point: 'has_close_elements', status: 'completed', outcome, wall_clock_seconds: 42, tokens: heTokens,
+    })
+    const humaneval = {
+      dataset: { name: 'HumanEval', source: 'example/HumanEval.jsonl.gz', sha256: 'c'.repeat(64), license: 'MIT' },
+      graded: 3, passed: 1, failed: 1, unmeasured: 1,
+      pass_at_1: { measured: false, reason: 'grade_unmeasured', detail: ['HumanEval/3'] },
+      tokens: { measured: true, value: 2700, turns_reported: 6, turns_unreported: 0 },
+      problems: [
+        problem('HumanEval/0', { measured: true, value: 'pass' }),
+        problem('HumanEval/1', { measured: true, value: 'fail' }),
+        problem('HumanEval/3', { measured: false, reason: 'grade_unmeasured', detail: 'the sandbox could not run' }),
+      ],
+      skipped: ['HumanEval/4'],
+    }
+    stubApi({ available: true, cards: [{ ...LATEST, schema_version: 5, humaneval }] })
+    renderPage()
+
+    const panel = await screen.findByRole('region', { name: 'HumanEval' })
+    const facts = within(panel).getByRole('group', { name: 'HumanEval' })
+    expect(within(facts).getByText('Not measured')).toBeInTheDocument()
+    expect(within(facts).queryByText('0%')).not.toBeInTheDocument()
+    expect(within(facts).getByText('2,700')).toBeInTheDocument()
+    expect(within(panel).getByText(/Skipped by the token budget, never graded: HumanEval\/4/)).toBeInTheDocument()
+    expect(within(panel).getByText(/MIT licence/)).toBeInTheDocument()
+
+    const table = within(panel).getByRole('table', { name: 'Each HumanEval problem of the latest scorecard' })
+    expect(within(within(table).getByRole('row', { name: /HumanEval\/0/ })).getByText('Pass')).toBeInTheDocument()
+    expect(within(within(table).getByRole('row', { name: /HumanEval\/1/ })).getByText('Fail')).toBeInTheDocument()
+    const unmeasured = within(table).getByRole('row', { name: /HumanEval\/3/ })
+    expect(within(unmeasured).getByText('Not measured')).toBeInTheDocument()
+    expect(within(unmeasured).getByText('the sandbox could not run')).toBeInTheDocument()
+  })
+
+  it('shows a measured pass@1 and no HumanEval section on a card without the block', async () => {
+    const humaneval = {
+      dataset: { name: 'HumanEval', source: 'x', sha256: 'c'.repeat(64), license: 'MIT' },
+      graded: 2, passed: 1, failed: 1, unmeasured: 0,
+      pass_at_1: { measured: true, value: 0.5 },
+      tokens: { measured: false, reason: 'no_reported_turns', turns_reported: 0, turns_unreported: 2 },
+      problems: [], skipped: [],
+    }
+    stubApi({ available: true, cards: [{ ...LATEST, schema_version: 5, humaneval }] })
+    const { unmount } = renderPage()
+    const facts = within(await screen.findByRole('region', { name: 'HumanEval' })).getByRole('group', { name: 'HumanEval' })
+    expect(within(facts).getByText('50%')).toBeInTheDocument()
+    unmount()
+
+    queryClient.clear()
+    stubApi({ available: true, cards: [{ ...LATEST, humaneval: null }] })
+    renderPage()
+    await screen.findByRole('region', { name: /Latest scorecard/ })
+    expect(screen.queryByRole('region', { name: 'HumanEval' })).not.toBeInTheDocument()
+  })
+
   it('says when the backend finds no scorecards folder', async () => {
     stubApi({ available: false, cards: [] })
     renderPage()

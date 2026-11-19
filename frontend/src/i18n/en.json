@@ -3838,7 +3838,8 @@
       "no_reported_turns": "no turn reported its token usage",
       "cost_unknown": "the cost of some tasks is unknown; the bench prices no turn",
       "not_in_card": "this card's schema version does not record it",
-      "no_prompt_measure": "no prompt was measured"
+      "no_prompt_measure": "no prompt was measured",
+      "no_problems_graded": "no HumanEval problem was graded"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -3912,6 +3913,26 @@
       "share": "Share",
       "prompts": "Prompts",
       "cut": "Cut"
+    },
+    "humaneval": {
+      "title": "HumanEval",
+      "note": "Each problem is graded by HumanEval's own tests in the bench's sandbox, one delivery each, never by the factory's report. The problems are not reference specifications and do not move the totals above.",
+      "passAt1": "pass@1",
+      "graded": "Graded",
+      "passed": "Passed",
+      "failed": "Failed",
+      "unmeasured": "Unmeasured",
+      "tokens": "Tokens reported",
+      "dataset": "Dataset {{source}}, sha256 {{sha}} (computed by the bench), {{license}} licence.",
+      "skipped": "Skipped by the token budget, never graded: {{problems}}",
+      "caption": "Each HumanEval problem of the latest scorecard",
+      "problem": "Problem",
+      "entryPoint": "Entry point",
+      "outcome": "Outcome",
+      "outcomes": {
+        "pass": "Pass",
+        "fail": "Fail"
+      }
     }
   },
   "account": {

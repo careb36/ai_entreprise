@@ -3838,7 +3838,8 @@
       "no_reported_turns": "ningún turno informó su consumo de tokens",
       "cost_unknown": "se desconoce el costo de algunas tareas; el banco no pone precio a los turnos",
       "not_in_card": "la versión del esquema de esta ficha no lo registra",
-      "no_prompt_measure": "no se midió ningún prompt"
+      "no_prompt_measure": "no se midió ningún prompt",
+      "no_problems_graded": "no se calificó ningún problema de HumanEval"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -3912,6 +3913,26 @@
       "share": "Proporción",
       "prompts": "Prompts",
       "cut": "Cortada"
+    },
+    "humaneval": {
+      "title": "HumanEval",
+      "note": "Cada problema se califica con las propias pruebas de HumanEval en el sandbox del banco, una entrega cada uno, nunca con el informe de la fábrica. Los problemas no son especificaciones de referencia y no cambian los totales de arriba.",
+      "passAt1": "pass@1",
+      "graded": "Calificados",
+      "passed": "Aprobados",
+      "failed": "Fallidos",
+      "unmeasured": "Sin medir",
+      "tokens": "Tokens informados",
+      "dataset": "Conjunto de datos {{source}}, sha256 {{sha}} (calculado por el banco), licencia {{license}}.",
+      "skipped": "Omitidos por el presupuesto de tokens, nunca calificados: {{problems}}",
+      "caption": "Cada problema de HumanEval de la última ficha",
+      "problem": "Problema",
+      "entryPoint": "Punto de entrada",
+      "outcome": "Resultado",
+      "outcomes": {
+        "pass": "Aprobado",
+        "fail": "Fallido"
+      }
     }
   },
   "account": {

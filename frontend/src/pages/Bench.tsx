@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { FlaskConical, FolderX } from 'lucide-react'
 import { BenchCardsTable, BenchSpecHistory } from '../components/bench/BenchHistory'
 import { BenchLatestCard } from '../components/bench/BenchLatestCard'
+import { HumanEvalPanel } from '../components/bench/HumanEvalPanel'
 import { PromptSectionsTable } from '../components/bench/PromptSectionsTable'
 import { EmptyState, LoadError, LoadingLine, PageHeader } from '../components/ui'
 import { useBenchScorecards } from '../hooks/useBench'
@@ -38,6 +39,7 @@ export default function Bench() {
             ? <BenchLatestCard card={latest} />
             : <EmptyState icon={FlaskConical} title={t('bench.noValidCard')} />}
           {latest?.prompt_sections && <PromptSectionsTable sections={latest.prompt_sections} />}
+          {latest?.humaneval && <HumanEvalPanel data={latest.humaneval} />}
           <BenchCardsTable cards={cards} />
           {valid.length > 0 && <BenchSpecHistory cards={valid} />}
         </>
