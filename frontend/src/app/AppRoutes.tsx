@@ -34,6 +34,7 @@ import McpServers from '../pages/McpServers'
 import SelfImprovement from '../pages/SelfImprovement'
 import Notifications from '../pages/Notifications'
 import ProjectSettings from '../pages/ProjectSettings'
+import AuditTrail from '../pages/AuditTrail'
 import ModelCatalog from '../pages/ModelCatalog'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
@@ -106,6 +107,7 @@ export function AppRoutes() {
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
         <Route path="/company/api-tokens" element={<ApiTokens />} />
+        <Route path="/company/audit-trail" element={<AuditTrail />} />
         <Route path="/company/procedures" element={<Procedures />} />
         <Route path="/company/findings" element={<CompanyFindings />} />
         <Route path="/company/findings/:id" element={<CompanyFindingDetail />} />
