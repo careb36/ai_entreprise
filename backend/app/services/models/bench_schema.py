@@ -4,7 +4,7 @@ Keep in step: any change to ``scripts/bench/schema.py`` (or the bench modules
 it calls) updates this copy and ``bench_schema_blocks`` in the same pull
 request; ``tests/test_scorecard_schema_parity.py`` fails until they agree.
 
-A copy of ``scripts/bench/schema.validate`` (versions 1 to 6) as a pure
+A copy of ``scripts/bench/schema.validate`` (versions 1 to 7) as a pure
 function: the backend shows the committed scorecards (``bench_scorecards``)
 and never imports the bench's scripts, which are protected paths and not in
 the backend's image. The parity test runs both validators over the same
@@ -12,7 +12,8 @@ cards, sound and broken, and fails on the first card they answer differently.
 
 The optional blocks (``run``, ``graders``, ``sections_off``, ``ablation`` and
 v5's ``humaneval``) are in ``bench_schema_blocks``, v6's ``swebench`` in
-``bench_schema_swebench``. No I/O, no clock, no model.
+``bench_schema_swebench`` and v7's edit-format fields in
+``bench_schema_edit_format``. No I/O, no clock, no model.
 """
 
 from __future__ import annotations
@@ -21,10 +22,11 @@ import math
 from typing import Any
 
 from services.models import bench_schema_blocks as blocks
+from services.models.bench_schema_edit_format import edit_format_problems
 from services.models.bench_schema_swebench import swebench_problems
 
-SCHEMA_VERSION = 6
-READABLE_VERSIONS = (1, 2, 3, 4, 5, 6)
+SCHEMA_VERSION = 7
+READABLE_VERSIONS = (1, 2, 3, 4, 5, 6, 7)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
 SPEC_STATUSES = ("completed", "timeout", "error", blocks.BUDGET_EXCEEDED)
 
@@ -222,9 +224,9 @@ def _spec_problems(where: str, spec: dict, version: Any) -> list[str]:
         problems.append(
             f"{where}.tasks: done_first_attempt <= done <= total does not hold"
         )
-    if version in (2, 3, 4, 5, 6):
+    if version in (2, 3, 4, 5, 6, 7):
         problems.extend(_routing_problems(where, spec.get("routing")))
-    if version in (3, 4, 5, 6):
+    if version in (3, 4, 5, 6, 7):
         problems.extend(_prompt_problems(where, spec.get("prompt")))
     return problems
 
@@ -239,7 +241,7 @@ def validate(card: Any) -> list[str]:
         problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
     keys = (
         ("stamp", "commit", "llm", "policy")
-        if version in (2, 3, 4, 5, 6)
+        if version in (2, 3, 4, 5, 6, 7)
         else ("stamp", "commit", "llm")
     )
     for key in keys:
@@ -266,13 +268,14 @@ def validate(card: Any) -> list[str]:
             for k in TOTAL_FIELDS
             if k in totals and not number(totals[k])
         )
-        if version in (3, 4, 5, 6):
+        if version in (3, 4, 5, 6, 7):
             problems.extend(_prompt_problems("totals", totals.get("prompt")))
     problems.extend(blocks.run_problems(card))
     problems.extend(blocks.ablation_problems(card))
     problems.extend(blocks.graders_problems(card))
     problems.extend(blocks.humaneval_problems(card, SPEC_STATUSES))
     problems.extend(swebench_problems(card, SPEC_STATUSES))
+    problems.extend(edit_format_problems(card))
     if not blocks.is_cut(card) and any(
         isinstance(s, dict) and s.get("status") == blocks.BUDGET_EXCEEDED for s in specs
     ):

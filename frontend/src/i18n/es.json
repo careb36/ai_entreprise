@@ -3872,7 +3872,9 @@
       "no_prompt_measure": "no se midió ningún prompt",
       "no_problems_graded": "no se calificó ningún problema de HumanEval",
       "no_instances_measured": "no se midió ninguna instancia de SWE-bench",
-      "tests_not_run": "las pruebas de la instancia no se ejecutaron"
+      "tests_not_run": "las pruebas de la instancia no se ejecutaron",
+      "format_unmeasured": "la corrida no pudo medir este modelo y formato",
+      "no_delivery_observed": "no se observó ninguna entrega en ningún formato"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -3988,6 +3990,29 @@
       "outcomes": {
         "pass": "Resuelta",
         "fail": "Fallida"
+      }
+    },
+    "editFormats": {
+      "title": "Formato de edición por modelo",
+      "note": "Cada modelo se ejecuta una vez por formato de edición sobre las mismas especificaciones, calificado por las pruebas de aceptación que escribió una persona. Cómo se usó un formato es lo que el backend leyó en cada respuesta y el daemon aplicó, nunca lo que dice el modelo. Un formato inutilizable (ninguna entrega bien formada) nunca es un aprobado, digan lo que digan las pruebas. Se muestra, no se juzga: cada fila es una sola corrida.",
+      "requested": "Formato que pidió esta corrida: {{format}}",
+      "deliveries": "Entregas de esta corrida: {{wellFormed}} de {{observed}} observadas bien formadas ({{missing}} sin observación, contadas aparte).",
+      "wellFormedShare": "Proporción bien formada",
+      "caption": "Cada modelo y formato de edición de la última ficha",
+      "model": "Modelo",
+      "format": "Formato",
+      "outcome": "Resultado",
+      "criteria": "Criterios",
+      "wellFormed": "Bien formadas",
+      "malformed": "Bloques mal formados",
+      "offFormat": "Fuera de formato",
+      "refused": "Rechazadas por el daemon",
+      "rework": "Retrabajo",
+      "ratio": "{{passed}}/{{total}}",
+      "outcomes": {
+        "pass": "Aprobado",
+        "fail": "Fallido",
+        "unusable": "Inutilizable"
       }
     }
   },

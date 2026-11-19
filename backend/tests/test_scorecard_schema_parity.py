@@ -380,3 +380,100 @@ def test_a_sound_swebench_block_is_valid_on_v6_only():
     assert "swebench needs schema v6" in bench_schema.validate(
         {**_base(), "schema_version": 5, "swebench": SWE_SOUND}
     )
+
+
+def _summary(**changes) -> dict:
+    summary = {
+        "deliveries": 4,
+        "observed": 3,
+        "missing": 1,
+        "well_formed": 2,
+        "whole_files": 3,
+        "edit_blocks": 2,
+        "malformed_edit_blocks": 1,
+        "off_format": 0,
+        "rejected_edits": 1,
+        "tool_edits": 0,
+        "tool_edit_errors": 0,
+        "requested": {"search_replace": 3},
+    }
+    summary.update(changes)
+    return summary
+
+
+def _format_row(outcome: str = "pass", **changes) -> dict:
+    row = {
+        "model": "fake-model",
+        "format": "search_replace",
+        "card": "20261114T201804Z",
+        "served_models": ["fake-model"],
+        "outcome": outcome,
+        "reason": None if outcome in ("pass", "fail") else "no delivery observed",
+        "criteria_passed": 30,
+        "criteria_total": 30,
+        "rework_requests": 0,
+        "tokens_reported": 84009,
+        **_summary(),
+        "well_formed_rate": 0.6667,
+    }
+    del row["requested"]
+    row.update(changes)
+    return row
+
+
+def _formats(*rows) -> dict:
+    return {"formats": ["search_replace"], "models": ["fake-model"], "rows": list(rows)}
+
+
+# (the card's edit_format, its first spec's edit_format, edit_formats); None
+# leaves the field out.
+EDIT_FORMAT_CASES = [
+    ("whole", _summary(), _formats(_format_row(), _format_row("fail"))),
+    ("search_replace", None, None),
+    (None, _summary(), None),
+    (None, None, _formats(_format_row("unusable", well_formed=0))),
+    (None, None, _formats(_format_row("unmeasured", well_formed_rate=None))),
+    ("diff", None, None),
+    (3, None, None),
+    (None, "not a summary", None),
+    (None, _summary(observed=2), None),
+    (None, _summary(well_formed=5, observed=4, missing=0), None),
+    (None, _summary(deliveries=-1, requested={"whole": -1}), None),
+    (None, _summary(requested=None), None),
+    (None, None, "not a block"),
+    (None, None, {"rows": {}}),
+    (None, None, _formats("not a row")),
+    (None, None, _formats(_format_row(format="diff", model="", outcome="won"))),
+    (None, None, _formats(_format_row("unusable", reason=""))),
+    (None, None, _formats(_format_row("unmeasured", reason=None))),
+    # A format no delivery used well is never a pass.
+    (None, None, _formats(_format_row(well_formed=0))),
+    (None, None, _formats(_format_row(criteria_passed=True, tokens_reported=-1))),
+    (None, None, _formats(_format_row(well_formed_rate=1.5))),
+    (None, None, _formats(_format_row(well_formed_rate=float("nan")))),
+    (None, None, _formats(_format_row(well_formed_rate=True))),
+]
+
+
+@pytest.mark.parametrize("version", [5, 6, 7])
+@pytest.mark.parametrize(("run_format", "summary", "block"), EDIT_FORMAT_CASES)
+def test_the_edit_format_fields_read_the_same(version, run_format, summary, block):
+    card = {**_base(), "schema_version": version}
+    if run_format is not None:
+        card["edit_format"] = run_format
+    if summary is not None:
+        card = _set(card, "specs.0.edit_format", summary)
+    if block is not None:
+        card["edit_formats"] = block
+    _same(card)
+
+
+def test_sound_edit_format_fields_are_valid_on_v7_only():
+    card = _set(_base(), "specs.0.edit_format", _summary())
+    card.update(edit_format="whole", edit_formats=_formats(_format_row()))
+    assert bench_schema.validate({**card, "schema_version": 7}) == []
+    assert bench_schema.validate({**card, "schema_version": 6}) == [
+        "edit_format needs schema v7",
+        "edit_formats needs schema v7",
+        "specs[0].edit_format needs schema v7",
+    ]

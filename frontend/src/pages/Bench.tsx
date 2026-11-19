@@ -4,6 +4,7 @@ import { BenchCardsTable, BenchSpecHistory } from '../components/bench/BenchHist
 import { BenchLatestCard } from '../components/bench/BenchLatestCard'
 import { HumanEvalPanel } from '../components/bench/HumanEvalPanel'
 import { PromptSectionsTable } from '../components/bench/PromptSectionsTable'
+import { EditFormatPanel } from '../components/bench/EditFormatPanel'
 import { SweBenchPanel } from '../components/bench/SweBenchPanel'
 import { EmptyState, LoadError, LoadingLine, PageHeader } from '../components/ui'
 import { useBenchScorecards } from '../hooks/useBench'
@@ -42,6 +43,7 @@ export default function Bench() {
           {latest?.prompt_sections && <PromptSectionsTable sections={latest.prompt_sections} />}
           {latest?.humaneval && <HumanEvalPanel data={latest.humaneval} />}
           {latest?.swebench && <SweBenchPanel data={latest.swebench} />}
+          {latest?.edit_formats && <EditFormatPanel data={latest.edit_formats} />}
           <BenchCardsTable cards={cards} />
           {valid.length > 0 && <BenchSpecHistory cards={valid} />}
         </>
