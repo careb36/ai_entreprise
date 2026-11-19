@@ -198,7 +198,7 @@ function PendingRuns({ companyId }: { companyId: number }) {
 }
 
 function Inbox({ companyId }: { companyId: number }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
   const inbox = useInbox(companyId)
@@ -223,6 +223,18 @@ function Inbox({ companyId }: { companyId: number }) {
           <span>{t('inbox.loadError', { message: errorDetail(inbox.error), defaultValue: 'Could not load what needs you: {{message}}' })}</span>
           <button onClick={() => inbox.refetch()} className="btn-ghost btn-sm"><RefreshCw size={14} />{t('common.refresh')}</button>
         </div>
+      )}
+      {(inbox.data?.run_window_waiting ?? []).length > 0 && (
+        <Section id="run-window" title={t('runWindow.inboxTitle')} count={0}>
+          <ul className="space-y-1 text-sm text-gray-300">
+            {(inbox.data?.run_window_waiting ?? []).map(wait => (
+              <li key={wait.sprint_id}>
+                <Link to={`/sprints/${wait.sprint_id}`} className="underline">{wait.sprint_name}</Link>{' '}
+                {t('runWindow.waiting', { time: new Date(wait.until).toLocaleString(i18n.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) })}
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
       <Section id="blocked" title={t('inbox.blockedTitle', { defaultValue: 'Tasks blocked until someone acts' })} count={blocked.length}>
         {inbox.isLoading ? (

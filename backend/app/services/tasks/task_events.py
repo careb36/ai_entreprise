@@ -97,6 +97,8 @@ KINDS = frozenset(
         "board_note",
         "board_note_rejected",
         "relation",
+        "run_window_wait",
+        "run_window_release",
         "legacy",
     }
 )

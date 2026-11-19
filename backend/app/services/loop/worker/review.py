@@ -32,7 +32,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import replicas, sprint_control
+from services.loop import replicas, run_window_gate, sprint_control
 from services.loop.worker import close, messages, qa_review, record
 from services.models import model_routing
 from services.platform import locks
@@ -99,6 +99,10 @@ async def _review_delivered(
     for item in in_review:
         sprint = session.get(Sprint, item.sprint_id)
         if not sprint or sprint_control.is_halted(sprint.status):
+            continue
+        # QA's review is a model turn: outside the run window it waits (#736).
+        if run_window_gate.gate_task(session, item, sprint):
+            session.commit()
             continue
         await _review_task(
             session, nats_client, item, sprint, histories, quality_gate_blocked_ids

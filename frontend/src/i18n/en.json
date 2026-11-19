@@ -2923,6 +2923,46 @@
     "capped": "This deployment allows at most “{{ceiling}}” (FORGE_POLICY_MAX): “{{effective}}” is in force.",
     "ownerOnly": "Only an Owner changes the forge policy."
   },
+  "runWindow": {
+    "title": "Run window",
+    "hint": "When work that can wait may start. Outside the window a new sprint, and each task's next model turn, wait for it; a model call already running is never cut, and an urgent sprint starts at once. Only an Owner changes this; each change is audited.",
+    "mode": {
+      "off": "Off: work starts at once",
+      "provider_off_peak_deepseek": "DeepSeek's off-peak hours (half price)",
+      "custom": "My own hours"
+    },
+    "presetSource": "Off-peak is billed at {{price}}. Peak hours as published by the provider, read on {{date}}:",
+    "timezone": "Time zone",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "from": "from",
+    "to": "to",
+    "addInterval": "Add hours",
+    "removeInterval": "Remove",
+    "calendar": "Holidays (open all day)",
+    "noCalendar": "None",
+    "dates": "Other dates",
+    "preview": "Preview",
+    "save": "Save",
+    "offHint": "No run window: work starts as soon as it is ready.",
+    "openNow": "The window is open now.",
+    "closedNow": "The window is closed; it opens at {{time}}.",
+    "previewTitle": "Open in the next 7 days ({{zone}})",
+    "ownerOnly": "Only an Owner changes the run window.",
+    "waiting": "Waiting for the run window until {{time}} (local)",
+    "waitingTitle": "Starts at {{time}} ({{zone}})",
+    "urgent": "Urgent",
+    "urgentHint": "An urgent sprint ignores the run window and starts at once. Audited.",
+    "urgentOn": "Urgent: the run window does not apply",
+    "inboxTitle": "Waiting for the run window"
+  },
   "graphSkeleton": {
     "loadingTopology": "Loading graph topology (<400ms Doherty threshold)",
     "loadingVisualization": "Loading graph visualization...",
