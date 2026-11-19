@@ -196,7 +196,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.generate` | request | `daemon.py`, `delivery.py` | `workspace_root`, `files` (`path` with `content` or `edits`), `git`?, `sprint_id`? | `ok`, `workspace_root`, `files` (per file `status`, `sha256` read back, the diff), `snapshot` or `git`, `project_files` |
 | `workspace.execute` | request | `daemon.py`, `shell_exec.py`, `sandbox.py`, `run_logs.py` | `command`, `workspace_root`, `sandbox`?, `command_policy`?, `timeout_seconds`?, `full_log`? | `success`, `stdout`, `stderr`, `exit_code`, `timed_out`?, `sandbox`?, `full_log`? |
 | `workspace.browse` | request | `host_folders.py` | `path`? | `host`, `path`, `parent`, `entries`, `shortcuts`, `roots`, `truncated` |
-| `workspace.inspect` | request | `host_folders.py` | `path`, `snapshot`? | `host`, `path`, `name`, `exists`, `is_dir`, `git`, `snapshot`? |
+| `workspace.inspect` | request | `host_folders.py` | `path`, `snapshot`? | `host`, `path`, `name`, `exists`, `is_dir`, `git`, `snapshot`? (with `playwright`: the version the project pins, `playwright_pin.py`, #315) |
 | `workspace.hash` | request | `file_hash.py` | `workspace_root`, `paths` | `files` (`present` with `sha256`, `missing`, `rejected`, `workspace_missing`) |
 | `workspace.undo` | request | `delivery_snapshot.py` | `workspace_root`, `snapshot_id` | `ok`, `snapshot`, `restored`, `removed` |
 | `workspace.list` | request | `workspace_read.py` | `workspace_root`, `path`?, `depth`? | `path`, `entries`, `truncated` |

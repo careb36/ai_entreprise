@@ -16,7 +16,9 @@ returns what the daemon replied, as observations (ADR 0012, ADR 0018):
   ``cd <folder> && <command>`` (``stack_roots.py``, ``folder_commands.py``);
 - ``check_app``: the application started in the sandbox and probed
   (``workspace.app.check``, ``vscode-daemon/app_run.py``), bounded by the
-  daemon's own phases.
+  daemon's own phases;
+- ``browser_image``: the browser sandbox image of the Playwright release the
+  project pins, from the daemon's fresh snapshot (``browser_images.py``).
 
 The loop chooses the command (the acceptance tests' verbose flag, QA's browser
 smoke tests as the e2e command) and reads the output against the criteria;
@@ -31,6 +33,7 @@ from typing import Any
 from config import settings
 
 from services.workspace import (
+    browser_images,
     dependency_install,
     folder_commands,
     run_logs,
@@ -151,6 +154,33 @@ async def run_in_folder(
     ``evidence["command_runs"]`` and the output received
     (``folder_commands.execute``)."""
     return await folder_commands.execute(ctx, kind, folder, command, box, unavailable)
+
+
+async def browser_image(ctx: Context) -> dict[str, Any] | None:
+    """The image a browser e2e command runs in, chosen from the Playwright
+    release the project pins (``browser_images.select``); ``None`` when
+    ``DELIVERY_BROWSER_IMAGES`` lists none. The version is read from a
+    snapshot the daemon takes now, after the install (which may have written
+    the lockfile), never from what the producer reported."""
+    images, refused = browser_images.parse(settings.DELIVERY_BROWSER_IMAGES)
+    if not images and not refused:
+        return None
+    pin = None
+    try:
+        project = await workspace_daemon.inspect_project(
+            ctx.nats, ctx.evidence.get("workspace_root") or "", snapshot=True
+        )
+        snapshot = project.get("snapshot") if isinstance(project, dict) else None
+        pin = snapshot.get("playwright") if isinstance(snapshot, dict) else None
+    except Exception:  # noqa: BLE001 - No observation: the version is unknown.
+        pin = None
+    return browser_images.select(pin, settings.DELIVERY_BROWSER_IMAGE, images, refused)
+
+
+def unverifiable_e2e(command: str, choice: dict[str, Any]) -> dict[str, Any]:
+    """``app_run["e2e"]`` for a browser suite not run: no image is known to
+    match the project's Playwright (``browser_images.unverifiable_e2e``)."""
+    return browser_images.unverifiable_e2e(command, choice)
 
 
 def app_record(reply: Any) -> dict[str, Any]:

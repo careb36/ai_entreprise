@@ -67,6 +67,7 @@ from routers.sprint_progress import router as sprint_progress_router
 from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
 from routers.sso_domains import router as sso_domains_router
+from routers.sso_link import router as sso_link_router
 from routers.support import router as support_router
 from routers.task_relations import router as task_relations_router
 from routers.task_views import router as task_views_router
@@ -76,7 +77,12 @@ from routers.webhooks import router as webhooks_router
 from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 from security import cors_allows_credentials, get_cors_origins, setup_security
-from services.integrations import anchoring, chat_approvals, webhooks
+from services.integrations import (
+    anchoring,
+    chat_approvals,
+    chat_regressions,
+    webhooks,
+)
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -85,6 +91,8 @@ settings = Settings()
 webhooks.install()
 # A risk hold posts its approval to the company's Slack or Teams (issue #512).
 chat_approvals.install()
+# A regression the factory observed is posted there too, information only (issue #682).
+chat_regressions.install()
 # A closed sprint or a release anchors the audit chain's head (issue #542).
 anchoring.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
@@ -153,6 +161,7 @@ app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(sso_admin_router)
 app.include_router(sso_domains_router)
+app.include_router(sso_link_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)

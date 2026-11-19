@@ -146,6 +146,7 @@ export function NavBar() {
                   <Link role="menuitem" to="/company/wiki" className="menu-item">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
                   {canManage && <Link role="menuitem" to="/company/members" className="menu-item">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   <Link role="menuitem" to="/invitations" className="menu-item">{t('nav.invitations')}</Link>
+                  <Link role="menuitem" to="/account" className="menu-item">{t('nav.account')}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="menu-item">{t('nav.teams')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="menu-item">{t('nav.duties')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/usage" className="menu-item">{t('nav.usage')}</Link>}

@@ -522,6 +522,9 @@
         "evidence",
         "loop"
       ],
+      "test_browser_images_playwright.py": [
+        "loop"
+      ],
       "test_browser_smoke.py": [
         "evidence",
         "loop"
@@ -536,6 +539,9 @@
         "management"
       ],
       "test_chat_approvals.py": [
+        "integrations"
+      ],
+      "test_chat_regressions.py": [
         "integrations"
       ],
       "test_chat_inbound.py": [
@@ -903,6 +909,9 @@
       "test_passwords.py": [
         "platform"
       ],
+      "test_playwright_pin.py": [
+        "workspace"
+      ],
       "test_procedures.py": [
         "loop"
       ],
@@ -910,6 +919,9 @@
         "planning"
       ],
       "test_project_docs_diagrams.py": [
+        "planning"
+      ],
+      "test_project_docs_final.py": [
         "planning"
       ],
       "test_project_docs_language.py": [
@@ -1217,6 +1229,12 @@
         "platform"
       ],
       "test_sso_flow.py": [
+        "platform"
+      ],
+      "test_sso_link.py": [
+        "platform"
+      ],
+      "test_sso_link_integrity.py": [
         "platform"
       ],
       "test_sso_tokens.py": [

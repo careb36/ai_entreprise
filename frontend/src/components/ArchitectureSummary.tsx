@@ -12,8 +12,7 @@ import { errorDetail } from '../services/api'
 import { architecturePath, latestArchitecture, useArchitectures, useDraftArchitecture } from '../services/architectures'
 import type { Specification } from '../services/specifications'
 import { CheckSummary, StatusBadge } from './SpecificationBadges'
-import { LoadErrorAlert, LoadingLine, Spinner } from './knowledge/PageStates'
-import { Panel } from './ui'
+import { LoadError, LoadingLine, Panel, Spinner } from './ui'
 
 export function ArchitectureSummary({ specification, canWrite }: { specification: Specification; canWrite: boolean }) {
   const { t } = useTranslation()
@@ -34,7 +33,7 @@ export function ArchitectureSummary({ specification, canWrite }: { specification
       <div className="space-y-3 p-3">
         {query.isLoading && <LoadingLine>{t('architectures.loading')}</LoadingLine>}
         {query.isError && (
-          <LoadErrorAlert onRetry={() => query.refetch()}>{t('architectures.loadError', { message: errorDetail(query.error) })}</LoadErrorAlert>
+          <LoadError onRetry={() => query.refetch()}>{t('architectures.loadError', { message: errorDetail(query.error) })}</LoadError>
         )}
         {query.isSuccess && latest === null && (
           <p className="text-[13px] text-gray-400">{canWrite ? t('architectures.noneHint') : t('architectures.noneViewer')}</p>

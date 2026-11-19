@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from daemon_status import host_info
 from git_workspace import git_info
+from playwright_pin import observe as observe_playwright
 
 IS_WINDOWS = os.name == "nt"
 
@@ -207,6 +208,15 @@ def inspect_project(path: str, with_snapshot: bool = False) -> Dict[str, Any]:
     }
     if with_snapshot and is_dir:
         result["snapshot"] = project_snapshot(resolved)
+        # The Playwright the project pins, read from its package.json and
+        # lockfile here (#315): the backend picks the browser image from it.
+        try:
+            result["snapshot"]["playwright"] = observe_playwright(resolved)
+        except Exception as e:  # noqa: BLE001 - The snapshot stands without it.
+            result["snapshot"]["playwright"] = {
+                "declared": None, "version": None, "observed_by": "daemon",
+                "reason": f"the daemon could not read the project's Playwright ({type(e).__name__})",
+            }
     return result
 
 
