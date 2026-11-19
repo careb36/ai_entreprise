@@ -1,0 +1,67 @@
+"""
+The default team's two DeepSeek models through the proxy.
+
+The backend's role defaults (``services/models/model_factory.py``) name
+``deepseek-v4-pro`` and ``deepseek-flash``. Both must pass the proxy's check
+(prefix and live catalogue) and reach DeepSeek with the caller's body as it
+was: the proxy sets no ``thinking`` field, so DeepSeek's own default (thinking
+on, https://api-docs.deepseek.com/guides/thinking_mode) applies, and a caller
+that sets one has it forwarded unchanged.
+"""
+
+import catalogue
+import pytest
+from conftest import openai_ok
+
+
+def _chat(client, model, **extra):
+    payload = {"model": model, "messages": [{"role": "user", "content": "hi"}], **extra}
+    return client.post("/v1/chat/completions", json=payload)
+
+
+@pytest.mark.parametrize("model", ["deepseek-v4-pro", "deepseek-flash"])
+def test_a_default_model_reaches_deepseek_under_its_own_name(client, upstream, model):
+    upstream.set("deepseek", openai_ok())
+
+    resp = _chat(client, model)
+
+    assert resp.status_code == 200
+    assert upstream.providers_called() == ["deepseek"]
+    assert upstream.calls[0]["json"]["model"] == model
+    assert resp.get_json().get("served_model") == model
+
+
+def test_the_proxy_does_not_choose_deepseeks_thinking_mode(client, upstream):
+    upstream.set("deepseek", openai_ok())
+
+    _chat(client, "deepseek-flash")
+
+    assert "thinking" not in upstream.calls[0]["json"]
+
+
+def test_a_callers_thinking_setting_is_forwarded_unchanged(client, upstream):
+    upstream.set("deepseek", openai_ok())
+
+    _chat(client, "deepseek-flash", thinking={"type": "disabled"})
+
+    assert upstream.calls[0]["json"]["thinking"] == {"type": "disabled"}
+
+
+def test_a_model_missing_from_the_live_list_is_refused_not_substituted(client, upstream, proxy, monkeypatch):
+    monkeypatch.setattr(proxy, "_available_deepseek_models", {"deepseek-v4-pro"})
+
+    resp = _chat(client, "deepseek-flash")
+
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "unknown_model"
+    assert upstream.calls == []
+
+
+def test_the_orchestrator_prefers_deepseek_flash():
+    models = [
+        {"id": "gemini-3.8-flash", "tier": "balanced"},
+        {"id": "deepseek-v4-pro", "tier": "balanced"},
+        {"id": "deepseek-flash", "tier": "fast"},
+    ]
+    assert catalogue.pick_orchestrator(models) == "deepseek-flash"
+    assert catalogue.pick_orchestrator(models[:2]) == "gemini-3.8-flash"

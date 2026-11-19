@@ -4,40 +4,41 @@ La Fabrique's agents are interchangeable producers; the product verifies their w
 The role names below are the canonical strings stored on `Agent.role` and used
 by `ModelFactory.ROLE_MODEL_MAP` / `default_model_for_role()`.
 
-## Decision roles (reasoning-heavy models)
+The default team runs on DeepSeek alone (`docs/contexts/models.md`, The
+default team): DeepSeek Pro (`deepseek-v4-pro`) where a mistake is expensive,
+DeepSeek Flash (`deepseek-flash`) for the rest.
+
+## Deciding and judging roles (DeepSeek Pro)
 
 | Role | Alias | Default model |
 |------|-------|---------------|
-| `PO` | ProductOwner | qwen3.7-plus |
-| `Architect` | — | qwen3.7-plus |
-| `ScrumMaster` | SM | qwen3.7-plus |
-| `SecOps` | Security | qwen3.7-plus |
+| `PO` | ProductOwner | deepseek-v4-pro |
+| `Architect` | — | deepseek-v4-pro |
+| `SecOps` | Security | deepseek-v4-pro |
+| `Reviewer` | — | deepseek-v4-pro (reads QA's settings) |
 
-## Implementation roles (code models)
+## Every other role (DeepSeek Flash)
 
 | Role | Aliases | Default model |
 |------|---------|---------------|
-| `Developer` | Dev, BackendDev, FrontendDev, FullstackDev, MobileDev, DataEngineer, MLEngineer, DevOps | deepseek-v4-pro |
-| `QA` | — | deepseek-v4-pro |
-| `Reviewer` | — | deepseek-v4-pro (as QA) |
-
-## Documentation / support roles (fast models)
-
-| Role | Alias | Default model |
-|------|-------|---------------|
-| `TechWriter` | — | qwen3.6-flash |
-| `Support` | — | qwen3.6-flash (as TechWriter) |
+| `ScrumMaster` | SM; the Manager agent runs as it | deepseek-flash |
+| `Developer` | Dev, FullstackDev, MobileDev, MLEngineer | deepseek-flash |
+| `BackendDeveloper`, `FrontendDeveloper`, `DevOps`, `DataEngineer` | BackendDev, FrontendDev, SRE, Data | deepseek-flash (as the Developer) |
+| `Designer` | — | deepseek-flash |
+| `QA` | — | deepseek-flash |
+| `TechWriter` | — | deepseek-flash |
+| `Support` | — | deepseek-flash (as TechWriter) |
 
 ## Internal
 
 | Role | Default model |
 |------|---------------|
-| `EngramProcessor` | deepseek-v4-pro |
+| `EngramProcessor` | deepseek-flash |
 
 ## Frontend-only display roles
 
-`Designer`, `UXResearcher` are display roles that resolve to `Developer` for
-model routing. Any unknown role resolves to `Developer`.
+`UXResearcher` is a display role that resolves to `Developer` for model
+routing. Any unknown role resolves to `Developer`.
 
 ## Autonomy
 

@@ -173,9 +173,12 @@ def listed_models(catalogue, keys: dict[str, str]) -> list[dict]:
 def pick_orchestrator(models: list[dict]) -> str:
     """
     Choose the best model for short orchestration/meta tasks (fast, stable, not preview).
-    Preference: balanced > fast > strategic, never preview.
+    Preference: DeepSeek Flash (the default team's model for every task that
+    is not a judgement), then Gemini's fast models, then any balanced or fast
+    model; never a preview.
     """
     preferred_ids = [
+        "deepseek-flash",
         "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
         "gemini-2.5-flash", "gemini-2.5-pro",
     ]
