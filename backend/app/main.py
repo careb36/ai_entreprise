@@ -35,6 +35,7 @@ from routers.company_architecture import router as company_architecture_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.documentation import router as documentation_router
+from routers.documentation_manifest import router as documentation_manifest_router
 from routers.enterprise import router as enterprise_router
 from routers.enterprise_agents import router as enterprise_agents_router
 from routers.enterprise_analytics import router as enterprise_analytics_router
@@ -203,6 +204,7 @@ app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(company_architecture_router)
 app.include_router(documentation_router)
+app.include_router(documentation_manifest_router)
 app.include_router(person_sections_router)
 app.include_router(security_tests_router)
 app.include_router(workspace_router)

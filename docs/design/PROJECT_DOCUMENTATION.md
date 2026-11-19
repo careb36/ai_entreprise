@@ -665,7 +665,8 @@ outside our control. Accepted by the Owner under `sdl-program`.
 
 **Open questions.** Should an Owner be able to approve a pack with warnings
 only, or must every document cite something? Should the pack be signed with
-the audit key once approved (phase 4, with export)?
+the audit key once approved (phase 4, with export)? Answered in Phase 4: the
+manifest is signed and its digest chained at compile time.
 
 ## What was taken from where
 
@@ -714,10 +715,120 @@ domain are done too (#692: approval before work, backlog churn, iterations on
 time, usage against the quota, sprint teams). The stakeholder register from members, teams and
 approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
-manifest of the pack), the COBIT governance matrix (phase 5; the ITIL transition set is done,
+manifest of the pack; the manifest is built, see Phase 4 below), the COBIT governance matrix (phase 5; the ITIL transition set is done,
 `transition.md`, #696), and bench grading of packs against person-written expectations.
 The C4 code level from the stored code graph is built (issue #693, under
 "Architecture diagrams, C4").
+
+## Phase 4: the signed manifest, export and organisation templates
+
+Issue #694. The first slice builds the manifest; export waits on a dependency
+decision; templates are designed here and not built.
+
+### The signed manifest (built)
+
+`project_docs/pack_manifest.py` and `GET /v1/documentation/{pack_id}/manifest`
+(Viewer, `routers/documentation_manifest.py`).
+
+- **What it lists.** Every file the pack writes to `docs/project/`
+  (`pack.files_of`, the same bytes the daemon receives) with the sha256 and
+  size the backend computed over them, sorted by path; the company, the pack's
+  id, version and language; its `inputs_sha256`; and its compile time
+  (`created_at` in UTC to the second, so the bytes are the same whether the
+  database kept the time zone or not). Its `type` is
+  `la-fabrique.documentation-pack-manifest`, version 1; the canonical bytes
+  (`pack_manifest.canonical`: JSON, sorted keys, no spaces, UTF-8) are part of the
+  format and change only with a new version.
+- **Whose hashes.** Only the backend's. No hash in it comes from the TechWriter,
+  the daemon or the browser; the daemon's `written_files` stay a separate
+  observation of what reached the disk.
+- **The signature.** The deployment's existing key, `AUDIT_SIGNING_KEY`, through
+  `audit_signing.sign_audit_payload`: `hmac-sha256:<hex>` with the key,
+  `unsigned:<sha256>` without one. No new key scheme. The manifest's `type`
+  field keeps its bytes apart from an audit row's canonical payload, whose keys
+  differ.
+- **The audit chain.** The factory holds that key, so the signature alone
+  cannot show that the factory rewrote a pack. Compiling a pack therefore
+  enters the manifest's digest in the company's audit chain (action
+  `documentation_pack_compiled`, attributed to the person who compiled it,
+  details: pack, version, inputs digest, manifest digest, file count). That
+  chain is what external anchors (`docs/design/AUDIT_ANCHORS.md`: a TSA token,
+  a customer's key, a webhook) cover; a pack rewritten in the database
+  afterwards gives a manifest whose digest no longer matches the chained one,
+  and the download says so (`audit.matches`). With no key configured, the
+  chained digest is the only protection, and the download's signature reads
+  `unsigned:`.
+- **No table.** The manifest is derived from the stored pack on request; what
+  is kept is the digest in the chain. A pack compiled before this change has no
+  chained digest (`audit.recorded: false`).
+- **Verification.** `pack_manifest.verify(manifest, signature, files)` takes the
+  files as found (path to bytes) and is `ok` only when the signature is valid
+  (or an intact `unsigned:` digest) and every listed file is present with its
+  listed sha256 and no other file is. A keyed signature checked where the key
+  is absent is `unverifiable`, never valid; an unknown prefix is `invalid`.
+- **Threats.** M1 (B5→B1, T): a pack rewritten in the database is served as
+  compiled. Mitigation: the chained digest, anchored outside; test
+  `test_a_pack_rewritten_in_the_database_no_longer_matches_the_chain`. M2 (B1,
+  S): a manifest rewritten to match a tampered file. Mitigation: the HMAC with
+  the deployment's key; test
+  `test_a_manifest_rewritten_to_match_a_tampered_file_fails_on_its_signature`.
+  M3 (B1, I): the manifest reveals hashes and file names to a Viewer, who can
+  already read the documents themselves; no new disclosure. This answers the
+  threat model's open question: the pack is signed with the audit key at
+  compile time, not only once approved, and the approval row already carries
+  its inputs digest.
+
+Next, in the same module: a manifest per export (the DOCX and PDF bytes'
+sha256 added as files of their own) and a manifest file written beside the
+pack (`docs/project/MANIFEST.json`) when an approved pack is written, compared
+with the daemon's reported hashes.
+
+### Export to DOCX and PDF (waiting on a dependency decision)
+
+Nothing in `backend/pyproject.toml` or `poetry.lock` writes DOCX or PDF (no
+python-docx, lxml, reportlab, fpdf2, WeasyPrint, Markdown parser or Pillow).
+Adding one is a supply-chain decision for the Owner; the options, with sizes
+approximate:
+
+| Option | Licence | Pure Python | Pulls in | Notes |
+|---|---|---|---|---|
+| python-docx (DOCX) | MIT | yes | lxml (BSD, C extension, a wheel of several MB) | Maintained; headings, tables and lists map directly |
+| reportlab (PDF) | BSD | mostly (optional C accelerators) | Pillow optional | Maintained by a company; Platypus does tables and flowing text; base fonts are Latin-1, a TTF must be embedded for other scripts |
+| fpdf2 (PDF) | LGPL-3.0 | yes | Pillow (C extension), fontTools, defusedxml | Maintained; small API; copyleft licence to weigh |
+| WeasyPrint (PDF from HTML) | BSD | no | Pango and other system libraries in the image | Best typography; heaviest, adds native libraries to the backend image |
+| The standard library only | ours | yes | nothing | DOCX is a zip of XML (`zipfile`): writable for the pack's Markdown subset (headings, paragraphs, lists, tables, code). A PDF writer by hand is feasible with the base-14 fonts but limited to Latin-1 and crude tables; every line of it is ours to maintain |
+
+Either way the input is the pack's own Markdown, a known subset the builders
+write (headings, paragraphs, lists, pipe tables, fenced Mermaid), parsed by a
+small parser of ours rather than a Markdown library; the C4 diagrams go in as
+their Mermaid source, or drawn from their data in a later step. The export is
+built from the stored pack, so it carries the same citations, claims marks and
+person sections; its bytes' sha256 enters the manifest.
+
+### Organisation templates (design only)
+
+A template lets an organisation make a pack look like its own documents. It
+changes presentation, never content.
+
+- **Where it lives.** A row per company (`documentation_templates`: company, a
+  version, the template's sha256 computed by the backend, who uploaded it and
+  when), set by an Owner and audited; the pack records the template version and
+  digest it was exported with, and the manifest lists them. No template is
+  read from the repository or from an agent.
+- **What it may change.** A cover page (organisation name, logo as an image the
+  backend re-encodes, a document reference scheme), page size and margins,
+  fonts and colours, header and footer text with fixed placeholders (project,
+  document title, version, date, page number), and the order of the documents
+  in the export.
+- **What it may never change.** Any document's text, tables, sources,
+  citations, digests, claim marks, person-section markers or the "generated
+  from records" note; which documents exist; the language. The template gets
+  the rendered document as a closed block: it has no field that reaches inside.
+  A template is data (a JSON of the fields above), never code or a document
+  with macros; a DOCX "template" file would be read only for its styles.
+- **Drift.** Changing the template does not make a pack stale (its inputs are
+  the records), but a new export names the new template version, so two
+  exports of one pack differ only in presentation, and the manifest shows it.
 
 ## Later phases: audit-ready documents
 
