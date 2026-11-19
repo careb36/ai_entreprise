@@ -1259,6 +1259,9 @@
       "test_sso_link_integrity.py": [
         "platform"
       ],
+      "test_sso_recheck_metrics.py": [
+        "platform"
+      ],
       "test_sso_tokens.py": [
         "platform"
       ],
