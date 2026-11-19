@@ -589,34 +589,17 @@ evidence carries the pinned version per task.
 Existing `every_delivery` commands keep working; slice 7 shows how a
 company moves them into standards, and Q6 asks whether to retire them.
 
-## 12. Open questions for the owner
+## 12. Decisions (2026-11-19)
 
-1. **Relaxing the catalogue.** The proposal is that a company can only
-   add, never relax or waive a catalogue standard (§6). Confirm, or name the
-   case that needs a standing exception.
-2. **Reverting on the numbers.** The proposal reverts a version on the
-   blocked share and the `unverifiable` share, never on rework alone (§8).
-   Should the platform revert at all, or only flag the version to the
-   Owner? Is 0.20 the right `unverifiable` tolerance?
-3. **The regular expression engine.** A linear-time engine (a pinned
-   RE2 binding, a new dependency) or Python's `re` restricted to a validated
-   subset with a budget (§10 T5)?
-4. **`command` standards with the `host` sandbox.** Refuse to activate a
-   set with a `command` standard unless the daemon reports `container` or
-   `bwrap`, or allow it with a warning, as every-delivery commands are
-   today?
-5. **Guards.** Hash only the listed `guards` files, or every file under
-   the folders they are in (safer, more false `guard_changed`)?
-6. **Every-delivery commands.** Keep `stack_profile.every_delivery` beside
-   company standards, or migrate it into `command` standards and retire it?
-7. **The file's format and place.** `.fabrique/standards.toml` (TOML,
-   parsed without code) or YAML, and one file or one per folder?
-8. **Who may import.** A Manager imports drafts and only an Owner
-   activates. Should SoD between importer and activator hold for every
-   company, or only when the company's SoD mode is on (the proposal)?
-9. **Agent proposals.** May the ScrumMaster propose a standard at a
-   retrospective (as a draft an Owner activates), or should standards come
-   only from people?
-10. **Findings on the board.** Should a `finding` from a company standard
-    count in the board's numbers (as rework does) or only be shown to the
-    reviewer, as the catalogue's findings are today?
+The owner delegated these decisions on 2026-11-19 ("the app is corporate and must scale: decide with the highest standards"). Each answer names the standard it follows. They replace the open questions this section held; the code pull request (#700) implements them.
+
+1. **Relaxing the catalogue: no.** A company only adds standards; it never relaxes or waives a catalogue standard. A real need goes through a time-boxed exception instead. An Owner requests it and a second Owner approves it. It carries a reason, a compensating control and an expiry of at most 90 days. It is audited, listed in the access review, and lapses on its own. (ISO/IEC 27001:2022 clause 6.1.3 and A.5.36; risk acceptance by a named owner.) A company with a single Owner can confirm alone, and the exception is then flagged in the access review, as single-Owner approvals are elsewhere (#703).
+2. **Reverting on the numbers: flag and propose, never revert alone.** A standards version whose blocked share or `unverifiable` share passes its tolerance is flagged to the Owners, and a revert to the previous version is prepared as a draft. Only an Owner activates the revert, and the activation is audited. A control changes only through a recorded human decision (ISO/IEC 27001:2022 A.8.32). The `unverifiable` tolerance starts at 0.20 and can be configured per company. It is judged only over at least 20 deliveries since activation, so that a handful of runs cannot trigger it. Rework alone never triggers it.
+3. **Regular expressions: a linear-time engine.** Patterns run on RE2 through the pinned `google-re2` binding (BSD-3-Clause), installed from a hash-pinned lock entry. Python's `re` is never used on a pattern a company wrote. RE2 has no backtracking, so a pattern cannot be crafted to take exponential time. (OWASP: Regular expression Denial of Service; CWE-1333.) A pattern RE2 refuses (backreferences, lookaround) is refused at import with that reason.
+4. **`command` standards on the `host` sandbox: refused.** A set that holds a `command` standard cannot be activated unless the daemon reports `container` or `bwrap`. The refusal names the sandbox it saw. (Fail closed: OWASP ASVS 4.0.3 V1.4, NIST SP 800-53 SC-39 process isolation.) Every-delivery commands keep today's warning until they move into standards (point 6).
+5. **Guards: every file under the guarded folders.** A guard hashes every file under each folder it names, recursively, sorted and with symbolic links refused. A guard may list exclude globs for generated files. Integrity favours the false positive over the silent change (ISO/IEC 27001:2022 A.8.32, A.8.4 access to source code).
+6. **Every-delivery commands: migrated, then retired.** `stack_profile.every_delivery` becomes `command` standards. A migration writes the existing commands as a draft set per company for an Owner to activate. `every_delivery` stays readable for one release, with a deprecation warning, and is then removed. One mechanism, one audit trail.
+7. **Format and place: TOML, one file.** The file is `.fabrique/standards.toml` at the repository root, parsed with `tomllib` (standard library, no code execution, typed values). Per-folder rules are tables inside it (`[folders."backend/app"]`), not separate files. YAML is not accepted: its implicit typing (`no` → false, `1.10` → 1.1) silently changes a standard's meaning.
+8. **Who may import: four-eyes always.** A Manager imports drafts and a different person, an Owner, activates them, whatever the company's SoD mode (ISO/IEC 27001:2022 A.5.3 segregation of duties). A company with a single Owner can activate its own import, and the activation is flagged in the access review.
+9. **Agent proposals: yes, as drafts.** The ScrumMaster may propose a standard at a retrospective. The proposal is a draft that cites the retrospective's evidence, and it is a claim until an Owner activates it under point 8. An agent never activates a standard.
+10. **Findings on the board: counted, apart.** A company standard's finding counts in the board's numbers as its own metric ("standard findings per delivery"), next to rework but never folded into it, and the reviewer sees each finding. What is not counted cannot be managed. Keeping it apart lets the numbers tell a new standard's effect from the producers' quality.
