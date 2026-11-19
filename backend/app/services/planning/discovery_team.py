@@ -1,10 +1,41 @@
 """The team a discovered project gets: the rules, and the model's prompt.
 
 ``_build_team`` composes the rule-based team from the detected stack (the
-fallback when no model answers); ``_TEAM_PROMPT`` and
-``_build_dynamic_catalog`` are what ``discovery_service`` sends the model to
-suggest one. ``discovery_service`` re-exports every name.
+fallback when no model answers); ``_TEAM_PROMPT`` is what
+``discovery_service`` sends the model to suggest one. The model proposes
+roles, seniority, specialty, a system prompt and the reasoning, never the
+models: every suggested agent's ``model`` is the deployment's default for its
+role (``model_for_discovery_role``, through ``model_factory``, so
+``AGENT_MODEL``, ``AGENT_MODEL_<ROLE>`` and ``NEMOTRON_ROLES`` still win), the
+DeepSeek team of PR #739 when nothing is set. ``discovery_service``
+re-exports every name.
 """
+
+from services.models.model_factory import AgentRole, ModelFactory
+
+# The roles discovery suggests, mapped to the factory's roles.
+DISCOVERY_ROLES: dict[str, AgentRole] = {
+    "PO": AgentRole.PO,
+    "SM": AgentRole.SCRUM_MASTER,
+    "Architect": AgentRole.ARCHITECT,
+    "Dev": AgentRole.DEVELOPER,
+    "QA": AgentRole.QA,
+    "DevOps": AgentRole.DEVOPS,
+    "Security": AgentRole.SECOPS,
+    "Data": AgentRole.DATA_ENGINEER,
+}
+
+
+def model_for_discovery_role(role: str) -> str:
+    """The deployment's default model for a discovery *role* (Dev when unknown)."""
+    return ModelFactory.model_for_role(DISCOVERY_ROLES.get(role, AgentRole.DEVELOPER))
+
+
+def with_default_models(team: list[dict]) -> list[dict]:
+    """*team* with each agent's ``model`` set to its role's default."""
+    return [
+        {**agent, "model": model_for_discovery_role(agent["role"])} for agent in team
+    ]
 
 
 def _build_team(
@@ -125,7 +156,7 @@ def _build_team(
             {"role": "SM", "seniority": "Senior", "specialty": "Agile Delivery"}
         )
 
-    return team
+    return with_default_models(team)
 
 
 # ── LLM-powered team suggestion ───────────────────────────────────────────────
@@ -142,15 +173,6 @@ optimal AI agent team to build and maintain this project.
 ## Project Context (README excerpt)
 {readme_excerpt}
 
-## Available Models (current live catalogue — choose ONLY from this list)
-{model_catalog}
-
-## Assignment Guidelines
-- strategic tier  → PO, Architect  (complex decisions, stakeholder impact)
-- balanced tier   → SM, Security   (coordination, reviews, risk analysis)
-- code tier       → Dev, QA, DevOps, Data  (primary output is code/tests/scripts)
-- fast/preview    → avoid unless no better option exists
-
 ## Instructions
 Return ONLY a valid JSON array — no markdown, no explanation outside the array.
 Each element is an agent object with EXACTLY these fields:
@@ -158,56 +180,18 @@ Each element is an agent object with EXACTLY these fields:
 - "role"         : one of PO, SM, Architect, Dev, QA, DevOps, Security, Data
 - "seniority"    : one of Junior, Mid, Senior, Staff
 - "specialty"    : concise 2-6 word focus area derived from the ACTUAL detected stack
-- "model"        : one model id from the catalogue above (must match exactly)
 - "system_prompt": A detailed paragraph (4-8 sentences) written in first person that defines:
                    * This agent's personality and communication style
                    * Their core responsibilities in THIS specific project
                    * The technologies they specialise in (from the detected stack)
                    * How they interact with other agents and escalate decisions
-- "reasoning"    : one sentence explaining why this role + model choice is right for THIS project
+- "reasoning"    : one sentence explaining why THIS project needs this role
+
+The factory assigns each role its model; do not name one.
 
 Constraints:
 - 3 to 8 agents maximum — do NOT pad with unnecessary roles
 - Always include PO, Architect, and at least one Dev
 - Use Staff seniority only for High complexity projects
-- Prefer the cheapest model that can handle the role's cognitive demands
 - Do NOT add markdown fences or any text outside the JSON array
 """
-
-
-def _build_dynamic_catalog(models: list[dict]) -> tuple[str, set[str]]:
-    """
-    Build a human-readable model catalog string and a set of valid model IDs
-    from the live list returned by the proxy.
-
-    Returns (catalog_text, valid_model_ids).
-    """
-    tier_order = ["strategic", "balanced", "code", "fast", "preview"]
-    tier_labels = {
-        "strategic": "STRATEGIC — deep reasoning (expensive, use sparingly)",
-        "balanced": "BALANCED  — fast reasoning, coordination, reviews",
-        "code": "CODE      — specialised code generation (cheapest, use for Dev/QA/DevOps/Data)",
-        "fast": "FAST      — lightweight, quick responses",
-        "preview": "PREVIEW   — experimental, may be unstable (avoid unless necessary)",
-    }
-
-    grouped: dict[str, list[dict]] = {t: [] for t in tier_order}
-    for m in models:
-        tier = m.get("tier", "balanced")
-        if tier not in grouped:
-            tier = "balanced"
-        grouped[tier].append(m)
-
-    lines = ["Available models (fetched live — only choose IDs listed here):\n"]
-    valid_ids: set[str] = set()
-    for tier in tier_order:
-        entries = grouped[tier]
-        if not entries:
-            continue
-        lines.append(f"{tier_labels[tier]}:")
-        for m in sorted(entries, key=lambda x: x["id"]):
-            lines.append(f"  - {m['id']:<40} {m['description']}")
-            valid_ids.add(m["id"])
-        lines.append("")
-
-    return "\n".join(lines), valid_ids

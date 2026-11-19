@@ -692,6 +692,9 @@
       "test_difficulty_routing.py": [
         "loop"
       ],
+      "test_discovery_team_models.py": [
+        "planning"
+      ],
       "test_documentation_router.py": [
         "loop"
       ],

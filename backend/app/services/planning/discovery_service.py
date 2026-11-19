@@ -7,9 +7,11 @@ and inspects Dockerfiles / docker-compose.yml to build an accurate picture of
 the technology stack.
 
 Phase 2 (AI-powered): Sends the detected stack plus a compact snapshot of the
-project's README / CONTRIBUTING to the LLM proxy so Gemini can reason about
-the *actual* work involved and suggest a team with role-level justifications.
-Falls back to deterministic rules if the LLM is unavailable.
+project's README / CONTRIBUTING to the LLM proxy so the Architect's model can
+reason about the *actual* work involved and suggest a team with role-level
+justifications. Falls back to deterministic rules if the LLM is unavailable.
+Either way each agent's model is the deployment's default for its role
+(``discovery_team.model_for_discovery_role``), never the suggestion's.
 
 The stack detection is in ``stack_detection`` and the team's rules and
 prompt in ``discovery_team``; this module re-exports their names.
@@ -25,8 +27,9 @@ from sqlmodel import Session
 
 from services.planning.discovery_team import (
     _TEAM_PROMPT,
-    _build_dynamic_catalog,
+    DISCOVERY_ROLES,
     _build_team,
+    model_for_discovery_role,
 )
 from services.planning.stack_detection import (  # noqa: F401 - re-exported
     _EXT_LANGUAGE,
@@ -61,13 +64,12 @@ def _ai_suggest_team(
     Ask the LLM proxy to reason about the project and suggest a team.
 
     Workflow:
-    1. Fetch the live model catalogue from the proxy (so the AI always sees
-       current, non-deprecated models and their capability tiers).
-    2. Build a dynamic catalog string and valid model ID set from that list.
-    3. Ask the orchestrator model (also chosen dynamically) to produce a JSON
-       team where every agent has an appropriate model, system_prompt, and
-       reasoning.
-    4. Validate and normalise the response; fall back to rules on any error.
+    1. Ask the Architect's default model for a JSON team: roles, seniority,
+       specialty, system_prompt and reasoning (no models, and no model
+       catalogue: the live catalogue is not read).
+    2. Validate and normalise the response, setting every agent's ``model``
+       to its role's default (``model_for_discovery_role``); a model the
+       response names is ignored.
 
     Returns a list of agent dicts on success, or ``None`` on failure.
     """
@@ -76,32 +78,11 @@ def _ai_suggest_team(
 
         from llm_proxy_client import LLMProxyClient
 
-        from services.models.model_factory import FLASH_MODEL
-
         log = logging.getLogger("fabrique-backend")
 
         client = LLMProxyClient(base_url=llm_proxy_url)
+        orchestrator_model = model_for_discovery_role("Architect")
 
-        # ── Step 1: fetch live model catalogue ───────────────────────────────
-        catalogue_data = client.get_available_models()
-        models = catalogue_data.get("models", [])
-        # Orchestrator: fastest stable non-preview model for meta-tasks
-        orchestrator_model = catalogue_data.get("orchestrator", FLASH_MODEL)
-
-        if not models:
-            log.warning("Empty model catalogue from proxy — falling back to rules")
-            return None
-
-        log.info(
-            "Model catalogue: %d models, orchestrator=%s",
-            len(models),
-            orchestrator_model,
-        )
-
-        # ── Step 2: build dynamic catalog string ─────────────────────────────
-        catalog_text, valid_model_ids = _build_dynamic_catalog(models)
-
-        # ── Step 3: build and send prompt ────────────────────────────────────
         stack_summary = (
             f"Primary language: {detected_stack['language']}\n"
             f"All languages: {', '.join(f'{k} ({v} files)' for k, v in detected_stack.get('all_languages', {}).items())}\n"
@@ -114,7 +95,6 @@ def _ai_suggest_team(
         prompt = _TEAM_PROMPT.format(
             stack_summary=stack_summary,
             readme_excerpt=readme,
-            model_catalog=catalog_text,
         )
 
         result = client.chat(
@@ -140,51 +120,25 @@ def _ai_suggest_team(
             log.warning("LLM returned unexpected team shape: %s", type(team))
             return None
 
-        # ── Step 4: validate and normalise ───────────────────────────────────
-        valid_roles = {
-            "PO",
-            "SM",
-            "Architect",
-            "Dev",
-            "QA",
-            "DevOps",
-            "Security",
-            "Data",
-        }
         valid_seniorities = {"Junior", "Mid", "Senior", "Staff"}
-
-        # Build a quick tier lookup for fallback model selection
-        _model_tier: dict[str, str] = {
-            m["id"]: m.get("tier", "balanced") for m in models
-        }
-        best_strategic = next(
-            (m["id"] for m in models if m.get("tier") == "strategic"),
-            orchestrator_model,
-        )
-        best_code = next(
-            (m["id"] for m in models if m.get("tier") == "code"), orchestrator_model
-        )
-        code_roles = {"Dev", "QA", "DevOps", "Data"}
 
         normalised = []
         for agent in team:
             role = agent.get("role", "Dev")
-            if role not in valid_roles:
+            if role not in DISCOVERY_ROLES:
                 role = "Dev"
             seniority = agent.get("seniority", "Senior")
             if seniority not in valid_seniorities:
                 seniority = "Senior"
-            model = agent.get("model", "")
-            if model not in valid_model_ids:
-                # LLM hallucinated a model — assign sensible default
-                model = best_code if role in code_roles else best_strategic
             specialty = str(agent.get("specialty", ""))[:80]
             normalised.append(
                 {
                     "role": role,
                     "seniority": seniority,
                     "specialty": specialty,
-                    "model": model,
+                    # The deployment's default for the role, whatever the
+                    # response named.
+                    "model": model_for_discovery_role(role),
                     "system_prompt": str(agent.get("system_prompt", ""))[:1500],
                     "reasoning": str(agent.get("reasoning", ""))[:300],
                     "persona": specialty,

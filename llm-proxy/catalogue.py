@@ -172,22 +172,13 @@ def listed_models(catalogue, keys: dict[str, str]) -> list[dict]:
 
 def pick_orchestrator(models: list[dict]) -> str:
     """
-    Choose the best model for short orchestration/meta tasks (fast, stable, not preview).
-    Preference: DeepSeek Flash (the default team's model for every task that
-    is not a judgement), then Gemini's fast models, then any balanced or fast
-    model; never a preview.
+    The recommended model for short orchestration/meta tasks: DeepSeek Flash,
+    the default team's model for every task that is not a judgement (PR #739).
+
+    It is recommended whatever the catalogue lists, as the frontend's
+    recommendation is: when DeepSeek is not configured the screen shows an id
+    that is not in the live catalogue rather than another provider's model.
+    *models* is kept for callers.
     """
-    preferred_ids = [
-        "deepseek-flash",
-        "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
-        "gemini-2.5-flash", "gemini-2.5-pro",
-    ]
-    available_ids = {m["id"] for m in models if m["tier"] != "preview"}
-    for candidate in preferred_ids:
-        if candidate in available_ids:
-            return candidate
-    # Fall back to any non-preview balanced model
-    for m in models:
-        if m["tier"] in ("balanced", "fast") and m["tier"] != "preview":
-            return m["id"]
-    return models[0]["id"] if models else "gemini-flash-latest"
+    del models
+    return "deepseek-flash"
