@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-### Pruebas, no promesas, para cada línea de código que escribe un agente de IA
+### Proyectos de TI de cualquier tipo, a cargo de una empresa de agentes de IA: pruebas, no promesas, de lo que hacen
 
 > **Idiomas:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
@@ -19,18 +19,36 @@
 
 ---
 
-Los agentes de IA escriben código más rápido de lo que cualquier equipo puede
-leerlo. La velocidad ya no es el cuello de botella. Lo que falta es una
-respuesta confiable a una sola pregunta:
+## Qué es
 
-> **¿El agente hizo de verdad lo que dice que hizo?**
+La Fabrique es una plataforma para llevar adelante proyectos de TI con una
+empresa de agentes de IA: software, ciencia de datos, machine learning, deep
+learning y lo que cada proyecto necesite. Los agentes planifican el trabajo,
+lo construyen y lo documentan, y la plataforma registra evidencia verificable
+de lo que hicieron de verdad.
 
-La Fabrique la responde con evidencia. Cada entrega de un agente se contrasta
-con lo que hay realmente en disco, con lo que devolvieron los tests y con lo
-que informó el CI. Lo que el agente cuenta de su propio trabajo se guarda
-aparte y nunca cuenta como prueba. Después, el trabajo le llega a tu equipo
-como tu equipo ya trabaja: una rama, un diff y una pull request en GitHub o
-GitLab, con la evidencia en la descripción.
+Los agentes son productores intercambiables. El producto es la capa que los
+observa, verifica su trabajo y guarda el registro
+([`docs/POSITIONING.md`](docs/POSITIONING.md), en inglés).
+
+**Qué está construido hoy y qué es dirección.**
+
+- **Construido:** el loop ejecuta tareas de software de punta a punta, desde
+  una especificación hasta los archivos en disco, los tests, la revisión y una
+  pull request. El **paquete de documentación** arma los documentos de gestión
+  de un proyecto a partir de sus registros (según la Guía del PMBOK, con
+  diagramas C4 y documentos de seguridad según OWASP WSTG), y cada afirmación
+  que contiene cita un registro. El [bench](bench/README.md) evalúa la fábrica
+  con especificaciones de referencia y tests escritos por una persona.
+- **Dirección, todavía no construido:** tipos de proyecto para ciencia de
+  datos, machine learning y deep learning, con sus propios entregables y su
+  propia evidencia; automatización más allá del loop de software; e
+  investigación. Hoy las herramientas de investigación solo les permiten a los
+  roles que deciden leer fuentes oficiales. Cómo se aplican las reglas de
+  evidencia a ese trabajo, y lo que decidió la dueña del proyecto al respecto,
+  está en
+  [`docs/POSITIONING.md`](docs/POSITIONING.md#scope-2026-11-19-it-projects-of-any-kind)
+  (en inglés).
 
 <div align="center">
 
@@ -38,657 +56,309 @@ GitLab, con la evidencia en la descripción.
 
 </div>
 
-## Por qué La Fabrique
+## Por qué: cómo hace la plataforma para que los agentes hagan lo que dicen
 
-| | Sin La Fabrique | Con La Fabrique |
-|---|---|---|
-| **Confianza** | El agente dice "listo, los tests pasan" y alguien tiene que creerle | Cada ejecución recibe un veredicto, `verified`, `refuted` o `unverifiable`, calculado a partir de archivos, hashes y códigos de salida; nunca lo decide un modelo |
-| **Revisión** | Quien revisa recibe una pared de texto generado | Una vista de **Archivos modificados** como la de una pull request: números de línea, comentarios por línea, Aprobar o Pedir cambios |
-| **Git** | Los archivos generados caen en tu copia de trabajo | Con **Rama de Git por tarea** activada: una rama por tarea y un commit por entrega, en un worktree aparte, sin tocar nunca tu checkout |
-| **Entrega** | Copiar, pegar y abrir la pull request a mano | **Publicar como pull request**: la rama se sube con tus propias credenciales y se abre una PR (GitHub) o MR (GitLab) en borrador con la evidencia |
-| **Aprendizaje** | Los mismos errores, sprint tras sprint | Las retrospectivas proponen procedimientos y los números deciden si se quedan o se revierten |
-| **Control** | Todo o nada | Niveles de autonomía, una bandeja de revisión y niveles de riesgo: una entrega cuyas rutas de archivo marcan autenticación, secretos, pagos o el pipeline de CI siempre espera a una persona |
-| **Auditoría** | Logs que cualquiera puede editar | Una cadena de hashes por empresa, con firma HMAC opcional, que muestra dónde se borró, alteró o reordenó una fila |
+La pregunta que responde La Fabrique es **"¿el agente hizo de verdad lo que
+dice que hizo?"**. No le cree al agente ni a otro agente. Registra lo que
+observó y decide solo a partir de eso.
 
-## Qué hace
+| Lo que dice el agente | Lo que registra la plataforma en su lugar |
+|---|---|
+| "Escribí estos archivos" | El sha256 de cada archivo tal como el daemon del workspace lo volvió a leer del disco, y el diff contra los bytes que había antes |
+| "Los tests pasan" | El código de salida y la salida de la suite que corrió el daemon después de la entrega, por criterio de aceptación |
+| "Usé esta biblioteca" | La respuesta del registro de paquetes para ese nombre y esa versión exacta |
+| "Primero revisé el código" | Cada archivo que el agente leyó con las herramientas, con su sha256, y cada llamada a una herramienta que el backend hizo por él |
+| "La precisión es 0,94" | Una afirmación, hasta que la plataforma corra la evaluación por su cuenta (dirección para proyectos de ML) |
 
-**📋 Arranca desde una especificación.** Dale un brief al PO y recibí
-requisitos numerados con criterios de aceptación escritos como *dado / cuando /
-entonces*, metas de calidad con número, restricciones y las preguntas que el PO
-no pudo resolver. Un chequeo determinístico bloquea la aprobación mientras un
-requisito no tenga un criterio que se pueda probar o una pregunta siga sin
-respuesta; vos respondés, editás y aprobás. Después cada tarea nombra los
-criterios que cubre, trabaja y se revisa solo contra ellos, y la
-especificación muestra qué criterios quedaron hechos.
+1. **Las afirmaciones y las observaciones nunca comparten un campo.** Lo que
+   declara un productor (su resumen, su lista de archivos, su propio informe de
+   tests, un mensaje a otro agente) se guarda como afirmación. Solo cuenta como
+   evidencia lo que la plataforma observó. Es la regla de diseño 1 del
+   posicionamiento, y todas las tablas la respetan.
+2. **El Verificador decide, sin un modelo.** Cada ejecución recibe un
+   veredicto, `verified`, `refuted` o `unverifiable`, a partir de chequeos
+   determinísticos: archivos escritos, tests corridos, tests de aceptación por
+   criterio (y sin modificar), cada comando que una entrega tenía que correr,
+   los estándares de calidad (un secreto en un archivo refuta), el anclaje en
+   la realidad (un paquete, una versión o un import inventados refutan), una
+   auditoría de dependencias, un escaneo de secretos y un SAST, un sondeo OWASP
+   WSTG de la aplicación en ejecución, los archivos leídos antes de
+   modificarlos, las fuentes consultadas y el sandbox donde corrieron los
+   tests. `unverifiable` es un veredicto de verdad y nunca se convierte en
+   `verified`. El detalle:
+   [`docs/contexts/evidence.md`](docs/contexts/evidence.md).
+3. **Hay una compuerta antes de QA.** Una entrega refutada o sin confirmar,
+   tests que fallan, un test de aceptación editado o un estándar violado
+   vuelven a rehacerse con el motivo, sin consultar a ningún modelo. Antes de
+   cada corrida se comprueba el hash de los archivos de tests de aceptación, y
+   se restauran si una entrega los cambió. Recién entonces revisa QA, y solo un
+   `APPROVED:` explícito cierra una tarea
+   ([`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md), pasos 4 a 6).
+4. **Los niveles de riesgo retienen el trabajo para una persona.** Las rutas de
+   autenticación, secretos, pagos o el pipeline de CI hacen que una entrega sea
+   de alto riesgo. También una herramienta que puede cambiar el mundo y un
+   archivo modificado sin haberlo leído antes. Una entrega de alto riesgo
+   espera a una persona en cualquier nivel de autonomía. Un productor puede
+   subir su propio nivel, nunca bajarlo. El nivel de autonomía (de 1 a 3)
+   decide qué más espera.
+5. **El log de auditoría es una cadena de hashes por empresa, de solo
+   agregado.** Las filas se enlazan con HMAC-SHA256; `GET /v1/audit/chain` dice
+   si la cadena está intacta o dónde se borró, alteró o reordenó una fila. Como
+   la fábrica tiene su propia clave, la cabeza de la cadena se puede anclar
+   fuera de ella: un webhook, una autoridad de sellado de tiempo RFC 3161 o la
+   clave Ed25519 del cliente
+   ([`docs/design/AUDIT_ANCHORS.md`](docs/design/AUDIT_ANCHORS.md)). Los
+   eventos de cada tarea también forman una cadena de hashes.
+6. **Los hashes los calcula la plataforma, nunca la parte registrada.** El
+   backend calcula el sha256 de un artefacto que ingiere, de la salida de cada
+   comando y de cada log completo que guarda; un hash que venga en una
+   respuesta no se lee.
+7. **Segregación de funciones.** Quien pidió el trabajo, o lo escribió, no lo
+   puede aprobar (en las acciones de alto riesgo por defecto, o en todas). Una
+   excepción para una sola persona es una concesión explícita y auditada del
+   Owner, y un informe lista cada aprobación junto a quienes la pidieron
+   ([`docs/design/SEGREGATION_OF_DUTIES.md`](docs/design/SEGREGATION_OF_DUTIES.md)).
+   Cada registro está acotado por empresa y por rol (Owner, Manager, Viewer).
 
-**🔍 Verifica cada entrega.** El daemon del workspace escribe los archivos del
-agente y los vuelve a leer. Lo que decide si un archivo existe es el sha256
-que informa el daemon, no la palabra del agente. Con los tests de entrega
-activados, también corre la suite del proyecto y registra el código de salida.
-Una entrega que no se puede confirmar vuelve a rehacerse sin consultar a
-ningún modelo.
+Los agentes que asesoran a las personas (los agentes Manager, Reviewer y
+Support) se miden igual: sus sugerencias se guardan aparte de las decisiones
+que registran las personas, y sus aciertos se cuentan contra esas decisiones.
 
-**🧑‍⚖️ Pone a las personas donde importan.** QA tiene que escribir un
-`APPROVED:` explícito para cerrar una tarea. Una entrega que se clasifica como
-de alto riesgo por las rutas que escribe (autenticación, secretos, pagos, el
-pipeline de CI) espera a un Manager en cualquier nivel de autonomía. La bandeja de **Revisión** lista
-exactamente lo que necesita a una persona: tareas bloqueadas, propuestas de
-procedimiento y ejecuciones externas que nadie decidió todavía.
+## Qué podés hacer hoy
 
-**🌿 Trabaja como GitHub y GitLab.** Diffs observados en disco, comentarios
-por línea y revisiones que devuelven el trabajo con los comentarios como
-feedback. Con **Rama de Git por tarea** activada, cada tarea tiene su rama y
-cada entrega es un commit, en un worktree aparte de tu checkout. Con un clic, la rama se publica
-como pull request o merge request en borrador. Si ya hay una abierta, se
-actualiza su descripción; si la rama avanzó más allá del commit de la
-ejecución, la publicación se rechaza.
+**Planificar.**
+- **Especificaciones**: el PO convierte un brief en requisitos numerados con
+  criterios *dado / cuando / entonces*; un chequeo determinístico bloquea la
+  aprobación ante un criterio que no se puede probar o una pregunta abierta
+  ([planning](docs/contexts/planning.md)).
+- **Arquitectura como datos**: el Architect propone módulos, interfaces,
+  decisiones y convenciones; una vez aprobada, se escribe en el repositorio y
+  el prompt y la revisión de cada tarea la siguen.
+- **Sprints desde una especificación**: el PO divide el trabajo en tareas que
+  nombran los criterios que cubren y sus dependencias, con primero una tarea de
+  escribir tests por requisito. Una cola de entrada guarda los pedidos que
+  llegan hasta que una persona los decide.
 
-**🏭 Gestiona una empresa de agentes.** PO, Architect, ScrumMaster, Developer,
-QA, SecOps y TechWriter se pasan el trabajo y cada traspaso queda registrado
-como mensaje. El ScrumMaster analiza cada tarea bloqueada y decide entre otro
-intento, con una indicación para hacerlo, o dejarla en manos de una persona.
-Todos los roles pueden usar las herramientas MCP que conectes.
+**Correr el sprint.**
+- **El tablero**: cinco columnas de estado, vistas guardadas y filtros, un
+  gráfico de avance (lo que se dijo hecho contra lo verificado), notas del
+  tablero entre tareas y la conversación de los agentes por tarea
+  ([loop](docs/contexts/loop.md), [tasks](docs/contexts/tasks.md)).
+- **Revisar como una pull request**: la pestaña **Archivos modificados** de
+  cada ejecución muestra el diff que observó el daemon, con comentarios por
+  línea y *Aprobar* o *Pedir cambios*. La bandeja de **Revisión** lista lo que
+  necesita a una persona.
+- **Aprendizaje**: cada sprint cerrado tiene su retrospectiva; el ScrumMaster
+  analiza las tareas bloqueadas y propone procedimientos, que los números del
+  tablero mantienen o revierten dos sprints después
+  ([learning](docs/contexts/learning.md)).
+- **Modelos y costo**: modelos por rol, ruteo según la dificultad de la tarea y
+  el costo de cada ejecución, tarea y sprint en tokens y centavos
+  ([models](docs/contexts/models.md)).
 
-**📈 Aprende, y se puede medir.** Cada sprint cerrado produce una
-retrospectiva. El ScrumMaster propone procedimientos en un formato fijo y, dos
-sprints después, cada uno se mantiene o se revierte según el retrabajo por
-tarea y la proporción de tareas bloqueadas. La página de Sprints responde con
-números, no con adjetivos, si la empresa está aprendiendo.
+**Trabajar sobre tu código.**
+- **Daemon del workspace**: corre de forma nativa en macOS, Linux o Windows,
+  escribe los archivos de los agentes, les lee el proyecto y corre los tests;
+  las entregas quedan en cola mientras está desconectado
+  ([workspace](docs/contexts/workspace.md)).
+- **Sandbox**: el código que escriben los agentes corre en el host, en un
+  contenedor efímero (sin red, con límites, sin capabilities) o con
+  bubblewrap. El daemon informa lo que aplicó, y una corrida en el host queda
+  como hallazgo.
+- **Git**: con **Rama de Git por tarea**, una rama por tarea y un commit por
+  entrega, en un worktree aparte. Las ramas de un sprint se integran en orden
+  de dependencias y la suite corre sobre el resultado. Publicá una pull
+  request (GitHub) o una merge request (GitLab) en borrador con la evidencia
+  en la descripción, y traé de vuelta los comentarios de quienes revisan
+  ([release](docs/contexts/release.md)).
+- **Herramientas**: servidores MCP por empresa, las herramientas de workspace
+  del Developer, un mapa del repositorio y herramientas de investigación que
+  leen fuentes oficiales; cada llamada es una observación
+  ([tools](docs/contexts/tools.md)).
+- **Otros productores**: agentes de programación de terminal como productores,
+  y pull requests de GitHub ingeridas y verificadas como ejecuciones
+  ([producers](docs/contexts/producers.md)).
 
-**🔐 Preparada para auditorías.** Cada tabla está acotada por empresa y por rol
-(Owner, Manager, Viewer). Las afirmaciones y las observaciones viven en campos
-separados. Los presupuestos de tokens se controlan en un único proxy. El log
-de auditoría es una cadena de hashes por empresa.
+**Documentar.**
+- **Paquete de documentación**: acta de constitución, alcance, EDT, matriz de
+  trazabilidad, RACI, registro de riesgos, lecciones aprendidas, diagramas C4
+  y el plan de tests OWASP WSTG, armados a partir de los registros; las
+  secciones que solo puede decidir una persona quedan como plantillas
+  ([`docs/design/PROJECT_DOCUMENTATION.md`](docs/design/PROJECT_DOCUMENTATION.md)).
+- **Wiki del proyecto**: páginas que se actualizan al cerrar el sprint a
+  partir de ejecuciones verificadas, con cada afirmación citada, y que se
+  marcan como desactualizadas cuando cambia lo que citan
+  ([`docs/design/PROJECT_WIKI.md`](docs/design/PROJECT_WIKI.md)).
 
-## Cómo funciona
+**Medir la fábrica.**
+- **El bench**: especificaciones de referencia que pasan por la fábrica y se
+  califican con tests escritos por una persona, con sus scorecards
+  ([`bench/README.md`](bench/README.md)).
+- **Estándares de calidad**: un catálogo para todos los proyectos, en el prompt
+  de cada agente según su rol; un procedimiento puede sumarles, nunca
+  relajarlos ([`docs/STANDARDS.md`](docs/STANDARDS.md)).
 
-```mermaid
-flowchart LR
-    A[Backlog] --> B[El agente escribe la tarea]
-    B --> C[El daemon escribe los archivos<br/>en tu máquina]
-    C --> D{Verificador<br/>sha256 · tests · riesgo}
-    D -- refutada / sin confirmar --> B
-    D -- verificada --> E[Revisión de QA]
-    E -- NEEDS WORK --> B
-    E -- APPROVED --> F[Archivos modificados<br/>comentarios · revisión]
-    F --> G[PR / MR en borrador<br/>con la evidencia]
-```
+**Gestionar la empresa.**
+- **Agente Manager y el resumen**: la dueña o el dueño actúa como cliente. El
+  agente Manager se ocupa de las decisiones de rutina bajo reglas estrictas, y
+  un resumen diario (también por correo) cuenta qué se hizo y qué espera su
+  decisión ([management](docs/contexts/management.md)).
+- **Mesa de ayuda**: reportes de errores y un chat de soporte, que analiza el
+  agente Support cuando está activado.
 
-1. **Planificación.** Se arma un sprint de alcance S, M o L y cada tarea entra en una cola durable.
-2. **Producción.** El agente asignado escribe la tarea. El daemon la escribe en tu máquina, como un commit en `fabrique/task-<id>` cuando la empresa trabaja con ramas de Git.
-3. **Verificación.** Controles deterministas deciden `verified`, `refuted` o `unverifiable` y fijan el nivel de riesgo.
-4. **Revisión.** QA revisa un extracto de los archivos escritos. Cuando corresponde, una persona revisa en **Archivos modificados** el diff que observó el daemon.
-5. **Entrega.** La rama se publica como pull request o merge request, con la evidencia en la descripción.
-6. **Aprendizaje.** El sprint se cierra, corre la retrospectiva y se miden los procedimientos.
+**Conectar.**
+- **Chat**: aprobá o devolvé entregas retenidas desde Slack o Microsoft Teams,
+  con los mismos chequeos de rol y la misma auditoría que en la web
+  ([`docs/design/CHAT_APPROVALS.md`](docs/design/CHAT_APPROVALS.md)).
+- **Webhooks**: un webhook de notificaciones por empresa, firmado con HMAC
+  ([integrations](docs/contexts/integrations.md)).
+- **Inicio de sesión único**: OpenID Connect por empresa, con configuraciones
+  listas para Google y Entra ID ([`docs/design/SSO.md`](docs/design/SSO.md)).
+- **Equipos y uso**: agrupá a los miembros en equipos con un rol y exportá
+  quién usó qué ([`docs/design/TEAMS_AND_USAGE.md`](docs/design/TEAMS_AND_USAGE.md)).
+- **Glassroom**: la pestaña **En vivo** del sprint transmite la actividad de
+  los agentes en tiempo real. La versión para visor vive en la rama
+  `main_meta`.
 
-## Calidad comprobable
-
-- Unos 900 tests de backend y 430 de frontend corren en cada pull request, sin necesidad de servicios externos.
-- Una prueba de punta a punta en el CI lleva una empresa entera por tres sprints contra PostgreSQL y NATS JetStream reales; al final, un verificador independiente rechaza cualquier historial de tarea ilegal.
-- Un límite de tamaño por archivo, un linter con versión fija y una regla de i18n que rompe el build ante texto sin traducir mantienen el código en orden a medida que crece.
-- La interfaz es completamente bilingüe, en inglés y en español.
-- Todos los proyectos se atienen a los mismos **estándares de calidad** ([`docs/STANDARDS.md`](docs/STANDARDS.md)): arquitectura, desarrollo, QA, seguridad, evidencia y auditoría, documentación, operaciones. Van en el prompt de cada agente según su rol, un procedimiento de la empresa puede ampliarlos pero nunca relajarlos, y los que se pueden verificar sin un modelo se verifican: un secreto en un archivo entregado refuta la entrega, código sin test o una dependencia sin versión fija es un hallazgo que ve quien revisa, y una especificación que no dice nada de seguridad, rendimiento, confiabilidad o accesibilidad recibe un aviso.
-
-## Inicio rápido
-
-```bash
-cp .env.example .env          # contraseñas de las bases, JWT_SECRET_KEY, QWEN_API_KEY y DEEPSEEK_API_KEY
-docker compose up -d          # backend :8000 · frontend :5173 · proxy de LLM :5100
-./scripts/start-daemon.sh     # en la computadora donde están tus proyectos (.\scripts\start-daemon.ps1 en Windows)
-```
-
-El equipo por defecto usa Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
-y DeepSeek (Developer, QA), así que necesita las dos claves. `AGENT_MODEL` pone
-a todo el equipo en un solo modelo (`AGENT_MODEL=deepseek-v4-pro` necesita solo
-`DEEPSEEK_API_KEY`), y `AGENT_MODEL_<ROL>` (`AGENT_MODEL_SCRUM_MASTER`, …) fija
-el de un rol. El modelo de cada agente también se cambia en la página
-**Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
-Nemotron en Nebius (ver *Model Providers* en el [README en inglés](README.md#model-providers-nebius--nvidia-nemotron)).
-
-Abrí `http://localhost:5173`, creá una empresa, apuntala a la carpeta de un
-proyecto y planificá tu primer sprint. Para probarla sin claves de API,
-`scripts/seed_demo_evidence.py` carga una ejecución por veredicto.
-
-> **¿No sos del área técnica?** La [**Guía de Negocio para Managers**](USER_GUIDE.es.md) explica La Fabrique sin código.
->
-> **Por qué está construida así:** el razonamiento y las reglas de diseño están en [`docs/POSITIONING.md`](docs/POSITIONING.md).
-
-## Capturas de pantalla
-
-![Una ejecución refutada: la afirmación del agente a un lado, las observaciones independientes al otro y el veredicto que se desprende de ellas](docs/img/evidence-detail.png)
-
-![Bandeja de revisión: lo que la empresa necesita de una persona](docs/img/governance.png)
-
-![Tablero del sprint: columnas del backlog por estado](docs/img/sprint-board.png)
-
-![Lista de sprints: retrabajo y proporción de bloqueadas por sprint, la tendencia de aprendizaje](docs/img/sprints-list.png)
-
-![Glassroom en vivo: los agentes y el flujo de mensajes en tiempo real](docs/img/sprint-live.png)
-
----
-
-## Índice
-
-- [Por qué La Fabrique](#por-qué-la-fabrique)
-- [Qué hace](#qué-hace)
-- [Cómo funciona](#cómo-funciona)
-- [Inicio rápido](#inicio-rápido)
-- [Descripción General](#descripción-general)
-- [Arquitectura](#arquitectura)
-- [Stack Tecnológico](#stack-tecnológico)
-- [Requisitos](#requisitos)
-- [Instalación](#instalación)
-- [Primeros Pasos](#primeros-pasos)
-- [Orquestación de Agentes](#orquestación-de-agentes)
-- [GlassRoom](#glassroom)
-- [Estructura del Proyecto](#estructura-del-proyecto)
-- [Referencia de la API](#referencia-de-la-api)
-- [Pruebas](#pruebas)
-- [Contribuir](#contribuir)
-- [Seguridad](#seguridad)
-- [Uso responsable](#uso-responsable)
-- [Hoja de ruta](#hoja-de-ruta)
-- [Documentación](#documentación)
-- [Licencia](#licencia)
-
----
-
-## Descripción General
-
-El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija. Cada ítem del backlog se convierte en un `AgentRun`: la afirmación del agente sobre lo que hizo, más las observaciones que la plataforma reúne por su cuenta. Una corrida solo queda cerrada cuando la verificación le produjo un veredicto.
-
-**Niveles de alcance por sprint:**
-
-| Tamaño | Máx. ítems en backlog | Uso típico |
-|--------|----------------------|------------|
-| S      | 4                    | Correcciones, features pequeñas |
-| M      | 8                    | Iteraciones de features (por defecto) |
-| L      | 12                   | Features grandes, trabajo fundacional |
-
-Cuando un workflow de agentes agota su capacidad antes de completar todos los ítems, el sprint pasa a estado `needs_split` — señal de que el alcance debe dividirse en sprints más pequeños antes de reintentar.
-
-**Ciclo de vida del sprint:** `active` → `completed` | `needs_split` | `cancelled`
-
----
+La interfaz está en inglés y en español, en el navegador o como aplicación de
+escritorio ([frontend](docs/contexts/frontend.md)).
 
 ## Arquitectura
 
 ```mermaid
-graph TD
-    A[Frontend React<br/>Dashboard · GlassRoom · KanbanBoard] -->|REST + SSE| B[Backend FastAPI]
+flowchart TB
+    FE["Frontend React<br/>navegador o app de escritorio"] -->|"REST + SSE"| BE
 
-    B -->|SQLModel| C[(PostgreSQL + pgvector<br/>sprints · auditoría · embeddings)]
-    B -->|Bolt| D[(Neo4j 5<br/>Grafo de Engramas)]
-    B -->|publish/subscribe| E[NATS JetStream]
+    subgraph BE["Backend FastAPI: 14 contextos, cada uno importa solo las capas de abajo"]
+        direction TB
+        L9["management"] --> L8["release · integrations"]
+        L8 --> L7["loop"]
+        L7 --> L6["planning · producers"]
+        L6 --> L5["learning"]
+        L5 --> L4["tools"]
+        L4 --> L3["workspace"]
+        L3 --> L2["tasks · models · evidence"]
+        L2 --> L1["platform"]
+        L1 --> L0["contracts"]
+    end
 
-    E -->|workspace.generate| F[Workflow LangGraph<br/>kickoff → PO → SM → Dev → burn]
-    E -->|glassroom.sprint_id| A
-    E -->|workspace.execute| G[VS Code Daemon<br/>escritura de archivos · shell]
-
-    F -->|chat_async| H[LLM Proxy :5100<br/>presupuesto de tokens · auditoría]
-    H -->|API Gemini| I[Google AI Studio]
-    H -->|API DeepSeek| J[DeepSeek]
-
-    B --> K[Janitor<br/>mantenimiento diario · reindexación]
+    BE --> PG[("Postgres + pgvector")]
+    BE <--> NATS[("NATS JetStream")]
+    NATS <--> D["Daemon del workspace<br/>en tu computadora: archivos, git, tests, sandbox"]
+    BE --> PX["Proxy de LLM<br/>presupuestos, ruteo, estado de proveedores"]
+    PX --> PR["Qwen · DeepSeek · Gemini · Nebius"]
+    BE -.->|opcional| NEO[("Grafo de conocimiento Neo4j")]
 ```
 
-### Flujo de datos de un sprint
+- **Backend**: `backend/app/services` está dividido en catorce contextos. El
+  contexto de evidencia importa solo contracts y platform, así que lo que juzga
+  una ejecución nunca depende del código que la produjo. La regla es un dato
+  (`docs/architecture/contexts.json`) que verifica el CI con
+  `scripts/check_architecture.py`. El detalle:
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y un documento por contexto
+  en [`docs/contexts/`](docs/contexts/) (en inglés).
+- **Daemon del workspace** (`vscode-daemon/`): el único componente que toca
+  los archivos del usuario. Habla con el backend por un protocolo NATS
+  versionado.
+- **Proxy de LLM** (`llm-proxy/`): toda llamada a un modelo pasa por él.
+  Controla los presupuestos de tokens por empresa, rutea por id de modelo a
+  los proveedores configurados, recurre a otro ante errores e informa qué
+  respondió cada proveedor.
+- **Almacenamiento**: Postgres con pgvector guarda todos los registros y la
+  memoria semántica. Neo4j guarda el linaje de archivos y es opcional. Un
+  contenedor janitor aplica la retención, y Jaeger recoge las trazas.
+- **El task worker** (`services/loop/worker/`) lleva cada tarea desde el
+  prompt hasta la decisión de QA ([`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md)).
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant FE as Frontend
-    participant BE as FastAPI
-    participant NJ as NATS
-    participant LG as LangGraph
-    participant DB as PostgreSQL
-    participant N4J as Neo4j
+## Inicio rápido
 
-    U->>FE: Crear sprint (alcance S/M/L + backlog)
-    FE->>BE: POST /v1/start_sprint
-    BE->>DB: INSERT sprint (status=active)
-    BE->>NJ: publish workspace.generate
-    NJ->>LG: kickoff → PO → ScrumMaster → Developer → PO wrap
-    LG-->>NJ: eventos glassroom.<sprint_id> (puente SSE)
-    NJ-->>FE: mensajes de agentes en tiempo real
-    LG->>N4J: burn_node — persistir engrama
-    LG->>BE: needs_split=true (si se supera la capacidad)
-    BE->>DB: UPDATE sprint SET status='needs_split'
-```
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Stack Tecnológico
-
-| Capa | Tecnología |
-|---|---|
-| **Backend** | Python 3.12, FastAPI, LangGraph, SQLModel |
-| **Frontend** | React 18, TypeScript, TailwindCSS, Vite, Zustand |
-| **Memoria Vectorial** | PostgreSQL 15 + pgvector |
-| **Grafo de Conocimiento** | Neo4j 5.15 Enterprise + APOC |
-| **Broker de Mensajes** | NATS JetStream |
-| **Modelos de IA** | Gemini (Google AI Studio) + DeepSeek |
-| **Infraestructura** | Docker Compose (8 servicios), VS Code CLI |
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Requisitos
-
-- **Docker** 24.0+ con Docker Compose v2
-- **Python** 3.12+ (para desarrollo local)
-- **Node.js** 24+ (para desarrollo frontend) — `engines.node >=24` y CI usa Node 24
-- **API Keys:** Google AI Studio (Gemini), DeepSeek
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Instalación
-
-La forma canónica de levantar el entorno local es `reset_infra.sh`:
+Requisitos: Docker 24+ con Compose v2, y Python 3.9+ en la computadora donde
+corre el daemon del workspace. Node.js 24+ solo para desarrollar el frontend.
 
 ```bash
-# 1. Copiar y configurar el entorno
 cp .env.example .env
-# Editar .env — completar GEMINI_API_KEY, DEEPSEEK_API_KEY,
-# POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
+# Definí al menos POSTGRES_PASSWORD, NEO4J_PASSWORD (y NEO4J_AUTH),
+# JWT_SECRET_KEY, FERNET_SECRET_KEY, AUDIT_SIGNING_KEY,
+# QWEN_API_KEY y DEEPSEEK_API_KEY.
 
-# 2. Inicio limpio completo
-./reset_infra.sh
+docker compose up -d          # backend :8000, frontend :5173, proxy de LLM :5100
+./scripts/start-daemon.sh     # en la computadora que tiene tus proyectos
+                              # (.\scripts\start-daemon.ps1 en Windows)
 ```
 
-El script ejecuta 6 pasos: `down -v` → prune de Docker → `build --no-cache` → `up -d` → espera de health-checks → `ps`. Al finalizar:
+1. **Revisá el stack**: `curl -s localhost:8000/health` (y `/health/deep`
+   para cada dependencia). La documentación de la API está en
+   `http://localhost:8000/docs`; las trazas, en `http://localhost:16686`.
+2. **Revisá las claves de los modelos**: `curl -s localhost:5100/v1/providers | jq`
+   lista qué respondió cada proveedor (`ok`, `no_credit`, `invalid_key`,
+   `not_configured`…). Agregá `?refresh=1` para volver a comprobar después de
+   cargar crédito.
+3. **Creá el primer usuario y la empresa**: abrí `http://localhost:5173`,
+   registrate y entrá a **Nueva compañía**: ponele nombre, elegí la carpeta del
+   proyecto en la computadora del daemon (por ejemplo `/home/you/src/app` o
+   `C:\Users\you\source\repos\app`) y revisá el equipo sugerido.
+4. **Planificá**: escribí una especificación, o planificá un sprint a partir
+   de un objetivo, y seguilo en el tablero.
 
-- **Frontend:** `http://localhost:5173`
-- **API Backend + Swagger:** `http://localhost:8000/docs`
-- **LLM Proxy:** `http://localhost:5100`
-- **Jaeger Tracing UI:** `http://localhost:16686`
+El equipo por defecto corre sobre Qwen y DeepSeek. `AGENT_MODEL` pone a todos
+los roles en un solo modelo (y entonces solo hace falta la clave de ese
+proveedor), `AGENT_MODEL_<ROL>` define uno, y la página **Agentes** cambia el
+modelo de un rol en cada empresa.
 
-**Reinicios incrementales** (tras cambios en el código):
+Neo4j es opcional y viene activado. Compose usa su imagen Enterprise con una
+licencia de evaluación, así que para producción licenciala o desactivala:
+`NEO4J_ENABLED=false docker compose up -d --scale neo4j=0`.
+
+El despliegue real (un proxy inverso, un daemon en un servidor, asegurar NATS,
+SSO, copias de seguridad, actualizaciones, rotación de claves, incidentes)
+está en [`docs/OPERATIONS.md`](docs/OPERATIONS.md) (en inglés). Una guía sin
+código para quienes gestionan: [`USER_GUIDE.es.md`](USER_GUIDE.es.md).
+
+## Configuración
+
+Cada variable de entorno, con su valor por defecto, el componente que la lee y
+si es un secreto, está en [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+Algunas cambian bastante el comportamiento: `AUTH_REQUIRED` (activada por
+defecto), `DELIVERY_TESTS_ENABLED` (el daemon corre los tests del proyecto
+después de cada entrega; desactivada por defecto), `DELIVERY_SANDBOX`
+(`host`, `container` o `bwrap`), y `MANAGER_AGENT_ENABLED`,
+`REVIEWER_AGENT_ENABLED` y `SUPPORT_AGENT_ENABLED` (desactivadas por defecto).
+
+## Tests
 
 ```bash
-docker compose up -d --build backend
-docker compose up -d --build frontend
+scripts/check.sh quick   # mientras trabajás: lo que tu cambio puede romper
+scripts/check.sh full    # antes de hacer push: todo lo que corre el CI
 ```
 
-**Daemon local de VS Code** (opcional — para escritura real de archivos en tu IDE):
-
-```bash
-pip install nats-py
-python vscode-daemon/daemon.py
-```
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Primeros Pasos
-
-Una vez que el stack esté en marcha, puedes interactuar con la API:
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Crear una empresa
-curl -X POST http://localhost:8000/v1/init_company \
-  -H "Content-Type: application/json" \
-  -d '{"company_name": "Mi Empresa"}'
-
-# Iniciar un sprint
-curl -X POST http://localhost:8000/v1/start_sprint \
-  -H "Content-Type: application/json" \
-  -d '{
-    "company_id": "<company_id>",
-    "scope": "M",
-    "backlog": ["Implementar autenticación de usuario", "Añadir widgets al dashboard"]
-  }'
-
-# Abrir documentación de la API
-open http://localhost:8000/docs
-```
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Orquestación de Agentes
-
-Cada kickoff de sprint dispara un **workflow LangGraph** a través del subject NATS `workspace.generate`. El grafo tiene una topología fija con `recursion_limit=12`:
-
-```mermaid
-flowchart LR
-    K([kickoff]) --> PO([PO])
-    PO -->|éxito| SM([Scrum Master])
-    PO -->|error| B
-    SM -->|éxito| DEV([Developer])
-    SM -->|error| B
-    DEV -->|éxito| POW([PO wrap])
-    DEV -->|error| B
-    POW --> B([burn])
-    B --> END(( END ))
-
-    style K  fill:#6366f1,color:#fff,stroke:none
-    style PO fill:#0ea5e9,color:#fff,stroke:none
-    style SM fill:#0ea5e9,color:#fff,stroke:none
-    style DEV fill:#0ea5e9,color:#fff,stroke:none
-    style POW fill:#0ea5e9,color:#fff,stroke:none
-    style B   fill:#64748b,color:#fff,stroke:none
-    style END fill:#10b981,color:#fff,stroke:none
-```
-
-**Responsabilidades de cada nodo:**
-
-| Nodo | Agente | Responsabilidad |
-|------|--------|----------------|
-| `kickoff` | Sistema | Valida el brief del sprint, extrae ítems del backlog, emite evento de estado inicial |
-| `po` | Product Owner | Prioriza el backlog (OpenProject opcional), identifica el ítem de mayor riesgo |
-| `scrum_master` | Scrum Master | Secuencia el trabajo, detecta bloqueos, asigna el primer movimiento al Developer |
-| `developer` | Developer | Toma el primer ítem accionable, detalla el plan de implementación, señala dependencias |
-| `po_wrap` | Product Owner | Cierra el kickoff con resumen de 3 puntos: prioridad · dueño · próxima acción |
-| `burn` | Sistema | Persiste engrama en Neo4j; publica el evento de finalización del kickoff en NATS |
-
-**Manejo de errores:** Cualquier fallo en un nodo establece `last_error` y cortocircuita hacia `burn`. El `GraphRecursionError` se captura explícitamente a nivel de workflow. En ambos casos el kickoff falló, pero el sprint sigue `active`: el agent worker publica `Kickoff failed: <reason>; tasks continue` en el Glassroom y las tareas del backlog siguen ejecutándose en el task worker. Solo una decisión explícita de división marca un sprint como `needs_split`.
-
-**Enrutamiento de modelos:** `ModelFactory.ROLE_MODEL_MAP` resuelve cada rol hacia un LLM específico vía el proxy — se cambia el modelo por rol en configuración sin tocar el código.
-
-### Arrancar y frenar el trabajo
-
-El Sprint 0 de una compañía nueva arranca enseguida solo si marcás **Iniciar el Sprint 0 apenas se cree la compañía** en el asistente (nunca con autonomía 1); si no, la página del sprint lo muestra sin empezar, con un botón **Iniciar**. En la pestaña Board un Manager puede **Pausar** (no se reparte, revisa ni reintenta nada hasta **Reanudar**), **Detener** un sprint para siempre y cambiar la **Autonomía** de la compañía: 1, cada tarea aprobada espera a una persona; 2, solo esperan las entregas de alto riesgo; 3, además los sprints siguientes y los procedimientos corren solos. Si un proveedor de modelos rechaza una llamada por falta de saldo, el sprint se pausa solo y la página dice qué proveedor; recargá saldo y reanudá.
-
-### Herramientas MCP
-
-Los agentes pueden usar herramientas de cualquier servidor [Model Context Protocol](https://modelcontextprotocol.io). Un Manager configura los servidores de la compañía con el mismo mapa `mcpServers` que leen los demás clientes MCP:
-
-```bash
-curl -X POST http://localhost:8000/v1/mcp/servers \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{
-    "company_id": 1,
-    "mcpServers": {
-      "docs":   {"url": "https://docs.example.com/mcp", "headers": {"Authorization": "Bearer ..."}},
-      "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
-                 "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "..."}, "roles": ["Developer"]}
-    }
-  }'
-```
-
-- `url` es un servidor streamable HTTP (`"type": "sse"` para el transporte anterior); `command` es un servidor stdio, que arranca dentro del contenedor del backend, así que su runtime (`npx`, `uvx`, …) tiene que estar en esa imagen.
-- `env` y `headers` son secretos: se guardan cifrados con Fernet (`FERNET_SECRET_KEY`), la API lista solo sus nombres (`GET /v1/mcp/servers`) y se enmascaran en los resultados que ve el modelo.
-- `roles` limita un servidor a algunos roles de agente; sin él, lo puede usar cualquier rol que ejecute tareas. `PATCH /v1/mcp/servers/{id}` desactiva un servidor o cambia sus roles; `GET /v1/mcp/servers/{id}/tools` se conecta en el momento y lista lo que anuncia.
-
-Cuando corre una tarea, el modelo ve las herramientas como `<servidor>__<herramienta>` y puede llamarlas durante como mucho `MCP_MAX_TOOL_ROUNDS` rondas antes de entregar. Cada llamada es **una observación que hizo el backend** — servidor, herramienta, argumentos, si falló, duración, sha256 del resultado — registrada en la evidencia del run y mostrada por el Verifier como `tools_used`, aparte de lo que el modelo afirma haber aprendido. Una herramienta que su servidor no marca como de solo lectura sube el nivel de riesgo de la entrega, así que una tarea aprobada que la usó espera a una persona en los mismos puntos que lo haría un archivo sensible.
-
-### El Developer lee el proyecto antes de escribir
-
-Junto a las herramientas MCP, los roles que entregan archivos (Developer, QA) reciben las **herramientas del workspace**, servidas por el daemon sobre el proyecto tal como está en disco: `workspace__list` (el árbol), `workspace__read` (un archivo, numerado), `workspace__search` (las líneas que coinciden con un patrón) y, con `DELIVERY_TESTS_ENABLED`, `workspace__run_tests` (el comando de tests del proyecto, o uno más acotado sobre el mismo runner). El prompt de cada tarea abre con un mapa del repositorio (sus dos primeros niveles), y el modelo puede llamar a las herramientas durante como mucho `DEVELOPER_TOOL_ROUNDS` rondas antes de entregar; `DEVELOPER_TOOLS_ENABLED=false` las apaga.
-
-Lo que el Developer leyó es evidencia: cada lectura se registra con el sha256 y el tamaño del archivo tal como los leyó el daemon, y el chequeo `context_read` del Verifier dice cuáles de los archivos que la entrega modificó se leyeron antes y cuáles no. Un archivo modificado sin haberlo leído sube el nivel de riesgo, así que la entrega espera a una persona. Lo que el modelo dice haber aprendido de un archivo sigue siendo una afirmación, y su propio relato de una corrida de tests nunca es evidencia: lo es el estado de salida que informa el daemon después de la entrega.
-
-Las herramientas nunca abren un archivo que pueda guardar secretos (`.env`, claves, certificados, `.ssh`, `.aws`…), saltean un symlink que salga del proyecto, tachan una línea con pinta de secreto antes de que el modelo la vea, y una búsqueda corre en un proceso hijo que el daemon detiene al vencer su plazo, así que un patrón que retrocede sin fin cuesta eso y nada más. Con el flujo Git activo, las herramientas miran el worktree de la tarea una vez que entregó ahí.
-
-### Dónde corre el código que escriben los agentes
-
-Con `DELIVERY_TESTS_ENABLED`, el daemon corre pruebas que escribió un modelo, y lo mismo hace `workspace__run_tests` del Developer. **Dónde** corren es una configuración, `DELIVERY_SANDBOX`, y una compañía puede elegir la suya en su configuración (`PUT /v1/companies/{id}/sandbox`):
-
-- **`host`**, el valor por defecto, corre el comando con el usuario del daemon, sus archivos, su red y su entorno. Es lo que hacían todas las versiones anteriores. No aísla nada.
-- **`container`** le da a cada corrida un contenedor efímero de Docker o Podman. El worktree de la tarea se monta en `/workspace` y no se monta nada más del host. La red queda apagada salvo que `DELIVERY_SANDBOX_NETWORK` la abra. Se aplican límites de CPU, memoria y procesos (`DELIVERY_SANDBOX_CPUS`, `_MEMORY_MB`, `_PIDS`), se quitan todas las capabilities, se bloquea la escalada de privilegios, el comando corre con el uid del usuario del host y la imagen sale de `DELIVERY_SANDBOX_IMAGE`.
-- **`bwrap`**, bubblewrap en Linux, monta los directorios del sistema en solo lectura y el worktree en lectura y escritura. Corre el comando en namespaces nuevos (también el de red, salvo que se abra) con un `/tmp` limpio. No aplica límite de CPU ni de memoria, y el reporte lo dice.
-
-En los dos modos aislados, una corrida no ve ninguna variable de entorno del daemon más allá de una base corta (`PATH`, `HOME=/tmp`, `LANG`), salvo las que la compañía lista **por nombre** (`env`). Sus valores quedan en la máquina del daemon, así que el backend nunca envía un secreto. Quien corre el daemon puede rechazar el host para todo: `FABRIQUE_SANDBOX_REQUIRED=container` hace que un pedido `host` corra en un contenedor, y el reporte dice que lo forzó el daemon. Un modo que no puede correr en esa máquina hace fallar la corrida con el motivo. Las pruebas quedan entonces como no verificadas, nunca como aprobadas en el host.
-
-El daemon informa lo que aplicó, y ese reporte es la evidencia. El Verificador lo registra como la comprobación `sandbox`, un registro y nunca el veredicto: decide el código de salida de las pruebas. Una corrida en el host queda marcada como un hallazgo que ve un Manager, igual que una de un daemon viejo que no informa sandbox. Qué protege cada modo, y qué no, está en [`docs/threat_model.md`](docs/threat_model.md).
-
-### Los roles que deciden leen fuentes oficiales
-
-El PO, el Arquitecto, SecOps y TechWriter deciden con lo que su modelo recuerda hasta su fecha de corte. Con las **herramientas de investigación** (`RESEARCH_TOOLS_ENABLED`, activas por defecto; `RESEARCH_ROLES` nombra los roles) primero verifican, en el mismo bucle acotado que las demás herramientas: `research__fetch` lee una página de documentación, notas de versión o un estándar como texto, desde un host de la lista de la compañía; `research__package` consulta una dependencia en su registro (PyPI, npm, crates.io, el proxy de Go: la última versión, cuándo salió, las últimas versiones); `research__advisories` lista sus vulnerabilidades conocidas en OSV. La lista de fuentes arranca con la documentación oficial de los stacks habituales, los registros y las bases de avisos; un Manager agrega hosts en la configuración de la compañía (`PUT /v1/companies/{id}/research`), el despliegue agrega algunos para todos (`RESEARCH_ALLOWED_HOSTS`) y nada quita uno por defecto. Una lectura no lleva credenciales, sigue una redirección solo mientras se quede en la lista y se corta en `RESEARCH_FETCH_MAX_BYTES`. Una búsqueda web, cuando una compañía la quiere, viene de un servidor MCP que ella configura; el backend no trae ninguna.
-
-Cada llamada es **una observación que hizo el backend**: la URL, cuándo se leyó, el estado HTTP, el sha256 y el tamaño de lo que volvió, y si el host estaba permitido (un rechazo también queda registrado). Una especificación o una arquitectura redactada por un agente conserva las fuentes que consultó (`sources`, visibles en su página), el Verificador las registra en la corrida de una tarea como la comprobación `sources`, y esa comprobación nombra además las dependencias que los manifiestos de una entrega declaran sin que nadie las haya consultado en un registro. Lo que el agente concluyó de una fuente es su afirmación. El prompt de un rol de investigación lo dice: su conocimiento tiene fecha de corte, las versiones que cuentan son las del disco, y un dato que no verificó en la fuente es una conjetura que debe llamar así.
-
-### Arrancar desde una especificación
-
-Un Manager abre **Especificaciones** (menú de la empresa), escribe un brief — unas pocas oraciones sobre qué se quiere y para quién — y le pide un borrador al PO. El PO contesta en una forma fija que el backend revisa: requisitos, cada uno con criterios de aceptación escritos como *dado / cuando / entonces*; atributos de calidad, cada uno con un número para medirlo; restricciones; y las preguntas que no pudo resolver con el brief. El backend numera todo (`REQ-1`, `REQ-1.2`, `NFR-1`), nunca el modelo, y corre un chequeo determinístico: un requisito sin criterio, un criterio con un paso vacío, una meta de calidad sin número o una pregunta sin responder **bloquean** la aprobación; una promesa sin número ("rápido", "fácil", "fast") es un aviso para mirar. Vos respondés las preguntas, le pedís al PO una revisión (tus respuestas van a su prompt), editás en un formulario con estructura, o escribís la especificación entera, y la aprobás. Una versión aprobada nunca se edita: **Revisar** abre la siguiente versión como borrador, que la reemplaza cuando se aprueba.
-
-Planificar un sprint **desde una especificación** hace que el PO la divida en tareas que nombran los criterios que cubre cada una y las tareas que tienen que estar hechas antes; el plan lista los criterios que ninguna tarea cubre, así nada se pierde en silencio, y el sprint conserva los dos vínculos. El worker sigue el orden que fijó el plan: una tarea espera, con una nota que dice a qué, hasta que todas las que necesita estén hechas, y arranca apenas cierra la última; las que no tienen nada entre sí corren en paralelo. Una tarea que espera por otra que vos tenés que decidir queda bloqueada con el motivo, así el sprint puede cerrar y la bandeja de Revisión muestra qué destraba tu decisión; decidís, y la tarea se libera. El prompt de cada tarea lleva solo los requisitos que cubre, QA revisa la entrega contra esos mismos criterios, y la página de la especificación muestra, por criterio, si una tarea quedó hecha, bloqueada, planificada o todavía no existe (`/v1/specifications`, `POST /v1/plan_sprint` y `POST /v1/start_sprint` con `specification_id`).
-
-La especificación además es **ejecutable**. El plan pone, antes de las tareas de implementación, una tarea de escritura de tests por requisito para QA: un test por criterio de aceptación, con el id en el nombre (`test_req_1_2_…`), escrito en el repositorio a través del daemon como cualquier otro archivo, y que falla hasta que exista la implementación. Cada tarea de implementación espera a los tests de los criterios que cubre y su prompt los nombra. Con `DELIVERY_TESTS_ENABLED`, los tests corren después de cada entrega y el Verificador lee las líneas por test del propio runner y las vuelve a los criterios: que los tests de QA fallen antes de su implementación es lo esperado, una implementación que deja su criterio fallando vuelve a trabajo, y una que reescribe un test de aceptación queda refutada en vez de aceptada en silencio, con el test de QA restablecido antes de juzgar nada. La página de la especificación marca un criterio como **verificado** solo cuando su test pasó en una corrida que La Fabrique observó, y la descripción del pull request dice cuántos criterios lo están.
-
-### La arquitectura, como dato
-
-Con la especificación aprobada, un Manager le pide al Architect un diseño, o lo escribe: los **módulos** (de qué se encarga cada uno, dónde vive en el repositorio, de qué depende, qué requisitos cubre), las **interfaces** entre ellos con un contrato que un test pueda exigir, las **decisiones** que un desarrollador tomaría solo si nadie las tomara antes, con sus consecuencias, y las **convenciones** que sigue cada tarea. El backend numera todo (`MOD-1`, `IF-1`, `ADR-1`) y traduce los nombres que usó el Architect a esos ids; un chequeo determinístico bloquea la aprobación ante un módulo o requisito inexistente, un ciclo de dependencias, una decisión sin lo decidido o una pregunta sin responder, y avisa cuando ningún módulo cubre un requisito. Vos respondés las preguntas del Architect, pedís una revisión, editás y aprobás; **Escribir en el repositorio** lo deja en `docs/ARCHITECTURE.md` a través del daemon del workspace, y el sha256 que el daemon lee del archivo es lo que La Fabrique guarda.
-
-Desde ahí el PO planifica siguiendo los módulos, y el prompt de cada tarea y la revisión de QA llevan los módulos a los que apuntan sus requisitos, con sus interfaces, más las decisiones y convenciones que sigue cada tarea: cambiarlas es decisión del Architect, no de una tarea (`/v1/architectures`).
-
-### Trabajar en ramas de Git
-
-Con **Rama de Git por tarea** activado (pestaña Board, un Manager; `PUT /v1/companies/{id}/git`), los agentes trabajan sobre un repositorio Git como trabaja la gente en GitHub y GitLab: una entrega nunca cae en tu checkout. Cada tarea tiene su rama, `fabrique/task-<id>`, que arranca de la base que nombres (`git_base_branch`) o del commit que tu repositorio tiene en el checkout; cada entrega es un commit en ella, de autor *La Fabrique* con los trailers `Fabrique-Task:` y `Fabrique-Sprint:`, escrito en un worktree dentro del directorio git del repositorio (`.git/fabrique-worktrees/`). Tu árbol de trabajo, tu índice y tu rama nunca se tocan. El commit, su padre y la rama son lo que dijo git, guardado en la evidencia del run; los tests que corre el daemon después de una entrega corren en ese worktree; los **Archivos modificados** del run nombran la rama y el commit. Para probar el trabajo de una tarea, `git checkout fabrique/task-<id>` (o abrí el worktree); hacer el merge lo decidís vos.
-
-Para llevar la rama de una tarea a GitHub o GitLab, un Manager aprieta **Publicar como pull request** en los Archivos modificados del run. El daemon del workspace sube la rama al `origin` del repositorio con tus propias credenciales de Git en esa computadora (nunca ve un token) y abre una pull request en borrador con `gh` o una merge request en borrador con `glab` si están instalados y con sesión iniciada; si no, te da la página para abrirla. La descripción es la evidencia del run tal como la observó el Verifier: el veredicto, cada chequeo, los archivos que el daemon leyó de vuelta y el commit, con lo que el agente solo declaró aparte y un trailer `Fabrique-Run:` que vuelve al run. Solo se suben ramas `fabrique/`, nunca forzadas; cada publicación queda en el run y en la auditoría (`POST /v1/agent_runs/{id}/publish`, `GET /v1/agent_runs/{id}/publications`).
-
-Cuando la gente revisa esa solicitud en GitHub o GitLab, **Traer comentarios** lee lo que escribieron, con el mismo login de `gh` o `glab`, y lo devuelve al run: los comentarios de línea, en su línea dentro de Archivos modificados; las revisiones y la conversación, al lado; cada uno marcado con dónde se escribió y un link. Leer de nuevo nunca duplica. La próxima revisión que envíes acá se los lleva al agente como tus propios comentarios; una revisión enviada en la plataforma no decide nada acá (`POST /v1/agent_runs/{id}/publications/{pid}/sync`).
-
-### Revisar un run como un pull request
-
-Cada página de run tiene una pestaña **Archivos modificados** armada como GitHub y GitLab muestran un pull request: los archivos con sus líneas agregadas y quitadas, y después los fragmentos de cada archivo con el número de línea viejo y el nuevo, una casilla **Visto** que pliega un archivo, y los archivos largos mostrados en parte hasta que pedís el resto. Los cambios son una observación, nunca el relato del agente:
-
-- en una tarea que entregaron los agentes, el daemon del workspace lee cada archivo justo antes de escribirlo y lo vuelve a leer después, e informa el diff entre esos bytes (`vscode-daemon/file_diff.py`) junto al sha256 que ya informaba; un archivo binario o demasiado grande aparece con sus conteos y sin diff;
-- en un pull request ingerido desde GitHub, el diff que devolvió GitHub;
-- en un productor que mandó un diff como artefacto sin que se observara nada en un disco, ese diff, rotulado como lo que el productor propone.
-
-Lo que el productor declaró pero ninguna observación cubre aparece aparte, así la revisión ve el hueco en vez de una afirmación mostrada como cambio. `GET /v1/agent_runs/{id}/changes` devuelve los mismos archivos a cualquier cliente.
-
-Un Manager revisa como se revisa un pull request: pasá el mouse por una línea y tocá **+** para comentarla (una línea borrada se comenta en su lado viejo), **Resolvé** un comentario que ya no aplica y después **Enviá la revisión** con *Comentar*, *Aprobar* o *Pedir cambios*. La revisión lleva los comentarios abiertos. Lo que hace depende de quién produjo el run:
-
-- en una tarea que entregaron los agentes de la compañía, sigue decidiendo el ciclo de revisión (QA, el Verifier), así que la revisión de una persona actúa solo donde el ciclo espera a una persona: **Pedir cambios** devuelve al trabajo una tarea bloqueada para una persona, con la revisión y sus comentarios, archivo por línea, como el `NEEDS WORK:` que recibe el próximo intento del Developer; **Aprobar** acepta una entrega que QA aprobó y que espera a una persona (una retención por alto riesgo, o cualquier aprobación con autonomía 1); una tarea en la que los agentes siguen trabajando, o cuyo sprint está cerrado, se rechaza con el motivo;
-- en el run de cualquier otro productor, la revisión registra la aprobación o el rechazo, con los comentarios como su devolución.
-
-Las revisiones y los comentarios son palabras de una persona, nunca evidencia: quedan auditados y el veredicto sigue siendo del Verifier (`/v1/agent_runs/{id}/comments`, `/v1/agent_runs/{id}/reviews`).
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## GlassRoom
-
-El GlassRoom es la vista de observabilidad en tiempo real de un sprint en ejecución. Usa Server-Sent Events (SSE) para transmitir los mensajes NATS de `glassroom.<sprint_id>` directamente al navegador.
-
-**Diseño de 3 columnas:**
-
-| Columna | Contenido |
-|---------|-----------|
-| Barra lateral izquierda | Metadata del sprint (badge de alcance, indicador de estado) + lista de agentes conectados |
-| Feed de mensajes | Mensajes agrupados por turno de agente (estilo Slack); `NeedsSplitBanner` ante eventos de scope excedido |
-| Panel derecho | Tarjetas de estado FSM por agente — `active` (verde) · `waiting` (brand) · `error` (rojo) · `idle` (gris) |
-
-**Tipos de eventos:** `status`, `agent_start`, `message`, `agent_complete`, `error`, `needs_split`
-
-El endpoint SSE (`GET /v1/glassroom/stream?sprint_id=<id>`) reproduce los últimos 50 eventos al conectarse, garantizando contexto completo para clientes que se unan tarde. Se envían pings de keepalive cada 15 segundos para mantener la conexión activa.
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Estructura del Proyecto
-
-```
-la-fabrique/
-├── backend/
-│   ├── agents/
-│   │   ├── graph.py                  # Workflow multiagente LangGraph
-│   │   └── tools/
-│   │       └── openproject_tools.py  # Creación de work packages
-│   ├── app/
-│   │   ├── main.py                   # Punto de entrada FastAPI · 4 workers · puente SSE
-│   │   ├── models/                   # ORM SQLModel (Sprint, Company, BacklogItem…)
-│   │   ├── schemas.py                # Schemas Pydantic de request/response
-│   │   ├── database.py               # Engine · sesión · _ensure_runtime_schema()
-│   │   ├── routers/                  # sprint · agents · enterprise · support
-│   │   ├── services/
-│   │   │   ├── agent_worker.py       # Consumidor NATS → ejecución LangGraph
-│   │   │   ├── task_worker.py        # Worker de asignación de tareas
-│   │   │   └── outbox_service.py     # Outbox transaccional → drenaje NATS
-│   │   └── nats_client.py            # Wrapper async de publish/subscribe NATS
-│   ├── llm/
-│   │   └── model_factory.py          # Mapeo rol → modelo
-│   ├── memory/
-│   │   └── engram_processor.py       # Persistencia de engramas (pgvector + Neo4j)
-│   ├── llm_proxy_client.py           # Cliente HTTP para el servicio LLM Proxy
-│   └── telemetry.py                  # Configuración de trazas OpenTelemetry
-├── frontend/
-│   └── src/
-│       ├── components/
-│       │   ├── GlassRoom.tsx         # Vista en tiempo real del sprint (3 columnas)
-│       │   ├── KanbanBoard.tsx       # Tablero de backlog del sprint (dnd-kit)
-│       │   ├── ControlPanel.tsx      # UI de configuración de sprint
-│       │   └── ErrorBoundary.tsx     # Error boundary global de React
-│       ├── pages/
-│       │   ├── Dashboard.tsx         # Strip KPI · tarjetas de sprint · lanzamiento rápido
-│       │   └── CompanyNew.tsx        # Wizard de onboarding de empresa
-│       ├── store/
-│       │   └── agentStore.ts         # Store Zustand FSM (idle/active/waiting/error)
-│       └── i18n/                     # Archivos de traducción EN + ES
-├── llm-proxy/                        # Gateway de presupuesto de tokens y auditoría (Flask :5100)
-├── vscode-daemon/                    # Suscriptor NATS local para operaciones en el IDE
-├── scripts/
-│   ├── verify_infra.py               # Script de verificación de salud de la infraestructura (CLI)
-│   └── infra_checks/                 # Sus comprobaciones: Neo4j, Postgres/pgvector, OpenProject
-├── db/
-│   └── init-db/init.sql              # DDL de bootstrap de Postgres
-├── docker-compose.yml                # Definición del stack local (8 servicios)
-├── reset_infra.sh                    # Script canónico de reset completo
-└── .env.example                      # Plantilla de variables de entorno requeridas
-```
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Referencia de la API
-
-Documentación interactiva disponible en `http://localhost:8000/docs` con el entorno levantado.
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET`  | `/health` | Health check del servicio |
-| `POST` | `/v1/init_company` | Crear empresa con tamaño de alcance por defecto (S/M/L); el sprint de fundamentos se planifica salvo que el daemon observe un repositorio con código en `project_path` (`foundation_sprint: true/false` lo pide o lo descarta; la respuesta dice qué ocurrió y por qué) |
-| `GET` · `POST` · `PUT` | `/v1/specifications` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`) | La especificación: requisitos numerados con criterios dado / cuando / entonces, chequeada de forma determinística; el PO la redacta y revisa desde un brief, una persona responde, edita y aprueba; cobertura por criterio leída de los tableros |
-| `GET` · `POST` · `PUT` | `/v1/architectures` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`, `/{id}/write`, `/{id}/document`, `/{id}/adrs`) | La arquitectura de una especificación aprobada: módulos, interfaces, decisiones y convenciones, chequeada de forma determinística; el Architect la redacta y revisa, una persona aprueba; escrita en el repositorio por el daemon como `docs/ARCHITECTURE.md` y un `docs/adr/NNNN-<slug>.md` por decisión, con el hash de cada archivo guardado |
-| `POST` | `/v1/plan_sprint` | Armar el backlog desde un objetivo o desde una especificación aprobada (`specification_id`: las tareas nombran los criterios que cubren, `uncovered` lista el resto) |
-| `POST` | `/v1/start_sprint` | Iniciar sprint; valida restricción de alcance y cantidad de ítems; `specification_id` y el `covers` de cada tarea conservan el vínculo con la especificación; el `depends_on` de cada tarea (posiciones) fija el orden que sigue el worker |
-| `POST` | `/v1/generate` | Disparar workflow LangGraph vía NATS |
-| `GET`  | `/v1/glassroom/stream` | Stream SSE de eventos de agentes en tiempo real |
-| `POST` | `/v1/audit` | Registrar entrada de auditoría estructurada |
-| `GET`  | `/v1/memory/search` | Búsqueda semántica en memoria de engramas (pgvector) |
-| `POST` | `/v1/memory/store` | Almacenar contenido en memoria vectorial |
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Pruebas
-
-### Backend
-
-```bash
-cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
-```
-
-La suite de pruebas backend usa pytest con SQLite en memoria — no requiere servicios externos.
-
-### Frontend
-
-```bash
-cd frontend
-npm run test:run    # Vitest + Testing Library (modo CI)
-npm run test        # Modo watch durante el desarrollo
-```
-
-### CI
-
-Las pruebas se ejecutan automáticamente en cada pull request vía GitHub Actions:
-- `.github/workflows/backend-tests.yml` — suite pytest backend
-- `.github/workflows/frontend-build.yml` — frontend tsc + vitest + build
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
+La suite del backend no necesita Postgres, NATS, Neo4j ni un modelo. El CI
+también corre una prueba de punta a punta contra Postgres y NATS reales que
+lleva a una empresa por varios sprints, el bench con un modelo falso y los
+chequeos de arquitectura, de capas del frontend y de tamaño de archivos. Las
+suites, sus tablas y los jobs de CI están en
+[`docs/TESTING.md`](docs/TESTING.md).
 
 ## Contribuir
 
-Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para estándares de desarrollo, estrategia de ramas y convenciones de commits.
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
+Trunk-based: cada cambio es una rama desde `main` con una sola pull request.
+Leé [`CONTRIBUTING.md`](CONTRIBUTING.md) y el
+[código de conducta](CODE_OF_CONDUCT.md); los agentes que trabajan sobre el
+código arrancan por [`CLAUDE.md`](CLAUDE.md). Los cambios quedan en
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## Seguridad
 
-Consulta [SECURITY.md](SECURITY.md) para la política de seguridad y el proceso de reporte de vulnerabilidades.
+Reportá vulnerabilidades como se indica en [`SECURITY.md`](SECURITY.md), que
+también contiene la línea base de seguridad. El modelo de amenazas está en
+[`docs/threat_model.md`](docs/threat_model.md).
 
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Uso responsable
-
-Los agentes de La Fabrique escriben archivos y ejecutan comandos en el equipo
-donde corre el **daemon del espacio de trabajo** — igual que haría un IDE.
-Apúntalo solo a carpetas que poseas o estés autorizado a modificar, y conecta
-únicamente repositorios que tengas derecho a cambiar. La salida del modelo es una
-ayuda para una persona, no una determinación: la verificación es determinista,
-pero la decisión de aprobar, reintentar o rechazar una tarea siempre es de una
-persona. Ver [SECURITY.md](SECURITY.md).
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Hoja de ruta
-
-| Ítem | Estado |
-| --- | --- |
-| Verificación determinista (afirmaciones vs. observaciones) | Hecho |
-| Cadena de auditoría firmada y de solo anexado | Hecho |
-| Presupuestos de tokens por empresa en un único proxy de LLM | Hecho |
-| Enrutado a Nebius Token Factory / NVIDIA Nemotron | Hecho |
-| Orquestación de sprints con reintento y escalado del ScrumMaster | Hecho |
-| Página de evidencia con resumen por veredicto | Hecho |
-| Agente revisor que sugiere (nunca decide) sobre ejecuciones de otros productores | Hecho |
-| Cualificación de relaciones entre entidades en el grafo engram | Planificado |
-| Indicadores de calidad de datos por fuente | Planificado |
-| Procedimientos deterministas medidos contra su propia adopción | Planificado |
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Documentación
-
-[Arquitectura](ARCHITECTURE.md) · [Posicionamiento](docs/POSITIONING.md) ·
-[Referencia de la API](docs/API.md) · [Modelo de amenazas](docs/threat_model.md) ·
-[Guía de usuario](USER_GUIDE.es.md) · [Contribuir](CONTRIBUTING.md) ·
-[Seguridad](SECURITY.md) · [Código de conducta](CODE_OF_CONDUCT.md) ·
-[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
-
----
+Los agentes escriben archivos y corren comandos donde corre el daemon del
+workspace. Apuntalo solo a carpetas que puedas modificar, preferí el sandbox
+`container` y dejá NATS escuchando en `127.0.0.1` salvo que el daemon esté en
+otra máquina: cualquiera que llegue a NATS le puede pedir al daemon que corra
+comandos.
 
 ## Licencia
 
-**Apache License 2.0.** Ver [LICENSE](LICENSE).  
-Copyright © 2026 Carolina Pereira.
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## Soporte y Mantenimiento
-
-- **Soporte del Sistema:** La Fabrique es mantenido por **Carolina Pereira**. Los errores críticos se reportan automáticamente a la proveedora para su resolución.
-- **Soporte de Proyectos:** Para incidencias con el código generado por la IA en tus proyectos, usa el Bot de Soporte integrado.
-- **Contacto:** Para consultas sobre licencias y acuerdos SLA Enterprise, contacta directamente con la propietaria.
-
-[⬆ Volver al inicio](#la-fabrique)
+Apache License 2.0. Mirá [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE), que
+también reconoce el código de terceros adaptado acá.

@@ -337,6 +337,8 @@
         "test_bench_routing.py",
         "test_bench_scorecard.py",
         "test_bench_specs.py",
+        "test_scorecard_history.py",
+        "test_scorecard_schema_parity.py",
         "test_verificador_benchmark.py"
       ],
       "docs/": "mentions",
@@ -928,6 +930,9 @@
       "test_project_docs_diagrams.py": [
         "planning"
       ],
+      "test_project_docs_domain_checks.py": [
+        "planning"
+      ],
       "test_project_docs_final.py": [
         "planning"
       ],
@@ -947,6 +952,9 @@
         "planning"
       ],
       "test_project_docs_status.py": [
+        "planning"
+      ],
+      "test_project_docs_transition.py": [
         "planning"
       ],
       "test_project_wiki.py": [
@@ -1143,6 +1151,14 @@
       ],
       "test_sandbox_manager.py": [
         "workspace"
+      ],
+      "test_scorecard_history.py": [
+        "models",
+        "repo"
+      ],
+      "test_scorecard_schema_parity.py": [
+        "models",
+        "repo"
       ],
       "test_scrum_master.py": [
         "loop"

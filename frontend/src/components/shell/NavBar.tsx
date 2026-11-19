@@ -141,6 +141,7 @@ export function NavBar() {
                   <Link role="menuitem" to="/company/models" className="menu-item">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="menu-item">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/findings" className="menu-item">{t('nav.findings')}</Link>
+                  <Link role="menuitem" to="/bench" className="menu-item">{t('nav.bench')}</Link>
                   <Link role="menuitem" to="/company/specifications" className="menu-item">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   <Link role="menuitem" to="/company/documentation" className="menu-item">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   <Link role="menuitem" to="/company/wiki" className="menu-item">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>

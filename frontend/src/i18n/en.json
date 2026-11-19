@@ -37,8 +37,9 @@
     "duties": "Duties and access",
     "auditAnchors": "Audit anchors",
     "invitations": "Invitations",
-    "account": "Account",
-    "findings": "Findings"
+    "findings": "Findings",
+    "bench": "Bench",
+    "account": "Account"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3012,6 +3013,10 @@
         "final_report_handover": {
           "title": "Handover notes",
           "what": "Who takes the result over (operations, maintenance, the client), what they receive, and what they should know about the holds and risks left open."
+        },
+        "transition_handover": {
+          "title": "Handover (ITIL transition set)",
+          "what": "Who takes each release over (operations, support, the client), what they receive, the workarounds for its known errors, and when the handover is complete."
         }
       }
     }
@@ -3703,32 +3708,6 @@
       "wiki": "Wiki"
     }
   },
-  "account": {
-    "title": "Account",
-    "subtitle": "Your own settings, whichever company you are working in.",
-    "sso": {
-      "title": "Single sign-on",
-      "intro": "Link your account to your company's identity provider so you can sign in with it. The provider's verified email must be this account's email, in a domain the company has verified. Unlinking is possible while you keep another way to sign in.",
-      "none": "None of your companies has single sign-on set up.",
-      "link": "Link",
-      "unlink": "Unlink",
-      "unknownCompany": "A company's identity provider",
-      "linkedAt": "linked {{date}}",
-      "outcome": {
-        "linked": "Your identity is linked. You can now sign in with single sign-on.",
-        "already_linked": "This identity was already linked to your account."
-      },
-      "errors": {
-        "state_mismatch": "The link was started in another browser or your session has ended. Sign in and start again here.",
-        "email_mismatch": "The identity provider's email is not this account's email, so it was not linked.",
-        "identity_taken": "This identity is already linked to another account.",
-        "already_linked": "Your account is already linked at this company's provider.",
-        "last_sign_in_method": "This is your only way to sign in, so it cannot be unlinked. Set a password or link another identity first.",
-        "no_connection": "This company's single sign-on is not enabled.",
-        "not_found": "That identity was not found."
-      }
-    }
-  },
   "invitations": {
     "title": "Invitations",
     "pendingTitle": "You are invited",
@@ -3848,6 +3827,146 @@
       "earlier": "Load {{bytes}} earlier bytes",
       "earlierError": "The earlier piece could not be read.",
       "refused": "The end of the log could not be read."
+    }
+  },
+  "bench": {
+    "title": "Bench",
+    "subtitle": "The committed scorecards: each reference specification run through the factory and graded by acceptance tests a person wrote, never by the model under test. Every number is what the scorer observed.",
+    "loading": "Loading the scorecards…",
+    "loadError": "The scorecards could not be loaded: {{message}}",
+    "unavailable": "No scorecards are available",
+    "unavailableHint": "The backend finds no bench/scorecards folder. Set BENCH_REPOSITORY_DIR to a checkout of the repository (see docs/CONFIGURATION.md).",
+    "empty": "No scorecard has been committed yet",
+    "noValidCard": "No committed scorecard matches the schema",
+    "notMeasured": "Not measured",
+    "notMeasuredBecause": "Not measured: {{reason}}",
+    "reasons": {
+      "grade_unmeasured": "the acceptance tests could not run, so no criterion was graded",
+      "no_criteria": "the specification has no graded criterion",
+      "no_reported_turns": "no turn reported its token usage",
+      "cost_unknown": "the cost of some tasks is unknown; the bench prices no turn",
+      "not_in_card": "this card's schema version does not record it",
+      "no_prompt_measure": "no prompt was measured",
+      "no_problems_graded": "no HumanEval problem was graded"
+    },
+    "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
+    "seconds": "{{value}} s",
+    "unreportedTurns_one": "+{{count}} turn unreported",
+    "unreportedTurns_other": "+{{count}} turns unreported",
+    "cols": {
+      "spec": "Specification",
+      "status": "Status",
+      "criteria": "Criteria passed",
+      "firstAttempt": "First attempt",
+      "reworkPerTask": "Rework per task",
+      "blocked": "Blocked",
+      "wallClock": "Wall-clock",
+      "tokens": "Reported tokens",
+      "cost": "Cost",
+      "promptPerTask": "Prompt tokens per task (est.)",
+      "stamp": "Run",
+      "source": "Kind",
+      "card": "Card",
+      "specs": "Specifications completed"
+    },
+    "specStatus": {
+      "completed": "Completed",
+      "timeout": "Timed out",
+      "error": "Error",
+      "budget_exceeded": "Budget exceeded"
+    },
+    "cardStatus": {
+      "valid": "Matches the schema",
+      "invalid": "Off the schema",
+      "unreadable": "Unreadable"
+    },
+    "folder": {
+      "fake": "Fake models",
+      "real": "Real models",
+      "ablation": "Section ablation"
+    },
+    "latest": {
+      "title": "Latest scorecard: {{stamp}}",
+      "llm": "Models served",
+      "policy": "Routing policy",
+      "noPolicy": "Not recorded",
+      "commit": "Factory commit",
+      "schema": "Schema version",
+      "graders": "Graders",
+      "buildGraders": "The build's own",
+      "run": "Run",
+      "runComplete": "Complete",
+      "budgetCut": "Cut by the token budget ({{skipped}} skipped)",
+      "sectionsOff": "Prompt sections turned off: {{sections}}",
+      "totals": "Totals",
+      "specsCaption": "Each specification of the latest scorecard"
+    },
+    "history": {
+      "title": "History",
+      "caption": "Every committed scorecard, newest first",
+      "countLabel_one": "{{count}} scorecard",
+      "countLabel_other": "{{count}} scorecards",
+      "specsCompleted": "{{completed}}/{{total}}"
+    },
+    "specHistory": {
+      "title": "By specification",
+      "caption": "Each specification across the scorecards that match the schema, newest first"
+    },
+    "sections": {
+      "title": "Prompt weight by section",
+      "note": "The latest card's Developer prompts: estimated tokens (characters / 4, the backend's measure, not the provider's count). A section the budget cut was not sent and is counted under Cut.",
+      "caption": "The estimated tokens of each prompt section, heaviest first",
+      "section": "Section",
+      "tokens": "Estimated tokens",
+      "share": "Share",
+      "prompts": "Prompts",
+      "cut": "Cut"
+    },
+    "humaneval": {
+      "title": "HumanEval",
+      "note": "Each problem is graded by HumanEval's own tests in the bench's sandbox, one delivery each, never by the factory's report. The problems are not reference specifications and do not move the totals above.",
+      "passAt1": "pass@1",
+      "graded": "Graded",
+      "passed": "Passed",
+      "failed": "Failed",
+      "unmeasured": "Unmeasured",
+      "tokens": "Tokens reported",
+      "dataset": "Dataset {{source}}, sha256 {{sha}} (computed by the bench), {{license}} licence.",
+      "skipped": "Skipped by the token budget, never graded: {{problems}}",
+      "caption": "Each HumanEval problem of the latest scorecard",
+      "problem": "Problem",
+      "entryPoint": "Entry point",
+      "outcome": "Outcome",
+      "outcomes": {
+        "pass": "Pass",
+        "fail": "Fail"
+      }
+    }
+  },
+  "account": {
+    "title": "Account",
+    "subtitle": "Your own settings, whichever company you are working in.",
+    "sso": {
+      "title": "Single sign-on",
+      "intro": "Link your account to your company's identity provider so you can sign in with it. The provider's verified email must be this account's email, in a domain the company has verified. Unlinking is possible while you keep another way to sign in.",
+      "none": "None of your companies has single sign-on set up.",
+      "link": "Link",
+      "unlink": "Unlink",
+      "unknownCompany": "A company's identity provider",
+      "linkedAt": "linked {{date}}",
+      "outcome": {
+        "linked": "Your identity is linked. You can now sign in with single sign-on.",
+        "already_linked": "This identity was already linked to your account."
+      },
+      "errors": {
+        "state_mismatch": "The link was started in another browser or your session has ended. Sign in and start again here.",
+        "email_mismatch": "The identity provider's email is not this account's email, so it was not linked.",
+        "identity_taken": "This identity is already linked to another account.",
+        "already_linked": "Your account is already linked at this company's provider.",
+        "last_sign_in_method": "This is your only way to sign in, so it cannot be unlinked. Set a password or link another identity first.",
+        "no_connection": "This company's single sign-on is not enabled.",
+        "not_found": "That identity was not found."
+      }
     }
   }
 }

@@ -37,8 +37,9 @@
     "duties": "Funciones y accesos",
     "auditAnchors": "Anclajes de auditoría",
     "invitations": "Invitaciones",
-    "account": "Cuenta",
-    "findings": "Hallazgos"
+    "findings": "Hallazgos",
+    "bench": "Banco de pruebas",
+    "account": "Cuenta"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3012,6 +3013,10 @@
         "final_report_handover": {
           "title": "Notas de traspaso",
           "what": "Quién recibe el resultado (operaciones, mantenimiento, el cliente), qué recibe y qué debe saber sobre las retenciones y los riesgos que quedan abiertos."
+        },
+        "transition_handover": {
+          "title": "Traspaso (conjunto de transición ITIL)",
+          "what": "Quién se hace cargo de cada entrega (operaciones, soporte, el cliente), qué recibe, las soluciones provisionales para sus errores conocidos y cuándo se completa el traspaso."
         }
       }
     }
@@ -3703,32 +3708,6 @@
       "wiki": "Wiki"
     }
   },
-  "account": {
-    "title": "Cuenta",
-    "subtitle": "Tu configuración personal, en cualquier empresa en la que trabajes.",
-    "sso": {
-      "title": "Inicio de sesión único",
-      "intro": "Vincula tu cuenta con el proveedor de identidad de tu empresa para iniciar sesión con él. El correo verificado del proveedor debe ser el de esta cuenta, en un dominio que la empresa haya verificado. Puedes desvincularla mientras conserves otra forma de iniciar sesión.",
-      "none": "Ninguna de tus empresas tiene configurado el inicio de sesión único.",
-      "link": "Vincular",
-      "unlink": "Desvincular",
-      "unknownCompany": "El proveedor de identidad de una empresa",
-      "linkedAt": "vinculada el {{date}}",
-      "outcome": {
-        "linked": "Tu identidad quedó vinculada. Ya puedes iniciar sesión con el inicio de sesión único.",
-        "already_linked": "Esta identidad ya estaba vinculada a tu cuenta."
-      },
-      "errors": {
-        "state_mismatch": "La vinculación se inició en otro navegador o tu sesión terminó. Inicia sesión y vuelve a empezar aquí.",
-        "email_mismatch": "El correo del proveedor de identidad no es el de esta cuenta, así que no se vinculó.",
-        "identity_taken": "Esta identidad ya está vinculada a otra cuenta.",
-        "already_linked": "Tu cuenta ya está vinculada con el proveedor de esta empresa.",
-        "last_sign_in_method": "Es tu única forma de iniciar sesión, así que no se puede desvincular. Define una contraseña o vincula otra identidad antes.",
-        "no_connection": "El inicio de sesión único de esta empresa no está activado.",
-        "not_found": "No se encontró esa identidad."
-      }
-    }
-  },
   "invitations": {
     "title": "Invitaciones",
     "pendingTitle": "Te han invitado",
@@ -3848,6 +3827,146 @@
       "earlier": "Cargar {{bytes}} bytes anteriores",
       "earlierError": "No se pudo leer la parte anterior.",
       "refused": "No se pudo leer el final del registro."
+    }
+  },
+  "bench": {
+    "title": "Banco de pruebas",
+    "subtitle": "Las fichas de resultados confirmadas: cada especificación de referencia pasada por la fábrica y calificada con pruebas de aceptación que escribió una persona, nunca por el modelo evaluado. Cada número es lo que observó el calificador.",
+    "loading": "Cargando las fichas…",
+    "loadError": "No se pudieron cargar las fichas: {{message}}",
+    "unavailable": "No hay fichas disponibles",
+    "unavailableHint": "El backend no encuentra la carpeta bench/scorecards. Configure BENCH_REPOSITORY_DIR con una copia del repositorio (vea docs/CONFIGURATION.md).",
+    "empty": "Todavía no se confirmó ninguna ficha",
+    "noValidCard": "Ninguna ficha confirmada cumple el esquema",
+    "notMeasured": "No medido",
+    "notMeasuredBecause": "No medido: {{reason}}",
+    "reasons": {
+      "grade_unmeasured": "las pruebas de aceptación no pudieron ejecutarse, así que no se calificó ningún criterio",
+      "no_criteria": "la especificación no tiene criterios calificados",
+      "no_reported_turns": "ningún turno informó su consumo de tokens",
+      "cost_unknown": "se desconoce el costo de algunas tareas; el banco no pone precio a los turnos",
+      "not_in_card": "la versión del esquema de esta ficha no lo registra",
+      "no_prompt_measure": "no se midió ningún prompt",
+      "no_problems_graded": "no se calificó ningún problema de HumanEval"
+    },
+    "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
+    "seconds": "{{value}} s",
+    "unreportedTurns_one": "+{{count}} turno sin informar",
+    "unreportedTurns_other": "+{{count}} turnos sin informar",
+    "cols": {
+      "spec": "Especificación",
+      "status": "Estado",
+      "criteria": "Criterios aprobados",
+      "firstAttempt": "Al primer intento",
+      "reworkPerTask": "Retrabajo por tarea",
+      "blocked": "Bloqueadas",
+      "wallClock": "Tiempo real",
+      "tokens": "Tokens informados",
+      "cost": "Costo",
+      "promptPerTask": "Tokens de prompt por tarea (est.)",
+      "stamp": "Ejecución",
+      "source": "Tipo",
+      "card": "Ficha",
+      "specs": "Especificaciones completadas"
+    },
+    "specStatus": {
+      "completed": "Completada",
+      "timeout": "Tiempo agotado",
+      "error": "Error",
+      "budget_exceeded": "Presupuesto superado"
+    },
+    "cardStatus": {
+      "valid": "Cumple el esquema",
+      "invalid": "Fuera del esquema",
+      "unreadable": "Ilegible"
+    },
+    "folder": {
+      "fake": "Modelos simulados",
+      "real": "Modelos reales",
+      "ablation": "Ablación de secciones"
+    },
+    "latest": {
+      "title": "Última ficha: {{stamp}}",
+      "llm": "Modelos servidos",
+      "policy": "Política de enrutamiento",
+      "noPolicy": "No registrada",
+      "commit": "Commit de la fábrica",
+      "schema": "Versión del esquema",
+      "graders": "Calificadores",
+      "buildGraders": "Los de la propia compilación",
+      "run": "Ejecución",
+      "runComplete": "Completa",
+      "budgetCut": "Cortada por el presupuesto de tokens ({{skipped}} omitidas)",
+      "sectionsOff": "Secciones del prompt desactivadas: {{sections}}",
+      "totals": "Totales",
+      "specsCaption": "Cada especificación de la última ficha"
+    },
+    "history": {
+      "title": "Historial",
+      "caption": "Todas las fichas confirmadas, de la más reciente a la más antigua",
+      "countLabel_one": "{{count}} ficha",
+      "countLabel_other": "{{count}} fichas",
+      "specsCompleted": "{{completed}}/{{total}}"
+    },
+    "specHistory": {
+      "title": "Por especificación",
+      "caption": "Cada especificación en las fichas que cumplen el esquema, de la más reciente a la más antigua"
+    },
+    "sections": {
+      "title": "Peso del prompt por sección",
+      "note": "Los prompts del Developer de la última ficha: tokens estimados (caracteres / 4, la medida del backend, no la cuenta del proveedor). Una sección que el presupuesto cortó no se envió y se cuenta en Cortada.",
+      "caption": "Los tokens estimados de cada sección del prompt, de la más pesada a la más liviana",
+      "section": "Sección",
+      "tokens": "Tokens estimados",
+      "share": "Proporción",
+      "prompts": "Prompts",
+      "cut": "Cortada"
+    },
+    "humaneval": {
+      "title": "HumanEval",
+      "note": "Cada problema se califica con las propias pruebas de HumanEval en el sandbox del banco, una entrega cada uno, nunca con el informe de la fábrica. Los problemas no son especificaciones de referencia y no cambian los totales de arriba.",
+      "passAt1": "pass@1",
+      "graded": "Calificados",
+      "passed": "Aprobados",
+      "failed": "Fallidos",
+      "unmeasured": "Sin medir",
+      "tokens": "Tokens informados",
+      "dataset": "Conjunto de datos {{source}}, sha256 {{sha}} (calculado por el banco), licencia {{license}}.",
+      "skipped": "Omitidos por el presupuesto de tokens, nunca calificados: {{problems}}",
+      "caption": "Cada problema de HumanEval de la última ficha",
+      "problem": "Problema",
+      "entryPoint": "Punto de entrada",
+      "outcome": "Resultado",
+      "outcomes": {
+        "pass": "Aprobado",
+        "fail": "Fallido"
+      }
+    }
+  },
+  "account": {
+    "title": "Cuenta",
+    "subtitle": "Tu configuración personal, en cualquier empresa en la que trabajes.",
+    "sso": {
+      "title": "Inicio de sesión único",
+      "intro": "Vincula tu cuenta con el proveedor de identidad de tu empresa para iniciar sesión con él. El correo verificado del proveedor debe ser el de esta cuenta, en un dominio que la empresa haya verificado. Puedes desvincularla mientras conserves otra forma de iniciar sesión.",
+      "none": "Ninguna de tus empresas tiene configurado el inicio de sesión único.",
+      "link": "Vincular",
+      "unlink": "Desvincular",
+      "unknownCompany": "El proveedor de identidad de una empresa",
+      "linkedAt": "vinculada el {{date}}",
+      "outcome": {
+        "linked": "Tu identidad quedó vinculada. Ya puedes iniciar sesión con el inicio de sesión único.",
+        "already_linked": "Esta identidad ya estaba vinculada a tu cuenta."
+      },
+      "errors": {
+        "state_mismatch": "La vinculación se inició en otro navegador o tu sesión terminó. Inicia sesión y vuelve a empezar aquí.",
+        "email_mismatch": "El correo del proveedor de identidad no es el de esta cuenta, así que no se vinculó.",
+        "identity_taken": "Esta identidad ya está vinculada a otra cuenta.",
+        "already_linked": "Tu cuenta ya está vinculada con el proveedor de esta empresa.",
+        "last_sign_in_method": "Es tu única forma de iniciar sesión, así que no se puede desvincular. Define una contraseña o vincula otra identidad antes.",
+        "no_connection": "El inicio de sesión único de esta empresa no está activado.",
+        "not_found": "No se encontró esa identidad."
+      }
     }
   }
 }
