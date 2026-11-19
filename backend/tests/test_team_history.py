@@ -402,7 +402,7 @@ def test_the_migration_seeds_one_open_period_per_membership(tmp_path, monkeypatc
         )
     before = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
     migrations.upgrade_to_head(engine)
-    assert migrations.current_revision(engine) == "0052"
+    assert migrations.current_revision(engine) == migrations.head_revision()
     assert migrations.schema_differences(engine) == []
     with engine.connect() as connection:
         [started] = connection.execute(

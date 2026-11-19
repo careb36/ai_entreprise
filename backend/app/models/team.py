@@ -12,13 +12,15 @@
   after the row is made, and only once; no row is deleted
   (``teams.HistoryRefused``). The team is kept by id and name, without a
   foreign key, so a deleted team's periods stay.
+- ``Team.membership_source`` — ``owner`` (members added by hand) or ``sso``
+  (members from the SSO group mapping, issue #703).
 - ``TeamHistoryStart`` — the moment migration 0052 started the history: the
   usage report gives work before it today's teams, and says so.
 """
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Index, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -26,15 +28,25 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+MEMBERSHIP_SOURCE_CHECK = "ck_teams_membership_source"
+
+
 class Team(SQLModel, table=True):
     __tablename__ = "teams"
-    __table_args__ = (UniqueConstraint("company_id", "name"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "name"),
+        CheckConstraint(
+            "membership_source IN ('owner', 'sso')", name=MEMBERSHIP_SOURCE_CHECK
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", index=True)
     name: str
     description: str | None = None
     role: str = "Viewer"  # "Viewer" | "Manager"; never "Owner"
+    # "owner": members added by hand; "sso": from the group mapping (issue #703).
+    membership_source: str = "owner"
     created_by: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -79,6 +91,11 @@ class TeamMembershipPeriod(SQLModel, table=True):
     started_by: str | None = None
     ended_at: datetime | None = None
     ended_by: str | None = None
+    # The group observation that opened or closed it, the exclusion that
+    # closed it (issue #703); no foreign key, null for an Owner's change.
+    started_observation_id: int | None = None
+    ended_observation_id: int | None = None
+    ended_exclusion_id: int | None = None
 
 
 class TeamHistoryStart(SQLModel, table=True):

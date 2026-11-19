@@ -24,13 +24,13 @@ from datetime import UTC, datetime
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
-from models import SsoConnection, User
+from models import SsoConnection, SsoGroupMapping, User
 from pydantic import Field
 from schemas import RequestModel
 from services.platform import sessions, sso_domains, sso_flow
 from services.platform import sso_connections as conns
 from services.platform.agent_service import AgentService
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, select
 
 router = APIRouter(prefix="/v1", tags=["SSO"])
 
@@ -237,6 +237,8 @@ async def delete_sso(
     if row is None:
         raise HTTPException(status_code=404, detail="no SSO connection")
     issuer = row.issuer
+    # The group pairs go with it (their foreign key cascades on Postgres).
+    session.exec(delete(SsoGroupMapping).where(SsoGroupMapping.connection_id == row.id))
     session.delete(row)
     sso_domains.drop_all(session, company_id)
     _audit(session, company_id, actor, "sso_connection_deleted", issuer=issuer)

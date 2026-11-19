@@ -314,8 +314,8 @@ export function createHttp() {
   patch: <T>(endpoint: string, data: unknown) =>
     fetchApi<T>(endpoint, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  delete: <T>(endpoint: string) =>
-    fetchApi<T>(endpoint, { method: 'DELETE' }),
+  delete: <T>(endpoint: string, data?: unknown) =>
+    fetchApi<T>(endpoint, { method: 'DELETE', body: data ? JSON.stringify(data) : undefined }),
   }
 }
 

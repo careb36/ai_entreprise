@@ -69,6 +69,9 @@
     "DELETE /v1/companies/{company_id}/teams/{team_id}": {
       "access": "Owner"
     },
+    "DELETE /v1/companies/{company_id}/teams/{team_id}/exclusions/{exclusion_id}": {
+      "access": "Owner"
+    },
     "DELETE /v1/companies/{company_id}/teams/{team_id}/members/{user_id}": {
       "access": "Owner"
     },
@@ -327,6 +330,9 @@
       "access": "Owner"
     },
     "GET /v1/companies/{company_id}/sso/domains": {
+      "access": "Owner"
+    },
+    "GET /v1/companies/{company_id}/sso/group-mappings": {
       "access": "Owner"
     },
     "GET /v1/companies/{company_id}/sso/identities": {
@@ -729,6 +735,18 @@
     "POST /v1/companies/{company_id}/sod/exception": {
       "access": "Owner"
     },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/approve": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/confirm-single-owner": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/reject": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/sso/group-mappings/approvals/{approval_id}/withdraw": {
+      "access": "Owner"
+    },
     "POST /v1/companies/{company_id}/sso/test": {
       "access": "Owner"
     },
@@ -736,6 +754,12 @@
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/teams": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/teams/{team_id}/exclusions": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/teams/{team_id}/membership-source-preview": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/views": {
@@ -1010,6 +1034,9 @@
       "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/sso": {
+      "access": "Owner"
+    },
+    "PUT /v1/companies/{company_id}/sso/group-mappings": {
       "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/stack_profile": {
