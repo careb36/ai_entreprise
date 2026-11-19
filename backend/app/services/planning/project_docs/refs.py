@@ -5,7 +5,8 @@ A reference is plain data, ``{"kind", "id", "sha256"?, "label"?, "claim"?}``:
 - ``kind`` is the record's kind (``specification``, ``requirement``,
   ``architecture``, ``module``, ``interface``, ``adr``, ``discovery``,
   ``sprint``, ``task``, ``event``, ``verification``, ``message``,
-  ``procedure``, ``integration``, ``membership``, ``rule``);
+  ``procedure``, ``integration``, ``membership``, ``rule``, ``code_file``: a
+  file of the stored code graph, its sha256 the workspace daemon's);
 - ``sha256`` is a digest the backend computed or observed, never one a producer
   handed in: a record's canonical JSON (``digest``), a task event's chain hash,
   a run's artifact digest, a commit the daemon reported;
@@ -31,6 +32,8 @@ from services.planning.project_docs import texts
 from services.planning.project_docs.sanitize import md_id, md_inline
 
 NO_SOURCE = "No source recorded"
+# Kinds whose id is text (a rule, a file path), shown escaped rather than cut to id characters.
+TEXT_IDS = ("rule", "code_file")
 # A digest shows only its hex digits and its prefix (``hmac-sha256:``).
 _HASH_DROP = re.compile(r"[^A-Za-z0-9:\-]")
 
@@ -64,7 +67,7 @@ def describe(reference: dict[str, Any], lang: str = texts.DEFAULT_LANGUAGE) -> s
     tr = texts.translator(lang)
     kind = reference.get("kind", "")
     ident = reference.get("id")
-    shown = md_inline(ident, 120) if kind == "rule" else md_id(ident)
+    shown = md_inline(ident, 120) if kind in TEXT_IDS else md_id(ident)
     name = (
         tr(f"kind.{kind}") if f"kind.{kind}" in texts.TEXTS["en"] else md_inline(kind)
     )
