@@ -16,6 +16,13 @@ membership opens or closes a period of the membership history
 - ``DELETE /v1/companies/{id}/teams/{team_id}``                delete it and its memberships
 - ``PUT    /v1/companies/{id}/teams/{team_id}/members/{uid}``  add a member of the company
 - ``DELETE /v1/companies/{id}/teams/{team_id}/members/{uid}``  remove them
+
+A team is Owner-managed (as above) or SSO-managed (issue #703;
+``docs/design/SSO_GROUP_MAPPING.md``): its members come from the
+identity provider's groups, so the member routes refuse to add to it and only
+end a manual exception (R18); switching it needs a preview and a confirmation
+(R19), and a mapped team's role is never raised (R16). The break-glass
+exclusion and the preview are in ``routers/team_sso.py``.
 """
 
 from __future__ import annotations
@@ -25,9 +32,18 @@ from datetime import UTC, datetime
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
-from models import CompanyMember, Team, TeamMember, User
+from models import (
+    CompanyMember,
+    SsoGroupMapping,
+    SsoManualException,
+    SsoTeamExclusion,
+    Team,
+    TeamMember,
+    User,
+)
 from pydantic import Field
 from schemas import RequestModel
+from services.platform import sso_team_control as control
 from services.platform import teams
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, delete, select
@@ -45,6 +61,9 @@ class TeamUpdate(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=teams.NAME_MAX)
     description: str | None = Field(default=None, max_length=teams.DESCRIPTION_MAX)
     role: str | None = Field(default=None, pattern="^(Viewer|Manager)$")
+    membership_source: str | None = Field(default=None, pattern="^(owner|sso)$")
+    preview_id: int | None = None
+    confirm: bool = False
 
 
 def _now() -> datetime:
@@ -69,7 +88,7 @@ def _team(session: Session, company_id: int, team_id: int) -> Team:
     return team
 
 
-def _refused(exc: teams.TeamRefused) -> HTTPException:
+def _refused(exc: teams.TeamRefused | control.ControlRefused) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
@@ -111,6 +130,7 @@ async def list_teams(
         select(Team).where(Team.company_id == company_id).order_by(Team.name, Team.id)
     ).all()
     of_user = teams.teams_of(session, company_id)
+    held = control.holds(session, company_id)
     members = session.exec(
         select(CompanyMember, User)
         .join(User, User.id == CompanyMember.user_id)
@@ -120,7 +140,13 @@ async def list_teams(
     return {
         "company_id": company_id,
         "roles": list(teams.TEAM_ROLES),
-        "teams": [teams.serialize(t, _member_ids(session, t)) for t in rows],
+        "teams": [
+            {
+                **teams.serialize(t, _member_ids(session, t)),
+                **held.get(t.id, {"exclusions": [], "manual_exceptions": []}),
+            }
+            for t in rows
+        ],
         "members": [
             {
                 "user_id": person.id,
@@ -199,14 +225,40 @@ async def update_team(
     if description is not None and (description or None) != team.description:
         changed["description"] = {"from": team.description, "to": description or None}
         team.description = description or None
-    if role is not None and role != team.role:
-        changed["role"] = {"from": team.role, "to": role}
-        team.role = role
+    extra: dict = {}
+    try:
+        if role is not None and role != team.role:
+            control.check_role(session, team, role)
+            changed["role"] = {"from": team.role, "to": role}
+            team.role = role
+        if body.membership_source is not None:
+            extra = (
+                control.switch_source(
+                    session,
+                    team,
+                    actor,
+                    body.membership_source,
+                    body.preview_id,
+                    body.confirm,
+                )
+                or {}
+            )
+    except control.ControlRefused as exc:
+        session.rollback()
+        raise _refused(exc) from exc
+    if "membership_source" in extra:
+        changed["membership_source"] = extra.pop("membership_source")
     if changed:
         team.updated_at = _now()
         session.add(team)
         _audit(
-            session, company_id, actor, "team_updated", team_id=team.id, changed=changed
+            session,
+            company_id,
+            actor,
+            "team_updated",
+            team_id=team.id,
+            changed=changed,
+            **extra,
         )
         session.commit()
         session.refresh(team)
@@ -227,6 +279,9 @@ async def delete_team(
         session, company_id, team_id=team.id, by=f"human:{actor.email}"
     )
     session.exec(delete(TeamMember).where(TeamMember.team_id == team.id))
+    # What the foreign keys cascade on Postgres, also where they are not enforced.
+    for model in (SsoGroupMapping, SsoTeamExclusion, SsoManualException):
+        session.exec(delete(model).where(model.team_id == team.id))
     session.delete(team)
     _audit(
         session,
@@ -252,6 +307,10 @@ async def add_team_member(
     """Add a member of the company to the team; adding one already in it changes nothing."""
     actor = _owner(session, user, company_id)
     team = _team(session, company_id, team_id)
+    try:
+        control.check_add(team)
+    except control.ControlRefused as exc:
+        raise _refused(exc) from exc
     if teams.own_role(session, company_id, user_id) is None:
         # A team never makes anyone a member: invite them first.
         raise HTTPException(status_code=404, detail="Not a member of this company")
@@ -293,6 +352,14 @@ async def remove_team_member(
 ):
     actor = _owner(session, user, company_id)
     team = _team(session, company_id, team_id)
+    if team.membership_source == "sso":
+        try:
+            control.remove_by_hand(session, team, actor, user_id)
+        except control.ControlRefused as exc:
+            session.rollback()
+            raise _refused(exc) from exc
+        session.commit()
+        return teams.serialize(team, _member_ids(session, team))
     existing = session.exec(
         select(TeamMember).where(
             TeamMember.team_id == team.id, TeamMember.user_id == user_id

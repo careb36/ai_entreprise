@@ -70,10 +70,12 @@ from routers.sprint_progress import router as sprint_progress_router
 from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
 from routers.sso_domains import router as sso_domains_router
+from routers.sso_groups import router as sso_groups_router
 from routers.sso_link import router as sso_link_router
 from routers.support import router as support_router
 from routers.task_relations import router as task_relations_router
 from routers.task_views import router as task_views_router
+from routers.team_sso import router as team_sso_router
 from routers.teams import router as teams_router
 from routers.usage import router as usage_router
 from routers.webhooks import router as webhooks_router
@@ -168,6 +170,7 @@ app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(sso_admin_router)
 app.include_router(sso_domains_router)
+app.include_router(sso_groups_router)
 app.include_router(sso_link_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
@@ -221,6 +224,7 @@ app.include_router(forge_policy_router)
 app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)
+app.include_router(team_sso_router)
 app.include_router(invitations_router)
 app.include_router(usage_router)
 app.include_router(bench_router)

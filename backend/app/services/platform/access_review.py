@@ -38,7 +38,7 @@ from models import (
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from services.platform import api_tokens, sessions, sod, teams
+from services.platform import api_tokens, sessions, sod, sso_group_review, teams
 from services.platform.agent_service import AgentService
 
 GRACE_DAYS = 14
@@ -210,12 +210,14 @@ def _tokens(session: Session, company_id: int, now: datetime, threshold: int):
 
 
 def listing(session: Session, company_id: int, now: datetime | None = None):
-    """What an Owner reviews now: members and working API tokens."""
+    """What an Owner reviews now: members, working API tokens and what the SSO
+    group mapping keeps outside the IdP's say (issue #703, R25, R29)."""
     now = now or _now()
     threshold = sod.policy_of(session, company_id).inactive_days
     return {
         "members": _members(session, company_id, now, threshold),
         "tokens": _tokens(session, company_id, now, threshold),
+        "sso": sso_group_review.listing(session, company_id, now),
     }
 
 
@@ -241,7 +243,11 @@ def history(session: Session, company_id: int, limit: int = 20) -> list[dict]:
 
 
 def _remove_member(
-    session: Session, company_id: int, user_id: int, by: str | None = None
+    session: Session,
+    company_id: int,
+    user_id: int,
+    by: str | None = None,
+    actor_id: int | None = None,
 ) -> str:
     member = session.exec(
         select(CompanyMember).where(
@@ -260,7 +266,7 @@ def _remove_member(
         if len(owners) <= 1:
             raise ReviewRefused(409, "The company's last Owner cannot be removed")
     session.delete(member)
-    teams.drop_memberships(session, company_id, user_id, by=by)
+    teams.drop_memberships(session, company_id, user_id, by=by, actor_id=actor_id)
     return member.human_role
 
 
@@ -275,7 +281,7 @@ def complete(
     """Record the review: every listed item decided, removals applied, audited."""
     now = now or _now()
     current = listing(session, company_id, now)
-    items = current["members"] + current["tokens"]
+    items = current["members"] + current["tokens"] + current["sso"]
     chosen = {(d["kind"], int(d["id"])): d["decision"] for d in decisions}
     if any(v not in DECISIONS for v in chosen.values()):
         raise ReviewRefused(422, "Each decision is confirm or remove.")
@@ -296,9 +302,11 @@ def complete(
         if item["decision"] != "remove":
             continue
         if item["kind"] == "member":
-            _remove_member(session, company_id, item["id"], by=f"human:{by.email}")
+            _remove_member(
+                session, company_id, item["id"], by=f"human:{by.email}", actor_id=by.id
+            )
             removed_users.append(item["id"])
-        else:
+        elif item["kind"] == "token":
             token = session.get(ApiToken, item["id"])
             if token is not None and token.company_id == company_id:
                 token.revoked_at = datetime.now(UTC)
@@ -318,11 +326,13 @@ def complete(
             "confirmed": sum(1 for i in items if i["decision"] == "confirm"),
             "removed": len(removed_users) + len(removed_tokens),
             "inactive": sum(1 for i in items if i["inactive"]),
+            "sso": len(current["sso"]),
         },
         note=" ".join((note or "").split())[:NOTE_MAX] or None,
     )
     session.add(review)
     session.flush()
+    sso_done = sso_group_review.apply(session, company_id, by, items, review.id)
     audit = AgentService().audit_interaction(
         session=session,
         company_id=company_id,
@@ -336,6 +346,7 @@ def complete(
             "due_at": state["due_at"],
             "removed_user_ids": removed_users,
             "revoked_token_ids": removed_tokens,
+            **sso_done,
         },
         decision_signature=None,
         cost_tokens=0,

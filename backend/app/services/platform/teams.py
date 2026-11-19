@@ -37,6 +37,8 @@ from datetime import UTC, datetime
 
 from models import (
     CompanyMember,
+    SsoManualException,
+    SsoTeamExclusion,
     Team,
     TeamHistoryStart,
     TeamMember,
@@ -86,15 +88,21 @@ def team_roles(session: Session, company_id: int, user_id: int) -> list[str]:
 
 
 def drop_memberships(
-    session: Session, company_id: int, user_id: int, by: str | None = None
+    session: Session,
+    company_id: int,
+    user_id: int,
+    by: str | None = None,
+    actor_id: int | None = None,
 ) -> int:
     """Remove *user_id* from every team of *company_id*; the number removed.
 
     Called when a person leaves the company, so team rows never outlive the
     membership: invited again later, they start with no team. Their open
-    periods are closed, by *by*.
+    periods are closed, by *by*, and their SSO exclusions and manual
+    exceptions in the company end, by *actor_id* (issue #703, R18).
     """
     close_memberships(session, company_id, user_id=user_id, by=by)
+    end_sso_holds(session, company_id, user_id, actor_id, "left the company")
     rows = session.exec(
         select(TeamMember).where(
             TeamMember.company_id == company_id, TeamMember.user_id == user_id
@@ -103,6 +111,45 @@ def drop_memberships(
     for row in rows:
         session.delete(row)
     return len(rows)
+
+
+def end_sso_holds(
+    session: Session,
+    company_id: int,
+    user_id: int,
+    actor_id: int | None,
+    reason: str,
+    team_id: int | None = None,
+    lift_exclusions: bool = True,
+) -> tuple[list[int], list[int]]:
+    """Lift *user_id*'s exclusions (unless *lift_exclusions* is false) and end
+    their manual exceptions in force in *company_id* (in *team_id* only, when
+    given); the ids of each."""
+    now = _now()
+    lifted, ended = [], []
+    query = select(SsoTeamExclusion).where(
+        SsoTeamExclusion.company_id == company_id,
+        SsoTeamExclusion.user_id == user_id,
+        SsoTeamExclusion.lifted_at.is_(None),
+    )
+    if team_id is not None:
+        query = query.where(SsoTeamExclusion.team_id == team_id)
+    for row in session.exec(query).all() if lift_exclusions else []:
+        row.lifted_by, row.lifted_at, row.lift_reason = actor_id, now, reason
+        session.add(row)
+        lifted.append(row.id)
+    query = select(SsoManualException).where(
+        SsoManualException.company_id == company_id,
+        SsoManualException.user_id == user_id,
+        SsoManualException.ended_at.is_(None),
+    )
+    if team_id is not None:
+        query = query.where(SsoManualException.team_id == team_id)
+    for row in session.exec(query).all():
+        row.ended_by, row.ended_at = actor_id, now
+        session.add(row)
+        ended.append(row.id)
+    return lifted, ended
 
 
 def own_role(session: Session, company_id: int, user_id: int) -> str | None:
@@ -175,8 +222,10 @@ def open_membership(
     user_id: int,
     by: str | None,
     at: datetime | None = None,
+    observation_id: int | None = None,
 ) -> TeamMembershipPeriod:
-    """Open *user_id*'s period in *team* at *at* (now), written by *by*."""
+    """Open *user_id*'s period in *team* at *at* (now), written by *by*; a
+    period the group mapping opens names its observation (issue #703)."""
     period = TeamMembershipPeriod(
         company_id=team.company_id,
         team_id=team.id,
@@ -184,6 +233,7 @@ def open_membership(
         user_id=user_id,
         started_at=at or _now(),
         started_by=by,
+        started_observation_id=observation_id,
     )
     session.add(period)
     return period
@@ -197,9 +247,13 @@ def close_memberships(
     team_id: int | None = None,
     user_id: int | None = None,
     at: datetime | None = None,
+    observation_id: int | None = None,
+    exclusion_id: int | None = None,
 ) -> int:
     """Close the open periods of *company_id* (of *team_id*, of *user_id*, or
-    both) at *at* (now); the number closed. A closed one is left as it is."""
+    both) at *at* (now); the number closed. A closed one is left as it is.
+    The group observation or the break-glass exclusion that closed them is
+    written with the end, once (issue #703)."""
     query = select(TeamMembershipPeriod).where(
         TeamMembershipPeriod.company_id == company_id,
         TeamMembershipPeriod.ended_at.is_(None),
@@ -213,6 +267,8 @@ def close_memberships(
     for period in rows:
         period.ended_at = max(moment, period.started_at)
         period.ended_by = by
+        period.ended_observation_id = observation_id
+        period.ended_exclusion_id = exclusion_id
         session.add(period)
     return len(rows)
 
@@ -250,6 +306,7 @@ _FIXED_FIELDS = (
     "user_id",
     "started_at",
     "started_by",
+    "started_observation_id",
 )
 
 
@@ -267,6 +324,10 @@ def _refuse_edits(_mapper, connection, period: TeamMembershipPeriod) -> None:
         return
     if stored["ended_at"] is not None:
         raise HistoryRefused("a closed membership period is never edited")
+    if period.ended_at is None and (
+        period.ended_observation_id is not None or period.ended_exclusion_id is not None
+    ):
+        raise HistoryRefused("what closed a period is written only with its end")
     for field in _FIXED_FIELDS:
         if getattr(period, field) != stored[field]:
             raise HistoryRefused(f"a membership period's {field} is never rewritten")
@@ -314,6 +375,7 @@ def serialize(team: Team, member_ids: list[int]) -> dict:
         "name": team.name,
         "description": team.description,
         "role": team.role,
+        "membership_source": team.membership_source,
         "members": sorted(member_ids),
         "created_by": team.created_by,
         "created_at": team.created_at.isoformat() if team.created_at else None,
