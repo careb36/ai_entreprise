@@ -51,7 +51,7 @@ nice to have. "PR" names the pull request that closes the gap.
 | `GET/PUT /v1/companies/{id}/research` | Viewer reads, Manager writes | The hosts the research tools may read beyond the deployment's defaults (an egress allowlist) | #741 |
 | `GET/POST/PATCH/DELETE /v1/mcp/servers`, `GET …/{id}/tools` | Viewer reads, Manager writes | The MCP servers agents may call, the roles each serves, enabling and removing one, its tools | #741 |
 | `DELETE /v1/company/{id}/members/{user_id}` | Owner (the last Owner stays) | Removing a member at once (it ends their sessions). Today only completing an access review removes one; there is no member list outside it | #741 |
-| `GET/DELETE /v1/companies/{id}/sso/identities[/{id}]` | Owner | The members' linked SSO identities, and unlinking one. Left until #703 (SSO group mapping, same page) lands | after #703 (#738) |
+| `GET/DELETE /v1/companies/{id}/sso/identities[/{id}]` | Owner | The members' linked SSO identities, and unlinking one (it ends their SSO-started sessions). Built once #703 (SSO group mapping, same page; #738) landed | #744 |
 | `GET /v1/companies/{id}/rsi/cycles[/{id}]`, `POST …/rsi/resume`, `…/cycles/import`, `…/cycles/{id}/merge` | Viewer reads; a signed-in Owner acts | The self-improvement loop's state and cycles; resuming after its stop; recording the person's merge; importing a runner's record. The Findings page shows cycles per finding, not the loop | #741 |
 
 ### P2 — daily work
