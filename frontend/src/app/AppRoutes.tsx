@@ -28,6 +28,10 @@ import CompanyFindings from '../pages/CompanyFindings'
 import Usage from '../pages/Usage'
 import AuditAnchors from '../pages/AuditAnchors'
 import ApiTokens from '../pages/ApiTokens'
+import SecurityTests from '../pages/SecurityTests'
+import ExecutionSettings from '../pages/ExecutionSettings'
+import McpServers from '../pages/McpServers'
+import SelfImprovement from '../pages/SelfImprovement'
 import Notifications from '../pages/Notifications'
 import ProjectSettings from '../pages/ProjectSettings'
 import SsoComplete from '../pages/SsoComplete'
@@ -94,6 +98,10 @@ export function AppRoutes() {
         <Route path="/company/notifications" element={<Notifications />} />
         <Route path="/company/project" element={<ProjectSettings />} />
         <Route path="/company/duties" element={<CompanyDuties />} />
+        <Route path="/company/security-tests" element={<SecurityTests />} />
+        <Route path="/company/execution" element={<ExecutionSettings />} />
+        <Route path="/company/mcp" element={<McpServers />} />
+        <Route path="/company/self-improvement" element={<SelfImprovement />} />
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
         <Route path="/company/api-tokens" element={<ApiTokens />} />

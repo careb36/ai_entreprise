@@ -101,6 +101,11 @@ class Company(SQLModel, table=True):
     # 0053 set every company that existed then to ``publish``. An Owner writes
     # it, audited (services/platform/forge_policy_setting.py).
     forge_policy: str = "none"
+    # When work that can wait may start (issue #736,
+    # services/contracts/run_window.py): null (off, work starts at once) or a
+    # window in a named IANA zone. An Owner writes it, audited
+    # (services/platform/run_window_setting.py).
+    run_window: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

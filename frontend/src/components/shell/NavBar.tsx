@@ -147,6 +147,10 @@ export function NavBar() {
                   <Link role="menuitem" to="/company/specifications" className="menu-item">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   <Link role="menuitem" to="/company/documentation" className="menu-item">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   <Link role="menuitem" to="/company/wiki" className="menu-item">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
+                  <Link role="menuitem" to="/company/security-tests" className="menu-item">{t('nav.securityTests')}</Link>
+                  <Link role="menuitem" to="/company/execution" className="menu-item">{t('nav.execution')}</Link>
+                  <Link role="menuitem" to="/company/mcp" className="menu-item">{t('nav.mcp')}</Link>
+                  <Link role="menuitem" to="/company/self-improvement" className="menu-item">{t('nav.selfImprovement')}</Link>
                   {canManage && <Link role="menuitem" to="/company/members" className="menu-item">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   <Link role="menuitem" to="/invitations" className="menu-item">{t('nav.invitations')}</Link>
                   <Link role="menuitem" to="/account" className="menu-item">{t('nav.account')}</Link>

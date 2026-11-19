@@ -13,14 +13,18 @@ Factory leaves local or cloud execution of its Droids to the operator.
    `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and the model
    keys, or plan a provider connection per company. The default team
    (`ROLE_MODEL_MAP` in `backend/app/services/models/model_factory.py`) runs
-   on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter, Designer) and
-   DeepSeek (Developer, QA and the other coding roles, the EngramProcessor),
-   so it needs `QWEN_API_KEY` and `DEEPSEEK_API_KEY`. `AGENT_MODEL` set to one
-   provider's model needs only that provider's key. Optional:
-   `GEMINI_API_KEY` (no default role uses it; Gemini model ids and the
-   proxy's embeddings, which fall back to a local vector without it) and
-   `NEBIUS_API_KEY` (only for `NEMOTRON_ROLES` or `nvidia/…` ids). The keys
-   go to the LLM proxy only. `docs/CONFIGURATION.md` lists every variable.
+   on DeepSeek alone: DeepSeek Pro (`deepseek-v4-pro`) for the PO, Architect,
+   SecOps and the Reviewer agent, DeepSeek Flash (`deepseek-flash`) for every
+   other role and agent, so it needs only `DEEPSEEK_API_KEY`. `AGENT_MODEL`
+   set to another provider's model needs that provider's key instead.
+   Optional: `QWEN_API_KEY` (no default role uses it), `GEMINI_API_KEY` (no
+   default role uses it; Gemini model ids and the proxy's embeddings, which
+   fall back to a local vector without it) and `NEBIUS_API_KEY` (only for
+   `NEMOTRON_ROLES` or `nvidia/…` ids). The keys go to the LLM proxy only.
+   DeepSeek's API processes requests in China: before personal or client
+   data goes through it, see `DEEPSEEK_API_KEY` in `docs/CONFIGURATION.md`
+   (GDPR arts. 44–49 and 35, and serving the open weights yourself through a
+   provider connection). `docs/CONFIGURATION.md` lists every variable.
 2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
    the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
    on by default: the backend does not wait for it and connects once it
@@ -85,8 +89,8 @@ one model of each other provider: the answer then has another
 `served_model` and `provider`, and `fallback_from` holds the failed call's
 `provider`, `model`, `status` and `message`. With no fallback left the proxy
 answers 429 or 502 with `"error": "upstream_error"` and the same fields. Do
-it once per provider the team uses (one Qwen and one DeepSeek id for the
-default team).
+it once per model the team uses (`deepseek-v4-pro` and `deepseek-flash` for
+the default team).
 
 The browser's session lives in `HttpOnly; Secure; SameSite=Strict` cookies
 (issue #524): serve the frontend and the API over https (a browser accepts
@@ -816,10 +820,9 @@ balance), and puts the task back to `todo` instead of blocking it. Add
 credit, or change the role's model on the company's Models page, then call
 `POST /v1/sprints/{id}/resume`. The company gets no follow-up sprint of its
 own while one is paused.
-On the default team the provider is Qwen (`QWEN_API_KEY`: PO, Architect,
-ScrumMaster, SecOps, TechWriter, Designer) or DeepSeek (`DEEPSEEK_API_KEY`:
-Developer, QA and the other coding roles); Gemini or Nebius only where a
-role, an agent or `AGENT_MODEL` names one of their models. Before resuming,
+On the default team the provider is DeepSeek (`DEEPSEEK_API_KEY`, every
+role); Qwen, Gemini or Nebius only where a role, an agent or `AGENT_MODEL`
+names one of their models. Before resuming,
 check the key with the 1-token request in Deploy, Check the model keys: the
 proxy's startup log says "validated successfully" for a key without credit,
 and its `/health` says nothing about providers. While another provider still
@@ -1083,6 +1086,51 @@ starts at `none`; every company that existed then was set to `publish`.
   upgrade the daemons to enforce the policy on their side.
 - **A publish answered `forge_disabled`** names the policy in force; raise it
   only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
+
+## Run window
+
+A company can have work that can wait start only in the hours it chooses
+(issue #736; `docs/contexts/loop.md`, The run window): off (the default and
+every company's value after migration `0055`), a provider's off-peak hours
+(`provider_off_peak:deepseek`: DeepSeek bills off-peak at half the peak
+price) or intervals of its own, in a named IANA time zone.
+
+- **Set it**: an Owner picks it on the Models page (Run window), with the
+  zone (the browser's by default) and a preview of the next 7 days, or
+  `PUT /v1/companies/{id}/run_window`, e.g.
+  `{"run_window": {"timezone": "America/Montevideo", "preset": "provider_off_peak:deepseek"}}`.
+  `{"run_window": null}` turns it off. Each change is audited as
+  `run_window_changed` with both values (`GET /v1/audit/verify` checks the
+  chain); a Manager or a Viewer gets 403.
+- **What waits**: outside the window a new sprint, a started or resumed one,
+  and each task's next model turn (the claim, the dispatch of `todo` tasks,
+  QA's review). A model call already running finishes. The board says
+  "waiting for the run window until HH:MM (local)"; the Review page lists
+  the waiting sprints. Each task records `run_window_wait` and
+  `run_window_release` events (`GET /v1/tasks/{id}/events`).
+- **Something cannot wait**: a Manager ticks *Urgent* on the board, or
+  `PUT /v1/sprints/{id}/urgent` `{"urgent": true}`, or sends `"urgent": true`
+  with `POST /v1/start_sprint`. The sprint starts at once; the bypass is
+  audited as `sprint_urgent_changed` with the account.
+- **Nothing started at the boundary**: the release worker
+  (`run_window_release` in the startup log) wakes at the earliest boundary,
+  at least every `RUN_WINDOW_RECHECK_SECONDS` (default 300), never more than
+  once a minute, so a release can be up to a minute late. A restart mid-wait
+  loses nothing: the hold is in the database (`sprints.run_window_wait_until`)
+  and the worker releases a due sprint as soon as it starts. A paused sprint
+  is left alone until it is resumed. Turning the window off releases what it
+  held at the worker's next look.
+- **Holidays**: the `cn` calendar (Chinese public holidays, which DeepSeek's
+  preset uses) ships as data, one file per year in
+  `backend/app/services/platform/holiday_calendars/cn/`, each citing the
+  State Council's notice; 2026 and 2027 are there. When a new year's notice
+  is published (usually in November), add `<year>.json` in the same shape,
+  with its source. Until then that year has no Chinese holidays and the
+  preset treats them as ordinary weekdays (it may hold work it need not,
+  never the other way); an Owner can add dates to the window meanwhile
+  (`holidays.dates`).
+- **Prices**: the cost report still prices every call at the catalogue's
+  single (peak) rate, so off-peak work costs less than it shows.
 
 ## Runner capacity
 
