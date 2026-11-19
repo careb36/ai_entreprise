@@ -2881,6 +2881,32 @@
       "reason": "Motivo (de 10 a 500 caracteres)"
     }
   },
+  "ssoMembers": {
+    "title": "Identidades de inicio de sesión único de los miembros",
+    "count_one": "{{count}} identidad",
+    "count_other": "{{count}} identidades",
+    "loading": "Cargando las identidades de los miembros",
+    "loadError": "No se pudieron cargar las identidades de los miembros: {{message}}",
+    "empty": "Ningún miembro vinculó una identidad a través del proveedor de la empresa.",
+    "columns": {
+      "member": "Miembro",
+      "providerEmail": "Dirección del proveedor",
+      "linked": "Vinculada",
+      "lastLogin": "Último inicio de sesión",
+      "actions": "Acciones"
+    },
+    "never": "Nunca",
+    "yours": "La tuya: desvincúlala desde Cuenta",
+    "unlink": "Desvincular",
+    "unlinkNamed": "Desvincular la identidad de {{email}}",
+    "confirmLabel": "Confirmar que se desvincula la identidad de {{email}}",
+    "confirm": "¿Desvincular a {{email}}? Las sesiones que inició con inicio de sesión único terminan ahora; vuelve a entrar de otra forma o vincula de nuevo.",
+    "unlinkConfirm": "Sí, desvincular",
+    "unlinked_one": "Desvinculada; terminó {{count}} sesión",
+    "unlinked_other": "Desvinculada; terminaron {{count}} sesiones",
+    "notFound": "Esta identidad ya no está vinculada a través de la empresa.",
+    "lastMethod": "Es la única forma que tiene esa persona de iniciar sesión."
+  },
   "documentation": {
     "title": "Documentación",
     "subtitle": "Los documentos de gestión del proyecto y sus diagramas de arquitectura, compilados a partir de lo que La Fabrique registró. Cada afirmación cita su fuente; la prosa que escribió un modelo se marca como afirmación sin verificar.",

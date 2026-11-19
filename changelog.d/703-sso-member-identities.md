@@ -1,0 +1,3 @@
+Added
+
+* **Members' single sign-on identities in the web app (`docs/design/FRONTEND_GAPS.md`, P1).** The Single sign-on page gains, for an Owner once a connection exists, the members linked through the company's provider (`GET /v1/companies/{id}/sso/identities`): each member's account and provider address, when the identity was linked and last used. An Owner unlinks a member's identity after a confirmation that says what follows (`DELETE …/sso/identities/{id}`): the sessions that member started through single sign-on end at once, and the answer reports how many. The backend's refusals are explained (`not_found`, `last_sign_in_method`); the Owner's own identity stays on the Account page.

@@ -2881,6 +2881,32 @@
       "reason": "Reason (10 to 500 characters)"
     }
   },
+  "ssoMembers": {
+    "title": "Members' single sign-on identities",
+    "count_one": "{{count}} identity",
+    "count_other": "{{count}} identities",
+    "loading": "Loading the members' identities",
+    "loadError": "Could not load the members' identities: {{message}}",
+    "empty": "No member has linked an identity through the company's provider.",
+    "columns": {
+      "member": "Member",
+      "providerEmail": "Provider's address",
+      "linked": "Linked",
+      "lastLogin": "Last sign-in",
+      "actions": "Actions"
+    },
+    "never": "Never",
+    "yours": "Yours: unlink it from Account",
+    "unlink": "Unlink",
+    "unlinkNamed": "Unlink the identity of {{email}}",
+    "confirmLabel": "Confirm unlinking the identity of {{email}}",
+    "confirm": "Unlink {{email}}? The sessions they started through single sign-on end now; they sign in again another way or link again.",
+    "unlinkConfirm": "Yes, unlink",
+    "unlinked_one": "Unlinked; {{count}} session ended",
+    "unlinked_other": "Unlinked; {{count}} sessions ended",
+    "notFound": "This identity is no longer linked through the company.",
+    "lastMethod": "This is the person's only way to sign in."
+  },
   "documentation": {
     "title": "Documentation",
     "subtitle": "The project's management documents and architecture diagrams, compiled from what La Fabrique recorded. Every statement cites its source; prose a model wrote is marked as a claim.",
