@@ -1175,6 +1175,9 @@
       "test_scorecard_swebench.py": [
         "models"
       ],
+      "test_scorecard_edit_formats.py": [
+        "models"
+      ],
       "test_scrum_master.py": [
         "loop"
       ],

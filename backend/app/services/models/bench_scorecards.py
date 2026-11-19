@@ -31,7 +31,12 @@ metric was not measured, the entry says so (``{"measured": false,
   could not be built or did not reproduce it (the card's own reason), its
   FAIL_TO_PASS and PASS_TO_PASS counts when its tests did not run, and the
   resolve rate when no instance was measured (an unmeasured instance is left
-  out of the rate, as the card counts it, and counted apart).
+  out of the rate, as the card counts it, and counted apart);
+- in v7's edit-format section, a row's outcome and criteria when the run
+  could not measure that model and format (the card's own reason), and the
+  share of well-formed deliveries when no delivery was observed. An
+  ``unusable`` row (no delivery well formed) keeps its own outcome and is
+  never shown as a pass, whatever the tests said.
 
 The totals' criteria are unmeasured when any spec's grade is; the totals'
 tokens when no spec reported any. The other numbers (tasks, rework, blocked
@@ -60,6 +65,17 @@ NO_PROMPT_MEASURE = "no_prompt_measure"
 NO_PROBLEMS_GRADED = "no_problems_graded"
 NO_INSTANCES_MEASURED = "no_instances_measured"
 TESTS_NOT_RUN = "tests_not_run"
+FORMAT_UNMEASURED = "format_unmeasured"
+NO_DELIVERY_OBSERVED = "no_delivery_observed"
+_FORMAT_COUNTS = (
+    "deliveries",
+    "observed",
+    "missing",
+    "well_formed",
+    "malformed_edit_blocks",
+    "off_format",
+    "rejected_edits",
+)
 _SPEC_COPIED = (
     "name",
     "status",
@@ -345,6 +361,57 @@ def _swebench(data: Any) -> dict[str, Any] | None:
     }
 
 
+def _well_formed(well_formed: int, observed: int) -> dict[str, Any]:
+    if not observed:
+        return unmeasured(NO_DELIVERY_OBSERVED)
+    return measured(round(well_formed / observed, 4))
+
+
+def _format_row(row: dict) -> dict[str, Any]:
+    outcome = row["outcome"]
+    if outcome == "unmeasured":
+        shown = unmeasured(FORMAT_UNMEASURED, str(row["reason"]))
+        criteria = unmeasured(FORMAT_UNMEASURED)
+    else:
+        shown = measured(outcome)
+        criteria = measured(
+            {"passed": row["criteria_passed"], "total": row["criteria_total"]}
+        )
+    return {
+        "model": row["model"],
+        "format": row["format"],
+        "outcome": shown,
+        # Why a format was unusable or failed, as the card says (or null).
+        "reason": None if outcome == "unmeasured" else row.get("reason"),
+        "criteria": criteria,
+        "rework_requests": row["rework_requests"],
+        **{k: row[k] for k in _FORMAT_COUNTS},
+        "well_formed_rate": _well_formed(row["well_formed"], row["observed"]),
+    }
+
+
+def _edit_formats(card: dict) -> dict[str, Any] | None:
+    """v7's edit-format section: the format the run asked for, its specs'
+    deliveries summed, and one row per model and format; None when the card
+    has none of them."""
+    summaries = [s["edit_format"] for s in card["specs"] if "edit_format" in s]
+    block = card.get("edit_formats")
+    if "edit_format" not in card and not summaries and block is None:
+        return None
+    deliveries = None
+    if summaries:
+        summed = {k: sum(s[k] for s in summaries) for k in _FORMAT_COUNTS}
+        deliveries = {
+            **summed,
+            "well_formed_rate": _well_formed(summed["well_formed"], summed["observed"]),
+        }
+    return {
+        "requested": card.get("edit_format"),
+        "deliveries": deliveries,
+        "rows": [_format_row(r) for r in block["rows"]] if block else [],
+    }
+
+
 def summarize(card: dict) -> dict[str, Any]:
     """A valid card's page entry: its header, totals and specs."""
     version = card["schema_version"]
@@ -374,6 +441,7 @@ def summarize(card: dict) -> dict[str, Any]:
         "prompt_sections": _sections(card["totals"].get("prompt"), version),
         "humaneval": _humaneval(card.get("humaneval")),
         "swebench": _swebench(card.get("swebench")),
+        "edit_formats": _edit_formats(card),
     }
 
 

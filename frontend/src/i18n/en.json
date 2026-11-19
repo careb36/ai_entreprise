@@ -3845,7 +3845,9 @@
       "no_prompt_measure": "no prompt was measured",
       "no_problems_graded": "no HumanEval problem was graded",
       "no_instances_measured": "no SWE-bench instance was measured",
-      "tests_not_run": "the instance's tests did not run"
+      "tests_not_run": "the instance's tests did not run",
+      "format_unmeasured": "the run could not measure this model and format",
+      "no_delivery_observed": "no delivery was observed in any format"
     },
     "criteriaValue": "{{passed}}/{{total}} ({{rate}})",
     "seconds": "{{value}} s",
@@ -3961,6 +3963,29 @@
       "outcomes": {
         "pass": "Resolved",
         "fail": "Failed"
+      }
+    },
+    "editFormats": {
+      "title": "Edit format per model",
+      "note": "Each model run once per edit format on the same specifications, graded by the acceptance tests a person wrote. How a format was used is what the backend read in each answer and the daemon applied, never the model's account. An unusable format (no delivery well formed) is never a pass, whatever the tests said. Shown, never judged: one run per row is one sample.",
+      "requested": "Format this run asked for: {{format}}",
+      "deliveries": "This run's deliveries: {{wellFormed}} of {{observed}} observed well formed ({{missing}} without an observation, counted apart).",
+      "wellFormedShare": "Well-formed share",
+      "caption": "Each model and edit format of the latest scorecard",
+      "model": "Model",
+      "format": "Format",
+      "outcome": "Outcome",
+      "criteria": "Criteria",
+      "wellFormed": "Well formed",
+      "malformed": "Malformed blocks",
+      "offFormat": "Off format",
+      "refused": "Refused by the daemon",
+      "rework": "Rework",
+      "ratio": "{{passed}}/{{total}}",
+      "outcomes": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "unusable": "Unusable"
       }
     }
   },

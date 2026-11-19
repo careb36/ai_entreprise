@@ -16,6 +16,8 @@ export type BenchUnmeasuredReason =
   | 'no_problems_graded'
   | 'no_instances_measured'
   | 'tests_not_run'
+  | 'format_unmeasured'
+  | 'no_delivery_observed'
 
 export type BenchMeasure<T> =
   | { measured: true; value: T }
@@ -122,6 +124,35 @@ export interface BenchSweBench {
   skipped: string[]
 }
 
+/** Deliveries observed in an edit format: what the backend read in each answer and the daemon applied, never the model's account. */
+export interface BenchEditFormatCounts {
+  deliveries: number
+  observed: number
+  missing: number
+  well_formed: number
+  malformed_edit_blocks: number
+  off_format: number
+  rejected_edits: number
+  well_formed_rate: BenchMeasure<number>
+}
+
+/** One model and format (schema v7): `unusable` is its own outcome, never a pass; `unmeasured` carries the card's reason. */
+export interface BenchEditFormatRow extends BenchEditFormatCounts {
+  model: string
+  format: string
+  outcome: BenchMeasure<'pass' | 'fail' | 'unusable'>
+  reason: string | null
+  criteria: BenchMeasure<{ passed: number; total: number }>
+  rework_requests: number
+}
+
+/** The card's edit-format fields (schema v7): the format the run asked for, its specs' deliveries summed, one row per model and format. */
+export interface BenchEditFormats {
+  requested: string | null
+  deliveries: BenchEditFormatCounts | null
+  rows: BenchEditFormatRow[]
+}
+
 interface BenchCardBase {
   file: string
   folder: '' | 'real' | 'ablation'
@@ -144,6 +175,7 @@ export interface BenchValidCard extends BenchCardBase {
   prompt_sections: BenchPromptSection[] | null
   humaneval: BenchHumanEval | null
   swebench: BenchSweBench | null
+  edit_formats: BenchEditFormats | null
 }
 
 export interface BenchRejectedCard extends BenchCardBase { status: 'invalid' | 'unreadable' }
