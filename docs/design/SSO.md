@@ -5,7 +5,9 @@ reviews it before it guides more work · Issue: #512 · SDL practice 3 ·
 Amended 2026-11-18 for the DNS verification of allowed domains (T16–T24,
 again written before the code) · Amended 2026-11-18 for linking an identity
 from inside a signed-in session (T25–T33, written with the tests, before the
-code; T31's single transaction and T33 added after the sdl-review)
+code; T31's single transaction and T33 added after the sdl-review) · The
+mapping of the provider's groups to teams (issue #703) is designed in
+[`SSO_GROUP_MAPPING.md`](SSO_GROUP_MAPPING.md), not built
 
 ## What is built
 
@@ -80,7 +82,7 @@ check rows are the observation; the status is derived only from the latter.
 | T3 | B8 | S | Email used as the join key lets one IdP take over an account | M | H | High | New: identity is `(issuer, sub)`; email links an existing account only once, only when `email_verified` is not false and the domain is allowed; a linked identity never moves by email (`sso_flow.resolve_identity`) |
 | T15 | B8 | E | **Cross-tenant takeover** (found by the sdl-review of the first draft): any Owner can run their own IdP, list another company's domain and assert a victim's verified email; linking by email would hand them the victim's account and every company it belongs to — even after inviting the victim into their own company first | H | H | Critical | New: an existing account is linked by email only when it is a member of this connection's company **and of no other company**; auto-join never adopts an existing account (`account_exists`, `link_refused`); a domain can be listed by one company's connection only (first come); tests for an account outside the company, in another company too, and the invite-then-assert attack |
 | T4 | B1 | E | Account pre-hijacking: someone registers `victim@corp` with a password before the victim, and an Owner invites that account | M | H | High | New: an account linked by email becomes SSO-only (password cleared) unless it is an Owner of the company (the break-glass path); recorded in the audit row; test |
-| T5 | B8 | E | IdP-asserted role or group grants access | L | H | High | New: no claim is read for authorization; new members get the connection's default role, Viewer or Manager, never Owner (validated on save; test) |
+| T5 | B8 | E | IdP-asserted role or group grants access | L | H | High | New: no claim is read for authorization; new members get the connection's default role, Viewer or Manager, never Owner (validated on save; test). Issue #703 will read a groups claim to set membership of SSO-managed teams only, within the company and up to a cap (`SSO_GROUP_MAPPING.md`, G1, G2; not built) |
 | T6 | B8 | E | A company claims a public mail domain (`gmail.com`) and auto-joins strangers | M | M | Medium | New: public mail domains refused in `allowed_domains`; auto-join off by default; the allowed domains still only admit people the company's own IdP authenticated |
 | T7 | B1 | E | A Manager, Viewer or API token changes the connection | L | H | High | New: every config route requires a signed-in human Owner (API tokens refused even with the Owner role); tests |
 | T8 | B1 | I | The client secret leaks through the API, logs or audit | M | H | High | Existing: Fernet at rest (`crypto.py`). New: `serialize` returns `has_client_secret` only; the audit row records which fields changed, never values; test that no response contains the secret |
@@ -291,6 +293,10 @@ unlink another company's.
   `routers/sso_link.py`; the callback in `routers/sso.py` dispatches on the
   state's kind. Frontend: `pages/Account.tsx` and
   `components/SsoIdentities.tsx`.
+
+- **Group mapping** (issue #703, not built; migration `0053`): the
+  threat model (G1–G18), data model and EARS rules are in
+  [`SSO_GROUP_MAPPING.md`](SSO_GROUP_MAPPING.md).
 
 ## What was taken from AixleHQ/flow (Apache-2.0, design only)
 
