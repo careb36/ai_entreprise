@@ -2738,6 +2738,46 @@
     "capped": "Esta instalación permite como máximo «{{ceiling}}» (FORGE_POLICY_MAX): rige «{{effective}}».",
     "ownerOnly": "Solo un Owner cambia la política de forja."
   },
+  "runWindow": {
+    "title": "Ventana de ejecución",
+    "hint": "Cuándo puede empezar el trabajo que puede esperar. Fuera de la ventana, un sprint nuevo y el siguiente turno del modelo de cada tarea esperan; una llamada al modelo que ya está en curso nunca se corta, y un sprint urgente empieza de inmediato. Solo un Owner la cambia; cada cambio queda auditado.",
+    "mode": {
+      "off": "Desactivada: el trabajo empieza de inmediato",
+      "provider_off_peak_deepseek": "Horas valle de DeepSeek (mitad de precio)",
+      "custom": "Mis propios horarios"
+    },
+    "presetSource": "Las horas valle se cobran al {{price}}. Horas pico según las publica el proveedor, consultadas el {{date}}:",
+    "timezone": "Zona horaria",
+    "days": {
+      "mon": "lun",
+      "tue": "mar",
+      "wed": "mié",
+      "thu": "jue",
+      "fri": "vie",
+      "sat": "sáb",
+      "sun": "dom"
+    },
+    "from": "de",
+    "to": "a",
+    "addInterval": "Agregar horario",
+    "removeInterval": "Quitar",
+    "calendar": "Feriados (abierta todo el día)",
+    "noCalendar": "Ninguno",
+    "dates": "Otras fechas",
+    "preview": "Vista previa",
+    "save": "Guardar",
+    "offHint": "Sin ventana de ejecución: el trabajo empieza en cuanto está listo.",
+    "openNow": "La ventana está abierta ahora.",
+    "closedNow": "La ventana está cerrada; abre a las {{time}}.",
+    "previewTitle": "Abierta en los próximos 7 días ({{zone}})",
+    "ownerOnly": "Solo un Owner cambia la ventana de ejecución.",
+    "waiting": "Esperando la ventana de ejecución hasta las {{time}} (hora local)",
+    "waitingTitle": "Empieza a las {{time}} ({{zone}})",
+    "urgent": "Urgente",
+    "urgentHint": "Un sprint urgente ignora la ventana de ejecución y empieza de inmediato. Queda auditado.",
+    "urgentOn": "Urgente: la ventana de ejecución no se aplica",
+    "inboxTitle": "Esperando la ventana de ejecución"
+  },
   "graphSkeleton": {
     "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",
     "loadingVisualization": "Cargando la visualización del grafo...",

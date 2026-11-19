@@ -20,6 +20,7 @@ import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
 import { dutiesEndpoints } from './api/duties'
+import { runWindowEndpoints } from './api/runWindow'
 import { taskViewEndpoints } from './api/taskViews'
 import { taskRelationEndpoints } from './api/taskRelations'
 import { teamEndpoints } from './api/teams'
@@ -49,6 +50,7 @@ export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
 export * from './api/duties'
+export * from './api/runWindow'
 export * from './api/taskViews'
 export * from './api/taskRelations'
 export * from './api/teams'
@@ -86,6 +88,7 @@ const endpoints = {
   ...teamEndpoints(http),
   ...usageEndpoints(http),
   ...dutiesEndpoints(http),
+  ...runWindowEndpoints(http),
   ...findingEndpoints(http),
   ...benchEndpoints(http),
 }

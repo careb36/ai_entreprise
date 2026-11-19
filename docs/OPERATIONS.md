@@ -1044,6 +1044,51 @@ starts at `none`; every company that existed then was set to `publish`.
 - **A publish answered `forge_disabled`** names the policy in force; raise it
   only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
 
+## Run window
+
+A company can have work that can wait start only in the hours it chooses
+(issue #736; `docs/contexts/loop.md`, The run window): off (the default and
+every company's value after migration `0055`), a provider's off-peak hours
+(`provider_off_peak:deepseek`: DeepSeek bills off-peak at half the peak
+price) or intervals of its own, in a named IANA time zone.
+
+- **Set it**: an Owner picks it on the Models page (Run window), with the
+  zone (the browser's by default) and a preview of the next 7 days, or
+  `PUT /v1/companies/{id}/run_window`, e.g.
+  `{"run_window": {"timezone": "America/Montevideo", "preset": "provider_off_peak:deepseek"}}`.
+  `{"run_window": null}` turns it off. Each change is audited as
+  `run_window_changed` with both values (`GET /v1/audit/verify` checks the
+  chain); a Manager or a Viewer gets 403.
+- **What waits**: outside the window a new sprint, a started or resumed one,
+  and each task's next model turn (the claim, the dispatch of `todo` tasks,
+  QA's review). A model call already running finishes. The board says
+  "waiting for the run window until HH:MM (local)"; the Review page lists
+  the waiting sprints. Each task records `run_window_wait` and
+  `run_window_release` events (`GET /v1/tasks/{id}/events`).
+- **Something cannot wait**: a Manager ticks *Urgent* on the board, or
+  `PUT /v1/sprints/{id}/urgent` `{"urgent": true}`, or sends `"urgent": true`
+  with `POST /v1/start_sprint`. The sprint starts at once; the bypass is
+  audited as `sprint_urgent_changed` with the account.
+- **Nothing started at the boundary**: the release worker
+  (`run_window_release` in the startup log) wakes at the earliest boundary,
+  at least every `RUN_WINDOW_RECHECK_SECONDS` (default 300), never more than
+  once a minute, so a release can be up to a minute late. A restart mid-wait
+  loses nothing: the hold is in the database (`sprints.run_window_wait_until`)
+  and the worker releases a due sprint as soon as it starts. A paused sprint
+  is left alone until it is resumed. Turning the window off releases what it
+  held at the worker's next look.
+- **Holidays**: the `cn` calendar (Chinese public holidays, which DeepSeek's
+  preset uses) ships as data, one file per year in
+  `backend/app/services/platform/holiday_calendars/cn/`, each citing the
+  State Council's notice; 2026 and 2027 are there. When a new year's notice
+  is published (usually in November), add `<year>.json` in the same shape,
+  with its source. Until then that year has no Chinese holidays and the
+  preset treats them as ordinary weekdays (it may hold work it need not,
+  never the other way); an Owner can add dates to the window meanwhile
+  (`holidays.dates`).
+- **Prices**: the cost report still prices every call at the catalogue's
+  single (peak) rate, so off-peak work costs less than it shows.
+
 ## Runner capacity
 
 The seven self-hosted runners (`lafabrique`) share one machine of about 4

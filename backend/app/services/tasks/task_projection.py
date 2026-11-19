@@ -36,7 +36,8 @@ from services.tasks import board, task_events
 # the System's integration note (it moves branches, not the task) and the
 # sprint board's notes (claims left for the other tasks, issue #439) and the
 # relations between tasks (issue #533) and the
-# effort observed at sprint close (issue #534).
+# effort observed at sprint close (issue #534) and the run window's holds and
+# releases (issue #736: when work may start, never what the task is).
 _ADVICE_KINDS = {
     "carried_over",
     "advised",
@@ -45,6 +46,8 @@ _ADVICE_KINDS = {
     "board_note_rejected",
     "relation",
     "effort_observed",
+    "run_window_wait",
+    "run_window_release",
 }
 # A dependency hold (``services/dependencies.py``) says so in its payload.
 DEPENDENCY_HOLD = "dependency"

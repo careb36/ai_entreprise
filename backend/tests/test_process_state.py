@@ -30,6 +30,7 @@ SAFE = {
     "services.evidence.protected_check.patterns_in_force": "the backend's own protected list and test map, shipped with the code",
     "services.platform.hooks._HANDLERS": "handlers installed once a process, by event name",
     "services.platform.wstg_catalogue.catalogue": "a cache of a file shipped with the code",
+    "services.platform.run_window_setting._calendar_files": "a cache of the holiday calendars shipped with the code",
     "services.platform.wstg_catalogue._by_short": "a cache of a file shipped with the code",
     "services.release.integration._SLOTS": "weak, by event loop: gone with the test's loop",
     "services.release.integration._LOCK_ENGINES": "an engine per database URL, holds no row",

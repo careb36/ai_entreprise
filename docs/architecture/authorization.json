@@ -302,6 +302,15 @@
     "GET /v1/companies/{company_id}/routing_record": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/rsi/cycles": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/run_window": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/sandbox": {
       "access": "Viewer"
     },
@@ -309,12 +318,6 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
-      "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/rsi/cycles": {
-      "access": "Viewer"
-    },
-    "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/service-accounts": {
@@ -719,6 +722,12 @@
     "POST /v1/companies/{company_id}/rsi/resume": {
       "access": "Owner"
     },
+    "POST /v1/companies/{company_id}/run_window/preview": {
+      "access": "Viewer",
+      "body": {
+        "run_window": null
+      }
+    },
     "POST /v1/companies/{company_id}/sandbox/cache/reset": {
       "access": "Manager"
     },
@@ -735,10 +744,10 @@
     "POST /v1/companies/{company_id}/sod/exception": {
       "access": "Owner"
     },
-    "POST /v1/companies/{company_id}/sso/test": {
+    "POST /v1/companies/{company_id}/sso/domains/{domain}/check": {
       "access": "Owner"
     },
-    "POST /v1/companies/{company_id}/sso/domains/{domain}/check": {
+    "POST /v1/companies/{company_id}/sso/test": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/teams": {
@@ -1015,6 +1024,12 @@
     "PUT /v1/companies/{company_id}/research": {
       "access": "Manager"
     },
+    "PUT /v1/companies/{company_id}/run_window": {
+      "access": "Owner",
+      "body": {
+        "run_window": null
+      }
+    },
     "PUT /v1/companies/{company_id}/sandbox": {
       "access": "Manager"
     },
@@ -1044,6 +1059,12 @@
     },
     "PUT /v1/specifications/{spec_id}": {
       "access": "Manager"
+    },
+    "PUT /v1/sprints/{sprint_id}/urgent": {
+      "access": "Manager",
+      "body": {
+        "urgent": false
+      }
     },
     "PUT /v1/views/{view_id}": {
       "access": "Viewer"

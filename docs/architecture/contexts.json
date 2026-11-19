@@ -30,6 +30,7 @@
         "protected_paths_setting",
         "rework_mentions",
         "rfc3161",
+        "run_window_setting",
         "sod",
         "teams",
         "wstg_catalogue"
@@ -1131,6 +1132,9 @@
       ],
       "test_run_cost.py": [
         "loop"
+      ],
+      "test_run_window.py": [
+        "management"
       ],
       "test_run_log_ranges.py": [
         "workspace"

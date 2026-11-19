@@ -435,6 +435,14 @@ Copy `.env.example` to `.env` and fill in:
   asks for, so `none` on a computer means it never fetches, pushes or reads a
   request from a forge. An unknown value reads as `none`. An air-gapped
   install sets `none` on both.
+- `RUN_WINDOW_RECHECK_SECONDS` — optional, default `300`, read by the backend
+  (`config.py`, `services/loop/run_window_gate.py`). The longest the run-window
+  worker sleeps between two looks at the sprints whose work waits for their
+  company's run window (issue #736). It wakes at the earliest window boundary
+  when that comes sooner, and never looks more often than once every 60
+  seconds (a smaller value reads as 60). The window itself is a company
+  setting, not a variable: an Owner sets it on the Models page or with
+  `PUT /v1/companies/{id}/run_window`.
 - `FABRIQUE_SANDBOX_RUNTIME` — daemon side, default unset
   (`vscode-daemon/sandbox.py`): the container runtime of `DELIVERY_SANDBOX=container`,
   a command name or path. Unset, the first of `docker` and `podman` on the

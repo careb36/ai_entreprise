@@ -1,4 +1,5 @@
 import type { Http } from './client'
+import type { RunWindowHold } from './runWindow'
 
 export interface BacklogItem {
   id: number
@@ -54,6 +55,8 @@ export interface SprintBoard {
     scope_size: string
     item_limit: number
     specification_id?: number | null; team?: string[] | null; team_source?: string // The roles its tasks may go to (null: every hired role), and who chose them.
+    /** A Manager's bypass of the run window, and the hold while the window keeps its work back (issue #736). */
+    urgent?: boolean; run_window?: RunWindowHold | null
   }
   columns: Record<string, BacklogItem[]>
   total: number
