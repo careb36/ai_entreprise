@@ -25,6 +25,7 @@ import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { AutonomyControl, SprintControls, SprintStatusBanner } from '../components/SprintControls'
 import { SprintTeamChips } from '../components/SprintTeam'
+import { SprintRelations } from '../components/SprintRelations'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { SprintProgress } from '../components/SprintProgress'
 import { parseRouteId } from '../lib/routeId'
@@ -244,6 +245,7 @@ export const SprintWorkspace: React.FC = () => {
               <SprintIntegration sprintId={sprintId} companyId={board.sprint.company_id}
                 canReview={canManage && board.sprint.company_id === companyId}
                 canConfigure={role === 'Owner' && board.sprint.company_id === companyId} />
+              <SprintRelations sprintId={sprintId} />
             </div>
           )}
         </div>

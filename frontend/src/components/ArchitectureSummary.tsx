@@ -11,6 +11,7 @@ import { Pencil, Sparkles } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { architecturePath, latestArchitecture, useArchitectures, useDraftArchitecture } from '../services/architectures'
 import type { Specification } from '../services/specifications'
+import { ArchitectureRevision } from './ArchitectureRevision'
 import { CheckSummary, StatusBadge } from './SpecificationBadges'
 import { LoadError, LoadingLine, Panel, Spinner } from './ui'
 
@@ -59,6 +60,7 @@ export function ArchitectureSummary({ specification, canWrite }: { specification
             {draft.isError && <span role="alert" className="text-[13px] text-red-300">{t('architectures.draftError', { message: errorDetail(draft.error) })}</span>}
           </div>
         )}
+        {offerNew && latest === null && <ArchitectureRevision companyId={specification.company_id} specificationId={specification.id} />}
       </div>
     </Panel>
   )

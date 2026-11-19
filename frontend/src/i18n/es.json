@@ -39,7 +39,9 @@
     "invitations": "Invitaciones",
     "findings": "Hallazgos",
     "bench": "Banco de pruebas",
-    "account": "Cuenta"
+    "account": "Cuenta",
+    "project": "Ajustes del proyecto",
+    "notifications": "Notificaciones"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1989,6 +1991,20 @@
       "countLabel_other": "{{count}} versiones"
     }
   },
+  "architectureFiles": {
+    "revise": "Revisar la arquitectura de la empresa (versión {{version}}) para esta especificación",
+    "reviseHint": "El borrador parte de la versión actual y conserva lo que cubre para especificaciones anteriores.",
+    "revisionOpen": "La versión {{version}} de la arquitectura de la empresa ya está en borrador.",
+    "openDraft": "Abrir el borrador",
+    "adrTitle": "Archivos ADR",
+    "adrHint": "Las decisiones como archivos Markdown para docs/adr/, para que los agregues al repositorio.",
+    "firstNumber": "Número del primer ADR",
+    "prepare": "Preparar los archivos",
+    "noDecisions": "Esta arquitectura no registra decisiones.",
+    "adrList": "Archivos ADR",
+    "download": "Descargar",
+    "downloadNamed": "Descargar {{path}}"
+  },
   "procedures": {
     "title": "Procedimientos",
     "subtitle": "Las reglas que sigue cada rol. El ScrumMaster las propone después de un sprint con rework; los números del tablero las mantienen o las revierten.",
@@ -2655,6 +2671,51 @@
     "saved": "Productores de consola guardados.",
     "sandboxWarning": "Ningún CLI se ejecuta hasta entonces: {{reason}}. El modelo produce estas tareas y el tablero dice por qué. Un productor de consola solo se ejecuta en un sandbox container o bwrap con red, y solo ve las variables listadas en la configuración del sandbox (lista ahí la clave del proveedor)."
   },
+  "projectSettings": {
+    "title": "Ajustes del proyecto",
+    "subtitle": "Cómo construye y prueba la fábrica el proyecto, y cómo se elige el equipo de un sprint.",
+    "saved": "Guardado",
+    "managersChange": "Un gestor cambia estos ajustes.",
+    "team": {
+      "title": "Equipo del sprint",
+      "loading": "Cargando el ajuste del equipo",
+      "suggested": {
+        "label": "Sugerido",
+        "hint": "El PO sugiere un equipo para cada sprint y un gestor lo confirma."
+      },
+      "automatic": {
+        "label": "Automático",
+        "hint": "La sugerencia del PO es el equipo del sprint."
+      }
+    },
+    "stack": {
+      "title": "Perfil de la pila",
+      "loading": "Cargando el perfil de la pila",
+      "hint": "Cada campo que se deja a la detección usa lo que la fábrica encuentra en el proyecto. Un paso desactivado se omite en cada entrega.",
+      "stack": "Pila",
+      "port": "Puerto",
+      "probePath": "Ruta de sondeo",
+      "web": "Sirve páginas web",
+      "webYes": "Sí",
+      "webNo": "No",
+      "detected": "Detectado",
+      "command": "Comando",
+      "off": "Desactivado",
+      "modeFor": "Cómo se define el paso {{step}}",
+      "commandFor": "El comando de {{step}}",
+      "commands": {
+        "install": "Instalar",
+        "test": "Probar",
+        "lint": "Lint",
+        "start": "Iniciar",
+        "e2e": "De extremo a extremo"
+      },
+      "portBad": "El puerto es un número entero de 1 a 65535.",
+      "probeBad": "La ruta de sondeo empieza con /.",
+      "folders": "Carpetas con su propio perfil (se conservan tal cual): {{folders}}",
+      "installed": "Manifiestos que vieron sus últimas instalaciones: {{manifests}}"
+    }
+  },
   "teamRoles": {
     "PO": "Product Owner",
     "Architect": "Arquitecto",
@@ -3037,7 +3098,9 @@
           "what": "Quién se hace cargo de cada entrega (operaciones, soporte, el cliente), qué recibe, las soluciones provisionales para sus errores conocidos y cuándo se completa el traspaso."
         }
       }
-    }
+    },
+    "manifest": "Manifiesto firmado",
+    "manifestError": "No se pudo descargar el manifiesto: {{message}}"
   },
   "chat": {
     "title": "Aprobaciones por chat",
@@ -3081,6 +3144,52 @@
       "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
     },
     "selectCompany": "Selecciona una empresa para vincular tus cuentas de chat."
+  },
+  "webhook": {
+    "title": "Notificaciones",
+    "subtitle": "El webhook de notificaciones de la empresa: adónde envía la fábrica sus eventos, firmados con un secreto que solo conoce el receptor.",
+    "loading": "Cargando el webhook",
+    "loadError": "No se pudo cargar el webhook: {{message}}",
+    "statusTitle": "Webhook",
+    "none": "No hay un webhook configurado.",
+    "noneManager": "No hay un webhook configurado. Créalo abajo.",
+    "on": "Activo",
+    "off": "Inactivo",
+    "eventsList": "Eventos: {{events}}",
+    "noEvents": "Ningún evento seleccionado: no se envía nada",
+    "events": {
+      "task_done": "Una tarea terminó",
+      "task_blocked": "Una tarea quedó bloqueada",
+      "sprint_closed": "Un sprint se cerró",
+      "run_refuted": "Una ejecución fue refutada"
+    },
+    "lastDelivery": "Última entrega {{when}}, estado {{status}}",
+    "noDelivery": "Todavía no se entregó nada",
+    "lastError": "Último error: {{error}}",
+    "ping": "Enviar un ping de prueba",
+    "pinged": "Ping en cola",
+    "delete": "Eliminar",
+    "confirmLabel": "Confirmar la eliminación del webhook",
+    "confirmDelete": "¿Eliminar el webhook? Los eventos dejan de enviarse.",
+    "deleteConfirm": "Sí, eliminar",
+    "createTitle": "Crear el webhook",
+    "editTitle": "Cambiar el webhook",
+    "url": "URL",
+    "urlPlaceholder": "https://hooks.example.com/fabrique",
+    "urlHint": "Una dirección https. Las credenciales van en el secreto, nunca en la URL.",
+    "urlProblem": {
+      "invalid": "Esto no es una URL.",
+      "scheme": "Solo se aceptan direcciones https.",
+      "credentials": "Quita el usuario y la contraseña de la URL: usa el secreto."
+    },
+    "secretRequired": "Secreto de firma (obligatorio)",
+    "secretReplace": "Nuevo secreto de firma (vacío para conservar el actual)",
+    "secretHint_one": "Al menos {{count}} carácter. Se guarda cifrado y no se vuelve a mostrar.",
+    "secretHint_other": "Al menos {{count}} caracteres. Se guarda cifrado y no se vuelve a mostrar.",
+    "eventsLabel": "Eventos que se envían",
+    "eventsHint": "Sin ninguno seleccionado, el webhook sigue configurado pero no envía nada.",
+    "enabled": "Enviar eventos",
+    "saved": "Webhook guardado"
   },
   "taskRelations": {
     "title": "Tareas relacionadas",
@@ -3249,6 +3358,25 @@
       "claimed": "Declarado",
       "open": "Abierto",
       "uncovered": "Sin cubrir"
+    }
+  },
+  "sprintRelations": {
+    "title": "Relaciones entre tareas",
+    "count_one": "{{count}} relación",
+    "count_other": "{{count}} relaciones",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "loading": "Cargando las relaciones entre tareas",
+    "loadError": "No se pudieron cargar las relaciones entre tareas: {{message}}",
+    "metrics": "{{confirmed}} confirmadas, {{proposed}} propuestas.",
+    "duplicatesDelivered_one": "{{count}} duplicado confirmado se entregó dos veces.",
+    "duplicatesDelivered_other": "{{count}} duplicados confirmados se entregaron dos veces.",
+    "empty": "Ninguna tarea de este sprint tiene relaciones.",
+    "columns": {
+      "task": "Tarea",
+      "relation": "Relación",
+      "other": "Otra tarea",
+      "state": "Estado"
     }
   },
   "teams": {

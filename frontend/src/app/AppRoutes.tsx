@@ -27,6 +27,8 @@ import CompanyFindingDetail from '../pages/CompanyFindingDetail'
 import CompanyFindings from '../pages/CompanyFindings'
 import Usage from '../pages/Usage'
 import AuditAnchors from '../pages/AuditAnchors'
+import Notifications from '../pages/Notifications'
+import ProjectSettings from '../pages/ProjectSettings'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
 import HelpDesk from '../pages/HelpDesk'
@@ -88,6 +90,8 @@ export function AppRoutes() {
         <Route path="/company/sso" element={<CompanySso />} />
         <Route path="/company/chat" element={<ChatApprovals />} />
         <Route path="/company/teams" element={<CompanyTeams />} />
+        <Route path="/company/notifications" element={<Notifications />} />
+        <Route path="/company/project" element={<ProjectSettings />} />
         <Route path="/company/duties" element={<CompanyDuties />} />
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
