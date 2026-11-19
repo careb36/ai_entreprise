@@ -88,7 +88,7 @@ describe('Sprints list', () => {
       totals: { specs: 1, specs_completed: 1, tasks: 4, done_first_attempt: 3, first_attempt_rate: 0.75, rework_per_task: 0.25,
         blocked_share: 0.5, wall_clock_seconds: 70, criteria: unmeasured, prompt: unmeasured,
         tokens: { ...unmeasured, turns_reported: 0, turns_unreported: 0 } },
-      specs: [], prompt_sections: null, humaneval: null,
+      specs: [], prompt_sections: null, humaneval: null, swebench: null,
     }] })
     renderPage()
     expect(await screen.findByText('Bench reference: 0.25')).toBeInTheDocument()
