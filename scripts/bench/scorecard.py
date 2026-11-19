@@ -31,6 +31,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
   ``--sections-off NAMES`` records the prompt sections the run turned off
   (``sections_off``, schema v4; ``run.sh`` with ``BENCH_SECTIONS_OFF``), and a
   card carrying a section ablation (``ablation.py``) renders its deltas.
+  ``--humaneval FILE`` (``run.sh --humaneval``, schema v5) takes the index
+  ``humaneval.py prepare`` wrote: the problems' entries leave ``specs`` and
+  become the ``humaneval`` block (pass@1, each problem's outcome, tokens).
 
 The pure functions are what ``backend/tests/test_bench_*.py`` check.
 
@@ -54,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ablation
 import budget
 import graders
+import humaneval_card
 import prompt_weight
 from bench_grade import (  # noqa: F401 - the grade, re-exported
     GRADER_CONFTEST,
@@ -227,10 +231,11 @@ def build_scorecard(
     run: dict[str, Any] | None = None,
     graders_record: dict[str, Any] | None = None,
     sections_off: list[str] | None = None,
+    humaneval_block: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them, and
-    the run-level block (``run``), the graders' commit and the prompt
-    sections turned off when given."""
+    the run-level block (``run``), the graders' commit, the prompt sections
+    turned off and the HumanEval problems (``humaneval``) when given."""
     criteria_passed = sum(s["criteria"]["passed"] for s in specs)
     criteria_total = sum(s["criteria"]["total"] for s in specs)
     tasks = sum(s["tasks"]["total"] for s in specs)
@@ -262,6 +267,7 @@ def build_scorecard(
         **({"run": run} if run is not None else {}),
         **({"graders": graders_record} if graders_record else {}),
         **({"sections_off": list(sections_off)} if sections_off else {}),
+        **({"humaneval": humaneval_block} if humaneval_block is not None else {}),
     }
 
 
@@ -335,6 +341,7 @@ def render_markdown(card: dict[str, Any]) -> str:
         ]
     lines += prompt_weight.render_lines(card)
     lines += ablation.render_lines(card)
+    lines += humaneval_card.render_lines(card)
     return "\n".join(lines) + "\n"
 
 
@@ -456,6 +463,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--skipped", action="append", default=[], help="a spec not run")
     w.add_argument("--graders", type=Path, help="the graders' record (graders.py)")
     w.add_argument("--sections-off", default="", help="the prompt sections turned off")
+    w.add_argument("--humaneval", type=Path, help="the HumanEval index (humaneval.py prepare)")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -473,8 +481,10 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"--sections-off: {exc}", file=sys.stderr)
         return 2
+    index = json.loads(args.humaneval.read_text()) if args.humaneval else None
+    specs, he_entries = humaneval_card.split(entries, index)
     card = build_scorecard(
-        entries,
+        specs,
         stamp=args.stamp,
         commit=_commit(),
         llm=args.llm,
@@ -487,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         graders_record=json.loads(args.graders.read_text()) if args.graders else None,
         sections_off=off,
+        humaneval_block=humaneval_card.block(he_entries, index, args.skipped) if index else None,
     )
     problems = validate(card)
     if problems:
