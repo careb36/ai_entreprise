@@ -284,3 +284,99 @@ def test_a_sound_humaneval_block_is_valid_on_v5_only():
     assert "humaneval needs schema v5" in bench_schema.validate(
         {**_base(), "schema_version": 4, "humaneval": SOUND}
     )
+
+
+def _instance(iid: str, outcome: str = "pass", **changes) -> dict:
+    passed = outcome == "pass"
+    owner, rest = iid.split("__")
+    row = {
+        "instance_id": iid,
+        "repo": f"{owner}/{rest.rsplit('-', 1)[0]}",
+        "spec": "swe-" + iid.replace("__", "-"),
+        "status": "completed",
+        "outcome": outcome,
+        "reason": {"fail": "a test failed", "unmeasured": "no environment"}.get(
+            outcome
+        ),
+        "fail_to_pass": None
+        if outcome == "unmeasured"
+        else {"passed": 2 if passed else 1, "total": 2},
+        "pass_to_pass": None if outcome == "unmeasured" else {"passed": 5, "total": 5},
+        "tokens": {"reported": 300, "turns_reported": 3, "turns_unreported": 1},
+    }
+    row.update(changes)
+    return row
+
+
+def _swebench(rows: list) -> dict:
+    outcomes = [r.get("outcome") for r in rows if isinstance(r, dict)]
+    resolved, failed = outcomes.count("pass"), outcomes.count("fail")
+    measured = resolved + failed
+    return {
+        "dataset": {
+            "name": "princeton-nlp/SWE-bench_Lite",
+            "revision": "c" * 40,
+            "split": "test",
+            "source": "example/SWE-bench_Lite",
+            "license": "none declared",
+            "instances": {"pallets__flask-4992": "d" * 64},
+        },
+        "subset": ["pallets__flask-4992", "psf__requests-3362"],
+        "instances": rows,
+        "skipped": [],
+        "graded": len(rows),
+        "measured": measured,
+        "resolved": resolved,
+        "failed": failed,
+        "unmeasured": outcomes.count("unmeasured"),
+        "resolved_rate": round(resolved / measured, 4) if measured else None,
+        "tokens_reported": 300 * len(rows),
+        "turns_unreported": len(rows),
+    }
+
+
+SWE_SOUND = _swebench(
+    [_instance("pallets__flask-4992"), _instance("psf__requests-3362", "fail")]
+)
+SWEBENCH_BREAKS = [
+    {},
+    SWE_SOUND,
+    # An unmeasured instance is left out of the rate, which stays measured.
+    _swebench([_instance("pallets__flask-4992"), _instance("a__b-1", "unmeasured")]),
+    _swebench([_instance("a__b-1", "unmeasured")]),
+    _swebench([]),
+    "not a block",
+    {**SWE_SOUND, "dataset": {"revision": "abc", "instances": {"x": "y"}}},
+    {**SWE_SOUND, "dataset": None},
+    {**SWE_SOUND, "instances": {}},
+    {**SWE_SOUND, "subset": None, "skipped": "x"},
+    {**SWE_SOUND, "resolved_rate": 1.0},
+    {**SWE_SOUND, "measured": 3, "tokens_reported": 0, "unmeasured": 1},
+    _swebench([_instance("a__b-1"), _instance("a__b-1")]),
+    _swebench([_instance("a__b-1", spec="01-cli-wordcount")]),
+    _swebench([_instance("a__b-1", "unmeasured", reason="")]),
+    _swebench([_instance("a__b-1", fail_to_pass={"passed": 1, "total": 2})]),
+    _swebench([_instance("a__b-1", pass_to_pass=None)]),
+    # A malformed group on a resolved row: a problem, never a crash.
+    _swebench([_instance("a__b-1", fail_to_pass={"total": 1})]),
+    _swebench([_instance("a__b-1", "fail", fail_to_pass={"passed": 3, "total": 2})]),
+    _swebench(["not a row", _instance("x__y-1", "skip", status="done", repo="")]),
+    _swebench([_instance("a__b-1", instance_id="not-an-id")]),
+    _swebench([_instance("a__b-1", spec=None, tokens={"reported": -1})]),
+]
+
+
+@pytest.mark.parametrize("version", [4, 5, 6])
+@pytest.mark.parametrize("block", SWEBENCH_BREAKS)
+def test_a_swebench_block_reads_the_same(version, block):
+    _same({**_base(), "schema_version": version, "swebench": block})
+
+
+def test_a_sound_swebench_block_is_valid_on_v6_only():
+    assert (
+        bench_schema.validate({**_base(), "schema_version": 6, "swebench": SWE_SOUND})
+        == []
+    )
+    assert "swebench needs schema v6" in bench_schema.validate(
+        {**_base(), "schema_version": 5, "swebench": SWE_SOUND}
+    )

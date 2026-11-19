@@ -157,7 +157,7 @@ def _row_problems(at: str, row: Any, statuses: tuple[str, ...]) -> list[str]:
         ):
             found.append(f"{at}.{key} must be null or passed <= total counts")
     if row.get("outcome") == PASS and not all(
-        isinstance(row.get(k), dict) and row[k]["passed"] == row[k]["total"]
+        isinstance(row.get(k), dict) and row[k].get("passed") == row[k].get("total")
         for k in ("fail_to_pass", "pass_to_pass")
     ):
         found.append(
