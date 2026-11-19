@@ -16,11 +16,28 @@ about other deliveries. The section is cut at ``CODE_GRAPH_MAX_CHARS`` (``0``
 leaves it out). The wait is bounded (``TIMEOUT_SECONDS``); no seeds, a daemon
 without the subject (an older one), a timeout, an error or an empty reply
 leave the section out (``""``), and the prompt is what it was before.
+
+Second slice: when the company's graph is stored (``code_graph_store``,
+``CODE_GRAPH_STORE``), the section reads it instead of asking the daemon to
+walk, and says it is the graph as the daemon last reported it; with nothing
+stored, or no seed in it, it asks the daemon on demand as above. ``persist``
+brings the stored graph up to date from the daemon's ``workspace.graph``
+(only the files whose sha256 changed) and records the edges from the
+architecture and the verifications. The task worker starts it with
+``persist_soon``, in the background and for the company's project folder
+only (``services/loop/worker/related.py``): on a project the size of this
+repository the first sync parses and stores every file, and a task never
+waits for that; a task's worktree, read by nobody once merged, is never
+stored. At most one sync per company and folder runs in this process, and
+while one is part way through (pages stored, more to come) the folder's
+half-written graph is not read: the section asks the daemon on demand. A daemon without the subject, or any failure,
+leaves the store as it was and the on-demand path in place.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -30,6 +47,7 @@ from sqlmodel import Session
 from services.contracts.verdicts import VERDICT_REFUTED
 from services.evidence import touched
 from services.evidence.context_read import redact_secrets
+from services.tools import code_graph_store
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -49,6 +67,13 @@ _NOTE = (
     "the files that use them, each with the names that tie them. A change to a "
     "starting file can break the files that use it; read them before you change "
     "a name they use."
+)
+_STORED_NOTE = (
+    "Context from the stored graph of the workspace daemon's parse, as the "
+    "daemon last reported it{when}, not evidence: the files this task starts "
+    "from, the files they use and the files that use them, each with the names "
+    "that tie them. A change to a starting file can break the files that use "
+    "it; read them before you change a name they use."
 )
 _RUNS_NOTE = (
     "What the daemon reported earlier deliveries wrote, with the verdict the "
@@ -101,6 +126,13 @@ def _run_line(run: dict[str, Any]) -> str:
     return f'- "{title}" ({verdict}{mark}): {", ".join(run.get("written") or [])}'
 
 
+def _note(reply: dict[str, Any]) -> str:
+    if not reply.get("stored"):
+        return _NOTE
+    when = reply.get("observed_at")
+    return _STORED_NOTE.format(when=f" ({when})" if isinstance(when, str) else "")
+
+
 def render(reply: dict[str, Any], runs: list[dict[str, Any]], max_chars: int) -> str:
     """The section from the daemon's *reply* and the *runs*; ``""`` without files."""
     files = [f for f in reply.get("files") or [] if isinstance(f, dict)]
@@ -109,7 +141,7 @@ def render(reply: dict[str, Any], runs: list[dict[str, Any]], max_chars: int) ->
         return ""
     seed_paths = {f["path"] for f in seeds}
     parts = [
-        "\n\n## Related code\n" + _NOTE,
+        "\n\n## Related code\n" + _note(reply),
         "### Starting files\n" + "\n".join(f"- {p}" for p in sorted(seed_paths)),
     ]
     uses = _lines(_merge(seeds, "uses", seed_paths))
@@ -150,6 +182,10 @@ def related_section(
     seeds = clean_seeds(seeds)
     if max_chars <= 0 or not root or not seeds:
         return ""
+    partial = half_written(company_id, root)
+    reply = None if partial else _stored(root, seeds, company_id, engine)
+    if reply is not None:
+        return render(reply, _runs(reply, company_id, engine), max_chars)
     try:
         reply = request_fn(
             SUBJECT,
@@ -166,6 +202,29 @@ def related_section(
         return ""
     if not isinstance(reply, dict) or not isinstance(reply.get("files"), list):
         return ""
+    return render(reply, _runs(reply, company_id, engine), max_chars)
+
+
+def _stored(
+    root: str, seeds: list[str], company_id: int | None, engine: Any
+) -> dict[str, Any] | None:
+    """The stored graph around *seeds*, or None (nothing stored, no seed in
+    it, the store off or failing): then the daemon is asked on demand."""
+    if company_id is None or engine is None:
+        return None
+    try:
+        store = code_graph_store.store_for(engine)
+        if store is None:
+            return None
+        return code_graph_store.related(store, company_id, root, seeds, HOPS, MAX_FILES)
+    except Exception as exc:  # noqa: BLE001 - The on-demand path.
+        logger.info("Could not read the stored code graph of %s: %s", root, exc)
+        return None
+
+
+def _runs(
+    reply: dict[str, Any], company_id: int | None, engine: Any
+) -> list[dict[str, Any]]:
     paths = [
         f["path"]
         for f in reply["files"]
@@ -177,5 +236,120 @@ def related_section(
             with Session(engine) as session:
                 runs = touched.runs_touching(session, company_id, paths, RUNS_SHOWN)
         except Exception as exc:  # noqa: BLE001 - The graph alone.
-            logger.info("Could not read the runs that touched %s: %s", root, exc)
-    return render(reply, runs, max_chars)
+            logger.info("Could not read the runs that touched the files: %s", exc)
+    return runs
+
+
+def persist(
+    request_fn: Requester,
+    engine: Any,
+    company_id: int | None,
+    root: str | None,
+    *,
+    architecture: dict[str, Any] | None = None,
+    architecture_id: Any = None,
+    on_page: Callable[[bool], None] | None = None,
+) -> dict[str, Any] | None:
+    """Bring the stored graph of *root* up to date from the daemon (only the
+    files whose sha256 changed) and record the edges from the architecture
+    and the verifications. None when nothing is stored (``off``, no root, a
+    daemon without ``workspace.graph``, a failure): the store stays as it was."""
+    if company_id is None or not root or engine is None:
+        return None
+    try:
+        store = code_graph_store.store_for(engine)
+        if store is None:
+            return None
+        done = code_graph_store.sync(store, request_fn, company_id, root, on_page)
+    except Exception as exc:  # noqa: BLE001 - The on-demand path stays.
+        logger.info("The code graph of %s was not stored: %s", root, exc)
+        return None
+    try:
+        code_graph_store.record_edges(
+            store,
+            engine,
+            company_id,
+            root,
+            architecture,
+            architecture_id=architecture_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - The file graph alone.
+        logger.info("Could not record the code graph's edges for %s: %s", root, exc)
+    return done
+
+
+# The background syncs of this process, one per (company, folder); the value
+# says whether the sync has stored a page after which the daemon said more.
+_SYNCS: dict[tuple[int, str], dict[str, Any]] = {}
+_SYNCS_LOCK = threading.Lock()
+
+
+def half_written(company_id: int | None, root: str | None) -> bool:
+    """Whether a running sync is part way through *root*'s graph: some pages
+    stored, more to come. The section does not read the store meanwhile."""
+    with _SYNCS_LOCK:
+        state = _SYNCS.get((company_id, root))
+        return bool(state and state["partial"])
+
+
+def persist_soon(
+    request_fn: Requester,
+    engine: Any,
+    company_id: int | None,
+    root: str | None,
+    *,
+    architecture: dict[str, Any] | None = None,
+    architecture_id: Any = None,
+) -> threading.Thread | None:
+    """``persist`` in a background thread, so the task goes on at once; None
+    when nothing is started (no root, the store ``off``, or a sync of the
+    same folder already running in this process)."""
+    if company_id is None or not root or engine is None:
+        return None
+    if (settings.CODE_GRAPH_STORE or "").strip().lower() == "off":
+        return None
+    key = (company_id, root)
+    state: dict[str, Any] = {"partial": False}
+
+    def page(more: bool) -> None:
+        with _SYNCS_LOCK:
+            state["partial"] = more
+
+    def run() -> None:
+        try:
+            persist(
+                request_fn,
+                engine,
+                company_id,
+                root,
+                architecture=architecture,
+                architecture_id=architecture_id,
+                on_page=page,
+            )
+        finally:
+            with _SYNCS_LOCK:
+                _SYNCS.pop(key, None)
+
+    thread = threading.Thread(target=run, name="code-graph-sync", daemon=True)
+    state["thread"] = thread
+    with _SYNCS_LOCK:
+        if key in _SYNCS:
+            return None
+        _SYNCS[key] = state
+    try:
+        thread.start()
+    except RuntimeError as exc:  # No thread to be had: the on-demand path.
+        with _SYNCS_LOCK:
+            _SYNCS.pop(key, None)
+        logger.info("The code graph of %s was not synced: %s", root, exc)
+        return None
+    return thread
+
+
+def wait_for_persists(timeout: float | None = None) -> bool:
+    """Wait for the background syncs running now; False if one outlasts *timeout*."""
+    with _SYNCS_LOCK:
+        threads = [state["thread"] for state in _SYNCS.values()]
+    for thread in threads:
+        thread.join(timeout)
+    return not any(thread.is_alive() for thread in threads)

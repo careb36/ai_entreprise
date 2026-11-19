@@ -208,6 +208,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.edit.finish` | request | `workspace_edit.py` | `workspace_root`, `session` | `session`, `files` |
 | `workspace.signatures` | request | `signatures.py` | `workspace_root`, `wanted` (`path`, `names`) | `files` (per file `status`, `sha256`, per name `found` / `unknown` / `missing`) |
 | `workspace.related` | request | `code_graph.py` | `workspace_root`, `seeds`, `hops`?, `max_files`? | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched` |
+| `workspace.graph` | request | `code_graph.py` | `workspace_root`, `known` (path to sha256), `max_files`? | `files` (`path`, `sha256`, `status`, `defs`, `refs`, `truncated`) for the files whose sha256 the backend does not hold, `unchanged`, `removed`, `more`, `partial` |
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git` | `ok`, `worktree`, `branch`, `head`, `guard`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
@@ -374,7 +375,7 @@ plain JSON:
 Fixtures cover `workspace.status`, `workspace.heartbeat`,
 `workspace.capabilities`, `workspace.generate`, `workspace.execute`,
 `workspace.list`, `workspace.read`, `workspace.search`, `workspace.find`,
-`workspace.map`, `workspace.related`, `workspace.signatures`,
+`workspace.map`, `workspace.related`, `workspace.graph`, `workspace.signatures`,
 `workspace.hash`, `workspace.sandbox.reset`, `workspace.inspect` and
 `workspace.browse` (`workspace.execute` also with `full_log`, replayed
 against an in-memory object store, and read back and hashed by the backend's
