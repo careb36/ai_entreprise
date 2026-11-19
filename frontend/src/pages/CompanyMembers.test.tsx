@@ -6,6 +6,9 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 
+// The Owner's member list reads its own data (components/MemberList.test.tsx).
+vi.mock('../components/MemberList', () => ({ MemberList: () => null }))
+
 function response(status: number, body: unknown = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
 }

@@ -5,6 +5,7 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { useCompanyInvitations, useInvite, useRevokeInvitation } from '../hooks/useInvitations'
 import { ApiError, errorDetail, type CompanyRole } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
+import { MemberList } from '../components/MemberList'
 import { AccessNotice, CountPill, EmptyState, FormActions, PageHeader, Panel, Spinner } from '../components/ui'
 
 const ROLES: CompanyRole[] = ['Viewer', 'Manager', 'Owner']
@@ -131,6 +132,7 @@ export default function CompanyMembers() {
               </div>
             )}
           </Panel>
+          {role === 'Owner' && <MemberList companyId={companyId} />}
         </>
       )}
     </div>
