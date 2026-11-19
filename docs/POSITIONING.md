@@ -6,7 +6,10 @@
 > reproducible; the market reading is a judgment, and remains open to revision
 > if the market moves. The [amendment](#amendment-2026-10-18-a-self-managed-company-of-agents)
 > at the end adds the owner's direction that the factory runs itself as a
-> company of agents; it keeps every design rule below.
+> company of agents; it keeps every design rule below. The
+> [scope amendment](#scope-2026-11-19-it-projects-of-any-kind) of
+> 2026-11-19 widens the platform from software to IT projects of any kind,
+> under the same rules.
 
 ## The one-line version
 
@@ -325,3 +328,68 @@ their tools before it delivers. The rules above decide how:
   allows, and whether tools help is measurable in the same tables as the
   rest (tasks with and without tool calls, by the board's numbers) — the
   next step, not this one.
+
+## Scope (2026-11-19): IT projects of any kind
+
+The owner set the scope on 2026-11-19:
+
+> La Fabrique is a platform to manage IT projects, not only software
+> development. The idea is to do whatever we come up with: for example a data
+> science project, a machine learning one, deep learning, and so on. It also
+> documents the work, and later evolutions are automation (like what Claude
+> does) and research.
+
+### What is built and what is not
+
+- **Built.** The task worker's loop runs software tasks end to end, and the
+  project documentation pack compiles a project's management documents from
+  its records, each statement citing a record with a digest the backend
+  computed (`docs/contexts/planning.md`, The documentation pack). The bench
+  grades the factory with tests a person wrote (`bench/README.md`).
+- **Not built.** Project types for data science, machine learning or deep
+  learning; automation beyond the software loop; research as a kind of work.
+  The research tools today only let the deciding roles read official sources,
+  and each fetch is an observation of what came back, not of what it means.
+
+### How the rules above apply
+
+The thesis does not change: the agents are interchangeable producers, and the
+product is the layer that verifies their work and records the evidence. Every
+design rule holds for non-software work as written.
+
+- **A metric is an observation only when the platform measured it.** A
+  training run's loss, accuracy or F1 counts as observed when the platform
+  ran the evaluation itself and recorded the command, its exit status and the
+  digest of its output. The accuracy an agent reports, in a message, in a
+  results file it wrote or in a notebook's saved output, is a claim (rules 1
+  and 2), however precise it looks.
+- **A file read back proves the file, not its numbers.** The daemon's sha256
+  shows that a metrics file or a checkpoint exists with that content; it does
+  not make the figures in it true.
+- **Digests of datasets and models are computed by the platform** (rule 6),
+  never taken from a manifest or a model card the agent wrote.
+- **What cannot be reproduced is `unverifiable`** (rule 3): a run that needs
+  hardware or data the platform does not have is not `verified` because the
+  agent says it ran. A seed or a hardware description nobody recorded is
+  unknown, not defaulted (rule 7).
+- **No model decides whether a model is good enough** (rule 5). A threshold is
+  a person's decision, and the check against it is deterministic.
+
+### Open design questions
+
+Recorded here, not answered:
+
+1. What an observation is for a data science or machine learning deliverable:
+   re-running the evaluation, re-running the training, or both; what
+   tolerance nondeterministic training gets; what compute the sandbox needs.
+2. Who holds the evaluation data, so that the producing agent never sees the
+   held-out set it is measured on.
+3. Datasets as deliverables: how one is identified (digest, schema, lineage,
+   licence) and how personal data in it is kept out of the record.
+4. Notebooks as deliverables: whether the platform runs them top to bottom,
+   and whether a saved output can ever be more than a claim.
+5. What "done" and an acceptance criterion mean for an experiment whose
+   honest outcome can be negative.
+6. Which standards (`docs/STANDARDS.md`) and which documents (a model card, a
+   datasheet for a dataset) these project types are held to, and what
+   automation and research deliver and how it is observed.

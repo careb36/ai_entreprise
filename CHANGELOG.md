@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+
+* **The project's scope: IT projects of any kind (owner, 2026-11-19).** README.md, README.es.md and CLAUDE.md describe a platform for running IT projects (software, data science, machine learning, deep learning and others) with a company of AI agents that plan, build and document the work and record verifiable evidence of what they did, and say what is built (the software loop end to end, the documentation pack, the bench) and what is direction (other project types, automation, research). `docs/POSITIONING.md` gains the amendment "Scope (2026-11-19)": how the evidence rules apply to non-software work (a metric is an observation only when the platform measured it; an agent's reported accuracy is a claim) and the open design questions, not answered. Documentation only.
+
 ### Security
 
 * **The weekly gitleaks scan's findings are triaged, and the scan can pass again (issue #522, the gap PR #666 found).** The full-history scan of `security-baseline.yml` had failed three weeks running (22 findings on 2026-11-16, 27 on 2026-11-18). All 27 are fixtures, examples or false positives, none a live credential: an alphabet-run OpenAI-style key and AWS key id and a stub RSA key in tests that check a secret is refused or never opened, a placeholder voice key in a curl example of `AGENTS.md`, and CVE identifiers in the deleted pytm threat model. The 23 only in the history are ignored by fingerprint in the new `.gitleaksignore`; the 4 still in `backend/tests/test_standards.py` (a protected file) are allowed in `.gitleaks.toml` for that path AND that exact value, per rule. A new credential-shaped string, the same fake value in another file, or another value in that file is still reported. Register entry E-15 in `SECURITY.md` §17.1, with the metrics in §17.2. Dependabot no longer ignores `vite`, `vitest` and `@vitejs/plugin-react` majors (the reason, "vite ^5", was stale; E-10 closed): their next majors arrive together in a `vite-toolchain` group.
