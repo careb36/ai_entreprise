@@ -1,0 +1,88 @@
+{
+  "calendar": "cn",
+  "name": "Public holidays of the People's Republic of China",
+  "year": 2027,
+  "source": {
+    "title": "国务院办公厅关于2027年部分节假日安排的通知",
+    "issued_by": "General Office of the State Council",
+    "published": "2026-11-05",
+    "document": "国办发明电〔2026〕10号",
+    "url": "https://www.news.cn/politics/20261105/f90cd6ad4df94ab4833b141e52ccfc13/c.html",
+    "read_on": "2026-11-19",
+    "note": "Xinhua's reprint of the full notice; the dates below are the notice's holiday days (放假), copied from it."
+  },
+  "holidays": [
+    {
+      "name": "New Year's Day",
+      "dates": [
+        "2027-01-01",
+        "2027-01-02",
+        "2027-01-03"
+      ]
+    },
+    {
+      "name": "Spring Festival",
+      "dates": [
+        "2027-02-05",
+        "2027-02-06",
+        "2027-02-07",
+        "2027-02-08",
+        "2027-02-09",
+        "2027-02-10",
+        "2027-02-11",
+        "2027-02-12",
+        "2027-02-13"
+      ]
+    },
+    {
+      "name": "Qingming Festival",
+      "dates": [
+        "2027-04-03",
+        "2027-04-04",
+        "2027-04-05"
+      ]
+    },
+    {
+      "name": "Labour Day",
+      "dates": [
+        "2027-05-01",
+        "2027-05-02",
+        "2027-05-03",
+        "2027-05-04",
+        "2027-05-05"
+      ]
+    },
+    {
+      "name": "Dragon Boat Festival",
+      "dates": [
+        "2027-06-09"
+      ]
+    },
+    {
+      "name": "Mid-Autumn Festival",
+      "dates": [
+        "2027-09-15"
+      ]
+    },
+    {
+      "name": "National Day",
+      "dates": [
+        "2027-10-01",
+        "2027-10-02",
+        "2027-10-03",
+        "2027-10-04",
+        "2027-10-05",
+        "2027-10-06",
+        "2027-10-07"
+      ]
+    }
+  ],
+  "adjusted_working_days": [
+    "2027-01-31",
+    "2027-02-14",
+    "2027-05-08",
+    "2027-09-26",
+    "2027-10-09"
+  ],
+  "adjusted_working_days_note": "Weekend days the notice makes working days (上班). Kept as data only: DeepSeek's pricing page names Monday to Friday as the days with peak hours, so the preset does not read them."
+}

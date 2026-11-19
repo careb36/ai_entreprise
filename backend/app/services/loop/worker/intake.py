@@ -37,7 +37,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import replicas, sprint_control
+from services.loop import replicas, run_window_gate, sprint_control
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
 from services.producers.console_assistants import normalize_utc
@@ -185,6 +185,11 @@ async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
     # A task that waits for others is queued once they are done.
     if not await asyncio.to_thread(dependencies.ready, engine, item["id"]):
         return None
+    # Outside the company's run window the next model turn waits (issue #736).
+    if item.get("status") == "todo" and await asyncio.to_thread(
+        run_window_gate.hold_task, engine, item["id"]
+    ):
+        return None
     # Guard against duplicate task.assign events for the same item: one
     # replica claims it, with a conditional update from todo (issue #328),
     # recorded as its ``claimed`` event (issue #324).
@@ -269,11 +274,16 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             select(BacklogItem).where(BacklogItem.status == "todo")
         ).all()
         histories = task_projection.histories_for(session, list(todo_items))
+        now = run_window_gate.utc_now()
         for item in todo_items:
             item_sprint = session.get(Sprint, item.sprint_id)
             if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
                 continue
             if not dependencies.is_ready(session, item):
+                continue
+            if item_sprint is not None and run_window_gate.gate_task(
+                session, item, item_sprint, now
+            ):
                 continue
             dispatch_time = datetime.now(UTC)
             record = task_projection.record_of(session, item, histories)

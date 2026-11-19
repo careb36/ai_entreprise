@@ -41,6 +41,10 @@
     "bench": "Bench",
     "account": "Account",
     "apiTokens": "API tokens",
+    "securityTests": "Security tests",
+    "execution": "Execution",
+    "mcp": "MCP servers",
+    "selfImprovement": "Self-improvement",
     "modelCatalog": "Model catalog"
   },
   "dashboard": {
@@ -1343,7 +1347,7 @@
     "deleteError": "Failed to delete agent. Please try again.",
     "recommendationReasons": {
       "dev": "Prioritizes code generation and refactoring quality, with stronger reasoning models for senior levels.",
-      "frontend": "Prioritizes UI code quality and component design, with Gemini Pro leading for senior levels.",
+      "frontend": "Prioritizes UI code quality and component design; DeepSeek Flash leads, with Gemini Pro as an alternative for senior levels.",
       "data": "Prefers reasoning for data design, pipeline correctness, and analytical decisions.",
       "designer": "Favors models strong at UX reasoning, visual structure, and clear written specs.",
       "qa": "Prefers stronger reasoning for review depth, risk analysis, and regression thinking.",
@@ -1364,6 +1368,53 @@
     "shownCount": "{{shown}} of {{total}} agents shown",
     "toolbarLabel": "Search and filter agents",
     "roleFilterLabel": "Filter by role"
+  },
+  "mcp": {
+    "title": "MCP servers",
+    "subtitle": "The tool servers the company's agents may call. Secrets are shown by name only.",
+    "listTitle": "Servers",
+    "count_one": "{{count}} server",
+    "count_other": "{{count}} servers",
+    "loading": "Loading the MCP servers",
+    "loadError": "Could not load the MCP servers: {{message}}",
+    "empty": "No MCP server is configured.",
+    "state": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "refused": "Refused by policy"
+    },
+    "refused": "This deployment would not start it: {{reason}}",
+    "roles": "Roles: {{roles}}",
+    "allRoles": "Every role",
+    "secrets": "Secrets: {{names}}",
+    "noSecrets": "No secrets",
+    "secretsUnreadable": "Its secrets cannot be read with this deployment's key",
+    "enable": "Enable",
+    "disable": "Disable",
+    "rolesFormLabel": "Roles of {{name}}",
+    "rolesLabel": "Roles (comma-separated; empty for every role)",
+    "rolesPlaceholder": "Developer, QA",
+    "saveRoles": "Save roles",
+    "listTools": "List tools",
+    "toolsHint": "Listing the tools starts the server; the backend records the start.",
+    "toolsOf": "Tools of {{name}}",
+    "noTools": "It advertises no tools.",
+    "remove": "Remove",
+    "removeNamed": "Remove the server {{name}}",
+    "confirmLabel": "Confirm removing {{name}}",
+    "confirmRemove": "Remove {{name}}? Agents stop reaching its tools.",
+    "removeConfirm": "Yes, remove",
+    "addTitle": "Add servers",
+    "addLabel": "An mcpServers map (JSON)",
+    "addPlaceholder": "{\"mcpServers\": {\"docs\": {\"url\": \"https://mcp.example.com/sse\"}}}",
+    "addHint": "A server with a name already used replaces it. Secrets in env or headers are stored encrypted and never shown again; this field is cleared after saving.",
+    "parse": {
+      "json": "This is not valid JSON.",
+      "shape": "Expected an object of servers, or {\"mcpServers\": {…}}.",
+      "empty": "No servers in the map."
+    },
+    "add": "Add servers",
+    "added": "Servers saved"
   },
   "common": {
     "loading": "Loading...",
@@ -1535,7 +1586,27 @@
     "revokeLabel": "Revoke the invitation of {{email}}",
     "revokeError": "Could not revoke: {{message}}",
     "pendingCount_one": "{{count}} pending invitation",
-    "pendingCount_other": "{{count}} pending invitations"
+    "pendingCount_other": "{{count}} pending invitations",
+    "listTitle": "Members",
+    "listCount_one": "{{count}} member",
+    "listCount_other": "{{count}} members",
+    "listLoading": "Loading the members",
+    "listError": "Could not load the members: {{message}}",
+    "listEmpty": "This company has no members yet.",
+    "columns": {
+      "member": "Member",
+      "role": "Role",
+      "lastActivity": "Last activity",
+      "actions": "Actions"
+    },
+    "roleRaised": "{{own}}, {{effective}} through a team",
+    "neverActive": "Never",
+    "you": "You",
+    "remove": "Remove",
+    "removeNamed": "Remove {{name}} from the company",
+    "confirmRemoveLabel": "Confirm removing {{name}}",
+    "confirmRemove": "Remove {{name}} now? Their sessions end everywhere and they leave their teams.",
+    "removeConfirm": "Yes, remove"
   },
   "github": {
     "title": "GitHub integration",
@@ -2161,6 +2232,58 @@
     "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
     "autonomySaved": "Autonomy level saved"
   },
+  "execution": {
+    "title": "Execution",
+    "subtitle": "Where the company's agent-written code runs, and what the research tools may read.",
+    "saved": "Saved",
+    "managersChange": "A manager changes this.",
+    "sandbox": {
+      "title": "Sandbox",
+      "loading": "Loading the sandbox",
+      "inForce": "Agent-written code runs in: {{mode}}.",
+      "fromDeployment": "This is the deployment's default.",
+      "hostWarning": "On the host, agent-written code runs without isolation on the computer that holds the project.",
+      "modes": {
+        "host": "the host, no isolation",
+        "container": "a container",
+        "bwrap": "a bubblewrap sandbox"
+      },
+      "limits": {
+        "image": "Image",
+        "network": "Network",
+        "cpus": "CPUs",
+        "memory_mb": "Memory (MB)"
+      },
+      "mode": "Mode",
+      "default": "The deployment's default ({{mode}})",
+      "env": "Variables a sandboxed run sees (names only)",
+      "envHint": "One name per line. Values come from the computer that runs the code, never from here.",
+      "envInvalid": "Not variable names: {{names}}",
+      "envList": "Variables it sees: {{names}}.",
+      "envNone": "It sees no variables from the computer."
+    },
+    "cache": {
+      "hint": "The dependency cache on the daemon's computer keeps installed packages between runs. Resetting it removes the cache volume and lifts a quarantine; the next run installs again.",
+      "reset": "Reset the dependency cache",
+      "confirmLabel": "Confirm the cache reset",
+      "confirm": "Reset the cache now? The next delivery reinstalls every dependency.",
+      "resetConfirm": "Yes, reset",
+      "done": "The cache was reset",
+      "doneQuarantine": "The cache was reset and its quarantine lifted"
+    },
+    "research": {
+      "title": "Research sources",
+      "loading": "Loading the research sources",
+      "on": "The research tools are on for: {{roles}}.",
+      "off": "The research tools are off in this deployment.",
+      "defaults": "The deployment's sources",
+      "own": "Hosts the company adds",
+      "hint": "Exact host names, one per line. Nothing here removes a deployment source.",
+      "invalid": "Not host names: {{hosts}}",
+      "ownList": "The company adds: {{hosts}}.",
+      "ownNone": "The company adds no hosts."
+    }
+  },
   "review": {
     "tabs": {
       "overview": "Overview",
@@ -2305,6 +2428,67 @@
       "product": "Product",
       "data": "Data",
       "ux": "UX"
+    }
+  },
+  "securityTests": {
+    "title": "Security tests",
+    "subtitle": "The project's OWASP WSTG plan: which tests apply, how each is observed, and what set its status. A status comes only from a Verifier's observation or a person's review.",
+    "loading": "Loading the security test plan",
+    "loadError": "Could not load the security test plan: {{message}}",
+    "filterLabel": "Filter tests by status",
+    "all": "All",
+    "planTitle": "Plan",
+    "count_one": "{{count}} test",
+    "count_other": "{{count}} tests",
+    "empty": "No test has this status.",
+    "columns": {
+      "test": "Test",
+      "mode": "Observed by",
+      "status": "Status",
+      "setBy": "What set it"
+    },
+    "mode": {
+      "auto": "A probe",
+      "manual": "A person"
+    },
+    "status": {
+      "observed-pass": "Passed",
+      "observed-fail": "Failed",
+      "needs-manual": "Needs a person",
+      "not-run": "Not run yet",
+      "not-applicable": "Not applicable"
+    },
+    "claimed": "Proposed by a model: a claim, not a rule.",
+    "byVerifier": "Observed by the Verifier",
+    "run": "run {{id}}",
+    "byReview": "Reviewed by a {{role}} on {{date}}",
+    "artifact": "On: {{artifact}}",
+    "reviewsTitle": "Reviews",
+    "reviewCount_one": "{{count}} review",
+    "reviewCount_other": "{{count}} reviews",
+    "reviewsLoading": "Loading the reviews",
+    "noReviews": "No review recorded yet.",
+    "reviewedBy": "by {{name}} ({{role}}), {{date}}",
+    "digest": "The record's digest, computed by the backend",
+    "result": {
+      "pass": "Pass",
+      "fail": "Fail",
+      "not_applicable": "Not applicable"
+    },
+    "attribution": "Catalogue at {{commit}}, {{licence}}.",
+    "form": {
+      "title": "Record a review",
+      "test": "Test",
+      "result": "Result",
+      "date": "Reviewed on",
+      "reviewer": "Reviewer's name",
+      "artifact": "What it rests on",
+      "artifactPlaceholder": "A report, a ticket, a commit",
+      "note": "Note",
+      "noteRequired": "Why it does not apply (required)",
+      "submit": "Record the review",
+      "saved": "Review of {{id}} recorded",
+      "error": "The review was refused: {{message}}"
     }
   },
   "sources": {
@@ -2739,6 +2923,46 @@
     },
     "capped": "This deployment allows at most “{{ceiling}}” (FORGE_POLICY_MAX): “{{effective}}” is in force.",
     "ownerOnly": "Only an Owner changes the forge policy."
+  },
+  "runWindow": {
+    "title": "Run window",
+    "hint": "When work that can wait may start. Outside the window a new sprint, and each task's next model turn, wait for it; a model call already running is never cut, and an urgent sprint starts at once. Only an Owner changes this; each change is audited.",
+    "mode": {
+      "off": "Off: work starts at once",
+      "provider_off_peak_deepseek": "DeepSeek's off-peak hours (half price)",
+      "custom": "My own hours"
+    },
+    "presetSource": "Off-peak is billed at {{price}}. Peak hours as published by the provider, read on {{date}}:",
+    "timezone": "Time zone",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "from": "from",
+    "to": "to",
+    "addInterval": "Add hours",
+    "removeInterval": "Remove",
+    "calendar": "Holidays (open all day)",
+    "noCalendar": "None",
+    "dates": "Other dates",
+    "preview": "Preview",
+    "save": "Save",
+    "offHint": "No run window: work starts as soon as it is ready.",
+    "openNow": "The window is open now.",
+    "closedNow": "The window is closed; it opens at {{time}}.",
+    "previewTitle": "Open in the next 7 days ({{zone}})",
+    "ownerOnly": "Only an Owner changes the run window.",
+    "waiting": "Waiting for the run window until {{time}} (local)",
+    "waitingTitle": "Starts at {{time}} ({{zone}})",
+    "urgent": "Urgent",
+    "urgentHint": "An urgent sprint ignores the run window and starts at once. Audited.",
+    "urgentOn": "Urgent: the run window does not apply",
+    "inboxTitle": "Waiting for the run window"
   },
   "graphSkeleton": {
     "loadingTopology": "Loading graph topology (<400ms Doherty threshold)",
@@ -3953,6 +4177,66 @@
     "listTitle": "All findings",
     "countLabel_one": "{{count}} finding",
     "countLabel_other": "{{count}} findings"
+  },
+  "rsi": {
+    "title": "Self-improvement",
+    "subtitle": "The loop that changes the factory itself, under the backend's limits: its state and its cycles. A person merges every kept change.",
+    "loading": "Loading the self-improvement loop",
+    "loadError": "Could not load the self-improvement loop: {{message}}",
+    "yes": "Yes",
+    "no": "No",
+    "state": {
+      "title": "State",
+      "stopped": "The loop stopped after too many cycles without a keep. An owner resumes it.",
+      "mayStart": "A cycle may start.",
+      "blocked": "No cycle starts now: {{why}}",
+      "enabled": "On in this deployment",
+      "withoutKeep": "Cycles without a keep",
+      "today": "Cycles today",
+      "personMerges": "Kept changes merged by a person",
+      "budget": "Token budget per cycle",
+      "diffLimit": "Largest change",
+      "diffValue": "{{files}} files, {{lines}} lines"
+    },
+    "resume": "Resume the loop",
+    "resumeHint": "Resuming is recorded with your name.",
+    "cycles": {
+      "title": "Cycles",
+      "count_one": "{{count}} cycle",
+      "count_other": "{{count}} cycles",
+      "empty": "No cycle has run yet.",
+      "cycle": "Cycle",
+      "status": "Status",
+      "shas": "Baseline and candidate",
+      "size": "Change",
+      "merge": "Merge",
+      "finding": "Finding {{id}}",
+      "b": "B {{sha}}",
+      "c": "C {{sha}}",
+      "diff": "{{files}} files, {{lines}} lines",
+      "merged": "{{sha}} by {{by}}"
+    },
+    "status": {
+      "running": "Running",
+      "awaiting_merge": "Kept, waiting for a merge",
+      "awaiting_person": "Waiting for a person",
+      "merged": "Merged",
+      "reverted": "Reverted",
+      "unmeasured": "Unmeasured",
+      "budget_exceeded": "Over budget",
+      "stopped": "Stopped"
+    },
+    "recordMergeFor": "Record the merge of {{key}}",
+    "mergedSha": "Merge commit (full sha)",
+    "recordMerge": "Record",
+    "import": {
+      "title": "Import a cycle record",
+      "label": "The runner's record (JSON)",
+      "hint": "The record scripts/rsi/cycle.py wrote. The backend checks its schema and recomputes the hashes of the kept files.",
+      "invalid": "This is not a JSON object.",
+      "submit": "Import",
+      "done": "Record imported"
+    }
   },
   "runLogs": {
     "title": "Full logs",

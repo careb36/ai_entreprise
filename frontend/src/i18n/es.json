@@ -41,6 +41,10 @@
     "bench": "Banco de pruebas",
     "account": "Cuenta",
     "apiTokens": "Tokens de API",
+    "securityTests": "Pruebas de seguridad",
+    "execution": "Ejecución",
+    "mcp": "Servidores MCP",
+    "selfImprovement": "Automejora",
     "modelCatalog": "Catálogo de modelos"
   },
   "dashboard": {
@@ -1343,7 +1347,7 @@
     "deleteError": "No se pudo eliminar el agente. Inténtalo de nuevo.",
     "recommendationReasons": {
       "dev": "Prioriza la calidad de generación y refactorización de código, con modelos de razonamiento más fuertes para niveles senior.",
-      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes, con Gemini Pro a la cabeza en niveles senior.",
+      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes; DeepSeek Flash va primero, con Gemini Pro como alternativa en niveles senior.",
       "data": "Prioriza el razonamiento para el diseño de datos, la corrección de pipelines y las decisiones analíticas.",
       "designer": "Prioriza modelos fuertes en razonamiento de UX, estructura visual y especificaciones claras.",
       "qa": "Prioriza un razonamiento sólido para revisiones profundas, análisis de riesgos y detección de regresiones.",
@@ -1364,6 +1368,53 @@
     "shownCount": "{{shown}} de {{total}} agentes mostrados",
     "toolbarLabel": "Buscar y filtrar agentes",
     "roleFilterLabel": "Filtrar por rol"
+  },
+  "mcp": {
+    "title": "Servidores MCP",
+    "subtitle": "Los servidores de herramientas que pueden llamar los agentes de la empresa. Los secretos se muestran solo por nombre.",
+    "listTitle": "Servidores",
+    "count_one": "{{count}} servidor",
+    "count_other": "{{count}} servidores",
+    "loading": "Cargando los servidores MCP",
+    "loadError": "No se pudieron cargar los servidores MCP: {{message}}",
+    "empty": "No hay servidores MCP configurados.",
+    "state": {
+      "enabled": "Activado",
+      "disabled": "Desactivado",
+      "refused": "Rechazado por la política"
+    },
+    "refused": "Este despliegue no lo iniciaría: {{reason}}",
+    "roles": "Roles: {{roles}}",
+    "allRoles": "Todos los roles",
+    "secrets": "Secretos: {{names}}",
+    "noSecrets": "Sin secretos",
+    "secretsUnreadable": "Sus secretos no se pueden leer con la clave de este despliegue",
+    "enable": "Activar",
+    "disable": "Desactivar",
+    "rolesFormLabel": "Roles de {{name}}",
+    "rolesLabel": "Roles (separados por comas; vacío para todos)",
+    "rolesPlaceholder": "Developer, QA",
+    "saveRoles": "Guardar roles",
+    "listTools": "Listar herramientas",
+    "toolsHint": "Listar las herramientas inicia el servidor; el backend registra el inicio.",
+    "toolsOf": "Herramientas de {{name}}",
+    "noTools": "No anuncia herramientas.",
+    "remove": "Quitar",
+    "removeNamed": "Quitar el servidor {{name}}",
+    "confirmLabel": "Confirmar que se quita {{name}}",
+    "confirmRemove": "¿Quitar {{name}}? Los agentes dejan de alcanzar sus herramientas.",
+    "removeConfirm": "Sí, quitar",
+    "addTitle": "Agregar servidores",
+    "addLabel": "Un mapa mcpServers (JSON)",
+    "addPlaceholder": "{\"mcpServers\": {\"docs\": {\"url\": \"https://mcp.example.com/sse\"}}}",
+    "addHint": "Un servidor con un nombre ya usado lo reemplaza. Los secretos en env o headers se guardan cifrados y no se vuelven a mostrar; este campo se vacía al guardar.",
+    "parse": {
+      "json": "Esto no es JSON válido.",
+      "shape": "Se esperaba un objeto de servidores, o {\"mcpServers\": {…}}.",
+      "empty": "El mapa no tiene servidores."
+    },
+    "add": "Agregar servidores",
+    "added": "Servidores guardados"
   },
   "common": {
     "loading": "Cargando...",
@@ -1535,7 +1586,27 @@
     "revokeLabel": "Revocar la invitación de {{email}}",
     "revokeError": "No se pudo revocar: {{message}}",
     "pendingCount_one": "{{count}} invitación pendiente",
-    "pendingCount_other": "{{count}} invitaciones pendientes"
+    "pendingCount_other": "{{count}} invitaciones pendientes",
+    "listTitle": "Miembros",
+    "listCount_one": "{{count}} miembro",
+    "listCount_other": "{{count}} miembros",
+    "listLoading": "Cargando los miembros",
+    "listError": "No se pudieron cargar los miembros: {{message}}",
+    "listEmpty": "Esta empresa todavía no tiene miembros.",
+    "columns": {
+      "member": "Miembro",
+      "role": "Rol",
+      "lastActivity": "Última actividad",
+      "actions": "Acciones"
+    },
+    "roleRaised": "{{own}}, {{effective}} por un equipo",
+    "neverActive": "Nunca",
+    "you": "Tú",
+    "remove": "Quitar",
+    "removeNamed": "Quitar a {{name}} de la empresa",
+    "confirmRemoveLabel": "Confirmar que se quita a {{name}}",
+    "confirmRemove": "¿Quitar a {{name}} ahora? Sus sesiones terminan en todas partes y deja sus equipos.",
+    "removeConfirm": "Sí, quitar"
   },
   "github": {
     "title": "Integración con GitHub",
@@ -2161,6 +2232,58 @@
     "gitHint": "Las entregas de cada tarea son commits en su propia rama, fabrique/task-<id>, en un worktree: tu checkout, tu índice y tu rama nunca se tocan.",
     "autonomySaved": "Nivel de autonomía guardado"
   },
+  "execution": {
+    "title": "Ejecución",
+    "subtitle": "Dónde se ejecuta el código que escriben los agentes de la empresa y qué pueden leer las herramientas de investigación.",
+    "saved": "Guardado",
+    "managersChange": "Un gestor cambia esto.",
+    "sandbox": {
+      "title": "Entorno aislado",
+      "loading": "Cargando el entorno aislado",
+      "inForce": "El código de los agentes se ejecuta en: {{mode}}.",
+      "fromDeployment": "Es el valor predeterminado del despliegue.",
+      "hostWarning": "En el host, el código de los agentes se ejecuta sin aislamiento en la computadora que tiene el proyecto.",
+      "modes": {
+        "host": "el host, sin aislamiento",
+        "container": "un contenedor",
+        "bwrap": "un entorno bubblewrap"
+      },
+      "limits": {
+        "image": "Imagen",
+        "network": "Red",
+        "cpus": "CPU",
+        "memory_mb": "Memoria (MB)"
+      },
+      "mode": "Modo",
+      "default": "El predeterminado del despliegue ({{mode}})",
+      "env": "Variables que ve una ejecución aislada (solo nombres)",
+      "envHint": "Un nombre por línea. Los valores vienen de la computadora que ejecuta el código, nunca de aquí.",
+      "envInvalid": "No son nombres de variables: {{names}}",
+      "envList": "Variables que ve: {{names}}.",
+      "envNone": "No ve variables de la computadora."
+    },
+    "cache": {
+      "hint": "La caché de dependencias en la computadora del daemon conserva los paquetes instalados entre ejecuciones. Reiniciarla elimina el volumen de caché y levanta una cuarentena; la próxima ejecución vuelve a instalar.",
+      "reset": "Reiniciar la caché de dependencias",
+      "confirmLabel": "Confirmar el reinicio de la caché",
+      "confirm": "¿Reiniciar la caché ahora? La próxima entrega reinstala todas las dependencias.",
+      "resetConfirm": "Sí, reiniciar",
+      "done": "La caché se reinició",
+      "doneQuarantine": "La caché se reinició y se levantó su cuarentena"
+    },
+    "research": {
+      "title": "Fuentes de investigación",
+      "loading": "Cargando las fuentes de investigación",
+      "on": "Las herramientas de investigación están activas para: {{roles}}.",
+      "off": "Las herramientas de investigación están desactivadas en este despliegue.",
+      "defaults": "Las fuentes del despliegue",
+      "own": "Hosts que agrega la empresa",
+      "hint": "Nombres de host exactos, uno por línea. Nada de aquí quita una fuente del despliegue.",
+      "invalid": "No son nombres de host: {{hosts}}",
+      "ownList": "La empresa agrega: {{hosts}}.",
+      "ownNone": "La empresa no agrega hosts."
+    }
+  },
   "review": {
     "tabs": {
       "overview": "Resumen",
@@ -2305,6 +2428,67 @@
       "product": "Producto",
       "data": "Datos",
       "ux": "UX"
+    }
+  },
+  "securityTests": {
+    "title": "Pruebas de seguridad",
+    "subtitle": "El plan OWASP WSTG del proyecto: qué pruebas aplican, cómo se observa cada una y qué fijó su estado. Un estado solo proviene de una observación del Verificador o de la revisión de una persona.",
+    "loading": "Cargando el plan de pruebas de seguridad",
+    "loadError": "No se pudo cargar el plan de pruebas de seguridad: {{message}}",
+    "filterLabel": "Filtrar las pruebas por estado",
+    "all": "Todas",
+    "planTitle": "Plan",
+    "count_one": "{{count}} prueba",
+    "count_other": "{{count}} pruebas",
+    "empty": "Ninguna prueba tiene este estado.",
+    "columns": {
+      "test": "Prueba",
+      "mode": "Observada por",
+      "status": "Estado",
+      "setBy": "Qué lo fijó"
+    },
+    "mode": {
+      "auto": "Una sonda",
+      "manual": "Una persona"
+    },
+    "status": {
+      "observed-pass": "Aprobada",
+      "observed-fail": "Fallida",
+      "needs-manual": "Requiere una persona",
+      "not-run": "Sin ejecutar",
+      "not-applicable": "No aplica"
+    },
+    "claimed": "Propuesta por un modelo: una afirmación, no una regla.",
+    "byVerifier": "Observada por el Verificador",
+    "run": "ejecución {{id}}",
+    "byReview": "Revisada por un {{role}} el {{date}}",
+    "artifact": "Sobre: {{artifact}}",
+    "reviewsTitle": "Revisiones",
+    "reviewCount_one": "{{count}} revisión",
+    "reviewCount_other": "{{count}} revisiones",
+    "reviewsLoading": "Cargando las revisiones",
+    "noReviews": "Todavía no hay revisiones registradas.",
+    "reviewedBy": "por {{name}} ({{role}}), {{date}}",
+    "digest": "El resumen del registro, calculado por el backend",
+    "result": {
+      "pass": "Aprobada",
+      "fail": "Fallida",
+      "not_applicable": "No aplica"
+    },
+    "attribution": "Catálogo en {{commit}}, {{licence}}.",
+    "form": {
+      "title": "Registrar una revisión",
+      "test": "Prueba",
+      "result": "Resultado",
+      "date": "Revisada el",
+      "reviewer": "Nombre de quien revisó",
+      "artifact": "En qué se basa",
+      "artifactPlaceholder": "Un informe, un ticket, un commit",
+      "note": "Nota",
+      "noteRequired": "Por qué no aplica (obligatorio)",
+      "submit": "Registrar la revisión",
+      "saved": "Revisión de {{id}} registrada",
+      "error": "La revisión fue rechazada: {{message}}"
     }
   },
   "sources": {
@@ -2739,6 +2923,46 @@
     },
     "capped": "Esta instalación permite como máximo «{{ceiling}}» (FORGE_POLICY_MAX): rige «{{effective}}».",
     "ownerOnly": "Solo un Owner cambia la política de forja."
+  },
+  "runWindow": {
+    "title": "Ventana de ejecución",
+    "hint": "Cuándo puede empezar el trabajo que puede esperar. Fuera de la ventana, un sprint nuevo y el siguiente turno del modelo de cada tarea esperan; una llamada al modelo que ya está en curso nunca se corta, y un sprint urgente empieza de inmediato. Solo un Owner la cambia; cada cambio queda auditado.",
+    "mode": {
+      "off": "Desactivada: el trabajo empieza de inmediato",
+      "provider_off_peak_deepseek": "Horas valle de DeepSeek (mitad de precio)",
+      "custom": "Mis propios horarios"
+    },
+    "presetSource": "Las horas valle se cobran al {{price}}. Horas pico según las publica el proveedor, consultadas el {{date}}:",
+    "timezone": "Zona horaria",
+    "days": {
+      "mon": "lun",
+      "tue": "mar",
+      "wed": "mié",
+      "thu": "jue",
+      "fri": "vie",
+      "sat": "sáb",
+      "sun": "dom"
+    },
+    "from": "de",
+    "to": "a",
+    "addInterval": "Agregar horario",
+    "removeInterval": "Quitar",
+    "calendar": "Feriados (abierta todo el día)",
+    "noCalendar": "Ninguno",
+    "dates": "Otras fechas",
+    "preview": "Vista previa",
+    "save": "Guardar",
+    "offHint": "Sin ventana de ejecución: el trabajo empieza en cuanto está listo.",
+    "openNow": "La ventana está abierta ahora.",
+    "closedNow": "La ventana está cerrada; abre a las {{time}}.",
+    "previewTitle": "Abierta en los próximos 7 días ({{zone}})",
+    "ownerOnly": "Solo un Owner cambia la ventana de ejecución.",
+    "waiting": "Esperando la ventana de ejecución hasta las {{time}} (hora local)",
+    "waitingTitle": "Empieza a las {{time}} ({{zone}})",
+    "urgent": "Urgente",
+    "urgentHint": "Un sprint urgente ignora la ventana de ejecución y empieza de inmediato. Queda auditado.",
+    "urgentOn": "Urgente: la ventana de ejecución no se aplica",
+    "inboxTitle": "Esperando la ventana de ejecución"
   },
   "graphSkeleton": {
     "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",
@@ -3953,6 +4177,66 @@
     "listTitle": "Todos los hallazgos",
     "countLabel_one": "{{count}} hallazgo",
     "countLabel_other": "{{count}} hallazgos"
+  },
+  "rsi": {
+    "title": "Automejora",
+    "subtitle": "El ciclo que cambia la propia fábrica, dentro de los límites del backend: su estado y sus ciclos. Una persona fusiona cada cambio conservado.",
+    "loading": "Cargando el ciclo de automejora",
+    "loadError": "No se pudo cargar el ciclo de automejora: {{message}}",
+    "yes": "Sí",
+    "no": "No",
+    "state": {
+      "title": "Estado",
+      "stopped": "El ciclo se detuvo tras demasiados ciclos sin conservar cambios. Un propietario lo reanuda.",
+      "mayStart": "Puede empezar un ciclo.",
+      "blocked": "Ahora no empieza ningún ciclo: {{why}}",
+      "enabled": "Activo en este despliegue",
+      "withoutKeep": "Ciclos sin conservar",
+      "today": "Ciclos hoy",
+      "personMerges": "Cambios conservados fusionados por una persona",
+      "budget": "Presupuesto de tokens por ciclo",
+      "diffLimit": "Cambio más grande",
+      "diffValue": "{{files}} archivos, {{lines}} líneas"
+    },
+    "resume": "Reanudar el ciclo",
+    "resumeHint": "La reanudación se registra con tu nombre.",
+    "cycles": {
+      "title": "Ciclos",
+      "count_one": "{{count}} ciclo",
+      "count_other": "{{count}} ciclos",
+      "empty": "Todavía no se ejecutó ningún ciclo.",
+      "cycle": "Ciclo",
+      "status": "Estado",
+      "shas": "Base y candidato",
+      "size": "Cambio",
+      "merge": "Fusión",
+      "finding": "Hallazgo {{id}}",
+      "b": "B {{sha}}",
+      "c": "C {{sha}}",
+      "diff": "{{files}} archivos, {{lines}} líneas",
+      "merged": "{{sha}} por {{by}}"
+    },
+    "status": {
+      "running": "En curso",
+      "awaiting_merge": "Conservado, espera una fusión",
+      "awaiting_person": "Espera a una persona",
+      "merged": "Fusionado",
+      "reverted": "Revertido",
+      "unmeasured": "Sin medir",
+      "budget_exceeded": "Sobre el presupuesto",
+      "stopped": "Detenido"
+    },
+    "recordMergeFor": "Registrar la fusión de {{key}}",
+    "mergedSha": "Commit de fusión (sha completo)",
+    "recordMerge": "Registrar",
+    "import": {
+      "title": "Importar un registro de ciclo",
+      "label": "El registro del ejecutor (JSON)",
+      "hint": "El registro que escribió scripts/rsi/cycle.py. El backend comprueba su esquema y recalcula los hashes de los archivos conservados.",
+      "invalid": "Esto no es un objeto JSON.",
+      "submit": "Importar",
+      "done": "Registro importado"
+    }
   },
   "runLogs": {
     "title": "Registros completos",

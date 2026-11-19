@@ -25,6 +25,7 @@ import SprintOverview from './Dashboard'
 import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { AutonomyControl, SprintControls, SprintStatusBanner } from '../components/SprintControls'
+import RunWindowBadge from '../components/RunWindowBadge'
 import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { SprintProgress } from '../components/SprintProgress'
@@ -213,6 +214,7 @@ export const SprintWorkspace: React.FC = () => {
         )}
         {board && <SprintTeamChips team={board.sprint.team} source={board.sprint.team_source} />}
         {board && <SprintStatusBanner sprint={board.sprint} />}
+        {board && <RunWindowBadge sprint={board.sprint} />}
         <div className="flex flex-wrap items-end gap-2 border-b border-surface-700">
           <SprintTabs sprintId={sprintId} selected={tab} />
           {tab === 'board' && board && (

@@ -48,6 +48,18 @@ export function useSodReport(companyId: number | null, enabled: boolean) {
   })
 }
 
+/** Remove a member at once (an Owner's, audited): refreshes the review's listing and the service accounts. */
+export function useRemoveMember(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: number) => api.removeMember(companyId as number, userId),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: reviewKey(companyId) })
+      client.invalidateQueries({ queryKey: accountsKey(companyId) })
+    },
+  })
+}
+
 /** The access review: its schedule, what to review, and the history. */
 export function useAccessReview(companyId: number | null, enabled: boolean) {
   return useQuery({

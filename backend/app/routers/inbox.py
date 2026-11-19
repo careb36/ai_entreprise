@@ -30,7 +30,7 @@ from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, U
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
 from services.learning import scrum_master
-from services.loop import sprint_archive
+from services.loop import run_window_gate, sprint_archive
 from services.loop.carry_over import carried_over, carry_mark
 from services.planning import intake_records
 from services.release import integration
@@ -58,6 +58,28 @@ def _suggestions(session: Session, company_id: int) -> dict[tuple[str, int], dic
     ).all():
         latest.setdefault((row.item_kind, row.item_id), serialize_decision(row))
     return latest
+
+
+def _run_window_waiting(session: Session, company_id: int, limit: int) -> list[dict]:
+    """The company's listed sprints whose work waits for the run window."""
+    sprints = session.exec(
+        select(Sprint)
+        .where(
+            Sprint.company_id == company_id,
+            Sprint.run_window_wait_until.is_not(None),  # type: ignore[union-attr]
+            sprint_archive.listed(),
+        )
+        .order_by(Sprint.id.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "sprint_id": s.id,
+            "sprint_name": s.sprint_name,
+            **(run_window_gate.view(session, s) or {}),
+        }
+        for s in sprints
+    ]
 
 
 @router.get("/inbox")
@@ -202,6 +224,9 @@ async def inbox(
         "agent_decisions": agent_decisions,
         "blocked_total": blocked_total,
         "intake_pending": intake_pending,
+        # Sprints whose work waits for the run window (issue #736): shown so
+        # a person knows when it starts, not a decision, so not in ``total``.
+        "run_window_waiting": _run_window_waiting(session, company_id, limit),
         "total": blocked_total
         + len(proposals)
         + int(pending_runs or 0)

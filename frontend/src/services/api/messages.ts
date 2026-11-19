@@ -93,6 +93,8 @@ export interface Inbox {
   pending_runs: number
   /** Requests waiting in the intake queue (issue #532); counted in `total`. */
   intake_pending?: number
+  /** Sprints whose work waits for the company's run window (issue #736): shown, not counted in `total`. */
+  run_window_waiting?: { sprint_id: number; sprint_name: string; until: string; until_local: string; timezone: string }[]
   total: number
 }
 

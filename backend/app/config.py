@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # forge_policy.py): ``none``, ``fetch`` or ``publish``; an air-gapped
     # install sets ``none``. An unknown value reads as ``none``.
     FORGE_POLICY_MAX: str = "publish"
+    # The longest the run-window worker sleeps between two looks at the
+    # sprints it holds (services/loop/run_window_gate.py, issue #736); it
+    # wakes at the next window boundary when that comes sooner, and never
+    # looks more often than once a minute.
+    RUN_WINDOW_RECHECK_SECONDS: int = 300
     DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
     DELIVERY_SANDBOX_NETWORK: bool = False
     DELIVERY_SANDBOX_CPUS: float = 2.0

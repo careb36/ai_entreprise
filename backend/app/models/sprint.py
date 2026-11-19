@@ -79,6 +79,12 @@ class Sprint(SQLModel, table=True):
     # platform opened (carry-over, the next sprint) or one from before
     # migration 0029. The usage report attributes the sprint's work by it.
     started_by_user_id: int | None = Field(default=None, foreign_key="users.id")
+    # A Manager's bypass of the company's run window (issue #736,
+    # services/loop/run_window_gate.py): its tasks start at once. Audited.
+    urgent: bool = False
+    # Set while the run window holds some of its work back: when the backend
+    # computed the window opens (UTC). The release worker reads it.
+    run_window_wait_until: datetime | None = None
 
 
 class BacklogItem(SQLModel, table=True):

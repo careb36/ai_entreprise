@@ -37,7 +37,13 @@ from fastapi.responses import FileResponse
 from logging_config import logger
 from models import BugReport, Company, User
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
-from services.management.support_agent import CATEGORIES, SEVERITIES, track_record
+from services.management.support_agent import (
+    CATEGORIES,
+    SEVERITIES,
+    SUPPORT_ROLE,
+    track_record,
+)
+from services.models.model_factory import default_model_for_role
 from services.planning import intake_queue
 from sqlmodel import Session, func, select, text
 
@@ -358,7 +364,7 @@ async def support_agent_record(
 @router.post("/chat")
 async def support_chat(req: SupportChatRequest):
     """
-    Bilingual AI support assistant powered by Gemini 1.5 Flash.
+    Bilingual AI support assistant, on the Support role's default model.
 
     Prepends a fixed system prompt that instructs the model to answer in the
     same language the user is writing in (English or Spanish).  The entire
@@ -387,7 +393,7 @@ async def support_chat(req: SupportChatRequest):
             r = await client.post(
                 f"{os.getenv('LLM_PROXY_URL', 'http://llm-proxy:5100')}/v1/chat/completions",
                 json={
-                    "model": "gemini-1.5-flash",
+                    "model": default_model_for_role(SUPPORT_ROLE),
                     "messages": formatted_messages,
                     "max_tokens": 512,
                     "temperature": 0.7,

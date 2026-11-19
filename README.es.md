@@ -246,7 +246,7 @@ flowchart TB
     BE <--> NATS[("NATS JetStream")]
     NATS <--> D["Daemon del workspace<br/>en tu computadora: archivos, git, tests, sandbox"]
     BE --> PX["Proxy de LLM<br/>presupuestos, ruteo, estado de proveedores"]
-    PX --> PR["Qwen · DeepSeek · Gemini · Nebius"]
+    PX --> PR["DeepSeek (por defecto) · Qwen · Gemini · Nebius"]
     BE -.->|opcional| NEO[("Grafo de conocimiento Neo4j")]
 ```
 
@@ -278,8 +278,8 @@ corre el daemon del workspace. Node.js 24+ solo para desarrollar el frontend.
 ```bash
 cp .env.example .env
 # Definí al menos POSTGRES_PASSWORD, NEO4J_PASSWORD (y NEO4J_AUTH),
-# JWT_SECRET_KEY, FERNET_SECRET_KEY, AUDIT_SIGNING_KEY,
-# QWEN_API_KEY y DEEPSEEK_API_KEY.
+# JWT_SECRET_KEY, FERNET_SECRET_KEY, AUDIT_SIGNING_KEY y DEEPSEEK_API_KEY
+# (la única clave de modelo que necesita el equipo por defecto).
 
 docker compose up -d          # backend :8000, frontend :5173, proxy de LLM :5100
 ./scripts/start-daemon.sh     # en la computadora que tiene tus proyectos
@@ -300,10 +300,17 @@ docker compose up -d          # backend :8000, frontend :5173, proxy de LLM :510
 4. **Planificá**: escribí una especificación, o planificá un sprint a partir
    de un objetivo, y seguilo en el tablero.
 
-El equipo por defecto corre sobre Qwen y DeepSeek. `AGENT_MODEL` pone a todos
-los roles en un solo modelo (y entonces solo hace falta la clave de ese
+El equipo por defecto corre solo sobre DeepSeek: DeepSeek Pro
+(`deepseek-v4-pro`) para el PO, el Architect, SecOps y el agente Reviewer,
+donde un error sale caro, y DeepSeek Flash (`deepseek-flash`) para todos los
+demás roles. Qwen, Gemini y Nebius siguen siendo opcionales. `AGENT_MODEL` pone
+a todos los roles en un solo modelo (y entonces hace falta la clave de ese
 proveedor), `AGENT_MODEL_<ROL>` define uno, y la página **Agentes** cambia el
-modelo de un rol en cada empresa.
+modelo de un rol en cada empresa. La API de DeepSeek procesa las solicitudes en
+China; para datos personales o de clientes, leé `DEEPSEEK_API_KEY` en
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) (evaluación de la
+transferencia y EIPD según el RGPD, o los pesos abiertos en un servidor que
+elijas, mediante una conexión de proveedor).
 
 Neo4j es opcional y viene activado. Compose usa su imagen Enterprise con una
 licencia de evaluación, así que para producción licenciala o desactivala:

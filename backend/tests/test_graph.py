@@ -38,7 +38,7 @@ def test_resolve_model_name_known_role():
     from services.producers.graph import _resolve_model_name
 
     model = _resolve_model_name("PO")
-    assert model == "qwen3.7-plus"
+    assert model == "deepseek-v4-pro"
 
 
 def test_resolve_model_name_unknown_role_falls_back_to_developer():
