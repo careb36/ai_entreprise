@@ -2947,6 +2947,22 @@
       "historyError": "Could not load the history: {{message}}",
       "historyEmpty": "No revision yet.",
       "sections": {
+        "quality_plan_objectives": {
+          "title": "Quality objectives and acceptance thresholds",
+          "what": "The quality objectives the project commits to and the thresholds that decide acceptance (for instance a first-pass rate, a share of verified deliveries or of WSTG tests passing), read against the measured outcomes in the quality plan; the factory reports the figures and never sets the threshold."
+        },
+        "communications_plan_stakeholders": {
+          "title": "Stakeholders outside the company and what they need to know",
+          "what": "Who outside the company must be kept informed (sponsor, users, suppliers, regulators), what each needs to know, and through which of the platform's channels or which channel outside it."
+        },
+        "stakeholder_register_external": {
+          "title": "Stakeholders outside the company",
+          "what": "Who outside the company has an interest in the project or influence over it (sponsor, customers, users, suppliers, regulators), what each expects, how much influence each has and how each is engaged; the platform records none of them."
+        },
+        "communications_plan_cadence": {
+          "title": "Meetings, reports and cadence agreed with people",
+          "what": "The meetings, reviews and reports agreed with people, how often they happen and who attends, beside what the platform sends on its own."
+        },
         "charter_justification": {
           "title": "Business justification",
           "what": "Why the investment is worth making, and for whom."
