@@ -38,20 +38,29 @@ Factory leaves local or cloud execution of its Droids to the operator.
 
 ### Check the model keys
 
-The proxy's own checks do not prove a key can pay for an answer:
+The proxy records what each provider answered, but a key check is not
+always a credit check:
 
-- At startup the proxy asks each provider whose key is set to authenticate
-  (`llm-proxy/provider_keys.py`): a 1-token chat completion for DeepSeek and
-  Qwen, a model listing for Gemini and Nebius. Only a 401 or 403, or a body
-  that says `invalid_api_key`, counts as invalid; any other answer logs
-  `<provider> API key validated successfully`. A key whose account is out of
-  credit usually answers 402 (or another non-401/403 status), so it looks
-  validated, and a listing succeeds without credit too. Even an invalid key only logs `API KEY VALIDATION FAILED`: the
-  proxy starts anyway. A network failure logs `Could not validate …`.
-- The proxy's `GET /health` is not a provider check: it always answers
-  `"status": "healthy", "database": "connected"` (both fixed strings) and
-  lists only the Gemini catalogue. The backend's `/health/deep` only checks
-  that the proxy answers.
+- At startup the proxy asks each provider whether its key works
+  (`llm-proxy/provider_keys.py`) and logs one line per provider:
+  `provider <name>: ok (HTTP 200, checked …)`, or `no_credit` (402, or the
+  provider's quota or billing error), `invalid_key` (401/403), `rate_limited`,
+  `unreachable` (timeout or 5xx), `unexpected`, or `not_configured` for a key
+  that is empty or still the `.env.example` placeholder, which is never sent.
+  The proxy starts whatever the outcome, and logs an error when no provider
+  answered.
+- `curl -s localhost:5100/v1/providers | jq` lists each provider's `status`,
+  `observed_at`, `http_status`, `source` and `checked`. `checked: key`
+  (Gemini and Nebius, a model listing) proves the key, not the credit;
+  `key_and_credit` (DeepSeek, Qwen, or any request the proxy served) proves
+  both. After topping up an account,
+  `curl -s 'localhost:5100/v1/providers?refresh=1'` checks again (at most once
+  every 30 s). A request refused for lack of credit or for its key updates the
+  entry as it happens, and a served request records `ok`.
+- The proxy's `GET /health` carries the same `providers` block; its
+  `"database": "connected"` is still a fixed string. The backend's
+  `/health/deep` shows the block under `llm_proxy` without changing its
+  overall status.
 - `GET /v1/models` lists the ids the chat endpoint routes. A provider other
   than Gemini is listed only when its key is set and its catalogue was
   fetched (at startup, then hourly), so a missing provider here means a
@@ -572,7 +581,10 @@ https address, or run as a stdio wrapper.
   `degraded` when NATS is, or Neo4j while it is enabled (API reads work, but
   without NATS no sprint moves), and `healthy` otherwise. Each component
   carries its `reason`. Neo4j switched off (`NEO4J_ENABLED=false`) is
-  reported as `disabled`, is not probed and degrades nothing.
+  reported as `disabled`, is not probed and degrades nothing. The
+  `llm_proxy` component carries the proxy's `providers` block as it is:
+  the proxy being up does not mean a provider can serve (a key without
+  credit is `no_credit`), and this does not change the severity.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,

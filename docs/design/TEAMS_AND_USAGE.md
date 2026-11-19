@@ -185,7 +185,8 @@ not flood the chain.
   same "within its company" trust as SSO linking, `docs/design/SSO.md`), a
   missing claim removing access (treat absent as "no change", present-and-empty
   as "remove"), and group overage tokens (Entra omits the claim past 200
-  groups).
+  groups). Threat model, data model and rules (design only, issue #703):
+  [`SSO_GROUP_MAPPING.md`](SSO_GROUP_MAPPING.md).
 - **Personal notifications** from task events (read, snooze, preferences; the
   Plane study in the #512 comments): design only, not started.
 - A usage history that keeps the team a person was in at the time of the work.

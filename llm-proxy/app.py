@@ -10,6 +10,9 @@ Nebius with:
   ``served_model``.
 - **Quota Enforcement**: Persistent token tracking per Business Unit via
   PostgreSQL (``quota.py``).
+- **Provider status**: what each provider answered, observed at startup, on
+  ``GET /v1/providers?refresh=1`` and on every request (``provider_status.py``,
+  ``provider_keys.py``), served by ``/v1/providers`` and ``/health``.
 
 This module is the entry point gunicorn starts (``app:app``). It holds the
 configuration, the live catalogues and their refresh, and the HTTP routes; the
@@ -26,13 +29,14 @@ import time
 import catalogue
 import connections
 import embedding
+import provider_keys
+import provider_status
 import providers
 import requests  # noqa: F401 - tests replace requests.post through this module
 import routing
 import telemetry
 import upstream
 from flask import Flask, jsonify, request
-from provider_keys import validate_api_keys
 from quota import (
     add_quota_warning_header,
     enforce_business_unit_quota,
@@ -67,9 +71,16 @@ else:
     logger.info("OpenTelemetry exporter disabled for llm-proxy")
 
 
-def _provider_key(provider: str) -> str:
+def _configured_key(provider: str) -> str:
+    """The key as configured, placeholder included (only the key check reads this)."""
     return {"gemini": GEMINI_API_KEY, "deepseek": DEEPSEEK_API_KEY, "qwen": QWEN_API_KEY,
             "nebius": NEBIUS_API_KEY}.get(provider, "")
+
+
+def _provider_key(provider: str) -> str:
+    """The key to send, or "" when none is set or it is an ``.env.example`` placeholder."""
+    key = _configured_key(provider).strip()
+    return "" if provider_status.is_placeholder(key) else key
 
 
 def _provider_url(provider: str) -> str:
@@ -77,14 +88,30 @@ def _provider_url(provider: str) -> str:
             "nebius": NEBIUS_PROXY_URL}.get(provider, "")
 
 
-# --- API Key Validation ---
-def _validate_api_keys():
-    """Ask each provider to authenticate, so a bad key fails loudly at startup."""
-    names = ("gemini", "deepseek", "qwen", "nebius")
-    return validate_api_keys({p: _provider_key(p) for p in names}, {p: _provider_url(p) for p in names})
+# --- Provider status ---
+# The startup check's timeout, and the on-demand one's (shorter: a person waits).
+_STARTUP_CHECK_TIMEOUT_SECONDS = 10.0
+_REFRESH_CHECK_TIMEOUT_SECONDS = 5.0
+# Each on-demand check makes a one-token call per provider: one per 30 s at most.
+_REFRESH_MIN_INTERVAL_SECONDS = 30.0
+_provider_status = provider_status.Board(provider_status.PROVIDERS)
+_refresh_limiter = provider_status.RefreshLimiter(_REFRESH_MIN_INTERVAL_SECONDS)
 
 
-_validate_api_keys()
+def _check_providers(source: str, timeout: float) -> None:
+    """Ask every provider whether its key works and record what each answered.
+
+    The proxy starts whatever the outcome: another provider may serve.
+    """
+    names = provider_status.PROVIDERS
+    seen = provider_keys.check_all({p: _configured_key(p) for p in names},
+                                   {p: _provider_url(p) for p in names}, timeout)
+    for provider, obs in seen.items():
+        _provider_status.record(provider, obs["status"], http_status=obs.get("http_status"),
+                                source=source, checked=obs.get("checked"), detail=obs.get("detail"))
+
+
+_check_providers("startup", _STARTUP_CHECK_TIMEOUT_SECONDS)
 
 # --- Dynamic Model Catalogue ---
 # The fetched ids per provider, replaced whole by each refresh (tests set them here).
@@ -102,26 +129,26 @@ _nebius_last_refresh: float = 0
 def _refresh_gemini_models():
     global _available_models, _last_refresh
     _available_models, _last_refresh = catalogue.refresh(
-        "gemini", GEMINI_API_KEY, GEMINI_PROXY_URL, _available_models, _last_refresh)
+        "gemini", _provider_key("gemini"), GEMINI_PROXY_URL, _available_models, _last_refresh)
 
 
 def _refresh_deepseek_models():
     global _available_deepseek_models, _deepseek_last_refresh
     _available_deepseek_models, _deepseek_last_refresh = catalogue.refresh(
-        "deepseek", DEEPSEEK_API_KEY, DEEPSEEK_PROXY_URL,
+        "deepseek", _provider_key("deepseek"), DEEPSEEK_PROXY_URL,
         _available_deepseek_models, _deepseek_last_refresh)
 
 
 def _refresh_qwen_models():
     global _available_qwen_models, _qwen_last_refresh
     _available_qwen_models, _qwen_last_refresh = catalogue.refresh(
-        "qwen", QWEN_API_KEY, QWEN_PROXY_URL, _available_qwen_models, _qwen_last_refresh)
+        "qwen", _provider_key("qwen"), QWEN_PROXY_URL, _available_qwen_models, _qwen_last_refresh)
 
 
 def _refresh_nebius_models():
     global _available_nebius_models, _nebius_last_refresh
     _available_nebius_models, _nebius_last_refresh = catalogue.refresh(
-        "nebius", NEBIUS_API_KEY, NEBIUS_PROXY_URL,
+        "nebius", _provider_key("nebius"), NEBIUS_PROXY_URL,
         _available_nebius_models, _nebius_last_refresh)
 
 
@@ -163,8 +190,20 @@ def _fallback_targets(failed_provider: str) -> list[tuple[str, str]]:
 
 def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
     # The key and URL are read here, at call time, so a test can replace them.
-    return providers.call_provider(
-        provider, model, data, timeout, api_key=_provider_key(provider), base_url=_provider_url(provider))
+    key = _provider_key(provider)
+    try:
+        answer = providers.call_provider(
+            provider, model, data, timeout, api_key=key, base_url=_provider_url(provider))
+    except upstream.UpstreamError as exc:
+        # A refusal that names the account is recorded; the error travels on
+        # unchanged, so the fallback decides exactly as before.
+        status = provider_status.classify(exc.status, exc.message)
+        if exc.status is not None and status in ("no_credit", "invalid_key"):
+            _provider_status.record(provider, status, http_status=exc.status, source="request",
+                                    checked="key_and_credit", detail=provider_status.redact(exc.message, key))
+        raise
+    _provider_status.record(provider, "ok", http_status=None, source="request", checked="key_and_credit")
+    return answer
 
 
 def _complete_with_fallback(provider: str, model: str, data: dict) -> tuple[dict, int, str, str, dict | None]:
@@ -192,7 +231,28 @@ app.after_request(add_quota_warning_header)
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models)})
+    return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models),
+                    "providers": _provider_status.snapshot()})
+
+
+@app.route("/v1/providers")
+def list_providers():
+    """What the proxy last observed of each provider, never its key.
+
+    ``?refresh=1`` asks every provider again (5 s timeout each, in parallel),
+    at most once every 30 s; a refused refresh answers the last observations
+    with ``refresh: rate_limited`` and ``retry_after_seconds``.
+    """
+    body: dict = {}
+    if request.args.get("refresh") in ("1", "true", "yes"):
+        allowed, retry_after = _refresh_limiter.try_acquire()
+        if allowed:
+            _check_providers("refresh", _REFRESH_CHECK_TIMEOUT_SECONDS)
+            body["refresh"] = "done"
+        else:
+            body.update(refresh="rate_limited", retry_after_seconds=retry_after)
+    body["providers"] = _provider_status.snapshot()
+    return jsonify(body)
 
 
 @app.route("/v1/models")
@@ -284,7 +344,7 @@ def embeddings():
     if not text.strip():
         return jsonify({"error": "input is required"}), 400
 
-    body, tokens = embedding.embed(text, data, api_key=GEMINI_API_KEY, base_url=GEMINI_PROXY_URL)
+    body, tokens = embedding.embed(text, data, api_key=_provider_key("gemini"), base_url=GEMINI_PROXY_URL)
     if tokens:
         track_usage_in_db(bu_id, tokens)
     return jsonify(body)
