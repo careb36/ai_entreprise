@@ -39,6 +39,7 @@ describe('Sprints list', () => {
     useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: 9 })
     // The planner lists the company's approved specifications; none here.
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
+    vi.spyOn(api, 'getBenchScorecards').mockResolvedValue({ available: true, cards: [] })
     vi.spyOn(managerApi, 'record').mockResolvedValue(EMPTY_RECORD)
     vi.spyOn(routingApi, 'record').mockResolvedValue({ rows: [], tasks: 0, policy: null })
     vi.spyOn(gateRefutationsApi, 'get').mockResolvedValue({
@@ -76,6 +77,23 @@ describe('Sprints list', () => {
     expect(rows[2]).toHaveTextContent('Needs Split')
     expect(rows[2]).toHaveTextContent('Not started')
     expect(list).toHaveBeenCalledWith(42)
+  })
+
+  it("draws the bench's reference under the learning tiles from the latest valid scorecard", async () => {
+    vi.spyOn(api, 'listSprints').mockResolvedValue(sprints)
+    const unmeasured = { measured: false as const, reason: 'not_in_card' as const }
+    vi.spyOn(api, 'getBenchScorecards').mockResolvedValue({ available: true, cards: [{
+      file: '20261114T201804Z.json', folder: '', stamp: '20261114T201804Z', problems: [], status: 'valid', schema_version: 3,
+      commit: 'c'.repeat(40), llm: 'fake', policy: null, run: null, graders_sha: null, sections_off: [], has_ablation: false,
+      totals: { specs: 1, specs_completed: 1, tasks: 4, done_first_attempt: 3, first_attempt_rate: 0.75, rework_per_task: 0.25,
+        blocked_share: 0.5, wall_clock_seconds: 70, criteria: unmeasured, prompt: unmeasured,
+        tokens: { ...unmeasured, turns_reported: 0, turns_unreported: 0 } },
+      specs: [], prompt_sections: null, humaneval: null, swebench: null,
+    }] })
+    renderPage()
+    expect(await screen.findByText('Bench reference: 0.25')).toBeInTheDocument()
+    expect(screen.getByText('Bench reference: 50%')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'See the bench' })[0]).toHaveAttribute('href', '/bench')
   })
 
   it("shows each sprint's tokens and cost, and price unknown when it could not be priced", async () => {

@@ -51,6 +51,7 @@ describe('Sprint edit, delete and archive', () => {
     queryClient.clear()
     useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: null })
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
+    vi.spyOn(api, 'getBenchScorecards').mockResolvedValue({ available: true, cards: [] })
     vi.spyOn(managerApi, 'record').mockResolvedValue({ categories: {}, total: counts(), flagged_rules: [] })
     vi.spyOn(api, 'listSprints').mockResolvedValue([running, stopped])
   })

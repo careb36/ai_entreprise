@@ -29,6 +29,8 @@ For support: from the address a person reports to the file to read. The routes a
 | `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete`, each one centred card in `pages/auth/AuthCard` (the product name, the page's `<h1>`, the line under the card) |
 | `/` | redirects to `/evidence` |
 | `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
+| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`; under its learning tiles, rework per task and blocked share, the bench's reference for the same number from the latest valid scorecard, dated and linked to /bench, and a dashed rule on the sparkline: `components/bench/BenchReferenceLine`, `lib/benchReference.ts`, issue #686; a number the card did not measure, or no valid card, draws nothing), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
+| `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` |
 | `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
 | `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` (its run secrets: `components/RunSecretsPanel`, `services/runSecrets.ts`; names for every member, add and delete for a Manager or an Owner, the value write-only) |
 | `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
