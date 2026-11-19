@@ -20,7 +20,10 @@ the reviewer's name), ``effort`` and ``costs`` (the backend's effort
 observation per task and each sprint's reported model usage,
 ``collect_status``), ``iteration_plans``, ``carries`` and ``releases``
 (each sprint's scope and team source, the platform's carries, the published
-integrations; ``collect_release``) and ``statements_<document>`` (a person's current
+integrations; ``collect_release``), ``quality_basis`` and ``communications``
+(the backend's quality definitions and the channels' configuration;
+``collect_plans``), ``stakeholders`` (the teams and approvals by role;
+``collect_stakeholders``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -55,7 +58,9 @@ from sqlmodel import Session, select
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
 from services.planning.project_docs import (
+    collect_plans,
     collect_release,
+    collect_stakeholders,
     collect_status,
     statements,
     texts,
@@ -580,5 +585,8 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         ),
         "carries": collect_release.carries(session, company.id),
         "releases": collect_release.releases(session, company.id),
+        "quality_basis": collect_plans.quality_basis(),
+        "communications": collect_plans.communications(session, company.id),
+        "stakeholders": collect_stakeholders.stakeholders(session, company.id),
         **_person_statements(session, company.id),
     }
