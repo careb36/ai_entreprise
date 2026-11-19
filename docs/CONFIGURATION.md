@@ -739,6 +739,14 @@ Copy `.env.example` to `.env` and fill in:
   uses them (the daemon's `workspace.related`, from the repository map's
   parse cache), and the recent runs that wrote them, cut at that many
   characters; `0` leaves the section out and asks the daemon nothing.
+- `CODE_GRAPH_STORE` (`postgres`) — where the code graph the daemon reports
+  is stored (`services/tools/code_graph_store.py`, issue #438, second
+  slice): `postgres` (the `code_graph_*` tables), `neo4j` (the knowledge
+  graph, used only while `NEO4J_ENABLED`; otherwise Postgres) or `off`
+  (nothing stored; the related code is computed on demand, as before). The
+  task worker updates it before a Developer's related code, from the files
+  whose sha256 changed, and the section reads it when it holds the task's
+  starting files.
 - `SPRINT_BOARD_MAX_CHARS` (2000) — the `## Sprint board` section of every
   task prompt (`services/loop/worker/sprint_notes.py`, issue #439;
   `docs/design/SPRINT_BOARD.md`): the sprint's active notes relevant to the

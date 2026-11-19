@@ -140,7 +140,9 @@
       "completed": "Completed",
       "cancelled": "Cancelled",
       "planned": "Planned",
-      "paused": "Paused"
+      "paused": "Paused",
+      "integrating": "Integrating",
+      "integration_failed": "Integration failed"
     },
     "roles": {
       "PO": {
