@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Download, FileText, FileX, Loader2, ShieldAlert, ShieldCheck, ShieldQuestion, type LucideIcon } from 'lucide-react'
 import { CountPill, EmptyState, Panel, StatusBadge, type StatusTone } from './ui'
 import { refusalOf, useRunLog, useRunLogs, type LogIntegrity, type RecordedLog } from '../services/runLogs'
+import { readInPieces, RunLogPieces } from './RunLogPieces'
 
 /** Lines shown per page of a log. */
 export const LINES_PER_PAGE = 500
@@ -12,6 +13,7 @@ const INTEGRITY: Record<LogIntegrity, { icon: LucideIcon; tone: StatusTone }> = 
   mismatched: { icon: ShieldAlert, tone: 'danger' },
   missing: { icon: FileX, tone: 'warning' },
   unavailable: { icon: ShieldQuestion, tone: 'neutral' },
+  unverified: { icon: ShieldQuestion, tone: 'warning' },
 }
 
 /** What the backend observed when it served the log: never computed here. */
@@ -123,6 +125,7 @@ export function RunLogViewer({ companyId, runId }: { companyId: number; runId: n
   const { t } = useTranslation()
   const logsQuery = useRunLogs(companyId, runId)
   const [open, setOpen] = useState<string | null>(null)
+  const [whole, setWhole] = useState<string | null>(null)
   const logs = logsQuery.data?.logs ?? []
 
   return (
@@ -149,7 +152,9 @@ export function RunLogViewer({ companyId, runId }: { companyId: number; runId: n
                       <span className="ml-auto text-meta text-gray-400">{t('runLogs.notKept', { reason: log.reason ?? '' })}</span>
                     )}
                   </div>
-                  {open === log.id && <LogBody companyId={companyId} runId={runId} log={log} />}
+                  {open === log.id && (readInPieces(log) && whole !== log.id
+                    ? <RunLogPieces companyId={companyId} runId={runId} log={log} onReadWhole={() => setWhole(log.id)} />
+                    : <LogBody companyId={companyId} runId={runId} log={log} />)}
                 </li>
               ))}
             </ul>

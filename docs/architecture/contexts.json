@@ -1112,6 +1112,9 @@
       "test_run_cost.py": [
         "loop"
       ],
+      "test_run_log_ranges.py": [
+        "workspace"
+      ],
       "test_run_log_view.py": [
         "workspace"
       ],
