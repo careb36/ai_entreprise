@@ -40,6 +40,7 @@
     "findings": "Hallazgos",
     "bench": "Banco de pruebas",
     "account": "Cuenta",
+    "apiTokens": "Tokens de API",
     "modelCatalog": "Catálogo de modelos"
   },
   "dashboard": {
@@ -2850,6 +2851,35 @@
         "unavailable": "El DNS no respondió; no cambió nada. Vuelve a intentarlo más tarde.",
         "verified_elsewhere": "El registro verificado de otra empresa para este dominio sigue publicado."
       }
+    },
+    "groups": {
+      "title": "Grupos asignados a equipos",
+      "intro": "En cada inicio de sesión por SSO, los grupos del ID token fijan la pertenencia de la persona a los equipos gestionados por SSO asignados aquí, y a ningún otro. Si falta el claim, no cambia nada; una lista vacía quita.",
+      "enabled": "Aplicar los grupos del proveedor de identidad al iniciar sesión",
+      "claim": "Claim que trae los grupos",
+      "proposedClaim": "Recomendado para este proveedor: {{claim}}",
+      "cap": "Rol más alto que puede otorgar un grupo",
+      "capWarning": "Quien pueda editar estos grupos en su proveedor de identidad podrá hacer Managers de los equipos asignados. Cada par hacia un equipo Manager sigue necesitando la aprobación de un segundo Owner.",
+      "entraGuids": "Los grupos de Entra se nombran por su object id (un GUID), no por su nombre visible.",
+      "googleUnavailable": "El ID token de Google no trae grupos. Asignarlos requiere la sincronización con Directory, que aún no está disponible.",
+      "overage": "El inicio de sesión del {{when}} traía demasiados grupos para el token (el overage de Entra, origen {{host}}), así que no cambió nada. Use roles de aplicación (el claim roles) o limite el claim a los grupos asignados a la aplicación.",
+      "noSsoTeams": "Ningún equipo está gestionado por SSO todavía. Pase primero un equipo a SSO en la página Equipos.",
+      "pairs": "Pares de grupo y equipo",
+      "value": "Valor del grupo",
+      "team": "Equipo",
+      "removePair": "Quitar este par",
+      "addPair": "Agregar un par",
+      "save": "Guardar la asignación",
+      "saved": "Asignación guardada",
+      "pending": "Pares Manager a la espera de un segundo Owner",
+      "fourEyes": "Un par que otorga Manager solo tiene efecto cuando otro Owner lo aprueba. Las aprobaciones vencen a los 7 días.",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "withdraw": "Retirar",
+      "confirmAlone": "Confirmar a solas",
+      "aloneWarning": "Solo se permite mientras usted sea el único Owner de la empresa. El par queda marcado en la revisión de accesos hasta que un segundo Owner lo confirme.",
+      "typeTeam": "Escriba el nombre del equipo para confirmar: {{name}}",
+      "reason": "Motivo (de 10 a 500 caracteres)"
     }
   },
   "documentation": {
@@ -3118,6 +3148,30 @@
     "confirmNow": "Confirmar ahora",
     "add": "Añadir relación"
   },
+  "runSecrets": {
+    "title": "Secretos de ejecución",
+    "count_one": "{{count}} secreto",
+    "count_other": "{{count}} secretos",
+    "note": "Valores que la ejecución de esta tarea puede leer como variables de entorno. El backend los guarda cifrados; un valor no se vuelve a mostrar.",
+    "loading": "Cargando los secretos de ejecución",
+    "loadError": "No se pudieron cargar los secretos de ejecución: {{message}}",
+    "empty": "Esta tarea no tiene secretos de ejecución.",
+    "listLabel": "Secretos de ejecución de esta tarea",
+    "valueHidden": "valor oculto",
+    "delete": "Eliminar",
+    "deleteNamed": "Eliminar el secreto {{name}}",
+    "confirmDelete": "¿Eliminar {{name}}?",
+    "deleteConfirm": "Sí, eliminar",
+    "addTitle": "Agregar un secreto de ejecución",
+    "name": "Nombre",
+    "namePlaceholder": "DATABASE_URL",
+    "value": "Valor",
+    "nameHint": "Letras, dígitos y guiones bajos, sin empezar por un dígito.",
+    "nameInvalid": "Usa solo letras, dígitos y guiones bajos, y no empieces por un dígito.",
+    "add": "Agregar secreto",
+    "saved": "{{name}} guardado",
+    "addError": "No se pudo agregar el secreto: {{message}}"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -3295,7 +3349,23 @@
     "effectiveRole": "Rol efectivo",
     "inTeams": "Equipos",
     "memberCount_one": "{{count}} miembro",
-    "memberCount_other": "{{count}} miembros"
+    "memberCount_other": "{{count}} miembros",
+    "sso": {
+      "managedBySso": "Gestionado por SSO",
+      "managedByOwner": "Gestionado a mano",
+      "switchToSso": "Gestionar por SSO",
+      "switchToOwner": "Gestionar a mano",
+      "confirmConvert": "¿Pasar {{name}} a SSO? Sus {{count}} miembros actuales se conservan como excepciones manuales, que la asignación nunca quita y que cada revisión de accesos lista.",
+      "confirmBack": "¿Volver a gestionar {{name}} a mano? Sus miembros se quedan; sus excepciones manuales terminan y sus exclusiones se levantan.",
+      "membersFromIdp": "Los miembros vienen de los grupos del proveedor de identidad. Para sacar a alguien ya, exclúyalo.",
+      "manualException": "Excepción manual",
+      "endException": "Terminar excepción",
+      "exclude": "Excluir",
+      "excludeReason": "¿Por qué excluir a {{name}} de este equipo? (de 10 a 500 caracteres; se avisa a los demás Owners)",
+      "exclusions": "Excluidos: la asignación no vuelve a agregar a estas personas hasta que un Owner levante la exclusión.",
+      "lift": "Levantar",
+      "liftReason": "¿Por qué levantar la exclusión de {{name}}? (de 10 a 500 caracteres)"
+    }
   },
   "usage": {
     "title": "Uso",
@@ -3493,7 +3563,10 @@
       "history": "Revisiones anteriores",
       "noHistory": "Todavía no se ha completado ninguna revisión.",
       "doneOnTime": "{{when}}: completada por {{by}}, {{removed}} quitadas.",
-      "doneLate": "{{when}}: completada tarde por {{by}}, {{removed}} quitadas."
+      "doneLate": "{{when}}: completada tarde por {{by}}, {{removed}} quitadas.",
+      "ssoExclusion": "Excluido de {{team}} por {{by}} hace {{days}} días: {{reason}}",
+      "ssoException": "Conservado a mano en el equipo SSO {{team}} (lo fijó {{by}} hace {{days}} días)",
+      "ssoManagerPair": "El grupo {{value}} otorga Manager en {{team}}, confirmado a solas por {{by}}: un segundo Owner lo confirma o lo quita"
     },
     "report": {
       "title": "Informe de aprobaciones y funciones",
@@ -3566,6 +3639,55 @@
       "proxyPresent": "Token interno del proxy LLM: definido",
       "proxyMissing": "Token interno del proxy LLM: sin definir"
     }
+  },
+  "apiTokens": {
+    "title": "Tokens de API",
+    "subtitle": "Credenciales para scripts y trabajos de CI, enviadas como token Bearer. Un token actúa con el rol que se le dio, nunca superior al de quien lo creó.",
+    "listTitle": "Tokens",
+    "count_one": "{{count}} token",
+    "count_other": "{{count}} tokens",
+    "loading": "Cargando los tokens",
+    "loadError": "No se pudieron cargar los tokens: {{message}}",
+    "empty": "Esta empresa no tiene tokens de API.",
+    "emptyManager": "Crea uno abajo cuando un script o un trabajo de CI necesite llamar a la API.",
+    "columns": {
+      "name": "Nombre",
+      "role": "Rol",
+      "state": "Estado",
+      "createdBy": "Creado por",
+      "expires": "Vence",
+      "lastUsed": "Último uso",
+      "actions": "Acciones"
+    },
+    "state": {
+      "active": "Activo",
+      "expired": "Vencido",
+      "revoked": "Revocado"
+    },
+    "never": "Nunca",
+    "neverUsed": "Sin uso todavía",
+    "revoke": "Revocar",
+    "revokeNamed": "Revocar el token {{name}}",
+    "confirmLabel": "Confirmar la revocación de {{name}}",
+    "confirmRevoke": "¿Revocarlo ahora? Las llamadas con él se detienen de inmediato.",
+    "revokeConfirm": "Sí, revocar",
+    "createTitle": "Crear un token",
+    "name": "Nombre",
+    "namePlaceholder": "ci-nocturno",
+    "role": "Rol",
+    "expiry": "Vence a los",
+    "days_one": "{{count}} día",
+    "days_other": "{{count}} días",
+    "createHint": "Todo token vence. Un token no puede crear otros tokens y su rol nunca es superior al tuyo.",
+    "create": "Crear token",
+    "forbidden": "Tu rol no puede crear un token con ese rol.",
+    "createError": "No se pudo crear el token: {{message}}",
+    "createdTitle": "Token {{name}} creado",
+    "createdOnce": "Cópialo ahora: se muestra solo esta vez y esta página no lo guarda. Guárdalo en tu gestor de secretos.",
+    "secretLabel": "Token",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "dismiss": "Descartar el token nuevo"
   },
   "taskViews": {
     "filters": "Filtros",
@@ -3712,6 +3834,24 @@
       "add": "Agregar un comentario en {{path}}, línea {{line}}"
     },
     "counts": "+{{additions}} −{{deletions}}"
+  },
+  "integrationActions": {
+    "integrate": "Integrar ahora",
+    "integrateAgain": "Integrar de nuevo",
+    "publish": "Publicar como una solicitud",
+    "publishAgain": "Publicar de nuevo",
+    "merge": "Fusionar localmente",
+    "confirmLabel": "Confirmar la fusión local",
+    "confirmMerge": "¿Fusionar la integración en {{base}} en la computadora del proyecto? No se envía nada.",
+    "mergeConfirm": "Sí, fusionar",
+    "forgeHolds": "La publicación está desactivada: la política de forja de la empresa es “{{policy}}”. Un propietario la cambia en Funciones y accesos.",
+    "reviewHolds": "La empresa exige la revisión aprobatoria de una persona antes de fusionar esta integración.",
+    "hint": "Integrar fusiona en orden las ramas de las tareas terminadas en {{branch}} y ejecuta la batería de pruebas sobre el resultado. Quien inició el sprint no puede fusionarlo.",
+    "integrated": "Integrado. El plan de abajo muestra el resultado.",
+    "published": "Publicado por {{name}} en {{commit}} sobre {{base}}.",
+    "openRequest": "Abrir la solicitud",
+    "newTab": "(se abre en una pestaña nueva)",
+    "merged": "Fusionado localmente por {{name}}, {{when}}."
   },
   "promptWeight": {
     "none": "No hay medida del prompt registrada para estas corridas.",

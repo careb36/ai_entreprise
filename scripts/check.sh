@@ -12,7 +12,8 @@
 #   - a change under frontend/: `npm run test:changed`, eslint on the changed
 #     files of frontend/src and `npx tsc --noEmit`;
 #   - a change to .github/workflows/: actionlint, when it is installed;
-#   - always, being fast: the two dependency rules and the file-size ratchet.
+#   - always, being fast: the two dependency rules, the file-size ratchet and
+#     the changelog fragments (scripts/check_changelog.py).
 # full runs the whole backend suite in parallel, ruff on app and tests, the
 # LLM proxy's tests, the whole frontend (tsc, lint, test:run, build),
 # actionlint and the rule checks.
@@ -188,6 +189,7 @@ rule_checks() {
   run_step "backend dependency rule" python3 -I scripts/check_architecture.py
   run_step "frontend layer rule" python3 -I scripts/check_frontend_architecture.py
   run_step "file sizes" python3 -I scripts/check_file_sizes.py
+  run_step "changelog fragments" python3 -I scripts/check_changelog.py
 }
 
 actionlint_step() {

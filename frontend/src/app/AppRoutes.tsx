@@ -27,6 +27,7 @@ import CompanyFindingDetail from '../pages/CompanyFindingDetail'
 import CompanyFindings from '../pages/CompanyFindings'
 import Usage from '../pages/Usage'
 import AuditAnchors from '../pages/AuditAnchors'
+import ApiTokens from '../pages/ApiTokens'
 import ModelCatalog from '../pages/ModelCatalog'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
@@ -92,6 +93,7 @@ export function AppRoutes() {
         <Route path="/company/duties" element={<CompanyDuties />} />
         <Route path="/company/usage" element={<Usage />} />
         <Route path="/company/audit-anchors" element={<AuditAnchors />} />
+        <Route path="/company/api-tokens" element={<ApiTokens />} />
         <Route path="/company/procedures" element={<Procedures />} />
         <Route path="/company/findings" element={<CompanyFindings />} />
         <Route path="/company/findings/:id" element={<CompanyFindingDetail />} />

@@ -68,6 +68,14 @@ from .sso import (
     SsoFlowState,
     SsoIdentity,
 )
+from .sso_groups import (
+    SsoGroupMapping,
+    SsoGroupObservation,
+    SsoManagerApproval,
+    SsoManualException,
+    SsoTeamExclusion,
+    TeamMembershipSourcePreview,
+)
 from .support import BugReport
 from .task_relation import TaskRelation
 from .team import Team, TeamHistoryStart, TeamMember, TeamMembershipPeriod
@@ -136,13 +144,19 @@ __all__ = [
     "SsoDomain",
     "SsoDomainCheck",
     "SsoFlowState",
+    "SsoGroupMapping",
+    "SsoGroupObservation",
     "SsoIdentity",
+    "SsoManagerApproval",
+    "SsoManualException",
+    "SsoTeamExclusion",
     "TaskEvent",
     "TaskRelation",
     "Team",
     "TeamHistoryStart",
     "TeamMember",
     "TeamMembershipPeriod",
+    "TeamMembershipSourcePreview",
     "User",
     "Verification",
     "WikiLink",
