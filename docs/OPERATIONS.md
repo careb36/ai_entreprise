@@ -220,11 +220,18 @@ taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
 `NOTICE`), on `main` instead of a `develop` branch.
 
 1. **Changelog pull request.** On a branch cut from `main`, run
-   `python3 scripts/release_notes.py release X.Y.Z`: it moves everything
+   `python3 scripts/release_notes.py release X.Y.Z` (or `cut X.Y.Z`): it
+   first collects the changelog fragments, folding every
+   `changelog.d/<issue>-<slug>.md` into `[Unreleased]` under its section and
+   deleting it (issue #731, `changelog.d/README.md`), then moves everything
    under `[Unreleased]` in `CHANGELOG.md` into a dated `## [X.Y.Z] -
-   YYYY-MM-DD` section. Update the link references at the end of the file by
-   hand, read the section as a user would (it is the release announcement),
-   and open the pull request as `chore(release): X.Y.Z`.
+   YYYY-MM-DD` section. It refuses, changing no file, while a fragment is bad
+   (the reason names the file) or the version already has a section. Commit
+   the deleted fragments with `CHANGELOG.md`. Update the link references at
+   the end of the file by hand, read the section as a user would (it is the
+   release announcement), and open the pull request as
+   `chore(release): X.Y.Z`. `python3 scripts/release_notes.py collect` folds
+   the fragments alone, without cutting.
 2. **Merge it** once its head is green.
 3. **Tag the merge commit on `main`** and push the tag, as a person:
 
@@ -239,12 +246,14 @@ taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
 4. **Check both runs** (`Release`, `Publish Images`) and the GitHub Release.
 
 `python3 scripts/release_notes.py notes vX.Y.Z` prints the notes exactly as
-the release will show them.
+the release will show them, and `python3 scripts/release_notes.py unreleased`
+prints `[Unreleased]` with the fragments not yet collected folded in.
 
 **Pre-releases** (`vX.Y.Z-rc.N`) are for trying a release on a staging
 deployment first. Tag them straight from `main`, without a changelog pull
 request: they get no section of their own, and their GitHub Release, marked
-pre-release, shows `[Unreleased]` as of the tagged commit. They never move
+pre-release, shows `[Unreleased]` as of the tagged commit, with that commit's
+uncollected fragments folded in (`notes` reads them). They never move
 `latest`.
 
 What pushing the tag runs:
