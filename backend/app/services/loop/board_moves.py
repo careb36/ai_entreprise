@@ -198,6 +198,61 @@ def start_moved_task(
     return answer
 
 
+def record_person_change(
+    session: Session,
+    item: BacklogItem,
+    sprint: Sprint | None,
+    user: Any,
+    *,
+    status: str | None,
+    comment: str,
+    starts: bool,
+) -> tuple[Any, dict[str, Any]]:
+    """A person's change of *item* on the board: its event, then the start.
+
+    The event comes first and the comment is its rendering
+    (``task_events.person_kind`` names it: a comment starting with
+    ``SEND_BACK_MARKER`` is a ``sent_back``). ``PATCH /v1/backlog/{id}`` and a
+    send-back from chat (``send_back``) both write it here. Returns the event
+    (``None`` for a change without status or comment) and ``start_moved_task``'s
+    answer. The caller commits.
+    """
+    event = None
+    if status or comment:
+        event = task_events.record(
+            session,
+            item,
+            task_events.person_kind(status, comment),
+            task_events.PERSON,
+            status=status or None,
+            text=comment or None,
+            created_at=str(datetime.now(UTC).replace(tzinfo=None)),
+        )
+    item.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    session.add(item)
+    return event, start_moved_task(session, item, sprint, user, starts)
+
+
+def send_back(
+    session: Session,
+    item: BacklogItem,
+    sprint: Sprint | None,
+    user: Any,
+    comment: str,
+) -> tuple[Any, dict[str, Any]]:
+    """The board's "Send back to work": *item* to To do with *comment*, started.
+
+    What ``PATCH /v1/backlog/{id}`` does for ``{"status": "todo", "comment":
+    ...}``, for a caller that already checked the role (a decision from chat,
+    ``routers/chat_interactions.py``). Raises ``BoardMoveError`` before
+    writing; the caller commits.
+    """
+    starts, text = prepare(sprint, item, "todo", comment)
+    return record_person_change(
+        session, item, sprint, user, status="todo", comment=text, starts=starts
+    )
+
+
 def closed_before(session: Session, sprint_id: int) -> bool:
     """Whether a person reopened *sprint_id* after the worker had closed it."""
     rows = session.exec(
