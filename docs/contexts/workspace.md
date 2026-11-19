@@ -50,7 +50,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ## Described elsewhere
 
 - The daemon's snapshots (`vscode-daemon/delivery_snapshot.py`) and `workspace.undo`: [release](release.md).
-- The daemon's read tools, checked edits, repository map and related code (`workspace_read.py`, `workspace_edit.py`, `repo_map.py`, `code_graph.py`): [tools](tools.md).
+- The daemon's read tools, checked edits, repository map, related code and the code graph's report (`workspace.graph`) (`workspace_read.py`, `workspace_edit.py`, `repo_map.py`, `code_graph.py`): [tools](tools.md).
 - The daemon's console runs (`vscode-daemon/console_run.py`): [producers](producers.md).
 - The daemon's sprint integration (`vscode-daemon/sprint_integration.py`): [release](release.md).
 - The sandbox, the command policy, the stack profiles, the application check and the daemon's state folders: [configuration](../CONFIGURATION.md).

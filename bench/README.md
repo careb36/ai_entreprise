@@ -24,6 +24,10 @@ bench/
                          backend/tests/test_wstg_plan.py)
   scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference (fake)
   scorecards/real/<stamp>.json, .md     the real-model references
+  scorecards/humaneval/                 HumanEval cards (run.sh --humaneval)
+  humaneval/fake/HumanEval_<n>/         the fake producer's answers for a few
+                                        HumanEval problems (see "HumanEval
+                                        through the factory"); never the dataset
   verifier/              the Verifier benchmark (see below and verifier/README.md)
 ```
 
@@ -53,6 +57,10 @@ bench/
   section with that section off, and `scripts/bench/ablation.py` writes each
   section's deltas onto the baseline's card (see "What each prompt section is
   worth").
+- `scripts/bench/humaneval.py` fetches HumanEval, checks it against its
+  pinned sha256 and writes each problem as a specification for
+  `run.sh --humaneval`; `scripts/bench/humaneval_card.py` is the card's
+  `humaneval` block (see "HumanEval through the factory").
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
   self-hosted runner, with the fake, and on real models behind a kill switch
   (see "The nightly real-model run").
@@ -521,6 +529,89 @@ top passes all of them.
 The card needs nothing new: a seeded specification is a specification like
 the others, under its folder's name. With `--graders`, the seed is read from
 the graders' commit with the rest of `bench/`.
+
+## HumanEval through the factory
+
+Issue #316 asks for public benchmarks with the factory as the producer and
+the benchmark's own tests as the judge. `run.sh --humaneval` runs a subset of
+OpenAI's HumanEval (164 Python problems, each a function signature with a
+docstring, graded by a `check` function) that way:
+
+```bash
+scripts/bench/run.sh --humaneval                  # the default subset, ten fixed problems
+scripts/bench/run.sh --humaneval=0,2,HumanEval/7  # named problems
+scripts/bench/run.sh --humaneval=all              # all 164
+python3 scripts/bench/compare.py bench/scorecards/humaneval/<stamp>.json --dir bench/scorecards/humaneval
+```
+
+- **The dataset is downloaded at run time, never committed.** The source is
+  the canonical one, `data/HumanEval.jsonl.gz` of the `openai/human-eval`
+  repository at commit `b9453e8f1865df0a0057a1383767caa400acfbcf`
+  (`scripts/bench/humaneval.py`, `DATASET_URL`). The bench computes the
+  sha256 of the bytes it received and refuses them, writing nothing and
+  starting nothing (exit 2), unless it is the pinned
+  `b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef`.
+  `BENCH_HUMANEVAL_CACHE` names a folder that keeps the checked file between
+  runs; it is checked again before every use and refused the same way.
+  `BENCH_HUMANEVAL_URL` names a mirror; the pin does not change.
+- **Licence.** HumanEval is released under the MIT licence (the repository's
+  `LICENSE`, "Copyright (c) OpenAI"), checked on 2026-11-18. The bench
+  downloads it and commits nothing of it; the card names the source and the
+  licence. The fake producer's answers below were written for the bench and
+  are not the dataset's canonical solutions.
+- **A problem as a specification.** Each problem becomes a folder under
+  `BENCH_WORKDIR/humaneval/specs/humaneval-<nnn>/` shaped like a reference
+  specification: `spec.json` (the title `HumanEval/<n>: <entry point>`, the
+  prompt in the summary, one requirement, "Complete `<entry point>`", with
+  the signature in its description and one criterion, REQ-1.1, a quality
+  target with a number and the constraints: `solution.py` at the root,
+  standard library only); `seed/solution.py`, the prompt verbatim, committed
+  as the base of the project as for a seeded specification (a
+  specification's texts are whitespace-collapsed, and HumanEval asks for a
+  body completed in place); and `acceptance/test_humaneval.py`, the hidden
+  test.
+- **The hidden test is HumanEval's own.** `test_req_1_1_humaneval` runs the
+  prompt (its helper functions, as HumanEval's harness has them), then the
+  delivered module's names over it, then the dataset's `check(<entry point>)`
+  under a 10 s alarm. It lives beside the specification, never in the
+  project or the specification, so the factory never sees it, and a
+  `check` the delivery defines is overwritten by the dataset's. The grade is
+  the bench's ordinary one (`scorecard.py grade`): in the daemon's container
+  sandbox, read back from pytest's report, `unmeasured` when the sandbox
+  cannot grade. The factory's own report is never read for it. Every
+  problem of the dataset maps to a specification the check approves, and
+  each canonical solution passes its hidden test through this harness (both
+  checked on 2026-11-18).
+- **The card.** The problems are kept out of `specs`, so they never move the
+  reference specifications' totals, and go into the `humaneval` block
+  (schema v5, `scripts/bench/humaneval_card.py`): the dataset (source, the
+  sha256 the bench computed, licence), the subset, per problem its outcome
+  (`pass`; `fail`; or `unmeasured` with the reason when the grade could not
+  run, never a pass and never a fail), the sprint's status, tasks, rework,
+  wall-clock, reported tokens and models served, the problems the token
+  budget skipped (listed, never graded), and **pass@1**: passed over graded,
+  one delivery per problem, `null` while any problem is unmeasured. The
+  card's Markdown has a "HumanEval" section; `compare.py` prints pass@1 and
+  each problem's outcome before → after (or the block alone with no previous
+  card), shown and never judged. Cards go to `bench/scorecards/humaneval/`
+  unless `--out` says otherwise, apart from the reference specifications'.
+- **Never in the default run.** Only `--humaneval` reaches the dataset; the
+  nightly and pull-request runs are unchanged. It is refused with a
+  `SPEC_DIR` or `--graders` (HumanEval's tests come from the pinned dataset,
+  not a commit), before anything starts.
+- **With the fake LLM there are no real answers.** The fake producer answers
+  three problems of the default subset, `HumanEval/0`, `HumanEval/2` and
+  `HumanEval/23` (`bench/humaneval/fake/HumanEval_<n>/`: `solution.py`, its
+  unit tests and QA's `tests/test_req_1.py`; the plan is written from them),
+  only so the plumbing (download, pin, spec, seed, plan, delivery, grade,
+  card) can run green without a model. With the fake, the default subset is
+  those three, a named problem without an answer is refused, and the run
+  fails unless every problem passes. A fake pass@1 measures nothing.
+
+The default subset is `HumanEval/0, 2, 4, 7, 12, 23, 35, 53, 129, 162`:
+fixed, so two runs compare problem by problem, and small enough that a run
+with real models costs ten sprints. HumanEvalPack (other languages) is not
+built.
 
 ## Adding a reference specification
 

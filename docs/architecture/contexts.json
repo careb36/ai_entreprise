@@ -577,6 +577,12 @@
         "evidence",
         "loop"
       ],
+      "test_code_graph_persist.py": [
+        "loop"
+      ],
+      "test_code_graph_store.py": [
+        "loop"
+      ],
       "test_command_policy.py": [
         "workspace"
       ],
@@ -1219,6 +1225,9 @@
       ],
       "test_sprint_integration_request.py": [
         "management"
+      ],
+      "test_sprint_integration_state.py": [
+        "release"
       ],
       "test_sprint_list.py": [
         "loop"
