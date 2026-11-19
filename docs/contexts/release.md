@@ -6,7 +6,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** What leaves the factory once accepted: publishing a branch, merging locally, a sprint's integration and its jobs and events, undoing a delivery from its snapshot, and bringing a request's comments back. It starts when the loop has closed work, through an event, never from inside the loop.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [planning](planning.md), [loop](loop.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `delivery_undo`, `git_publish`, `integration`, `integration_review` (the review gate: `required`, `approving_review`), `local_merge` (with `needs_diff` and `protected_facts` for the protected-path guard), `protected_merge` (`inventory_problem`, which `management/rsi_cycle_steps` reads to trust a diff's size), `self_change` (the Owner's hold on merging a self-improvement cycle's integration or task branches: `cycle_for`, `require_owner`). Another context imports only these modules and the package; the rest are internal.
-- **Modules:** `delivery_undo`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `local_merge`, `protected_merge`, `review_sync`, `self_change`.
+- **Modules:** `delivery_undo`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `integration_state`, `local_merge`, `protected_merge`, `review_sync`, `self_change`.
 
 ## Components
 
@@ -34,6 +34,7 @@ A local merge into the base branch is a release (issue #543, [`docs/design/SEGRE
 
 ### Other modules
 
+- `integration_state` (#699, F8 of [the self-hosting retrospective](../retrospectives/2026-11-self-hosting.md)): a sprint reads `completed` when its tasks settle, before its integration has merged and run the suite, so `GET /v1/sprints` and `GET /v1/sprints/{id}/board` add `integration_state` and `integration_status` beside `status`, read from the sprint's latest `SprintIntegration` (what git and the daemon answered; nothing stored): `integrating` (`running`, `pending`), `integrated` (`tests_passed`, `untested`), `failed` (`tests_failed`, `conflict`, `incomplete`, `error`) or `none` (no integration recorded). The job is written by the `sprint.closed` handler just after the close, so for that moment a completed sprint reads `none`. The frontend shows a completed sprint as "Integrating" or "Integration failed" (`lib/sprintStatus.ts`), and the self-hosting harness waits on the state.
 - `integration_events` (`record_for_tasks`): writes each task's part in a sprint's integration (merged, skipped, stopped at a conflict, branch missing) as that task's `integration` event; the task's status does not change.
 
 ## Described elsewhere

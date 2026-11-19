@@ -140,7 +140,9 @@
       "completed": "Completado",
       "cancelled": "Cancelado",
       "planned": "Planificado",
-      "paused": "En pausa"
+      "paused": "En pausa",
+      "integrating": "Integrando",
+      "integration_failed": "Integración fallida"
     },
     "roles": {
       "PO": {
@@ -3824,13 +3826,24 @@
       "matched": "El hash coincide con el registro",
       "mismatched": "El hash no coincide con el registro",
       "missing": "Registro ausente",
-      "unavailable": "Integridad desconocida"
+      "unavailable": "Integridad desconocida",
+      "unverified": "Sin verificar: parte del registro"
     },
     "refused": {
       "matched": "No se pudo servir el registro.",
       "mismatched": "No se pudo servir el registro.",
       "missing": "El almacén de objetos ya no guarda este registro.",
-      "unavailable": "No se pudo leer el registro, así que su integridad es desconocida."
+      "unavailable": "No se pudo leer el registro, así que su integridad es desconocida.",
+      "unverified": "No se pudo servir esta parte del registro."
+    },
+    "pieces": {
+      "reading": "Leyendo el final del registro…",
+      "showing": "Bytes {{start}}–{{end}} de {{total}}",
+      "partialHint": "Una parte no se puede comprobar contra el sha256 registrado para el registro completo. Lee el registro completo para verificarlo.",
+      "readWhole": "Leer y verificar el registro completo",
+      "earlier": "Cargar {{bytes}} bytes anteriores",
+      "earlierError": "No se pudo leer la parte anterior.",
+      "refused": "No se pudo leer el final del registro."
     }
   }
 }
