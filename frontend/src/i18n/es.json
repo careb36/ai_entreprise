@@ -39,7 +39,8 @@
     "invitations": "Invitaciones",
     "findings": "Hallazgos",
     "bench": "Banco de pruebas",
-    "account": "Cuenta"
+    "account": "Cuenta",
+    "auditTrail": "Registro de auditoría"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -3117,6 +3118,32 @@
     "confirmNow": "Confirmar ahora",
     "add": "Añadir relación"
   },
+  "taskEvents": {
+    "title": "Registro de eventos",
+    "count_one": "{{count}} evento",
+    "count_other": "{{count}} eventos",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "loading": "Cargando el registro de eventos",
+    "loadError": "No se pudo cargar el registro de eventos: {{message}}",
+    "chain": {
+      "intact": "Cadena íntegra",
+      "broken": "Cadena rota",
+      "empty": "Sin eventos encadenados"
+    },
+    "source": {
+      "events": "El tablero lee estos eventos.",
+      "comments": "El tablero lee los comentarios anteriores de esta tarea."
+    },
+    "break": "Evento {{seq}}: {{reason}}",
+    "empty": "Esta tarea todavía no tiene eventos.",
+    "listLabel": "Eventos de esta tarea, del más antiguo al más reciente",
+    "by": "por {{actor}}",
+    "status": "estado {{status}}",
+    "run": "ejecución {{id}}",
+    "legacy": "importado",
+    "payload": "Detalles"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -3212,10 +3239,73 @@
       "kind": "Tipo",
       "seq": "Fila",
       "state": "Estado",
-      "anchoredAt": "Anclado el"
+      "anchoredAt": "Anclado el",
+      "receipt": "Recibo"
     },
     "anchorCount_one": "{{count}} ancla",
-    "anchorCount_other": "{{count}} anclas"
+    "anchorCount_other": "{{count}} anclas",
+    "export": "Recibo",
+    "exportNamed": "Descargar el recibo del ancla en la fila {{seq}}"
+  },
+  "auditTrail": {
+    "title": "Registro de auditoría",
+    "subtitle": "La cadena de auditoría de la empresa tal como la verifica el backend, y su cabeza para contrafirmar con tu propia clave.",
+    "chainTitle": "Verificación de la cadena",
+    "verify": "Verificar la cadena",
+    "verifyAgain": "Verificar de nuevo",
+    "verifyHint": "El backend recorre cada fila de la cadena de auditoría de la empresa e informa dónde se rompe. Solo se ejecuta cuando lo pides.",
+    "verifying": "Recorriendo la cadena…",
+    "verifyError": "No se pudo verificar la cadena: {{message}}",
+    "status": {
+      "intact": "Íntegra",
+      "broken": "Rota",
+      "empty": "Vacía"
+    },
+    "statusText": {
+      "intact": "Cada fila enlaza con la anterior y su hash coincide.",
+      "broken": "Algunas filas no coinciden: la cadena fue alterada, reordenada o cortada. Las filas se listan abajo.",
+      "empty": "La empresa todavía no tiene filas auditadas."
+    },
+    "rows": "Filas",
+    "headSeq": "Fila de cabeza",
+    "mode": "Hashes",
+    "modes": {
+      "hmac-sha256": "Con clave (HMAC-SHA256)",
+      "unsigned": "Sin clave (SHA-256)",
+      "mixed": "Con y sin clave"
+    },
+    "headHash": "Hash de cabeza",
+    "headHint": "Registra la fila y el hash de cabeza fuera de la fábrica: si un recorrido posterior termina antes, se eliminaron las filas más nuevas.",
+    "breaksTitle": "Dónde se rompe la cadena",
+    "breakCount_one": "{{count}} problema",
+    "breakCount_other": "{{count}} problemas",
+    "columns": {
+      "seq": "Fila",
+      "reason": "Problema"
+    },
+    "reasons": {
+      "gap": "Falta una fila, está repetida o renumerada",
+      "prev_mismatch": "El enlace con la fila anterior no coincide",
+      "hash_mismatch": "La fila o su lugar fue alterado",
+      "key_missing": "Un hash con clave sin clave configurada para comprobarlo",
+      "downgrade": "Una fila sin clave después de una con clave"
+    },
+    "anchorsLink": "Ver las anclas",
+    "signTitle": "Contrafirmar la cabeza con tu clave",
+    "signIntro": "Obtén la declaración de la cabeza de la cadena, fírmala fuera de la fábrica con la clave Ed25519 que registró un propietario y pega la firma. Tu clave privada nunca llega a esta página; el backend comprueba la firma con las claves públicas registradas.",
+    "getStatement": "Obtener la declaración",
+    "refreshStatement": "Obtener una declaración más reciente",
+    "statementError": "No se pudo obtener la declaración: {{message}}",
+    "statementLabel": "Declaración de la fila {{seq}}",
+    "copyStatement": "Copiar",
+    "copied": "Copiado",
+    "signHow": "Guárdala como statement.json tal como se muestra y fírmala, por ejemplo:",
+    "signatureLabel": "Firma (base64)",
+    "signatureHint": "La firma en base64 que produjo tu proceso de firma.",
+    "signatureShape": "Esto no es base64: usa letras, dígitos, + y /, con hasta dos = al final.",
+    "submitSignature": "Enviar la firma",
+    "signed": "La fila {{seq}} quedó anclada con tu clave",
+    "signError": "La firma fue rechazada: {{message}}"
   },
   "sprintProgress": {
     "title": "Declarado como hecho frente a verificado",

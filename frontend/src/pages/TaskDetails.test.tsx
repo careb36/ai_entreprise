@@ -13,6 +13,8 @@ vi.mock('../services/cost', async importOriginal => ({
 }))
 // The relations section reads its own data (components/TaskRelations.test.tsx).
 vi.mock('../components/TaskRelations', () => ({ TaskRelations: () => null }))
+// So does the event log (components/TaskEventLog.test.tsx).
+vi.mock('../components/TaskEventLog', () => ({ TaskEventLog: () => null }))
 vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),
