@@ -295,7 +295,8 @@ unlink another company's.
   `components/SsoIdentities.tsx`.
 
 - **Group mapping** (issue #703, not built; migration `0053`): the
-  threat model (G1–G18), data model and EARS rules are in
+  threat model (G1–G22), data model, EARS rules and the owner's
+  decisions of 2026-11-19 are in
   [`SSO_GROUP_MAPPING.md`](SSO_GROUP_MAPPING.md).
 
 ## What was taken from AixleHQ/flow (Apache-2.0, design only)
