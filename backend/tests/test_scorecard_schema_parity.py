@@ -136,7 +136,9 @@ BREAKS = [
 ]
 
 
-@pytest.mark.parametrize(("field", "value"), BREAKS, ids=lambda v: str(v)[:40])
+@pytest.mark.parametrize(
+    ("field", "value"), BREAKS, ids=[f"{f}-{i}" for i, (f, _) in enumerate(BREAKS)]
+)
 def test_a_broken_card_reads_the_same(field, value):
     _same(_set(_base(), field, value))
 
