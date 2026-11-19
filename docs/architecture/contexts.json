@@ -129,6 +129,7 @@
       ],
       "public": [
         "code_graph",
+        "code_level",
         "developer_tools",
         "mcp_tools",
         "registry_lookup",
@@ -923,6 +924,9 @@
         "loop"
       ],
       "test_project_docs.py": [
+        "planning"
+      ],
+      "test_project_docs_code_level.py": [
         "planning"
       ],
       "test_project_docs_diagrams.py": [

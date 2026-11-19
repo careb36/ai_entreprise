@@ -20,7 +20,9 @@ the reviewer's name), ``effort`` and ``costs`` (the backend's effort
 observation per task and each sprint's reported model usage,
 ``collect_status``), ``iteration_plans``, ``carries`` and ``releases``
 (each sprint's scope and team source, the platform's carries, the published
-integrations; ``collect_release``) and ``statements_<document>`` (a person's current
+integrations; ``collect_release``), ``code_graph`` and
+``code_graph_observed_at`` (the stored code graph per architecture
+component, ``collect_code``) and ``statements_<document>`` (a person's current
 statement per person section, with the author's role and never their
 address; ``statements``). Each list is bounded (``LIMIT``), newest records kept.
 """
@@ -55,6 +57,7 @@ from sqlmodel import Session, select
 from services.contracts import roles as role_catalogue
 from services.planning import arch_versions
 from services.planning.project_docs import (
+    collect_code,
     collect_release,
     collect_status,
     statements,
@@ -552,6 +555,8 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
     """Everything a pack reads about *company*, as plain data."""
     spec = current_specification(session, company.id)
     sprints = _sprints(session, company.id)
+    arch = _architecture(current_architecture(session, company.id))
+    code, code_observed_at = collect_code.code_graph(session, company.id, arch)
     return {
         "project": {"company_id": company.id, "name": company.company_name},
         # Not an input of any document's digest: the lint compares it apart.
@@ -560,7 +565,10 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "specifications": [
             _listed(session, s) for s in approved_specifications(session, company.id)
         ][-LIMIT:],
-        "architecture": _architecture(current_architecture(session, company.id)),
+        "architecture": arch,
+        "code_graph": code,
+        # Shown, not an input of any digest (``collect_code``).
+        "code_graph_observed_at": code_observed_at,
         "stack": _stack(session, company.id),
         "sprints": sprints,
         "events": _events(session, company.id),
