@@ -259,6 +259,7 @@ def test_an_approved_pack_is_written_to_docs_project_with_the_daemons_hashes(
     ).all()
     assert sorted(actions) == [
         "documentation_pack_approved",
+        "documentation_pack_compiled",
         "documentation_pack_written",
     ]
 
