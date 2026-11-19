@@ -806,6 +806,9 @@
         "evidence",
         "loop"
       ],
+      "test_land_script.py": [
+        "repo"
+      ],
       "test_licence_scan.py": [
         "repo"
       ],
