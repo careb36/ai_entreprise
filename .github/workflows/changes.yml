@@ -140,6 +140,8 @@ jobs:
               - '.github/dependabot.yml'
               - '.github/licence-exceptions.txt'
               - '.github/pip-audit-ignore.txt'
+              - '.gitleaks.toml'
+              - '.gitleaksignore'
             frontend:
               - 'frontend/**'
               - 'docs/architecture/frontend.json'

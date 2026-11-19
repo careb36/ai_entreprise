@@ -384,7 +384,8 @@ def test_a_card_records_the_sections_its_run_turned_off(tmp_path):
     args = ["write", "--out-dir", str(out), "--stamp", "20260101T000000Z"]
     assert scorecard.main([*args, "--sections-off", "Memory", str(entry)]) == 0
     card = json.loads((out / "20260101T000000Z.json").read_text())
-    assert card["schema_version"] == 4 and card["sections_off"] == ["memory"]
+    assert card["schema_version"] == scorecard.SCHEMA_VERSION
+    assert card["sections_off"] == ["memory"]
     assert "Sections off" in (out / "20260101T000000Z.md").read_text()
     assert scorecard.main([*args, str(entry)]) == 0
     card = json.loads((out / "20260101T000000Z.json").read_text())
