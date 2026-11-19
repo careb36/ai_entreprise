@@ -62,6 +62,10 @@ criteria passed, rework requests, estimated prompt tokens and reported tokens
 beside the baseline's, with the difference. It is printed even with no
 previous card and never judged: the exit status is the comparison's alone.
 The header names the sections either run turned off (``sections_off``).
+
+A card carrying HumanEval's block (schema v5, ``run.sh --humaneval``,
+``humaneval.py``) adds pass@1 and each problem's outcome, before → after,
+or the block alone with no previous card; shown, never judged.
 """
 
 import argparse
@@ -74,6 +78,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ablation  # the sibling modules, by path
 import budget
 import graders
+import humaneval_card
 import prompt_weight
 import repeated
 import routing_split
@@ -347,6 +352,7 @@ def render(
     lines += routing_split.render(previous, current, "model")
     lines += prompt_weight.render_table(previous, current)
     lines += ablation.render_lines(current, level="###")
+    lines += humaneval_card.render_compare(previous, current)
     if result["new_specs"]:
         lines += [
             "",
@@ -453,6 +459,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if current.get("ablation"):
             print("\n".join(ablation.render_lines(current, level="###")))
+        if current.get("humaneval"):
+            print("\n".join(humaneval_card.render_lines(current, level="###")))
         return 0
     previous = _load(previous_path)
     if previous is None:

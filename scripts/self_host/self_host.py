@@ -417,37 +417,37 @@ def _sprint(api: Api, cid: int, sprint_id: int) -> dict:
 def step_wait(api, args, state, report):
     cid, sid = state["company_id"], state["sprint_id"]
     deadline = time.monotonic() + args.timeout
-    status = ""
+    sprint: dict = {}
     while time.monotonic() < deadline:
-        status = _sprint(api, cid, sid).get("status", "")
-        if status == "completed":
+        sprint = _sprint(api, cid, sid)
+        if sprint.get("status") == "completed":
             break
         time.sleep(3)
     board = api.get(f"/v1/sprints/{sid}/board")
     report["wait"] = {
         "sprint_id": sid,
-        "status": status,
+        "status": sprint.get("status", ""),
+        "integration_state": sprint.get("integration_state"),  # review waits while "integrating"
         "board": sorted(f"{i['title']}={i['status']}" for c in board["columns"].values() for i in c),
     }
 
 
-def _settled_integration(api: Api, sid: int, timeout: int) -> tuple[dict, dict]:
-    """The sprint's integration plan and its latest integration, once that one
-    has finished: the sprint reads "completed" before its integration (a job,
-    ``integration_jobs.OPEN``) has merged the branches and run the suite."""
+def _settled_integration(api: Api, cid: int, sid: int, timeout: int) -> tuple[dict, dict]:
+    """The sprint's integration plan and its latest integration, once the
+    sprint's ``integration_state`` no longer reads ``integrating``: the sprint
+    reads "completed" before its integration has merged the branches and run
+    the suite, and the backend says where that stands (#699, F8)."""
     start = time.monotonic()
     while True:
-        integration = api.get(f"/v1/sprints/{sid}/integration")
-        latest = integration.get("latest") or {}
+        state = _sprint(api, cid, sid).get("integration_state") or "none"
         waited = time.monotonic() - start
-        # None yet: the job may not have been queued; give it a minute.
-        if not latest and waited > min(60, timeout):
-            return integration, latest
-        if latest and latest.get("status") not in ("pending", "running"):
-            return integration, latest
-        if waited > timeout:
-            return integration, latest
+        # "none" just after the close: the job may not be written yet; give it a minute.
+        none_settled = state == "none" and waited > min(60, timeout)
+        if none_settled or state not in ("none", "integrating") or waited > timeout:
+            break
         time.sleep(3)
+    integration = api.get(f"/v1/sprints/{sid}/integration")
+    return integration, integration.get("latest") or {}
 
 
 def step_review(api, args, state, report):
@@ -462,7 +462,7 @@ def step_review(api, args, state, report):
         for task in (t for t in held if t.get("risk_hold")):
             api.patch(f"/v1/backlog/{task['id']}", {"status": "done", "comment": args.accept})
             accepted.append(task["id"])
-    integration, latest = _settled_integration(api, sid, args.timeout)
+    integration, latest = _settled_integration(api, cid, sid, args.timeout)
     if args.accept and not latest:
         # The worker integrates on its own when the sprint closes; tasks a
         # person accepted after that are integrated now, on the person's word.
@@ -470,7 +470,7 @@ def step_review(api, args, state, report):
             api.post(f"/v1/sprints/{sid}/integrate")
         except ApiError as e:
             report.setdefault("notes", []).append(str(e))
-        integration, latest = _settled_integration(api, sid, args.timeout)
+        integration, latest = _settled_integration(api, cid, sid, args.timeout)
     merged = reviewed = None
     if args.merge and latest:
         # The person's reading is recorded before the merge (F7): an approving
