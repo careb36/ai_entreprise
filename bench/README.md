@@ -25,6 +25,7 @@ bench/
   scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference (fake)
   scorecards/real/<stamp>.json, .md     the real-model references
   scorecards/humaneval/                 HumanEval cards (run.sh --humaneval)
+  scorecards/swebench/                  SWE-bench Lite cards (run.sh --swebench)
   humaneval/fake/HumanEval_<n>/         the fake producer's answers for a few
                                         HumanEval problems (see "HumanEval
                                         through the factory"); never the dataset
@@ -61,6 +62,11 @@ bench/
   pinned sha256 and writes each problem as a specification for
   `run.sh --humaneval`; `scripts/bench/humaneval_card.py` is the card's
   `humaneval` block (see "HumanEval through the factory").
+- `scripts/bench/swebench.py` fetches the pinned SWE-bench Lite instances,
+  checks each against its sha256 and writes each as a seeded specification
+  for `run.sh --swebench`; `scripts/bench/swebench_grade.py` runs the
+  instance's own tests on the delivery; `scripts/bench/swebench_card.py` is
+  the card's `swebench` block (see "SWE-bench Lite through the factory").
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
   self-hosted runner, with the fake, and on real models behind a kill switch
   (see "The nightly real-model run").
@@ -612,6 +618,130 @@ The default subset is `HumanEval/0, 2, 4, 7, 12, 23, 35, 53, 129, 162`:
 fixed, so two runs compare problem by problem, and small enough that a run
 with real models costs ten sprints. HumanEvalPack (other languages) is not
 built.
+
+## SWE-bench Lite through the factory
+
+Issue #687 grades the factory on real repository issues: a fixed subset of
+SWE-bench Lite, each instance started from its repository at the base
+commit, its problem statement as the specification, and graded by its own
+tests, run by the scorer, never by the agent.
+
+```bash
+BENCH_GRADE_IN_PROCESS=1 scripts/bench/run.sh --swebench                       # the five pinned instances
+BENCH_GRADE_IN_PROCESS=1 scripts/bench/run.sh --swebench=pallets__flask-4992   # named pinned instances
+python3 scripts/bench/compare.py bench/scorecards/swebench/<stamp>.json --dir bench/scorecards/swebench
+```
+
+- **The dataset and its licence.** `princeton-nlp/SWE-bench_Lite` on
+  Hugging Face, split `test`, at revision
+  `6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2` (`scripts/bench/swebench.py`,
+  `REVISION`). The dataset declares no licence (its card has none, checked
+  on 2026-11-19). The harness that defines how an instance is graded,
+  `SWE-bench/SWE-bench`, is MIT, for its code only. Each instance's problem
+  statement, patches and tests come from its upstream repository (Flask:
+  BSD-3-Clause; requests: Apache-2.0; pytest: MIT) under that repository's
+  licence. So the bench **commits only the instance ids, their row indices
+  and a sha256 of each, and the pinned revision**, never any of the
+  dataset's content: no statement, no patch, no test id list. The card names
+  the dataset, the revision, where the rows were read and this note.
+- **Each instance is fetched at run time and checked.** One row by its index
+  from the dataset server (`datasets-server.huggingface.co/rows`, retried on
+  a rate limit); the bench computes the sha256 of the fields it uses
+  (`FIELDS`, as canonical JSON) and refuses the row, writing nothing and
+  starting nothing (exit 2), unless it is the hash pinned beside the id, or
+  when the server cut a cell short. `BENCH_SWEBENCH_INSTANCES` names a local
+  JSON-lines file of rows (a mirror), checked against the same pins.
+- **The repository at the base commit is the seed.** The repository is
+  cloned from GitHub into `BENCH_WORKDIR/swebench/repos/` (kept between
+  instances of the same repository; `BENCH_SWEBENCH_REPO_URL` names another
+  source, `{repo}` standing for `owner/name`), and its tree at the base
+  commit is written as the specification's `seed/`, which `seed.py` commits
+  as the project's base, as for any seeded specification (git workflow off,
+  no foundation sprint). A tree with a symbolic link or a submodule is
+  refused.
+- **The problem statement is the specification.** A specification's texts
+  are cut at 1000 characters (`spec_check.TEXT_LIMIT`), so the statement
+  goes whole into the seed as `SWEBENCH_ISSUE.md`; the specification (title
+  `<instance id>: an issue reported in <repo>`, one requirement, "Resolve
+  `<instance id>`", one criterion, REQ-1.1) names that file and quotes the
+  statement's first 600 characters. The hints are not given, as in
+  SWE-bench. The test patch, FAIL_TO_PASS and PASS_TO_PASS go into
+  `acceptance/instance.json` beside the specification, never into the
+  project or the specification; the reference patch goes nowhere but the
+  fake's delivery.
+- **The grade, run by the scorer** (`scripts/bench/swebench_grade.py`,
+  after SWE-bench's harness): a virtual environment is built from the recipe
+  for the instance's repository and version (`ENVIRONMENTS`: the
+  interpreter, packages pinned before the repository is installed, the
+  install; `uv` when the machine has it, which fetches the interpreter,
+  else `python3.X`). Then **the environment check**: the base, with the
+  test patch applied, must pass every PASS_TO_PASS test and fail at least
+  one FAIL_TO_PASS test. Then the delivery: the project is copied, the files
+  the test patch touches are reset to the base and the patch is applied, the
+  copy is installed without its dependencies and the test files run once;
+  the JUnit report is read per test id (`junit_xml.cases`), an expected
+  failure counting as a pass and a skip as a failure, as the harness counts
+  them; an id the harness logged cut at a space stands for every case whose
+  name starts with it. The instance is resolved (`pass`) when every
+  FAIL_TO_PASS and every PASS_TO_PASS test passed.
+- **Not measured is not a fail.** An instance with no recipe, whose
+  environment cannot be built, whose test patch does not apply to the base,
+  or whose base does not reproduce it, is `unmeasured` with the reason:
+  never a pass and never a fail, and left out of the resolve rate, since the
+  environment check runs before the delivery is read. A delivery that cannot
+  be installed (the base could), that adds or changes a file that runs
+  inside the test run (`conftest.py`, `sitecustomize.py`, a `pytest`
+  module, a `.pth`; the specification forbids it), or whose run times out or
+  ends without a report, fails.
+- **Isolation.** The tests run on this machine in that environment, the
+  delivered code with the runner's files and network (`isolation:
+  host_venv`), not in the daemon's container sandbox, whose image does not
+  hold each repository's dependencies; so `run.sh --swebench` refuses to
+  start unless `BENCH_GRADE_IN_PROCESS=1` says this is accepted. The proxy
+  variables are taken out of the test run's environment, so a test that
+  expects a connection to time out sees it do so. A container per
+  repository, as SWE-bench's harness builds, is the next slice.
+- **The card.** The instances are kept out of `specs` and go into the
+  `swebench` block (schema v6, `scripts/bench/swebench_card.py`): the
+  dataset (name, revision, split, source, licence note, each instance's
+  pinned sha256), the subset, per instance its outcome with the reason, its
+  FAIL_TO_PASS and PASS_TO_PASS counts, the sprint's status, tasks, rework,
+  wall-clock, reported tokens and models; the instances the token budget
+  skipped; and the **resolve rate**: resolved over measured, null when none
+  was measured, shown beside how many were. The card's Markdown has a
+  "SWE-bench Lite" section; `compare.py` prints the rate and each outcome
+  before → after, shown and never judged. Cards go to
+  `bench/scorecards/swebench/` unless `--out` says otherwise.
+- **Never in the default run.** Only `--swebench` reaches the dataset; the
+  nightly and pull-request runs are unchanged (the workflow is not touched
+  by this slice). It is refused with a `SPEC_DIR`, `--graders` or
+  `--humaneval`, before anything starts.
+- **With the fake LLM** the delivery is each instance's reference patch,
+  applied to the base at run time (`fake/` under `BENCH_WORKDIR` only, with
+  QA's file `test_req_1_swebench.py`), so the plumbing (fetch, pin, clone,
+  seed, delivery, environment, grade, card) can run without a model; the run
+  fails unless every instance measured is resolved. A fake resolve rate
+  measures nothing. Known limit of this slice: the factory's own delivery
+  tests run with the stack's Python (`DELIVERY_TEST_COMMAND`), which does
+  not hold the instance's dependencies, so they can send the delivery back;
+  the grade reads the folder as the sprint left it.
+
+**How the five were chosen.** From the 300 instances at the pinned revision,
+only the repositories with small, fast suites the issue names (psf/requests,
+6 instances; pallets/flask, 3; pytest-dev/pytest, 17), preferring recent
+versions that build on a current interpreter. Each candidate was run here on
+2026-11-19 through the grade with the reference patch as the delivery and
+with no delivery: `pallets__flask-4992`, `pallets__flask-5063`,
+`pytest-dev__pytest-11143` and `pytest-dev__pytest-11148` reproduce (the
+base fails FAIL_TO_PASS and passes PASS_TO_PASS), resolve with the reference
+patch and fail with none, each grade in 5 to 21 s.
+`psf__requests-3362` is pinned for the third repository; in this session's
+sandbox two of its PASS_TO_PASS tests (`TestTimeout::test_connect_timeout`
+and `test_total_timeout_connect`, which expect a connection to an
+unroutable address to time out) fail on the base because the sandbox refuses
+the connection at once, so it is unmeasured there; on a runner with an
+ordinary network it should reproduce. `psf__requests-2317` was set aside:
+seven of its eight FAIL_TO_PASS tests already pass on the base here.
 
 ## Adding a reference specification
 

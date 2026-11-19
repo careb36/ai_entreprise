@@ -118,7 +118,7 @@ def test_the_scorecard_totals_and_its_schema():
 @pytest.mark.parametrize(
     ("change", "problem"),
     [
-        (lambda c: c.update(schema_version=6), "schema_version"),
+        (lambda c: c.update(schema_version=7), "schema_version"),
         (lambda c: c.update(commit=""), "commit"),
         (lambda c: c["specs"][0].update(status="done"), "status"),
         (lambda c: c["specs"][0]["criteria"].update(passed=7), "criteria.passed"),
@@ -312,7 +312,7 @@ def test_humaneval_results_are_a_block_apart_from_the_specs(tmp_path):
     status, out = _write_he(tmp_path, [*entries, _entry("01-a")], _he_index(0, 2, 23))
     assert status == 0
     card = json.loads((out / "20260101T000000Z.json").read_text())
-    assert card["schema_version"] == 5 and scorecard.validate(card) == []
+    assert card["schema_version"] >= 5 and scorecard.validate(card) == []
     assert [s["name"] for s in card["specs"]] == ["01-a"]  # the totals stay the specs'
     block = card["humaneval"]
     assert (block["graded"], block["passed"], block["failed"]) == (3, 2, 1)
@@ -461,3 +461,52 @@ def test_run_sh_refuses_humaneval_with_specs_or_graders_before_starting(tmp_path
     )
     assert done.returncode == 2, done.stdout + done.stderr
     assert not (tmp_path / "out").exists()
+
+
+# ---------------------------------------------------------------------------
+# run.sh --swebench (issue #687, scripts/bench/swebench.py): only when asked
+# ---------------------------------------------------------------------------
+
+
+def test_run_sh_runs_swebench_only_when_asked_and_grades_it_with_its_own_tests():
+    script = RUN_SH.read_text(encoding="utf-8")
+    assert 'SWEBENCH=""' in script and "--swebench) SWEBENCH=1" in script
+    assert 'swebench.py" prepare' in script and "bench/scorecards/swebench" in script
+    assert (
+        'swebench_grade.py" grade' in script
+        and '"$dir/acceptance/instance.json"' in script
+    )
+    assert 's["resolved"] == s["measured"] > 0' in script
+
+
+@pytest.mark.parametrize(
+    ("args", "in_process"),
+    [
+        (["--swebench"], ""),
+        (["--swebench", "bench/specs/01-cli-wordcount"], "1"),
+        (["--swebench", "--graders", "HEAD"], "1"),
+        (["--swebench", "--humaneval"], "1"),
+        (["--swebench=nope!"], "1"),
+    ],
+)
+def test_run_sh_refuses_swebench_before_starting(tmp_path, args, in_process):
+    import subprocess
+
+    done = subprocess.run(
+        ["bash", str(RUN_SH), "--out", str(tmp_path / "out"), *args],
+        cwd=BENCH.parent,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "BENCH_PYTHON": sys.executable,
+            "BENCH_WORKDIR": str(tmp_path / "w"),
+            "BENCH_GRADE_IN_PROCESS": in_process,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert done.returncode == 2, done.stdout + done.stderr
+    assert (
+        not (tmp_path / "out").exists() and not (tmp_path / "w" / "swebench").exists()
+    )
