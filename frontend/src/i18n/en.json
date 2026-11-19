@@ -3794,6 +3794,11 @@
   },
   "bench": {
     "title": "Bench",
+    "reference": {
+      "value": "Bench reference: {{value}}",
+      "date": "scorecard of {{date}}",
+      "link": "See the bench"
+    },
     "subtitle": "The committed scorecards: each reference specification run through the factory and graded by acceptance tests a person wrote, never by the model under test. Every number is what the scorer observed.",
     "loading": "Loading the scorecards…",
     "loadError": "The scorecards could not be loaded: {{message}}",

@@ -7,10 +7,14 @@
  * over, how many second attempts got done, with and without the
  * ScrumMaster's brief; and once a console assistant advised on a task, or
  * the Architect briefed one, how those tasks fared against the rest.
+ * Under each tile, the bench's reference for the same number when its latest
+ * valid scorecard measured it (#686, `components/bench/BenchReferenceLine`).
  */
 import { useTranslation } from 'react-i18next'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
-import type { ConsoleAdvice, SprintSummary } from '../services/api'
+import type { BenchCard, ConsoleAdvice, SprintSummary } from '../services/api'
+import { BenchReferenceLine, SparkReferenceRule } from './bench/BenchReferenceLine'
+import { benchReference, type BenchReference } from '../lib/benchReference'
 import { architectAdvice, consoleAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
 
 const SPARK_POINTS = 12
@@ -28,14 +32,15 @@ function columnPath(x: number, top: number, bottom: number, width: number) {
   return `M${x},${bottom} V${top + r} Q${x},${top} ${x + r},${top} H${x + width - r} Q${x + width},${top} ${x + width},${top + r} V${bottom} Z`
 }
 
-function Sparkline({ points, pick, format, label }: {
+function Sparkline({ points, pick, format, label, reference }: {
   points: SprintPoint[]
+  reference?: number
   pick: (point: SprintPoint) => number
   format: (value: number) => string
   label: string
 }) {
   const shown = points.slice(-SPARK_POINTS)
-  const max = Math.max(...shown.map(pick), 0)
+  const max = Math.max(...shown.map(pick), reference ?? 0, 0)
   const width = shown.length * (BAR_WIDTH + BAR_GAP) - BAR_GAP
   return (
     <svg width={width} height={SPARK_HEIGHT} viewBox={`0 0 ${width} ${SPARK_HEIGHT}`} role="img" aria-label={label} className="shrink-0 overflow-visible">
@@ -57,6 +62,7 @@ function Sparkline({ points, pick, format, label }: {
           </path>
         )
       })}
+      {reference !== undefined && <SparkReferenceRule value={reference} max={max} width={width} height={SPARK_HEIGHT} />}
     </svg>
   )
 }
@@ -77,8 +83,9 @@ function Delta({ change, format }: { change: number; format: (value: number) => 
   )
 }
 
-function Tile({ label, points, pick, format }: {
+function Tile({ label, points, pick, format, reference = null }: {
   label: string
+  reference?: BenchReference | null
   points: SprintPoint[]
   pick: (point: SprintPoint) => number
   format: (value: number) => string
@@ -91,8 +98,9 @@ function Tile({ label, points, pick, format }: {
         <p className="text-xs text-gray-400">{label}</p>
         <p className="mt-1 text-2xl font-semibold text-white">{format(pick(latest))}</p>
         {previous && <Delta change={pick(latest) - pick(previous)} format={format} />}
+        <BenchReferenceLine reference={reference} format={format} />
       </div>
-      {points.length >= 2 && <Sparkline points={points} pick={pick} format={format} label={label} />}
+      {points.length >= 2 && <Sparkline points={points} pick={pick} format={format} label={label} reference={reference?.value} />}
     </div>
   )
 }
@@ -148,7 +156,8 @@ function AdviceCard({ tally, title, split }: {
   )
 }
 
-export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
+/** `benchCards`: the bench's scorecards, newest first, for each tile's reference (#686). */
+export function LearningTrend({ sprints, benchCards }: { sprints: SprintSummary[]; benchCards?: BenchCard[] }) {
   const { t } = useTranslation()
   const points = learningTrend(sprints)
   if (points.length === 0) return null
@@ -164,8 +173,10 @@ export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Tile label={reworkLabel} points={points} pick={p => p.reworkPerTask} format={formatRework} />
-        <Tile label={blockedLabel} points={points} pick={p => p.blockedShare} format={formatShare} />
+        <Tile label={reworkLabel} points={points} pick={p => p.reworkPerTask} format={formatRework}
+          reference={benchReference(benchCards, 'reworkPerTask')} />
+        <Tile label={blockedLabel} points={points} pick={p => p.blockedShare} format={formatShare}
+          reference={benchReference(benchCards, 'blockedShare')} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <SecondAttemptsCard sprints={sprints} />
