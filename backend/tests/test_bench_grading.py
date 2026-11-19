@@ -275,10 +275,13 @@ def test_prepare_refuses_a_dataset_off_its_pin(tmp_path):
     "data",
     [
         b"not gzip",
-        gzip.compress(b"{}"),
-        gzip.compress(b'{"task_id": "x"}\n'),
-        gzip.compress(b""),
+        # mtime=0: gzip stamps the current time otherwise, and pytest-xdist
+        # refuses to run when its workers collect different test ids.
+        gzip.compress(b"{}", mtime=0),
+        gzip.compress(b'{"task_id": "x"}\n', mtime=0),
+        gzip.compress(b"", mtime=0),
     ],
+    ids=["not gzip", "an object, not lines", "a row without a prompt", "empty"],
 )
 def test_a_malformed_dataset_is_refused(data):
     with pytest.raises(humaneval.DatasetError):
