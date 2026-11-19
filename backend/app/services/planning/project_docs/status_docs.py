@@ -92,6 +92,20 @@ def spend_text(tr: Any, cost: dict[str, Any] | None) -> str:
     )
 
 
+def spend_total(tr: Any, rows: list[dict[str, Any]], total: dict[str, Any]) -> str:
+    """The project's spend in dollars, or why it is not known (the first
+    sprint whose usage is not priced); never a zero for unknown."""
+    if total["cost_known"]:
+        return tr(
+            "status.spend_value",
+            usd=performance.usd(total["cost_cents"]),
+            tokens=total["reported_tokens"],
+        )
+    used = [r["cost"] for r in rows if r["cost"] and r["cost"].get("turns")]
+    unknown = next((c for c in used if not performance.known_cost(c)), None)
+    return spend_text(tr, unknown) if unknown else tr("status.spend_none")
+
+
 def _summary(snapshot, rows, total, src, lang, tr) -> list[str]:
     sprint_marks = _marks(src, [sprint_ref(r["sprint"]) for r in rows])
     carries = [event_ref(e, lang) for r in rows for e in r["carry_events"]]
@@ -100,23 +114,7 @@ def _summary(snapshot, rows, total, src, lang, tr) -> list[str]:
     costs = [
         cost_ref(r["cost"], lang) for r in rows if r["cost"] and r["cost"].get("turns")
     ]
-    if total["cost_known"]:
-        spend = tr(
-            "status.spend_value",
-            usd=performance.usd(total["cost_cents"]),
-            tokens=total["reported_tokens"],
-        )
-    elif costs:
-        unknown = next(
-            r["cost"]
-            for r in rows
-            if r["cost"]
-            and r["cost"].get("turns")
-            and not performance.known_cost(r["cost"])
-        )
-        spend = spend_text(tr, unknown)
-    else:
-        spend = tr("status.spend_none")
+    spend = spend_total(tr, rows, total)
     measures = [
         (
             "m_done",

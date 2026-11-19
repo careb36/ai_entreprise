@@ -3,10 +3,10 @@
  * who wrote it, in which role, when, and which text. Loaded only when opened.
  */
 import { useTranslation } from 'react-i18next'
-import { LoadErrorAlert, LoadingLine } from '../knowledge/PageStates'
 import { errorDetail } from '../../services/api'
 import { usePersonSectionHistory } from '../../services/documentation'
 import { StatementClaim } from './StatementClaim'
+import { LoadError, LoadingLine } from '../ui'
 
 export function PersonSectionHistory({ companyId, section }: { companyId: number; section: string }) {
   const { t } = useTranslation()
@@ -14,9 +14,9 @@ export function PersonSectionHistory({ companyId, section }: { companyId: number
   if (history.isLoading) return <LoadingLine>{t('documentation.personSections.historyLoading')}</LoadingLine>
   if (history.isError) {
     return (
-      <LoadErrorAlert onRetry={() => history.refetch()}>
+      <LoadError onRetry={() => history.refetch()}>
         {t('documentation.personSections.historyError', { message: errorDetail(history.error) })}
-      </LoadErrorAlert>
+      </LoadError>
     )
   }
   const revisions = history.data?.revisions ?? []

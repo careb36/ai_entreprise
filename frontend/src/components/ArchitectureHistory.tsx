@@ -12,8 +12,7 @@ import { CircleCheck, History } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { type Architecture, architecturePath, useCompanyArchitecture } from '../services/architectures'
 import { StatusBadge } from './SpecificationBadges'
-import { Spinner } from './knowledge/PageStates'
-import { CountPill, Panel, StatusBadge as Badge } from './ui'
+import { CountPill, Panel, Spinner, StatusBadge as Badge } from './ui'
 
 function formatDate(iso: string) {
   try {

@@ -20,7 +20,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -57,7 +57,12 @@ class SsoConnection(SQLModel, table=True):
 
 class SsoIdentity(SQLModel, table=True):
     __tablename__ = "sso_identities"
-    __table_args__ = (UniqueConstraint("issuer", "subject"),)
+    __table_args__ = (
+        UniqueConstraint("issuer", "subject"),
+        # One identity per account and provider (migration 0050): a second
+        # link racing past the check fails here, as ``identity_conflict``.
+        Index("ux_sso_identities_user_issuer", "user_id", "issuer", unique=True),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)

@@ -18,9 +18,7 @@ import {
   type CoverageStatus,
 } from '../services/auditAnchors'
 import { useAppStore } from '../store/useAppStore'
-import { CountPill, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
-import { TABLE, TD, TH, TR } from '../components/adminTable'
-import { AccessNotice, ButtonSpinner, FormActions, LoadError, LoadingRows, SavedNote } from './admin/AdminParts'
+import { AccessNotice, CountPill, FormActions, LoadError, LoadingRows, PageHeader, Panel, SavedNote, Spinner, StatusBadge, type StatusTone, TABLE, TD, TH, TR } from '../components/ui'
 
 /** The coverage as an icon, a sentence and a tone: never the colour alone. */
 const COVERAGE_LOOK: Record<CoverageStatus, { icon: LucideIcon; text: string }> = {
@@ -65,7 +63,7 @@ export default function AuditAnchors() {
             {anchorNow.isSuccess && <SavedNote>{t('auditAnchors.queued', { count: anchorNow.data.queued.length })}</SavedNote>}
             {anchorNow.isError && <span role="alert" className="text-xs text-red-300">{errorDetail(anchorNow.error)}</span>}
             <button type="button" className="btn-tool border border-surface-700" disabled={anchorNow.isPending} onClick={() => anchorNow.mutate()}>
-              {anchorNow.isPending ? <ButtonSpinner /> : <Anchor size={13} aria-hidden="true" />}
+              {anchorNow.isPending ? <Spinner size={13} /> : <Anchor size={13} aria-hidden="true" />}
               {t('auditAnchors.anchorNow')}
             </button>
           </>
@@ -78,7 +76,7 @@ export default function AuditAnchors() {
           {coverage.isLoading ? (
             <LoadingRows rows={1} />
           ) : coverage.isError ? (
-            <LoadError message={errorDetail(coverage.error)} onRetry={() => coverage.refetch()} />
+            <LoadError onRetry={() => coverage.refetch()}>{errorDetail(coverage.error)}</LoadError>
           ) : coverage.data ? (
             <CoverageCard coverage={coverage.data} />
           ) : null}
@@ -266,7 +264,7 @@ function SettingsForm({ initial, editable }: { initial: AnchorSettings; editable
           </div>
           <FormActions>
             <button type="submit" className="btn-primary btn-sm" disabled={save.isPending}>
-              {save.isPending && <ButtonSpinner />}
+              {save.isPending && <Spinner size={13} />}
               {t('auditAnchors.save')}
             </button>
             {save.isSuccess && <SavedNote>{t('auditAnchors.saved')}</SavedNote>}

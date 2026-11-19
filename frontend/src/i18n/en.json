@@ -37,6 +37,7 @@
     "duties": "Duties and access",
     "auditAnchors": "Audit anchors",
     "invitations": "Invitations",
+    "account": "Account",
     "findings": "Findings"
   },
   "dashboard": {
@@ -2981,6 +2982,18 @@
         "release_plan_targets": {
           "title": "Target release dates and scope ahead",
           "what": "The dates the project commits to for its coming releases, what each coming release and iteration is to contain, and the scope decisions taken ahead, read against the plan above."
+        },
+        "final_report_acceptance": {
+          "title": "Acceptance by the sponsor",
+          "what": "Whether the sponsor accepts what was delivered, with any conditions or reservations, read against the delivery and the holds left open above."
+        },
+        "final_report_benefits": {
+          "title": "Benefits realisation outlook",
+          "what": "Which benefits the result is expected to bring after closure, when, and who will follow them up."
+        },
+        "final_report_handover": {
+          "title": "Handover notes",
+          "what": "Who takes the result over (operations, maintenance, the client), what they receive, and what they should know about the holds and risks left open."
         }
       }
     }
@@ -3666,6 +3679,32 @@
       "completed_tasks": "Completed tasks",
       "console_assistant_notes": "Console notes",
       "wiki": "Wiki"
+    }
+  },
+  "account": {
+    "title": "Account",
+    "subtitle": "Your own settings, whichever company you are working in.",
+    "sso": {
+      "title": "Single sign-on",
+      "intro": "Link your account to your company's identity provider so you can sign in with it. The provider's verified email must be this account's email, in a domain the company has verified. Unlinking is possible while you keep another way to sign in.",
+      "none": "None of your companies has single sign-on set up.",
+      "link": "Link",
+      "unlink": "Unlink",
+      "unknownCompany": "A company's identity provider",
+      "linkedAt": "linked {{date}}",
+      "outcome": {
+        "linked": "Your identity is linked. You can now sign in with single sign-on.",
+        "already_linked": "This identity was already linked to your account."
+      },
+      "errors": {
+        "state_mismatch": "The link was started in another browser or your session has ended. Sign in and start again here.",
+        "email_mismatch": "The identity provider's email is not this account's email, so it was not linked.",
+        "identity_taken": "This identity is already linked to another account.",
+        "already_linked": "Your account is already linked at this company's provider.",
+        "last_sign_in_method": "This is your only way to sign in, so it cannot be unlinked. Set a password or link another identity first.",
+        "no_connection": "This company's single sign-on is not enabled.",
+        "not_found": "That identity was not found."
+      }
     }
   },
   "invitations": {
