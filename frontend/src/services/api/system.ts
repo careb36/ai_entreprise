@@ -16,10 +16,22 @@ export interface Capabilities {
 
 export type ComponentStatus = { status: 'up' | 'down' | 'disabled'; reason?: string; detail?: string }
 
+/** One capability of the deployment (issue #751): on, off or degraded, and why; never a setting's value. */
+export interface CapabilityState {
+  state: 'on' | 'off' | 'degraded'
+  reason: string
+  provider?: string
+  model?: string
+  scope?: string
+  providers?: string[]
+}
+
 export interface DeepHealth {
   status: 'healthy' | 'degraded' | 'down'
   components: Record<string, ComponentStatus>
   nats?: string
+  /** The backend's capabilities and the LLM proxy's (`llm.*`); never changes `status`. */
+  capabilities?: Record<string, CapabilityState>
 }
 
 export const systemEndpoints = (api: Http) => ({

@@ -281,7 +281,13 @@ docker compose up -d          # backend :8000, frontend :5173, LLM proxy :5100
 The default team runs on DeepSeek alone: DeepSeek Pro (`deepseek-v4-pro`) for
 the PO, Architect, SecOps and the Reviewer agent, where a mistake is
 expensive, and DeepSeek Flash (`deepseek-flash`) for every other role. Qwen,
-Gemini and Nebius stay optional. `AGENT_MODEL` puts every role on one model
+Gemini and Nebius stay optional, and no other integration (GitHub token, mail,
+Neo4j, the Manager agents) is needed for a sprint: each is off with a named
+reason in `/health/deep` and on the Models page (Capabilities). A request
+DeepSeek fails moves between Pro and Flash, never to another provider unless
+`LLM_FALLBACK_PROVIDERS` names it, and memory embeds locally (DeepSeek has no
+embeddings endpoint); see Minimal configuration: DeepSeek only in
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md). `AGENT_MODEL` puts every role on one model
 (then that provider's key is needed), `AGENT_MODEL_<ROLE>` sets one role, and
 the **Agents** page changes a role's model per company. DeepSeek's API
 processes requests in China; for personal or client data, read

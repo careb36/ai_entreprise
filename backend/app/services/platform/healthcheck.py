@@ -26,6 +26,7 @@ from database import engine, get_neo4j_driver
 from logging_config import logger
 from sqlmodel import Session, text
 
+from services.platform import capabilities
 from services.platform.memory_graph import graph_enabled
 
 _PROBE_TIMEOUT_SECONDS = 3.0
@@ -146,6 +147,8 @@ async def probe_llm_proxy() -> dict[str, Any]:
         providers = _provider_observations(body.get("providers"))
         if providers is not None:
             extra["providers"] = providers
+        if isinstance(body.get("capabilities"), dict):
+            extra["capabilities"] = body["capabilities"]
         return _ok(
             detail=body.get("status"),
             models_count=len(models) if isinstance(models, list) else None,
@@ -155,13 +158,20 @@ async def probe_llm_proxy() -> dict[str, Any]:
         return _down(f"{type(exc).__name__}: {exc}")
 
 
-async def aggregate(nats_client: Any, nats_state: str | None = None) -> dict[str, Any]:
+async def aggregate(
+    nats_client: Any,
+    nats_state: str | None = None,
+    backend_capabilities: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Run all probes concurrently and return a structured health document.
 
     ``nats_state`` is the backend's NATS connection lifecycle state
     (``"connecting"`` while the startup connector is still retrying,
     ``"connected"`` once workers have started); it is reported as the
-    top-level ``nats`` field when given.
+    top-level ``nats`` field when given. ``backend_capabilities``
+    (``capabilities.from_state``), when given, is reported with the LLM
+    proxy's as the top-level ``capabilities`` section (issue #751); it never
+    changes the status.
     """
     nats_result, postgres_result, neo4j_result, llm_result = await asyncio.gather(
         probe_nats(nats_client),
@@ -199,4 +209,9 @@ async def aggregate(nats_client: Any, nats_state: str | None = None) -> dict[str
     document: dict[str, Any] = {"status": severity, "components": components}
     if nats_state is not None:
         document["nats"] = nats_state
+    if backend_capabilities is not None:
+        document["capabilities"] = {
+            **backend_capabilities,
+            **capabilities.from_proxy(llm_result.pop("capabilities", None)),
+        }
     return document

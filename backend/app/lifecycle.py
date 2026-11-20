@@ -354,6 +354,17 @@ async def startup(app):
 
     for warning in startup_warnings():
         logger.warning(warning)
+    log_capabilities(app)
+
+
+def log_capabilities(app) -> None:
+    """The startup self-check: the effective capability set, names and reasons only (#751)."""
+    from services.platform import capabilities
+
+    try:
+        capabilities.log_effective(capabilities.from_state(app.state))
+    except Exception as exc:  # noqa: BLE001 - A self-check never stops the start.
+        logger.warning("Capability self-check failed: %s", exc)
 
 
 async def shutdown(app):

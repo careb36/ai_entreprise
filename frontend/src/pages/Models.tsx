@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Boxes, CircleCheck, Cpu, Plug } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { CalibrationReport } from '../components/CalibrationReport'
+import CapabilitiesPanel from '../components/CapabilitiesPanel'
 import ConsoleProducers from '../components/ConsoleProducers'
 import ForgePolicyPanel from '../components/ForgePolicyPanel'
 import GitWorkflowPanel from '../components/GitWorkflowPanel'
@@ -60,6 +61,7 @@ export default function Models() {
           <ForgePolicyPanel companyId={companyId} isOwner={role === 'Owner'} />
           <RunWindowPanel companyId={companyId} isOwner={role === 'Owner'} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
+          <CapabilitiesPanel />
         </>
       )}
     </div>

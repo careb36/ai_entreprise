@@ -90,6 +90,7 @@ from services.integrations import (
     chat_regressions,
     webhooks,
 )
+from services.platform import capabilities
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -269,4 +270,8 @@ async def health_check(request: Request):
 @app.get("/health/deep")
 async def deep_health_check(request: Request):
     nats_client = getattr(request.app.state, "nats_client", None)
-    return await aggregate(nats_client, nats_state=_nats_state(request))
+    return await aggregate(
+        nats_client,
+        nats_state=_nats_state(request),
+        backend_capabilities=capabilities.from_state(request.app.state),
+    )
