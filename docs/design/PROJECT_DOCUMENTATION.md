@@ -860,9 +860,29 @@ when an approved pack is written, compared with the daemon's reported hashes.
 - **Licences.** python-docx (MIT), lxml (BSD), WeasyPrint (BSD-3-Clause) and
   their other dependencies are on the allowlist except Pillow (MIT-CMU, a
   permissive HPND variant) and Pyphen (GPL, LGPL or MPL 1.1 at the user's
-  choice, taken under MPL 1.1, unmodified): both are listed in
-  `.github/licence-exceptions.txt` pending the owner's decision, as the scan
-  requires.
+  choice, taken under MPL 1.1, unmodified, so its file-level copyleft never
+  reaches our code). Both were accepted on 2026-11-20 under the owner's
+  delegation for company standards and are recorded in
+  `.github/licence-exceptions.txt`, as the scan requires.
+- **Advisories (2026-11-20).** WeasyPrint is pinned at 70.0 or later, which
+  clears all three advisories pip-audit reported against 68.1.
+  PYSEC-2026-3940 (GHSA-jf6q-chmf-3h3v: `write_pdf(stylesheets=…,
+  xmp_metadata=…)` used a default fetcher instead of the document's) and
+  PYSEC-2026-4311 (GHSA-r543-q48m-4c9j: EPS image bytes reached Ghostscript
+  through Pillow) are fixed in 70.0. Neither was reachable here: the export
+  passes neither parameter, its fetcher refuses every URL, and the pack has
+  no images. PYSEC-2026-3412 (GHSA-jhhc-3hcp-qhm5: CSS injection through
+  presentational hints) names no fixed version and lists 68.1 as the last
+  affected version; OSV reports nothing against 69.0 or 70.0. It never applied
+  to this use: it needs `presentational_hints=True`, which the export never
+  sets, and the HTML is our own, escaped, built from the stored pack, with a
+  fetcher that refuses every URL, so even an injected `url()` would fetch
+  nothing.
+- **fontTools subsetting is deprecated upstream.** WeasyPrint 70.0 warns that
+  a future version will require HarfBuzz's subsetter. The export keeps
+  fontTools for now (below, it is the path validated). Before moving to a
+  WeasyPrint that requires `libharfbuzz-subset0`, the PDF has to pass veraPDF
+  and the byte-determinism check again with that subsetter.
 
 **What is verified and what is declared.** The tests
 (`test_project_docs_export.py`) check on the bytes: the XMP declares

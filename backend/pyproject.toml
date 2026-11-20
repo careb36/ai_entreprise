@@ -49,7 +49,7 @@ dnspython = "^2.7"
 # BSD) and PDF/A-3b with WeasyPrint (BSD-3-Clause), whose Pango and HarfBuzz
 # come from the image's distribution packages (backend/Dockerfile).
 python-docx = "^1.2"
-weasyprint = "^68"
+weasyprint = "^70"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.1.1,<10.0.0"
