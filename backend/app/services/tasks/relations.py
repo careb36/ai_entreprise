@@ -35,7 +35,7 @@ from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from services.contracts.task_dependencies import depends_on_of
-from services.tasks import dependencies, task_events
+from services.tasks import dependencies, similarity, task_events
 
 BLOCKED_BY = "blocked_by"
 DUPLICATE = "duplicate"
@@ -258,6 +258,53 @@ def propose(
         },
     )
     return relation
+
+
+def best_duplicate(
+    item: BacklogItem, others: list[BacklogItem]
+) -> tuple[BacklogItem, float] | None:
+    """The task of *others* whose title most likely repeats *item*'s, with its
+    score, when one reaches ``similarity.THRESHOLD``; done tasks never count."""
+    best: tuple[BacklogItem, float] | None = None
+    for other in others:
+        if other.id == item.id or other.status == "done":
+            continue
+        score = similarity.similarity(item.title, other.title)
+        if score >= similarity.THRESHOLD and (best is None or score > best[1]):
+            best = (other, score)
+    return best
+
+
+def propose_likely_duplicate(
+    session: Session, item: BacklogItem, other: BacklogItem, score: float
+) -> TaskRelation | None:
+    """Record that *item* likely repeats *other* as a *proposed* ``duplicate``
+    a person confirms or rejects; ``None`` when the pair is already related."""
+    if between(session, item.id, other.id) is not None:
+        return None
+    return propose(
+        session,
+        item,
+        other,
+        DUPLICATE,
+        by=f"{similarity.RULE} ({score:.2f})",
+        role=SYSTEM,
+    )
+
+
+def propose_likely_duplicates(
+    session: Session, items: list[BacklogItem]
+) -> list[TaskRelation]:
+    """Propose a ``duplicate`` for each pair of *items* (one plan) that likely
+    repeat each other. Information only: both tasks still run."""
+    proposed = []
+    for position, item in enumerate(items):
+        match = best_duplicate(item, items[position + 1 :])
+        if match is not None:
+            relation = propose_likely_duplicate(session, item, *match)
+            if relation is not None:
+                proposed.append(relation)
+    return proposed
 
 
 def confirm(session: Session, relation: TaskRelation, by: str) -> TaskRelation:

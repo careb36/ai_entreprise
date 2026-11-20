@@ -43,7 +43,7 @@ from services.planning import (
 )
 from services.platform import sod
 from services.release import integration_state
-from services.tasks import dependencies, sprint_board, task_filter
+from services.tasks import dependencies, relations, sprint_board, task_filter
 from services.tasks.board import (
     count_architect_advice,
     count_second_attempt,
@@ -208,6 +208,9 @@ async def start_sprint(
             )
         )
 
+    # Two tasks of the plan that likely repeat each other: a proposed
+    # duplicate relation for a person, both still run (issue #766).
+    relations.propose_likely_duplicates(session, rows)
     if carry_over_ids:
         try:
             carried = carry_over(
