@@ -3437,7 +3437,15 @@
       }
     },
     "manifest": "Manifiesto firmado",
-    "manifestError": "No se pudo descargar el manifiesto: {{message}}"
+    "manifestError": "No se pudo descargar el manifiesto: {{message}}",
+    "export": {
+      "docx": "DOCX",
+      "pdf": "PDF/A",
+      "manifest": "Manifiesto firmado de la exportación {{format}}",
+      "manifestHint": "El manifiesto firmado de la exportación: el sha256 del archivo junto a los del paquete",
+      "unavailable": "No disponible en este servidor: {{reason}}",
+      "error": "No se pudo exportar el paquete: {{message}}"
+    }
   },
   "chat": {
     "title": "Aprobaciones por chat",

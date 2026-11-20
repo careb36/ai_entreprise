@@ -86,6 +86,52 @@ def build(pack: DocumentationPack) -> dict[str, Any]:
     }
 
 
+EXPORT_MANIFEST_TYPE = "la-fabrique.documentation-pack-export-manifest"
+EXPORT_DIRECTORY = "export"
+
+
+def build_export(
+    pack: DocumentationPack,
+    *,
+    fmt: str,
+    file_name: str,
+    data: bytes,
+    renderer: str,
+    conformance: list[str],
+) -> dict[str, Any]:
+    """The manifest of one export of *pack*: the pack's files and the export's own.
+
+    The export's bytes are hashed here, by the backend that rendered them,
+    and listed as one more file (``export/<file name>``), so ``verify`` checks
+    a downloaded DOCX or PDF beside the Markdown. ``pack_manifest_sha256`` is
+    the digest of the pack's own manifest, the one the audit chain holds.
+    """
+    built = build(pack)
+    files = [
+        *built["files"],
+        {
+            "path": f"{EXPORT_DIRECTORY}/{file_name}",
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "bytes": len(data),
+        },
+    ]
+    files.sort(key=lambda f: f["path"])
+    return {
+        **built,
+        "type": EXPORT_MANIFEST_TYPE,
+        "version": MANIFEST_VERSION,
+        "pack_manifest_sha256": digest(built),
+        "export": {
+            "format": fmt,
+            "path": f"{EXPORT_DIRECTORY}/{file_name}",
+            "renderer": renderer,
+            # What the file declares; the design says which of it is verified.
+            "conformance": list(conformance),
+        },
+        "files": files,
+    }
+
+
 def canonical(manifest: Mapping[str, Any]) -> bytes:
     """The bytes that are hashed and signed. Part of the format: changing it needs a new version."""
     return json.dumps(

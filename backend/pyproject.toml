@@ -48,6 +48,12 @@ dnspython = "^2.7"
 # (issue #700, docs/design/COMPANY_STANDARDS.md §12 decision 3; OWASP ReDoS,
 # CWE-1333): linear time, no backtracking. Pinned exactly; BSD-3-Clause.
 google-re2 = "1.1.20251105"
+# Exporting the documentation pack (issue #694, decision of 2026-11-19 in
+# docs/design/PROJECT_DOCUMENTATION.md): DOCX with python-docx (MIT, with lxml,
+# BSD) and PDF/A-3b with WeasyPrint (BSD-3-Clause), whose Pango and HarfBuzz
+# come from the image's distribution packages (backend/Dockerfile).
+python-docx = "^1.2"
+weasyprint = "^70"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.1.1,<10.0.0"

@@ -12,8 +12,8 @@
 # who accepted the risk.
 #
 # The entries below were found by the first run of the scan (issue #522, part
-# C) and are listed so that run can pass while the owner decides; none of
-# them has been accepted yet. Each says what deciding means.
+# C) and are listed so that run can pass while the owner decides; those not
+# marked accepted are still pending. Each says what deciding means.
 
 # MIT-0 is MIT without the attribution clause: more permissive than MIT.
 # Deciding: add MIT-0 to ALLOWED in scripts/licence_scan.py, or keep this.
@@ -43,9 +43,24 @@ npm:caniuse-lite | CC-BY-4.0 | 2026-12-31 | pending the owner's decision: CC-BY-
 # It reaches the runtime set through globalize.
 npm:cldrjs | UNKNOWN | 2026-12-31 | the lockfile has no licence field; the package states MIT in its legacy `licenses` array, to be confirmed by the owner
 
+# Accepted on 2026-11-20 by the owner's delegation for company standards
+# (decided by the highest recognised standards, as for #700): the three
+# entries below are permissive or file-level copyleft licences of packages
+# used unmodified. Each is reviewed again within a year, and stops matching if
+# the package's licence changes.
+
+# Pillow is under MIT-CMU (the historical PIL licence, an HPND variant):
+# permissive, attribution only. It reaches the runtime set through WeasyPrint
+# (the documentation pack's PDF export, issue #694, decided on 2026-11-19).
+pypi:pillow | MIT-CMU | 2027-11-20 | accepted on 2026-11-20 (owner's delegation, company standards): MIT-CMU is a permissive, attribution-only HPND variant (backend, through WeasyPrint)
+# Pyphen (hyphenation dictionaries) is offered under GPL, LGPL or MPL 1.1, at
+# the user's choice; La Fabrique takes it under MPL 1.1 and uses it unmodified.
+# MPL 1.1's copyleft is file-level, as MPL-2.0's is, so it never reaches our
+# code. It reaches the runtime set through WeasyPrint (issue #694).
+pypi:pyphen | (GPL OR LGPL OR Mozilla Public License 1.1 (MPL 1.1)) | 2027-11-20 | accepted on 2026-11-20 (owner's delegation, company standards): taken under MPL 1.1, unmodified, file-level copyleft only (backend, through WeasyPrint)
+
 # numpy declares every licence of the code it bundles: BSD-3-Clause for numpy
 # itself, and 0BSD, MIT, Zlib and CC0-1.0 for vendored parts (Zlib is a
 # permissive, attribution-only licence, like MIT). The LLM proxy needs it
 # through onnxruntime, which runs the local embedding model (issue #755).
-# Deciding: add Zlib to ALLOWED in scripts/licence_scan.py, or keep this.
-pypi:numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | 2027-02-20 | pending the owner's decision: Zlib is not on the allowlist (llm-proxy, through onnxruntime for the local embedding model)
+pypi:numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | 2027-11-20 | accepted on 2026-11-20 (owner's delegation, company standards): Zlib is permissive and attribution-only, like MIT (llm-proxy, through onnxruntime for the local embedding model)
