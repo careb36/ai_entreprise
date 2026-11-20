@@ -279,3 +279,33 @@ def test_on_the_host_the_tool_installs_nothing():
         is None
     )
     assert test_runs.install_first(lambda *a: {}, "/p", None, "backend", "x") is None
+
+
+def test_a_worktree_s_repository_is_mounted_read_only_at_its_own_path(tmp_path):
+    """In a task's worktree ``.git`` names a folder of the main repository;
+    without it in the container every git call in the tests failed."""
+    import sandbox as daemon_sandbox  # the daemon's module, via conftest
+
+    common = tmp_path / "repo" / ".git"
+    own = common / "worktrees" / "task-1"
+    own.mkdir(parents=True)
+    (own / "commondir").write_text("../..\n")
+    tree = tmp_path / "repo" / ".git" / "fabrique-worktrees" / "task-1"
+    tree.mkdir(parents=True)
+    (tree / ".git").write_text(f"gitdir: {own}\n")
+
+    # La Fabrique's worktrees sit inside the common folder: it is mounted.
+    assert daemon_sandbox.git_mounts(str(tree)) == ["-v", f"{common}:{common}:ro"]
+
+    outside = tmp_path / "work" / "task-2"
+    outside.mkdir(parents=True)
+    (outside / ".git").write_text(f"gitdir: {own}\n")
+    assert daemon_sandbox.git_mounts(str(outside)) == [
+        "-v",
+        f"{common}:{common}:ro",
+    ]
+    # A plain checkout, or no repository: nothing.
+    plain = tmp_path / "plain"
+    (plain / ".git").mkdir(parents=True)
+    assert daemon_sandbox.git_mounts(str(plain)) == []
+    assert daemon_sandbox.git_mounts(str(tmp_path / "missing")) == []

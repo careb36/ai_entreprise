@@ -167,6 +167,38 @@ def container_runtime() -> str:
     )
 
 
+def git_mounts(cwd: str) -> list[str]:
+    """A worktree's repository, read-only at its own path (issue #766).
+
+    In a ``git worktree`` (every task's, ``fabrique-worktrees/<name>``),
+    ``.git`` is a file naming a folder of the main repository, which the
+    container did not see: every ``git`` call in the tests failed with "not
+    a git repository". The repository's common folder (objects, refs and the
+    worktree's own folder) is mounted read-only where the file says, so git
+    reads work and nothing in the repository can be changed from inside."""
+    marker = os.path.join(cwd, ".git")
+    try:
+        if not os.path.isfile(marker):
+            return []
+        with open(marker, encoding="utf-8") as handle:
+            line = handle.readline().strip()
+    except OSError:
+        return []
+    if not line.startswith("gitdir:"):
+        return []
+    gitdir = os.path.normpath(os.path.join(cwd, line[len("gitdir:"):].strip()))
+    common = gitdir
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as handle:
+            common = os.path.normpath(os.path.join(gitdir, handle.readline().strip()))
+    except OSError:
+        pass
+    root = os.path.abspath(cwd)
+    if not os.path.isdir(common) or common == root or common.startswith(root + os.sep):
+        return []
+    return ["-v", f"{common}:{common}:ro"]
+
+
 def container_command(
     runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None, scratch_mb: int | None = None
 ) -> list[str]:
@@ -189,7 +221,7 @@ def container_command(
         *(
             ["--tmpfs", f"{CONTAINER_WORKDIR}:rw,exec,size={int(scratch_mb)}m"]
             if scratch_mb
-            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw"]
+            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw", *git_mounts(cwd)]
         ),
         "-w", CONTAINER_WORKDIR,
     ]

@@ -5,6 +5,7 @@ Changed
   - a Poetry virtualenv left with the install's container: the environment volume, now on, keeps it;
   - the daemon stopped a suite after 120 s: `DELIVERY_TEST_RUN_SECONDS` (600, at most 900) bounds the root's test run, each folder's suite and `run_tests`;
   - `pytest -n auto` started a worker per host core in a 2-CPU container: the daemon sets `PYTEST_XDIST_AUTO_NUM_WORKERS` to the CPU limit;
+  - in a task's worktree `.git` names a folder of the main repository, which the container did not see, so every `git` call in the tests failed: the daemon mounts the repository's common folder read-only at its own path (`sandbox.git_mounts`);
   - in a repository whose root has no suite, the folders' suites now count as the delivery's test observation (required checks policy `v1`);
   - the Developer's `workspace__run_tests` was offered only with a root test command: it now has a `folder` parameter listing the folders' suites, keeps a wrapper such as `poetry run` on a narrower command, and installs a folder before its first run in an isolated sandbox (`services/tools/test_runs.py`).
 
