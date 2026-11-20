@@ -57,6 +57,8 @@ export interface SprintBoard {
     specification_id?: number | null; team?: string[] | null; team_source?: string // The roles its tasks may go to (null: every hired role), and who chose them.
     /** A Manager's bypass of the run window, and the hold while the window keeps its work back (issue #736). */
     urgent?: boolean; run_window?: RunWindowHold | null
+    /** The objective the person wrote, whole; the planner's fallback as the backend recorded it. */
+    objective?: string | null; planner_fallback?: PlannerFallback | null
   }
   columns: Record<string, BacklogItem[]>
   total: number
@@ -111,6 +113,13 @@ export interface PlannedSprintTask {
   depends_on?: number[]; kind?: 'acceptance_tests' | null // Positions in the plan's `tasks` to finish first; QA's test-writing task.
 }
 
+/** Why the planner's model gave no usable answer, as the backend observed it. */
+export interface PlannerFallback {
+  reason: 'no_model' | 'model_error' | 'unparseable' | 'too_few_tasks' | 'unexpected_error' | string
+  detail: string
+  recorded_at?: string | null
+}
+
 export interface SprintPlanResponse {
   sprint_name: string
   goal: string
@@ -119,6 +128,8 @@ export interface SprintPlanResponse {
   tasks: PlannedSprintTask[]
   /** Criteria no task covers; the team the PO suggests (why, per role) among the company's hired roles. */
   uncovered?: string[]; suggested_team?: string[]; team_reasons?: Record<string, string>; hired_roles?: string[]; team_selection?: 'suggested' | 'automatic'
+  /** The person's objective, whole; a fallback plan's reason and the id of the backend's record of it; items the scope left out. */
+  objective?: string | null; planner_fallback?: PlannerFallback | null; plan_id?: string | null; unplanned_items?: string[]
 }
 
 export const sprintEndpoints = (api: Http) => ({
@@ -148,7 +159,7 @@ export const sprintEndpoints = (api: Http) => ({
   updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
     api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number; team?: string[]; suggested_team?: string[] }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; objective?: string; plan_id?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number; team?: string[]; suggested_team?: string[] }) =>
     api.post<{ sprint_id: number; backlog_item_ids?: number[]; sprint_url?: string }>('/v1/start_sprint', data),
 
   planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number; team?: string[] }) =>

@@ -21,6 +21,7 @@ from typing import Any
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 
+from services.planning.objective_text import display_name
 from services.planning.sprint_context import (  # noqa: F401 - re-exported
     _DEFAULT_EXECUTION_TEAM,
     _build_stack_summary,
@@ -32,6 +33,7 @@ from services.planning.sprint_context import (  # noqa: F401 - re-exported
 )
 from services.planning.sprint_fallbacks import (  # noqa: F401 - re-exported
     _FALLBACK_TASKS,
+    SPRINT_NAME_LIMIT,
     _build_execution_fallback,
     _build_self_improvement_fallback,
     _filter_fallback_tasks,
@@ -192,7 +194,13 @@ def _plan_with_po(
 ) -> dict[str, Any]:
     """The PO's plan from *template*, or *fallback(team_agents, scope)* when no
     model answers usably. With a sprint *team* (``services/planning/sprint_team.py``)
-    only its roles get tasks, else only hired ones; the PO suggests the team."""
+    only its roles get tasks, else only hired ones; the PO suggests the team.
+
+    The plan carries ``objective`` (what the person wrote, never cut) apart
+    from the model's ``goal``, and ``planner_fallback``: None when the model
+    answered usably, else ``{"reason", "detail"}`` as the backend observed it
+    (``no_model``, ``model_error``, ``unparseable``, ``too_few_tasks``,
+    ``unexpected_error``)."""
     from services.planning import sprint_team
 
     everyone = _ensure_execution_team(agents)
@@ -208,11 +216,24 @@ def _plan_with_po(
     def finish(plan: dict[str, Any]) -> dict[str, Any]:
         plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], available_roles)
         suggested, reasons = sprint_team.suggested(parsed, team or hired, plan["tasks"])
-        return {**plan, "suggested_team": suggested, "team_reasons": reasons}
+        return {
+            **plan,
+            # The person's objective, whole and apart from the model's goal.
+            "objective": objective,
+            "planner_fallback": None,
+            "suggested_team": suggested,
+            "team_reasons": reasons,
+        }
+
+    def fell_back(reason: str, detail: str) -> dict[str, Any]:
+        """The deterministic plan, with why the backend saw no usable answer."""
+        plan = finish(fallback(roster, normalized_scope))
+        plan["planner_fallback"] = {"reason": reason, "detail": detail}
+        return plan
 
     if not po_model:
         logger.info("No planning model available — using %s fallback", label)
-        return finish(fallback(roster, normalized_scope))
+        return fell_back("no_model", "No planning model is assigned to the PO.")
     prompt = template.format(
         agent_name=po.get("name") or "PO",
         seniority=po.get("seniority", "Senior"),
@@ -238,7 +259,7 @@ def _plan_with_po(
         )
         if result.get("error"):
             logger.warning("LLM error during %s planning: %s", label, result["error"])
-            return finish(fallback(roster, normalized_scope))
+            return fell_back("model_error", str(result["error"]))
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         cleaned = raw.strip()
         if cleaned.startswith("```"):
@@ -265,20 +286,25 @@ def _plan_with_po(
         validated = validated[:item_limit]
         if len(validated) < 2:
             logger.warning("Planner returned too few valid %s tasks", label)
-            return finish(fallback(roster, normalized_scope))
+            return fell_back(
+                "too_few_tasks",
+                f"The answer held {len(validated)} usable task(s); a plan needs 2.",
+            )
         return finish(
             {
                 "sprint_name": str(parsed.get("sprint_name") or default_name)[:70],
-                "goal": str(parsed.get("goal") or objective.strip())[:140],
+                # The model's one-line goal is bounded; without one, the
+                # person's objective stands whole, never a cut of it.
+                "goal": str(parsed["goal"])[:140] if parsed.get("goal") else objective,
                 "tasks": validated,
             }
         )
     except (json.JSONDecodeError, KeyError, IndexError, AttributeError) as exc:
         logger.warning("Failed to parse %s sprint plan: %s", label, exc)
-        return finish(fallback(roster, normalized_scope))
+        return fell_back("unparseable", f"{type(exc).__name__}: {exc}")
     except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
         logger.error("Unexpected error planning %s sprint: %s", label, exc)
-        return finish(fallback(roster, normalized_scope))
+        return fell_back("unexpected_error", f"{type(exc).__name__}: {exc}")
 
 
 def plan_execution_sprint(
@@ -295,7 +321,7 @@ def plan_execution_sprint(
         _EXECUTION_PROMPT,
         lambda roster, scope: _build_execution_fallback(objective, roster, scope),
         "execution",
-        f"Sprint - {objective[:40].strip()}",
+        f"Sprint - {display_name(objective, SPRINT_NAME_LIMIT)}",
         objective,
         scope_size,
         agents,

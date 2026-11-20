@@ -2935,6 +2935,23 @@
       "all": "No team chosen: every role the company hired."
     }
   },
+  "plannerFallback": {
+    "title": "The planner's model did not answer; this is a generic plan.",
+    "reasons": {
+      "no_model": "No planning model is assigned to the PO.",
+      "model_error": "The planning model answered with an error (or timed out).",
+      "unparseable": "The planning model's answer could not be read as a plan.",
+      "too_few_tasks": "The planning model's answer held too few usable tasks.",
+      "unexpected_error": "Planning failed with an unexpected error."
+    },
+    "observed": "Observed: {{detail}}",
+    "kept": "Your objective is kept whole: it is the sprint's goal, the PO's task cites it, and each item you listed is its own task. Plan again to get a plan from the model.",
+    "unplanned_one": "{{count}} item did not fit the scope and is not a task: {{items}}. Pick a larger scope or plan again.",
+    "unplanned_other": "{{count}} items did not fit the scope and are not tasks: {{items}}. Pick a larger scope or plan again.",
+    "retry": "Retry planning",
+    "objective_one": "The objective as written ({{count}} character)",
+    "objective_other": "The objective as written ({{count}} characters)"
+  },
   "cost": {
     "runTitle": "Cost of this run",
     "taskTitle": "Cost of this task",

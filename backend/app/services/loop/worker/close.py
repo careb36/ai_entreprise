@@ -35,7 +35,7 @@ from services.loop.sprint_close import (
 from services.loop.sprint_close import reclosed as _reclosed
 from services.loop.worker import messages, procedures_round
 from services.models import effort
-from services.planning import spec_planning, sprint_team
+from services.planning import planner_fallback, spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
@@ -331,10 +331,15 @@ def _complete_sprint_and_plan_follow_up(
             scope_size=scope_size,
             status="active",
             goal=plan.get("goal") or objective,
+            objective=objective,
             specification_id=sprint.specification_id,
         )
         session.add(next_sprint)
         session.flush()
+        # Planned without the model: the board says so (planner_fallback).
+        planner_fallback.record_sprint(
+            session, next_sprint, plan.get("planner_fallback")
+        )
 
         backlog_payloads = _add_follow_up_tasks(session, next_sprint, tasks)
         carried = _carry_into_follow_up(

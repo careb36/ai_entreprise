@@ -166,6 +166,10 @@ class SprintStartRequest(RequestModel):
     start_date: str  # ISO-8601 date string (e.g. "2026-04-01")
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
     goal: str | None = None
+    objective: str | None = None  # the person's, whole (``Sprint.objective``)
+    # A fallback plan's ``plan_id``: the backend reads its own record of it
+    # (``services/planning/planner_fallback.py``).
+    plan_id: str | None = None
     duration_days: int | None = None  # deprecated
     # With a specification, "covers" lists the criteria ids (``REQ-1.2``)
     # the task covers; "depends_on" lists the positions, in this list, of

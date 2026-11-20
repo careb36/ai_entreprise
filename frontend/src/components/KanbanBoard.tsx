@@ -23,6 +23,8 @@ import { BacklogItem, errorDetail } from '../services/api'
 import type { BoardMoveResult } from '../services/boardMoves'
 import { useAgentRuns, useCurrentRole, useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import { useBoardPreferences } from '../hooks/useBoardPreferences'
+import { useNavigate } from 'react-router-dom'
+import { ObjectiveText, PlannerFallbackNote } from './PlannerFallback'
 import { useAppStore } from '../store/useAppStore'
 import { TASK_WORKER_PRODUCER, latestRunsByTask } from '../lib/taskEvidence'
 import {
@@ -85,6 +87,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const prefs = useBoardPreferences(idNum)
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
+  const navigate = useNavigate()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -232,6 +235,17 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
         searchRef={searchRef}
       />
       <p id={hintId} className="sr-only">{t('kanbanBoard.keyboardHint')}</p>
+
+      {(board.sprint.planner_fallback || board.sprint.objective) && (
+        <div className="mx-4 mt-3 space-y-2">
+          {/* Planned without the model: a Manager plans again from the objective, whole. */}
+          <PlannerFallbackNote
+            fallback={board.sprint.planner_fallback}
+            onRetry={canManage ? () => navigate('/sprints#plan-sprint', { state: { objective: board.sprint.objective ?? '' } }) : undefined}
+          />
+          <ObjectiveText objective={board.sprint.objective} />
+        </div>
+      )}
 
       {notice && (
         <p role={notice.error ? 'alert' : 'status'}
