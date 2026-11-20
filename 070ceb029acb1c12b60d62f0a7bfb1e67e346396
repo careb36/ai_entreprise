@@ -1,0 +1,174 @@
+{
+  "account": {
+    "git_user_name": "openhands",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "52b6e3e100a44525e31445770b76a3785a9be58a",
+    "name": "fix/required-checks"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "070ceb029acb1c12b60d62f0a7bfb1e67e346396",
+  "duration_seconds": 487.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-20T19:01:19Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-43-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/070ceb029acb1c12b60d62f0a7bfb1e67e346396.20261120T185312Z.log",
+    "sha256": "327424e46be5561b214987ffe37272f946fd3410f1362d8904de0ecb9ce0dd9a"
+  },
+  "main_before": "c00b4f8249caea745cefda0152ee7ff6f30e9bc3",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "c00b4f8249caea745cefda0152ee7ff6f30e9bc3",
+    "52b6e3e100a44525e31445770b76a3785a9be58a"
+  ],
+  "protected_paths": [
+    {
+      "path": ".github/CODEOWNERS",
+      "pattern": ".github/CODEOWNERS"
+    },
+    {
+      "path": "backend/app/services/evidence/protected_list.json",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/required_checks.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/verification.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/tests/test_agent_tools_delivery.py",
+      "pattern": "backend/tests/test_agent_tools_delivery.py"
+    },
+    {
+      "path": "backend/tests/test_delivery_tests.py",
+      "pattern": "backend/tests/test_delivery_tests.py"
+    },
+    {
+      "path": "backend/tests/test_grounding_signature_check.py",
+      "pattern": "backend/tests/test_grounding_signature_check.py"
+    },
+    {
+      "path": "backend/tests/test_roles.py",
+      "pattern": "backend/tests/test_roles.py"
+    },
+    {
+      "path": "backend/tests/test_task_delivery.py",
+      "pattern": "backend/tests/test_task_delivery.py"
+    },
+    {
+      "path": "bench/verifier/cases.py",
+      "pattern": "bench/**"
+    },
+    {
+      "path": "docs/architecture/contexts.json",
+      "pattern": "docs/architecture/contexts.json"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "93070dbc8936662fa1456d9d71970b615338553c",
+  "started_at": "2026-11-20T18:53:12Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 348.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 24.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 75.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 26.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "49f4852c005305857d6d600615c43ffc4bd13490"
+}
