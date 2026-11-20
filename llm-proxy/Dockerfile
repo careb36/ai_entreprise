@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir gunicorn 'setuptools<81'
 # and usage.py boots gunicorn into `ModuleNotFoundError: No module named
 # 'upstream'` and the container dies before serving a single request.
 # A new top-level module in llm-proxy/ has to be added here too.
-COPY app.py catalogue.py connections.py embedding.py gemini.py local_model.py provider_keys.py provider_status.py \
+COPY app.py catalogue.py connections.py embedding.py gemini.py inline_tool_calls.py local_model.py provider_keys.py provider_status.py \
      providers.py quota.py routing.py telemetry.py thinking.py timeouts.py upstream.py usage.py gunicorn.conf.py \
      embedding_model.json /app/
 

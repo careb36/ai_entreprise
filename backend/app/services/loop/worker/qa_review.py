@@ -23,8 +23,9 @@ from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from models import AgentMessage, BacklogItem, Company, Sprint
+from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
 from nats_client import NATSClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from services.contracts.manifest import parse_file_manifest
 from services.evidence import risk, standards
@@ -73,11 +74,18 @@ def _review_prompt(
     qa_review_failures: int,
 ) -> str:
     """What QA is asked about one delivery, with the task's context and procedures."""
+    if review_digest.is_digest(deliverable):
+        # The run's whole files, within REVIEW_CHARS; the digest bounds itself.
+        shown = review_digest.for_review(
+            deliverable, _run_artifact(session, sprint.company_id, item.id)
+        )
+    else:
+        shown = deliverable[: review_digest.DIGEST_CHARS]
     return (
         f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
         f"Description: {item.description or 'N/A'}\n\n"
-        f"--- DELIVERABLE ---\n{deliverable[: review_digest.DIGEST_CHARS]}\n--- END ---"
-        + (review_digest.NOTE if review_digest.is_digest(deliverable) else "")
+        f"--- DELIVERABLE ---\n{shown}\n--- END ---"
+        + (review_digest.NOTE if review_digest.is_digest(shown) else "")
         + "\n\nProvide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
         "If not, start with 'NEEDS WORK:' and explain what's missing."
         + _review_format_reminder(qa_review_failures)
@@ -89,6 +97,20 @@ def _review_prompt(
     ) + procedures.procedures_prompt(
         procedures.active_procedures(session, sprint.company_id, reviewer_dict["role"])
     )
+
+
+def _run_artifact(session: Session, company_id: int, item_id: int) -> str | None:
+    """The company's latest task-worker run's artifact for the task: every file whole."""
+    run = session.exec(
+        select(AgentRun)
+        .where(
+            AgentRun.company_id == company_id,
+            AgentRun.external_ref == f"task-{item_id}",
+            AgentRun.producer == TASK_WORKER_PRODUCER,
+        )
+        .order_by(AgentRun.version.desc())
+    ).first()
+    return run.artifact_text if run is not None else None
 
 
 async def _qa_review(

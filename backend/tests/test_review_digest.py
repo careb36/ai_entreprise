@@ -116,3 +116,40 @@ def test_the_developer_prompt_runs_from_stable_to_variable(monkeypatch):
     positions = [prompt.index(section) for section in order]
     assert positions == sorted(positions)
     assert prompt.startswith("## Output format for files")
+
+
+def _artifact(targets, prose="Done."):
+    blocks = "\n\n".join(
+        f"```python path={t['path']}\n{t['content']}\n```" for t in targets
+    )
+    return f"{prose}\n\n{blocks}"
+
+
+def test_the_digest_never_exceeds_its_limit_so_no_later_cut_hides_a_file():
+    """Five files used to overflow 3800 and QA's second cut fell mid-file."""
+    targets = [_file(f"src/m{i}.py", 400) for i in range(5)]
+    digest = review_digest.build(targets, "x" * 1000)
+    assert len(digest) <= review_digest.DIGEST_CHARS
+    assert re.findall(r"# Artifact: (\S+)", digest) == [t["path"] for t in targets]
+    many = [_file(f"src/f{i}.py", 50) for i in range(60)]
+    assert len(review_digest.build(many)) <= review_digest.DIGEST_CHARS
+
+
+def test_qa_reads_the_run_s_whole_files_when_the_artifact_holds_them_all():
+    targets = [_file("src/a.py", 150), _file("tests/test_a.py", 120)]
+    board = review_digest.build(targets, "prose")
+    view = review_digest.for_review(board, _artifact(targets))
+    assert "line 149 of src/a.py" in view and "line 119 of tests/test_a.py" in view
+    assert "not shown here" not in view
+    assert len(view) <= review_digest.REVIEW_CHARS
+
+
+def test_qa_keeps_the_board_digest_when_the_artifact_misses_a_listed_file():
+    """A file written with the edit tool is not in the answer's artifact."""
+    targets = [_file("src/a.py", 150), _file("src/edited.py", 40)]
+    board = review_digest.build(targets)
+    assert review_digest.for_review(board, _artifact(targets[:1])) == board
+    assert review_digest.for_review(board, None) == board
+    assert (
+        review_digest.for_review("plain answer", _artifact(targets)) == "plain answer"
+    )

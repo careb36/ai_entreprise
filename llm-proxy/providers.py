@@ -11,11 +11,17 @@ only (``thinking.py``). A structured call whose thinking answer came back
 empty because the reasoning used the whole budget is retried once, on the
 same model, with thinking off, within what is left of the call's budget; the
 answer then says so in ``thinking_retry``.
+
+Tool calls a model wrote as text are read back into ``tool_calls``
+(``inline_tool_calls.py``); when the request offered no tools, the call is
+asked once more with ``NO_TOOLS_NOTE`` and the answer says so in
+``inline_tool_calls_retry``.
 """
 
 import logging
 import time
 
+import inline_tool_calls
 import thinking
 import upstream
 from gemini import call_gemini
@@ -38,6 +44,7 @@ def call_openai_compatible(
         {**data, "model": model},
         timeout,
     )
+    inline_tool_calls.normalize(provider, model, status, result, data)
     upstream.check_openai_answer(provider, model, status, result)
     return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))
 
@@ -61,14 +68,26 @@ def call_provider(
         return call_openai_compatible(provider, model, payload, timeout, api_key=api_key, base_url=base_url)
     except upstream.UpstreamError as first:
         remaining = deadline - time.monotonic()
-        if not thinking.retry_without(provider, payload, first.reason, structured) or remaining < MIN_RETRY_SECONDS:
+        retry = _retry_payload(provider, payload, first.reason, structured)
+        if retry is None or remaining < MIN_RETRY_SECONDS:
             raise
-        logger.warning("%s; structured call, retrying once on %s with thinking disabled", first, model)
+        payload_again, label = retry
+        logger.warning("%s; retrying once on %s (%s)", first, model, label)
         try:
             result, tokens = call_openai_compatible(
-                provider, model, thinking.without_thinking(payload), remaining, api_key=api_key, base_url=base_url)
+                provider, model, payload_again, remaining, api_key=api_key, base_url=base_url)
         except upstream.UpstreamError as second:
             second.tokens += first.tokens
             raise
-        result["thinking_retry"] = {"reason": first.reason, "first_attempt_tokens": first.tokens}
+        result[label] = {"reason": first.reason, "first_attempt_tokens": first.tokens}
         return result, tokens + first.tokens
+
+
+def _retry_payload(provider: str, payload: dict, reason: str | None, structured: bool) -> tuple[dict, str] | None:
+    """The request to send once more after *reason*, and the answer's key that says so."""
+    if reason == inline_tool_calls.INLINE_TOOL_CALLS_WITHOUT_TOOLS:
+        note = {"role": "user", "content": inline_tool_calls.NO_TOOLS_NOTE}
+        return {**payload, "messages": [*payload.get("messages", []), note]}, "inline_tool_calls_retry"
+    if thinking.retry_without(provider, payload, reason, structured):
+        return thinking.without_thinking(payload), "thinking_retry"
+    return None

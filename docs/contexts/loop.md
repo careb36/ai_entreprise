@@ -84,5 +84,5 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - `console_host`: the console producers paragraph in [producers](producers.md).
 - `carry_over`: step 6 of [the sprint loop](../SPRINT_LOOP.md) and the moves on the board below.
 - `delivery_checks`: step 6 of [the migration record](../architecture/MIGRATION.md).
-- `review_digest` (what QA is shown of a delivery): `test_review_digest.py` in [testing](../TESTING.md).
+- `review_digest` (what QA is shown of a delivery: the board's digest within `DIGEST_CHARS`, never over it, and for the review the run's whole files within `REVIEW_CHARS`, `for_review`, read by `worker/qa_review` from the company's latest task-worker run): `test_review_digest.py` and `test_review_gate.py` in [testing](../TESTING.md).
 - How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-11-first-part).

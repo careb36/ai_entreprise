@@ -126,6 +126,24 @@ the planner's `planner_fallback` (`{"reason": "model_error", "detail":
 "empty_content_reasoning_exhausted: …"}`, [planning](planning.md)), whose
 detail starts with the named reason, an empty 2xx answer included.
 
+**Tool calls written as text.** DeepSeek's models sometimes write a tool
+call into `content` in their own markup (`<｜DSML｜tool_calls>`,
+`<｜DSML｜invoke name="…">`, `<｜DSML｜parameter …>`) and leave `tool_calls`
+empty; the backend's tool loop reads only `tool_calls`, so it took that text
+for the final answer and delivered a first exploration step as the task's
+work (sprint 3 of the self-sprint: tasks 12 and 16, and the Architect's
+consult answers). `llm-proxy/inline_tool_calls.py` reads such an answer back
+before the empty-answer check: when the request offered tools the calls go to
+`tool_calls` (ids `call_inline_<n>`, `string="false"` values as JSON), the
+prose before them stays as `content`, `finish_reason` becomes `tool_calls`
+and the answer carries `inline_tool_calls` (`{"format": "dsml", "calls":
+n}`). When the request offered none, the model asked for tools it does not
+have (`exec_command`, `Read`): the call is asked once more on the same model
+with `NO_TOOLS_NOTE` appended, within the request's budget, and the answer
+carries `inline_tool_calls_retry`; a second such answer is the retriable
+named error `inline_tool_calls_without_tools`, so the fallback model may
+answer.
+
 **Timeouts.** One setting, `LLM_UPSTREAM_TIMEOUT_SECONDS` (300 s), bounds a
 chat call's provider calls; the proxy enforces it as a deadline on the whole
 body (DeepSeek keeps a slow non-streaming call alive with empty lines,
