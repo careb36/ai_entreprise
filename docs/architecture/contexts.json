@@ -189,7 +189,7 @@
     },
     "producers": {
       "path": "backend/app/services/producers/",
-      "responsibility": "The interchangeable producers of work other than the task worker's own model call: the terminal assistants and CLI producers, the optional LangGraph kickoff (agent_worker, and backend/agents/graph.py after the migration) and the GitHub adapter that ingests pull requests as runs. A producer's output is a claim handed to the evidence.",
+      "responsibility": "The interchangeable producers of work other than the task worker's own model call: the CLI producers a company chooses explicitly (console producers), the optional LangGraph kickoff (agent_worker, and backend/agents/graph.py after the migration) and the GitHub adapter that ingests pull requests as runs. A producer's output is a claim handed to the evidence.",
       "depends_on": [
         "contracts",
         "platform",
@@ -200,7 +200,6 @@
         "tools"
       ],
       "public": [
-        "console_assistants",
         "console_producer"
       ],
       "modules": []
@@ -613,15 +612,6 @@
       ],
       "test_company_models.py": [
         "management"
-      ],
-      "test_console_assistant_sandbox.py": [
-        "producers"
-      ],
-      "test_console_assistants.py": [
-        "producers"
-      ],
-      "test_console_capabilities.py": [
-        "producers"
       ],
       "test_console_producers_command.py": [
         "loop"

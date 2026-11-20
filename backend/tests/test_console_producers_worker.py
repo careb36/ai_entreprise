@@ -10,8 +10,7 @@ the provider's key alone.
 Console producers: a terminal coding agent produces a role's task, and the
 delivery is what the daemon observes (``services/producers/console_producer.py``,
 ``services/producers/console_clis.py``, ``vscode-daemon/console_run.py``).
-Real git in ``tmp_path`` and the real daemon, with a fake CLI on ``PATH`` (as
-``test_console_assistants`` and the e2e's ``e2e-copilot`` do); the shared
+Real git in ``tmp_path`` and the real daemon, with a fake CLI on ``PATH``; the shared
 fixtures are in ``console_producer_helpers``.
 """
 
@@ -26,7 +25,7 @@ from models import Company
 from services.loop import console_host, task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import quality_gate
-from services.producers import console_assistants, console_clis, console_producer
+from services.producers import cli_cooldowns, console_clis, console_producer
 from sqlmodel import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -259,9 +258,9 @@ def test_a_missing_binary_hands_the_task_to_the_model_while_it_cools_down(
     notes = [c["text"] for c in _board(world["engine"], item["id"])]
     assert any("Gemini CLI not used" in n and "not installed" in n for n in notes)
     assert _runs(world["engine"], item["id"]) == []  # No refuted run of its own.
-    assert console_assistants.cooldown_until(company.id, "producer:gemini")
-    # The host adviser's cooldown is its own.
-    assert console_assistants.cooldown_until(company.id, "gemini") is None
+    assert cli_cooldowns.cooldown_until(company.id, "producer:gemini")
+    # A row a removed console assistant left (issue #750) is not the producer's.
+    assert cli_cooldowns.cooldown_until(company.id, "gemini") is None
     # The model's delivery carries the attempt on its evidence.
     answer = "Fixed.\n\n```python path=calc.py\ndef add(a, b):\n    return a + b\n```\n"
     asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, answer))
@@ -289,14 +288,14 @@ def test_a_quota_stop_starts_the_cooldown_and_the_model_produces(world, cli_path
     )
     assert agent["console_skipped"]["attempt"]["cooldown"] == "quota"
     assert "quota" in agent["console_skipped"]["reason"]
-    assert console_assistants.cooldown_until(world["company"].id, "producer:claude")
-    assert console_assistants.cooldown_until(world["company"].id, "claude") is None
+    assert cli_cooldowns.cooldown_until(world["company"].id, "producer:claude")
+    assert cli_cooldowns.cooldown_until(world["company"].id, "claude") is None
 
 
-def test_the_host_advisers_cooldown_does_not_stop_the_producer(world, cli_path):
+def test_a_removed_assistants_old_cooldown_does_not_stop_the_producer(world, cli_path):
     from datetime import UTC, datetime, timedelta
 
-    console_assistants.set_runtime_state(
+    cli_cooldowns.set_runtime_state(
         world["company"].id,
         "claude",
         cooldown_until=datetime.now(UTC) + timedelta(hours=1),

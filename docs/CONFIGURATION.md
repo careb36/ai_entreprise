@@ -505,9 +505,9 @@ Copy `.env.example` to `.env` and fill in:
   a command name or path. Unset, the first of `docker` and `podman` on the
   `PATH`; none found makes the run unavailable with the reason.
 - `CONSOLE_ASSISTANT_COMMANDS` — daemon side, default `copilot,claude`
-  (`vscode-daemon/daemon.py`). The assistant CLIs the daemon looks for when
-  the backend's request lists none; bare command names only (a path or shell
-  syntax is dropped).
+  (`vscode-daemon/daemon.py`). The CLIs the daemon reports on
+  `workspace.capabilities`, kept for older backends: since the console
+  assistants were removed (issue #750) the backend never asks.
 - `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
   `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
@@ -526,11 +526,7 @@ Copy `.env.example` to `.env` and fill in:
   check (`services/workspace/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
   for everything (`vscode-daemon/sandbox.py`), a request that names no sandbox
-  included (#525). The console assistants (`CONSOLE_ASSISTANTS_ENABLED`) run in
-  the company's sandbox too, with purpose `assistant`: in `container` or
-  `bwrap` they need `DELIVERY_SANDBOX_NETWORK` on (off by default; otherwise
-  they are skipped with the reason), the CLI in `DELIVERY_SANDBOX_IMAGE`, and
-  the provider's key listed by name in the company's `console_env`. In container mode the report
+  included (#525). In container mode the report
   names the image that ran (`image_identity`: the content ID and registry
   digest from `image inspect`, observed by the daemon before the run, and the
   container started from that ID; after the run for an image the run pulled;
@@ -867,8 +863,8 @@ Copy `.env.example` to `.env` and fill in:
   The Developer's task prompt in estimated tokens (characters / 4) for that
   role (upper-cased, other characters as `_`: `PROMPT_BUDGET_BACKENDDEVELOPER`),
   else for every role (`services/loop/worker/prompt_budget.py`). Over it,
-  whole sections are left out from the least needed (console assistant notes,
-  then memory and the sprint's completed tasks, lessons, the repository, the
+  whole sections are left out from the least needed (memory and the
+  sprint's completed tasks, then lessons, the repository, the
   requirements, standards and previous attempt); the format, the task, the
   Architect's brief and review feedback never are, and the prompt names what
   was left out. Unset or `0`: nothing is cut. Either way each section's weight
@@ -878,7 +874,8 @@ Copy `.env.example` to `.env` and fill in:
   for a with/without comparison on the bench (`memory,lessons`). The names:
   `standards_and_procedures`, `lessons`, `requirements`, `repository`,
   `related_code`, `wiki`, `memory`, `previous_attempt`, `completed_tasks`,
-  `sprint_board`, `console_assistant_notes` (case does not matter). They are
+  `sprint_board` (case does not matter; `console_assistant_notes` went with
+  the console assistants, issue #750, and is now an unknown name). They are
   left out before `PROMPT_BUDGET` applies and the prompt does not name them;
   the run's `prompt_sections` records `off` (the names set) and `off_dropped`
   (those the prompt would have carried), so a scorecard can tell the runs
@@ -1040,30 +1037,22 @@ Copy `.env.example` to `.env` and fill in:
   Git workflow may fetch the base, `services/workspace/git_workflow.py`); a
   console producer's preparation and collection steps on the daemon get twice
   that.
-- Console assistants (`services/producers/console_assistants.py`,
-  `console_commands.py`; on by default with `CONSOLE_ASSISTANTS_ENABLED`):
-  advice from the CLIs on the daemon's machine before a task, context for the
-  prompt and never evidence. All backend, none secret:
-  - `CONSOLE_ASSISTANT_ALLOWED_ROLES` — default
-    `Developer,Architect,QA,PO,ScrumMaster`: the roles that ask.
-  - `CONSOLE_ASSISTANT_STRATEGY` — default `copilot_first`: the Copilot CLI
-    is asked first; any other value asks it only when no other assistant is
-    chosen.
-  - `COPILOT_CLI_COMMAND_TEMPLATE` — default
-    `copilot -p {prompt} --output-format json`.
-  - `CLAUDE_CLI_COMMAND_TEMPLATE` — default
-    `claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}`;
-    empty never asks it. It is asked only for a high-value task: a role in
-    `CLAUDE_CLI_HIGH_VALUE_ROLES` (default `Architect,PO,QA,ScrumMaster`), a
-    `high` or `critical` priority, or a strategic keyword in the task.
-  - `CLAUDE_CLI_ALLOWED_TOOLS` — default `Read,Grep,Glob,LS,Bash(git *)`,
-    and `CLAUDE_CLI_APPEND_SYSTEM_PROMPT` (a fixed advisory prompt in
-    `config.py`) fill the template's placeholders.
-  - `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES` — default `10` (at least 1): how
-    long a company skips that CLI after it reported a quota without a reset
-    time.
-  - `CONSOLE_ASSISTANT_TIMEOUT_SECONDS` — default `90`: one assistant run on
-    the daemon.
+- `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES` — backend, default `10` (at least 1)
+  (`services/producers/cli_cooldowns.py`): how long a company's console
+  producer skips the Claude CLI after it reported a quota without a reset
+  time.
+- **Removed (issue #750), ignored if still set:** `CONSOLE_ASSISTANTS_ENABLED`,
+  `CONSOLE_ASSISTANT_TIMEOUT_SECONDS`, `CONSOLE_ASSISTANT_STRATEGY`,
+  `CONSOLE_ASSISTANT_ALLOWED_ROLES`, `COPILOT_CLI_COMMAND_TEMPLATE`,
+  `CLAUDE_CLI_COMMAND_TEMPLATE`, `CLAUDE_CLI_ALLOWED_TOOLS`,
+  `CLAUDE_CLI_APPEND_SYSTEM_PROMPT` and `CLAUDE_CLI_HIGH_VALUE_ROLES`. They
+  configured the console assistants, which asked a terminal CLI on the
+  daemon's machine (Copilot CLI, Claude CLI) for advice on a task, under the
+  person's own account; the second opinion is now the Architect's
+  consultation on the team's own model (`ARCHITECT_CONSULT_ENABLED`). They
+  stay declared in `config.py` (`REMOVED_SETTINGS`) so a `.env` that still
+  sets one loads, and the backend logs once at startup that each one set no
+  longer does anything; remove them from `.env`.
 
 ## The LLM proxy
 

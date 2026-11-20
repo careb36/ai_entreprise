@@ -4,7 +4,7 @@ import { taskPath } from './identity'
 import { formatTime } from './format'
 import type { MessageGroup } from './types'
 import { MessageContent } from './MessageContent'
-import { AgentAvatar, AssistantBadge, CopyBtn, PreviewCard, TypeBadge } from './atoms'
+import { AgentAvatar, CopyBtn, PreviewCard, TypeBadge } from './atoms'
 
 // ── Message row / group ───────────────────────────────────────────────────────
 
@@ -17,12 +17,6 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
       </span>
       <div className="flex-1 min-w-0">
         <MessageContent text={msg.content} isError={isError} />
-        <AssistantBadge msg={msg} />
-        {msg.assistantDetail && (
-          <p className="mt-1 text-[11px] text-gray-500 whitespace-pre-wrap break-words">
-            {msg.assistantDetail}
-          </p>
-        )}
         {msg.preview && <PreviewCard preview={msg.preview} task={msg.task} />}
       </div>
       <CopyBtn text={msg.content} />

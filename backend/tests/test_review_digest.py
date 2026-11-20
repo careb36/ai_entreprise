@@ -96,7 +96,6 @@ def test_the_developer_prompt_runs_from_stable_to_variable(monkeypatch):
         item,
         {"role": "Developer", "model": "m"},
         "S1",
-        external_advice="advice text",
         memory_context="memory text",
         completed_tasks_context="done text",
         architect_advice="brief text",
@@ -111,7 +110,6 @@ def test_the_developer_prompt_runs_from_stable_to_variable(monkeypatch):
         "## Task: Login",
         "## Memory: Relevant Past Decisions",
         "## Sprint Context: Already Completed Tasks",
-        "## External Console Assistant Notes",
         "## Architect Guidance",
         "## Review feedback to address",
     ]

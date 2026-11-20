@@ -219,7 +219,7 @@ it in full.
 | Phase | Where | Evidence kind |
 |---|---|---|
 | Claim | `replicas.claim_todo`, a conditional update from `todo`; `claimed` event | bookkeeping |
-| Advice (optional) | console assistants (`collect_advice`), Architect brief (`_consult_architect`); `advised` | claims, prompt context only |
+| Advice (optional) | Architect brief (`_consult_architect`, on the team's own model; the console assistants were removed, issue #750); `advised` | claims, prompt context only |
 | Produce | `_execute_task`: model call with MCP, workspace and research tools | the answer is a claim; tool calls are observations |
 | Text gate | `_validate_minimum_deliverable`, then `_send_back_from_quality_gate` | deterministic check on the claim's form |
 | Deliver | `_deliver_artifacts`: `workspace.generate` on the daemon (or a queued job) | observation: sha256 read back, diff, snapshot or commit |

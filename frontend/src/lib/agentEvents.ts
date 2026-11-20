@@ -21,13 +21,6 @@ export type GlassroomTaskPhase =
   | 'kickoff_complete'
   | 'unknown'
 
-export interface AssistantTelemetry {
-  label?: string
-  purpose?: string
-  decision?: string
-  detail?: string
-}
-
 export interface TaskTelemetry {
   id?: number
   title?: string
@@ -44,7 +37,6 @@ interface AgentEventBase {
   semanticType: string
   source: string
   task?: TaskTelemetry
-  assistant?: AssistantTelemetry
 }
 
 export interface AgentNodeStartEvent extends AgentEventBase {
@@ -145,19 +137,6 @@ function extractTask(raw: Record<string, unknown>, fallbackTitle: string): TaskT
   }
 }
 
-function extractAssistant(raw: Record<string, unknown>): AssistantTelemetry | undefined {
-  const label = coerceText(raw.assistant_label)
-  const purpose = coerceText(raw.assistant_purpose)
-  const decision = coerceText(raw.assistant_decision)
-  const detail = coerceText(raw.assistant_detail)
-
-  if (!label && !purpose && !decision && !detail) {
-    return undefined
-  }
-
-  return { label, purpose, decision, detail }
-}
-
 function semanticTypeFor(raw: Record<string, unknown>, explicitType: string): string {
   const semantic = coerceText(raw.semantic_type)
   if (semantic) return semantic
@@ -188,7 +167,6 @@ export function normalizeSSEEvent(raw: Record<string, unknown>): AgentEvent | nu
   const task = coerceText(raw.task, extractMessage(raw))
   const message = extractMessage(raw)
   const taskTelemetry = extractTask(raw, task)
-  const assistant = extractAssistant(raw)
   const base = {
     eventId: coerceText(raw.event_id, crypto.randomUUID()),
     timestamp,
@@ -196,7 +174,6 @@ export function normalizeSSEEvent(raw: Record<string, unknown>): AgentEvent | nu
     semanticType,
     source: coerceText(raw.source, 'backend'),
     task: taskTelemetry,
-    assistant,
   }
 
   if (semanticType === 'stream.connected' || explicitType === 'connected') {
@@ -253,14 +230,6 @@ export function normalizeSSEEvent(raw: Record<string, unknown>): AgentEvent | nu
 
   if (explicitType === 'status') {
     const shouldSurfaceAsNodeStart = role !== 'System' || semanticType.startsWith('task.')
-
-    if (semanticType === 'assistant.telemetry') {
-      return {
-        ...base,
-        kind: 'system',
-        content: message || task || 'Assistant telemetry update',
-      }
-    }
 
     if (semanticType === 'task.memory_retrieved' || semanticType === 'kickoff.memory_retrieved') {
       return {

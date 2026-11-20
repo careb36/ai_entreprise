@@ -103,6 +103,15 @@ ARCHITECT_CONSULT_KEYWORDS = (
 
 ARCHITECT_CONSULT_PRIORITIES = {"high", "critical"}
 
+# The roles whose tasks the Architect is consulted on (issue #750): the coding
+# roles, and the roles an external console assistant used to advise with
+# "planning and architecture advice" (QA, PO, ScrumMaster), so that advice
+# comes from the team's own model by default. Never the Architect itself: it
+# would be the same model asking itself.
+ARCHITECT_CONSULT_ROLES = frozenset(
+    {KPI_ROLE_DEVELOPER, KPI_ROLE_QA, "PO", "ScrumMaster"}
+)
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers
@@ -369,15 +378,18 @@ def should_consult_architect(
     *,
     enabled: bool = True,
 ) -> bool:
-    """Decide whether a Developer task deserves an Architect consultation.
+    """Decide whether a task deserves an Architect consultation.
 
-    The Architect is consulted at most once per implementation attempt, and
-    only for Developer-owned work that is either high priority, touches a
-    design-sensitive topic, or is being reworked after QA pushed it back.
+    The Architect is consulted at most once per attempt, and only for work of
+    a role in ``ARCHITECT_CONSULT_ROLES`` (the coding roles, QA, PO and
+    ScrumMaster; never the Architect's own) that is either high priority,
+    touches a design-sensitive topic, or is being reworked after QA pushed it
+    back. It runs on the Architect's model: the company's choice, else the
+    role's default from ``model_factory`` (issue #750).
     """
     if not enabled:
         return False
-    if canonical_kpi_role(agent.get("role")) != KPI_ROLE_DEVELOPER:
+    if canonical_kpi_role(agent.get("role")) not in ARCHITECT_CONSULT_ROLES:
         return False
 
     comments = _coerce_comments(

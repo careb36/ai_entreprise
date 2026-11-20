@@ -14,7 +14,7 @@ from typing import Any
 
 from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 from services.evidence.console_run import check_console_run  # noqa: F401 - re-exported
-from services.producers import console_assistants
+from services.producers import cli_cooldowns
 
 # The CLIs a company may name, headless (Flow's adapters, ``session_command``).
 #
@@ -190,10 +190,10 @@ def run_sandbox(box: dict[str, Any], extra: list[str]) -> dict[str, Any]:
 
 
 def cooldown_key(cli: str) -> str:
-    """The ``AssistantRuntimeState`` key of a console producer's cooldown, apart
-    from the host console adviser's (``console_assistants``): a CLI missing
-    from the sandbox image, or a quota on the key the sandbox sees, says
-    nothing about the CLI on the host."""
+    """The ``AssistantRuntimeState`` key of a console producer's cooldown
+    (``cli_cooldowns``). The ``producer:`` prefix kept the producers' rows
+    apart from the console assistants' (``claude``, ``copilot``), which were
+    removed in issue #750; older rows under those keys are no longer read."""
     return f"producer:{cli}"
 
 
@@ -250,7 +250,7 @@ def sent_prompt(cli: str, prompt: str) -> str:
 
 def render_command(cli: str, prompt: str) -> str:
     """The CLI's headless command with the prompt shell-quoted as its last
-    argument (as ``console_assistants`` quotes it), readable by the policy
+    argument, readable by the policy
     and within ``COMMAND_MAX_BYTES`` (``sent_prompt``)."""
     return _command(cli, sent_prompt(cli, prompt))
 
@@ -265,8 +265,7 @@ def quota_hit(cli: str, output: str) -> bool:
     return any(p.search(output or "") for p in patterns) or (
         cli == "claude"
         and any(
-            t in (output or "").lower()
-            for t in console_assistants.CLAUDE_QUOTA_PATTERNS
+            t in (output or "").lower() for t in cli_cooldowns.CLAUDE_QUOTA_PATTERNS
         )
     )
 
@@ -281,7 +280,7 @@ def missing_binary(result: dict[str, Any]) -> bool:
     if code is not None or result.get("success"):
         return False
     text = f"{result.get('stderr') or ''}{result.get('error') or ''}".lower()
-    return any(t in text for t in console_assistants.ASSISTANT_UNAVAILABLE_PATTERNS)
+    return any(t in text for t in cli_cooldowns.ASSISTANT_UNAVAILABLE_PATTERNS)
 
 
 def failure(

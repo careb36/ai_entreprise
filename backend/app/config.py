@@ -147,7 +147,7 @@ class Settings(BaseSettings):
     DELIVERY_E2E_TIMEOUT_SECONDS: float = 300.0
 
     # ---------------------------------------------------------------------------
-    # Autonomous improvement & console assistants
+    # Autonomous improvement
     # ---------------------------------------------------------------------------
     # Off by default (docs/design/rsi-loop.md, decision 8): the model-planned
     # follow-up sprint ran with no protected-path guard; a company turns it on.
@@ -168,7 +168,6 @@ class Settings(BaseSettings):
     # The checkout whose bench/scorecards the /bench page reads (read-only);
     # empty: the backend's own checkout, when it has one.
     BENCH_REPOSITORY_DIR: str = ""
-    CONSOLE_ASSISTANTS_ENABLED: bool = True
     # The Support agent triages new help-desk tickets (suggested severity and
     # category, a first reply to the reporter). Off by default: reporting a
     # bug is public, and each new ticket costs an LLM call.
@@ -182,8 +181,6 @@ class Settings(BaseSettings):
     # A run with no verification yet waits this long, so a producer that
     # verifies right after ingesting is judged with the Verifier's verdict.
     REVIEWER_VERIFY_GRACE_SECONDS: float = 60.0
-    # Per-call timeout for a console assistant run requested from the daemon.
-    CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
     # A console producer's run (services/producers/console_producer.py): the CLI's wall clock
     # on the daemon (which caps a request at 900 s).
     CONSOLE_PRODUCER_TIMEOUT_SECONDS: float = 600.0
@@ -275,21 +272,31 @@ class Settings(BaseSettings):
     RESEARCH_CRATES_URL: str = "https://crates.io/api/v1/crates"
     RESEARCH_GO_URL: str = "https://proxy.golang.org"
     RESEARCH_OSV_URL: str = "https://api.osv.dev"
-    # Consult the Architect agent before Developers start high-priority, design-sensitive
-    # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
+    # Consult the Architect agent, on the team's own model (its role default
+    # from model_factory, DeepSeek Pro unless overridden), before a
+    # high-priority, design-sensitive or QA-reworked task of a coding role, QA,
+    # PO or ScrumMaster: the team's second opinion (issue #750). Emits
+    # ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True
     # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.
     AGENT_GRAPH_ENABLED: bool = False
-    COPILOT_CLI_COMMAND_TEMPLATE: str = "copilot -p {prompt} --output-format json"
-    CLAUDE_CLI_COMMAND_TEMPLATE: str | None = (
-        "claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}"
-    )
-    CLAUDE_CLI_ALLOWED_TOOLS: str = "Read,Grep,Glob,LS,Bash(git *)"
-    CLAUDE_CLI_APPEND_SYSTEM_PROMPT: str = "You are being used as a bounded external coding advisor. Stay read-mostly, prefer incremental changes, preserve healthy behavior, and return concise actionable guidance for the current repository task."
-    CONSOLE_ASSISTANT_STRATEGY: str = "copilot_first"
-    CLAUDE_CLI_HIGH_VALUE_ROLES: str = "Architect,PO,QA,ScrumMaster"
+    # How long a console producer's CLI cools down after a quota stop whose
+    # message names no reset time (services/producers/cli_cooldowns.py).
     CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES: int = 10
-    CONSOLE_ASSISTANT_ALLOWED_ROLES: str = "Developer,Architect,QA,PO,ScrumMaster"
+
+    # Removed with the console assistants (issue #750): the team's Architect
+    # gives the second opinion. Never read; declared so a .env that still sets
+    # one does not stop the backend (the settings refuse unknown keys from that
+    # file), and named once at startup (lifecycle, ``removed_settings_in_use``).
+    CONSOLE_ASSISTANTS_ENABLED: str | None = None
+    CONSOLE_ASSISTANT_TIMEOUT_SECONDS: str | None = None
+    CONSOLE_ASSISTANT_STRATEGY: str | None = None
+    CONSOLE_ASSISTANT_ALLOWED_ROLES: str | None = None
+    COPILOT_CLI_COMMAND_TEMPLATE: str | None = None
+    CLAUDE_CLI_COMMAND_TEMPLATE: str | None = None
+    CLAUDE_CLI_ALLOWED_TOOLS: str | None = None
+    CLAUDE_CLI_APPEND_SYSTEM_PROMPT: str | None = None
+    CLAUDE_CLI_HIGH_VALUE_ROLES: str | None = None
 
     # ---------------------------------------------------------------------------
     # Audit — filesystem path for append-only JSONL audit logs
@@ -461,6 +468,32 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
+
+# Settings that no longer do anything, kept declared so an old .env still loads.
+REMOVED_SETTINGS: dict[str, str] = {
+    name: "the console assistants were removed (issue #750); the team's Architect gives the second opinion"
+    for name in (
+        "CONSOLE_ASSISTANTS_ENABLED",
+        "CONSOLE_ASSISTANT_TIMEOUT_SECONDS",
+        "CONSOLE_ASSISTANT_STRATEGY",
+        "CONSOLE_ASSISTANT_ALLOWED_ROLES",
+        "COPILOT_CLI_COMMAND_TEMPLATE",
+        "CLAUDE_CLI_COMMAND_TEMPLATE",
+        "CLAUDE_CLI_ALLOWED_TOOLS",
+        "CLAUDE_CLI_APPEND_SYSTEM_PROMPT",
+        "CLAUDE_CLI_HIGH_VALUE_ROLES",
+    )
+}
+
+
+def removed_settings_in_use(current: "Settings") -> list[str]:
+    """The removed settings this environment or .env still sets, one warning line each."""
+    return [
+        f"{name} is set but no longer does anything: {why}. Remove it from the environment or .env."
+        for name, why in REMOVED_SETTINGS.items()
+        if name in current.model_fields_set
+    ]
 
 
 # Module-level singleton; import this object rather than instantiating Settings directly.

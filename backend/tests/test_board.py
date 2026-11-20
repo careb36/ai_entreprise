@@ -161,37 +161,15 @@ def test_an_assistants_words_are_never_read_as_a_verdict():
     )
 
 
-def test_only_the_workers_note_marks_a_task_as_advised():
+def test_only_the_workers_note_is_an_old_console_advice_note():
+    """No longer written (issue #750); still recognised on older boards."""
     look_alike = {"author": "Dev", "text": ADVICE["text"]}
     persons = {"author": "user", "text": ADVICE["text"]}
 
-    assert board.has_console_advice([ADVICE]) is True
-    assert board.has_console_advice([look_alike, persons]) is False
-
-
-def test_an_advised_tasks_rework_counts_from_the_advice_on():
-    tally = board.no_console_advice()
-    # Attempt 1 ran without advice and drew a request; attempt 2 was advised.
-    board.count_console_advice(
-        tally,
-        "done",
-        [
-            {"author": "Dev", "text": "# Artifact: a.py"},
-            {"author": "QA", "text": "NEEDS WORK: add a test"},
-            ADVICE,
-            {"author": "Dev", "text": "# Artifact: a.py, with a test"},
-            {"author": "QA", "text": "NEEDS WORK: cover the empty case"},
-            {"author": "QA", "text": "APPROVED: done"},
-        ],
-    )
-    board.count_console_advice(
-        tally, "blocked", [{"author": "QA", "text": "NEEDS WORK: again"}]
-    )
-
-    assert tally == {
-        "advised": {"total": 1, "done": 1, "rework": 1},
-        "unadvised": {"total": 1, "done": 0, "rework": 1},
-    }
+    assert board.is_console_advice_note(ADVICE) is True
+    assert not board.is_console_advice_note(look_alike)
+    assert not board.is_console_advice_note(persons)
+    assert not hasattr(board, "usage_comment")
 
 
 BRIEF = {

@@ -239,7 +239,6 @@ def test_the_developer_prompt_carries_the_board_section(monkeypatch):
         None,
         None,
         None,
-        None,
         1,
         None,
         None,

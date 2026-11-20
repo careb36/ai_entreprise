@@ -9,17 +9,6 @@ export interface MessageGroup {
   messages: AgentMessage[]
 }
 
-export interface AssistantSummaryEntry {
-  label: string
-  used: number
-  quotaSkips: number
-  failures: number
-  unavailableSkips: number
-  requested: number
-  cooldownUntil?: string
-  lastDecision?: string
-}
-
 export interface HealthPanelEntry {
   label: string
   value: string
@@ -53,7 +42,6 @@ export interface TaskAutonomyEntry {
   reviewCount: number
   deliverableCount: number
   blockedReason?: string
-  assistantLabels: string[]
   stepStates: Array<{
     key: string
     label: string

@@ -5,9 +5,10 @@ The intake (``intake._on_task_assign``) loads a task with ``_load_task_context``
 claims it; ``_run_claimed_task`` then runs it, in these steps:
 
 - ``_announce_claim``: the ``task.claimed`` and context events on Glassroom;
-- ``_gather_context``: the memory, lessons, procedures, completed tasks,
-  requirements and console assistants' advice, fetched concurrently;
-- ``_announce_context``: the memory event and the assistants' board note;
+- ``_gather_context``: the memory, lessons, procedures, completed tasks and
+  requirements, fetched concurrently (no external CLI is consulted: the
+  second opinion is the Architect's brief, issue #750);
+- ``_announce_context``: the memory event;
 - ``_produce``: the Architect's brief, then the company's console producer
   for the role, else the LLM, and the deliverable on Glassroom;
 - ``_still_in_progress``: a completion for a task that was frozen or moved
@@ -43,7 +44,6 @@ from services.loop.worker import (
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
 from services.platform.glassroom import publish_glassroom
-from services.producers import console_assistants
 from services.tasks import task_events, task_projection
 
 logger = setup_logger("fabrique-task-worker")
@@ -231,7 +231,6 @@ async def _gather_context(
         procedures_ctx,
         completed_ctx,
         requirements_ctx,
-        assistant_context,
     ) = await asyncio.gather(
         # The project wiki first; the vector memory only as its fallback (#445).
         asyncio.to_thread(
@@ -256,9 +255,6 @@ async def _gather_context(
         spec_planning.task_requirements_context(
             nats_client, engine, item["id"], deliver._resolve_workspace_root
         ),
-        console_assistants.collect_advice(
-            nats_client, item, agent, sprint, deliver._resolve_workspace_root
-        ),
     )
     return {
         "memory": memory_ctx["memory"],
@@ -267,10 +263,6 @@ async def _gather_context(
         "procedures": procedures_ctx,
         "completed": completed_ctx,
         "requirements": requirements_ctx,
-        "external_advice": assistant_context.get("combined", ""),
-        "assistant_usage_comment": console_assistants.usage_comment(
-            assistant_context.get("sources", [])
-        ),
     }
 
 
@@ -281,7 +273,7 @@ async def _announce_context(
     sprint: dict[str, Any],
     context: dict[str, Any],
 ) -> None:
-    """The memory event when there was memory, and the assistants' board note."""
+    """The memory event when there was memory."""
     if context["memory"] or context.get("wiki") or context["lessons"]:
         await publish_glassroom(
             nats_client,
@@ -300,16 +292,6 @@ async def _announce_context(
             },
         )
 
-    if context["assistant_usage_comment"]:
-        await asyncio.to_thread(
-            board_writes._update_item_status,
-            item["id"],
-            "in_progress",
-            comment_text=context["assistant_usage_comment"],
-            comment_author="System",
-            kind="advised",
-        )
-
 
 async def _produce(
     nats_client: NATSClient,
@@ -319,7 +301,6 @@ async def _produce(
     context: dict[str, Any],
 ) -> str:
     """The Architect's brief, then the deliverable from the producer, sanitized."""
-    external_advice = context["external_advice"]
     requirements_ctx = context["requirements"]
     architect_advice = await execute._architect_brief(nats_client, item, agent, sprint)
 
@@ -336,11 +317,7 @@ async def _produce(
             "task_status": "in_progress",
             "phase": "execution",
             "task": item["title"],
-            "message": (
-                f"🛠️ {agent.get('name') or agent['role']} is executing autonomously on: {item['title']}"
-                if external_advice
-                else f"🛠️ {agent.get('name') or agent['role']} is executing autonomously without external assistant help on: {item['title']}"
-            ),
+            "message": f"🛠️ {agent.get('name') or agent['role']} is executing autonomously on: {item['title']}",
         },
     )
 
@@ -352,7 +329,6 @@ async def _produce(
         item,
         agent,
         sprint["name"],
-        external_advice,
         context["memory"],
         context["completed"],
         architect_advice or None,

@@ -80,10 +80,8 @@ export interface SprintSummary {
   rework: number
   /** Tasks carried over from an earlier sprint, how many got done, and the same for those the ScrumMaster briefed. */
   second_attempts: SecondAttempts
-  /** Tasks a console assistant advised on and tasks none did: how many got done and how many rework requests each drew. */
-  console_advice: ConsoleAdvice
-  /** The same split for the Architect's briefs; a briefed task's rework counts from its first brief on. */
-  architect_advice: ConsoleAdvice
+  /** Tasks the Architect briefed and tasks it did not: how many got done and how many rework requests each drew; a briefed task's rework counts from its first brief on. */
+  architect_advice: AdviceTally
 }
 
 export interface AdviceGroup {
@@ -92,7 +90,7 @@ export interface AdviceGroup {
   rework: number
 }
 
-export interface ConsoleAdvice {
+export interface AdviceTally {
   advised: AdviceGroup
   unadvised: AdviceGroup
 }

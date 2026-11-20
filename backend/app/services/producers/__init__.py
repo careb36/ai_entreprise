@@ -1,10 +1,9 @@
 """The producers context: interchangeable producers of work (ADR 0012, 0016).
 
-The producers other than the task worker's own model call: the terminal
-assistants that advise a task (``console_assistants`` and its commands,
-``console_commands``, with the daemon's probe of what is installed,
-``console_capabilities``), the terminal coding
-agents that produce a role's task (``console_clis``, ``console_producer``),
+The producers other than the task worker's own model call: the terminal coding
+agents a company explicitly chooses to produce a role's task
+(``console_clis``, ``console_producer``, with their per-company cooldowns in
+``cli_cooldowns``),
 the optional LangGraph kickoff (``agent_worker``, ``graph``, ``graph_agents``,
 ``graph_nodes``, with OpenProject through ``openproject_tools`` and its HTTP
 adapter ``openproject_client``) and the GitHub adapter that

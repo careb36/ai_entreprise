@@ -1,13 +1,13 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { LearningTrend } from './LearningTrend'
-import { architectAdvice, consoleAdvice, learningTrend, secondAttempts } from '../lib/learningTrend'
+import { architectAdvice, learningTrend, secondAttempts } from '../lib/learningTrend'
 import type { SprintSummary } from '../services/api'
 
 const sprint = (overrides: Partial<SprintSummary>): SprintSummary => ({
   id: 1, sprint_name: 'S', status: 'completed', goal: null, start_date: null, scope_size: 'S',
   total: 4, done: 4, blocked: 0, rework: 0,
-  second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, ...overrides,
+  second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, ...overrides,
 })
 
 const SPRINTS: SprintSummary[] = [
@@ -60,9 +60,9 @@ describe('LearningTrend', () => {
   it('tallies second attempts over closed sprints, with and without the brief', () => {
     const sprints = [
       // Still open: its attempts have no outcome yet.
-      sprint({ id: 9, status: 'active', second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } }),
-      sprint({ id: 7, sprint_name: 'Sprint 2', second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } }),
-      sprint({ id: 4, sprint_name: 'Sprint 1', second_attempts: { total: 1, done: 0, briefed: 0, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } }),
+      sprint({ id: 9, status: 'active', second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 } }),
+      sprint({ id: 7, sprint_name: 'Sprint 2', second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 } }),
+      sprint({ id: 4, sprint_name: 'Sprint 1', second_attempts: { total: 1, done: 0, briefed: 0, briefed_done: 0 } }),
     ]
     expect(secondAttempts(sprints)).toEqual({ total: 4, done: 2, briefed: 2, briefed_done: 2 })
 
@@ -71,28 +71,6 @@ describe('LearningTrend', () => {
     expect(within(section).getByText('Second attempts that got done')).toBeInTheDocument()
     expect(within(section).getByText('2 of 4')).toBeInTheDocument()
     expect(within(section).getByText("With the ScrumMaster's brief: 2 of 2 · without: 0 of 2")).toBeInTheDocument()
-  })
-
-  it('compares tasks that got console advice with the rest, over closed sprints', () => {
-    const group = (total: number, done: number, rework: number) => ({ total, done, rework })
-    const sprints = [
-      // Still open: not counted.
-      sprint({ id: 9, status: 'active', console_advice: { advised: group(5, 0, 0), unadvised: group(1, 0, 0) } }),
-      sprint({ id: 7, sprint_name: 'Sprint 2', console_advice: { advised: group(2, 2, 1), unadvised: group(2, 1, 3) } }),
-      sprint({ id: 4, sprint_name: 'Sprint 1', console_advice: { advised: group(2, 1, 1), unadvised: group(2, 1, 1) } }),
-    ]
-    expect(consoleAdvice(sprints)).toEqual({ advised: group(4, 3, 2), unadvised: group(4, 2, 4) })
-
-    render(<LearningTrend sprints={sprints} />)
-    const section = screen.getByRole('region', { name: 'Is the company learning?' })
-    expect(within(section).getByText('Tasks done with console advice')).toBeInTheDocument()
-    expect(within(section).getByText('3 of 4')).toBeInTheDocument()
-    expect(within(section).getByText('0.50 rework requests per task · without advice: 2 of 4 done, 1.00 per task')).toBeInTheDocument()
-  })
-
-  it('leaves out console advice before any task got it', () => {
-    render(<LearningTrend sprints={SPRINTS} />)
-    expect(screen.queryByText('Tasks done with console advice')).not.toBeInTheDocument()
   })
 
   it("compares tasks the Architect briefed with the rest, over closed sprints", () => {
@@ -110,7 +88,7 @@ describe('LearningTrend', () => {
     expect(within(section).getByText("Tasks done with the Architect's brief")).toBeInTheDocument()
     expect(within(section).getByText('1 of 2')).toBeInTheDocument()
     expect(within(section).getByText('1.00 rework requests per task after the brief · without one: 5 of 6 done, 0.33 per task')).toBeInTheDocument()
-    // No console advice in these sprints: no card for it.
+    // The console assistants were removed (issue #750): no card for their advice.
     expect(within(section).queryByText('Tasks done with console advice')).not.toBeInTheDocument()
   })
 

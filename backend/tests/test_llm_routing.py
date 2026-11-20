@@ -23,7 +23,6 @@ from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import intake, prompt, qa_review, task_run
 from services.models.model_factory import AgentRole, ModelFactory
-from services.producers import console_assistants
 from sqlmodel import Session, select
 
 
@@ -262,11 +261,6 @@ def _task_assign_handler(monkeypatch):
     monkeypatch.setattr(
         prompt, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
     )
-
-    async def _no_assistants(nats, item, agent, sprint, resolve_workspace_root):
-        return {"combined": "", "sources": []}
-
-    monkeypatch.setattr(console_assistants, "collect_advice", _no_assistants)
     nats = _Nats()
     with pytest.raises(_StopAfterSubscribe):
         asyncio.run(intake.process_backlog_tasks(nats))
@@ -377,3 +371,67 @@ def test_task_execution_records_the_conversation(llm, db, monkeypatch):
         == 'Delivered "Implement login" for review (no files declared).'
     )
     assert {m.sprint_id for m in messages} == {sprint.id}
+
+
+# ---------------------------------------------------------------------------
+# The second opinion is the team's own (issue #750)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingNats(_Nats):
+    """Records every request: a CLI consultation would be ``workspace.execute``."""
+
+    def __init__(self):
+        super().__init__()
+        self.requests: list[str] = []
+
+    async def request(self, subject, payload, timeout=5.0):
+        self.requests.append(subject)
+        raise TimeoutError("no daemon in this test")
+
+
+@pytest.mark.parametrize("role", ["QA", "PO", "ScrumMaster", "Developer"])
+def test_with_defaults_no_cli_runs_and_the_architect_advises_on_its_default_model(
+    llm, db, monkeypatch, role
+):
+    """A design-sensitive task of a role an external console assistant used to
+    advise is briefed by the team's Architect, on the Architect's role default
+    from model_factory (DeepSeek Pro unless an override says otherwise), and
+    nothing asks the daemon to run a CLI."""
+    llm.response = {
+        "choices": [{"message": {"content": "A thorough written analysis. " * 40}}],
+    }
+    company, sprint, item = _board(db, role=role, agent_model="")
+    item.title = "Design the implementation slice"
+    db.add(item)
+    db.add(Agent(company_id=company.id, name="Ada", role="Architect", model=""))
+    db.commit()
+    monkeypatch.setattr(prompt, "_fetch_memory_context", lambda *args: "")
+    monkeypatch.setattr(prompt, "_load_recent_lessons", lambda *args: "")
+    monkeypatch.setattr(prompt, "_load_sprint_completed_tasks", lambda s, i: "")
+    nats = _RecordingNats()
+    with pytest.raises(_StopAfterSubscribe):
+        asyncio.run(intake.process_backlog_tasks(nats))
+
+    asyncio.run(
+        nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})
+    )
+
+    assert worker_execute.ARCHITECT_CONSULT_ENABLED, "on by default"
+    db.refresh(company)
+    assert not company.console_producers, "a console producer is never on by default"
+    assert "workspace.execute" not in nats.requests, "no CLI ran"
+    assert not [
+        p for _s, p in nats.published if p.get("semantic_type") == "assistant.telemetry"
+    ]
+    architect = [c for c in llm.calls if c["role"] == "Architect"]
+    assert architect, "the Architect was consulted"
+    assert architect[0]["model"] == _role_default(AgentRole.ARCHITECT)
+    db.expire_all()
+    kinds = [
+        (m.from_role, m.to_role, m.kind)
+        for m in db.exec(
+            select(AgentMessage).where(AgentMessage.backlog_item_id == item.id)
+        ).all()
+    ]
+    assert ("Architect", role, "answer") in kinds

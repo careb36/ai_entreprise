@@ -12,10 +12,11 @@ task they sit on: the gates' texts (``Quality gate``, ``Verifier``), a
 person's notes (author ``user``; the send-back one, ``SEND_BACK_MARKER``,
 also restarts the rework budgets), the carry-over lineage notes
 (``CARRIED_*_PREFIX``), which quote an earlier task's verdict and must not be
-read as this task's, and the advice a task got: the worker's console-advice
-note (``CONSOLE_ADVICE_PREFIX``), which quotes an assistant's words, and the
-Architect's brief (``ARCHITECT_CONSULTED:``). Whether that advice helps is
-counted from the boards (``count_console_advice``, ``count_architect_advice``).
+read as this task's, and the advice a task got: the Architect's brief
+(``ARCHITECT_CONSULTED:``) and, on boards written before issue #750 removed
+the console assistants, the worker's console-advice note
+(``CONSOLE_ADVICE_PREFIX``), which quotes an external CLI's words. Whether the
+Architect's advice helps is counted from the boards (``count_architect_advice``).
 Only the system, the gates and a person write the phrases that keep a task
 blocked; the same words in a deliverable or a brief are not a verdict.
 """
@@ -58,9 +59,9 @@ CARRIED_FROM_PREFIX = "Carried over from"
 # The line the ScrumMaster's brief travels on, in its decision and in the
 # carry-over note of the next attempt.
 BRIEF_PREFIX = "Brief for the next attempt: "
-# The note the worker writes when console assistants (Copilot CLI, Claude CLI)
-# advised on a task. Their advice is context, never evidence; whether it helps
-# is counted from the boards.
+# The note the worker wrote when console assistants (Copilot CLI, Claude CLI)
+# advised on a task, before they were removed (issue #750). No longer written;
+# still recognised so an older board's note is never read as a verdict.
 CONSOLE_ADVICE_PREFIX = "External assistant context used for this task:"
 # The worker's note when QA approved a delivery whose risk tier is high
 # (services/risk.py): the task waits for a person to accept it, at every
@@ -101,7 +102,8 @@ def is_lineage_comment(comment: dict[str, Any]) -> bool:
 
 
 def is_console_advice_note(comment: dict[str, Any]) -> bool:
-    """The worker's note quoting console assistants' advice.
+    """The worker's note quoting console assistants' advice (boards written
+    before issue #750; no longer written).
 
     It carries an excerpt of what an assistant wrote ("add retry logic", "needs
     manual triage"), so it is never read as a verdict; and only the worker's
@@ -428,48 +430,12 @@ def count_second_attempt(tally: dict[str, int], status: str, comments: Any) -> N
         tally["briefed_done"] += done
 
 
-def has_console_advice(comments: Any) -> bool:
-    """Whether the worker wrote a console assistant's advice onto the task."""
-    return any(is_console_advice_note(comment) for comment in comment_list(comments))
-
-
-def usage_comment(sources: list[dict[str, str]]) -> str:
-    """The worker's note quoting the console assistants: one line per assistant."""
-    if not sources:
-        return ""
-    lines = [CONSOLE_ADVICE_PREFIX]
-    for source in sources:
-        label = source.get("label", "Assistant")
-        purpose = source.get("purpose", "advice")
-        excerpt = (source.get("excerpt") or "").strip().replace("\n", " ")
-        lines.append(f"- {label} ({purpose}): {excerpt}")
-    return "\n".join(lines)[:1800]
-
-
-def earlier_advice(comments: Any) -> str:
-    """The advice note a first attempt left, to quote back on a rework.
-
-    The assistants' prompt carries no review feedback, so running them again
-    on the same task gives the same answer at the same cost (the Claude CLI
-    reads the whole repository each time). The note holds the excerpts the
-    worker kept, the prefix stripped; empty when no attempt was advised.
-    """
-    for comment in reversed(comment_list(comments)):
-        if is_console_advice_note(comment):
-            return _text(comment)[len(CONSOLE_ADVICE_PREFIX) :].strip()
-    return ""
-
-
-def no_console_advice() -> dict[str, dict[str, int]]:
-    """An empty tally: tasks that got advice and tasks that did not."""
+def no_architect_advice() -> dict[str, dict[str, int]]:
+    """An empty tally: tasks the Architect briefed and tasks it did not."""
     return {
         "advised": {"total": 0, "done": 0, "rework": 0},
         "unadvised": {"total": 0, "done": 0, "rework": 0},
     }
-
-
-# The Architect's briefs are tallied the same way.
-no_architect_advice = no_console_advice
 
 
 def _count_advice(
@@ -491,17 +457,6 @@ def _count_advice(
     group["total"] += 1
     group["done"] += int(status == "done")
     group["rework"] += rework_request_count(comments[first_advice or 0 :])
-
-
-def count_console_advice(
-    tally: dict[str, dict[str, int]], status: str, comments: Any
-) -> None:
-    """Tally a task by whether a console assistant advised on it.
-
-    An assistant may have been cooling down, or silent, on the first attempt;
-    the rework that attempt drew is not the advice's doing.
-    """
-    _count_advice(tally, status, comments, is_console_advice_note)
 
 
 def count_architect_advice(

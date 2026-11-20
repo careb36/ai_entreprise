@@ -19,7 +19,7 @@ import { getEventTypes } from './glassroom/format'
 import { groupMessages } from './glassroom/groupMessages'
 import { useAgentPresence, useAutoScroll, useClockTick, useFeedFilters } from './glassroom/useFeed'
 import {
-  useAssistantSummary, useAutonomyTree, useHealthEntries, useQuotaTelemetry, useSprintTasks,
+  useAutonomyTree, useHealthEntries, useQuotaTelemetry, useSprintTasks,
 } from './glassroom/useSprintInsights'
 import { TopBar } from './glassroom/TopBar'
 import { LeftSidebar } from './glassroom/LeftSidebar'
@@ -51,7 +51,6 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
 
   const grouped = useMemo(() => groupMessages(filteredMessages), [filteredMessages])
   const { activeAgents, onlineAgents } = useAgentPresence(messages, clockTick)
-  const assistantSummary = useAssistantSummary(messages)
   const sprintTasks = useSprintTasks(board)
   const quotaTelemetry = useQuotaTelemetry(quotas)
   const healthEntries = useHealthEntries({ agentStates, clockTick, isConnected, messages, sprintTasks, memoryHits, lastRetro, t })
@@ -127,7 +126,6 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           agentStates={agentStates}
           messageCount={messages.length}
           isConnected={isConnected}
-          assistantSummary={assistantSummary}
           sprintTasks={sprintTasks}
           healthEntries={healthEntries}
           autonomyTree={autonomyTree}

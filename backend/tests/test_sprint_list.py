@@ -11,8 +11,7 @@ from services.platform.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     format_architect_consult_comment,
 )
-from services.producers import console_assistants
-from services.tasks.board import CARRIED_FROM_PREFIX
+from services.tasks.board import CARRIED_FROM_PREFIX, CONSOLE_ADVICE_PREFIX
 from sqlmodel import select
 
 
@@ -122,10 +121,6 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "rework": 0,
             "contradiction_rework": 0,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
-            "console_advice": {
-                "advised": {"total": 0, "done": 0, "rework": 0},
-                "unadvised": {"total": 0, "done": 0, "rework": 0},
-            },
             "architect_advice": {
                 "advised": {"total": 0, "done": 0, "rework": 0},
                 "unadvised": {"total": 0, "done": 0, "rework": 0},
@@ -153,10 +148,6 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "rework": 2,
             "contradiction_rework": 0,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
-            "console_advice": {
-                "advised": {"total": 0, "done": 0, "rework": 0},
-                "unadvised": {"total": 3, "done": 1, "rework": 2},
-            },
             "architect_advice": {
                 "advised": {"total": 0, "done": 0, "rework": 0},
                 "unadvised": {"total": 3, "done": 1, "rework": 2},
@@ -204,7 +195,12 @@ def test_counts_second_attempts_and_those_briefed_by_the_scrum_master(
     }
 
 
-def test_counts_tasks_with_and_without_console_advice(test_client, sqlite_session):
+def test_an_old_console_advice_note_is_neither_counted_nor_a_brief(
+    test_client, sqlite_session
+):
+    """The console assistants and their tally were removed (issue #750): a
+    board written before keeps its note, read as advice (never a verdict),
+    and the list no longer carries ``console_advice``."""
     company = _company(sqlite_session, "Sprint list console advice")
     sprint = _sprint(
         sqlite_session,
@@ -218,10 +214,8 @@ def test_counts_tasks_with_and_without_console_advice(test_client, sqlite_sessio
         .where(BacklogItem.sprint_id == sprint.id)
         .order_by(BacklogItem.id)
     ).all()
-    # The note the worker writes after asking the assistants, as it writes it.
-    advice = console_assistants.usage_comment(
-        [{"label": "Claude CLI", "purpose": "review", "excerpt": "Add a test."}]
-    )
+    # The note the worker wrote after asking the assistants, as it wrote it.
+    advice = f"{CONSOLE_ADVICE_PREFIX}\n- Claude CLI (review): Add a test."
     rework = {"author": "QA", "text": "NEEDS WORK: cover the empty case"}
     items[0].comments = [{"author": "System", "text": advice}, rework]
     items[1].comments = [{"author": "System", "text": advice}]
@@ -233,10 +227,12 @@ def test_counts_tasks_with_and_without_console_advice(test_client, sqlite_sessio
 
     assert response.status_code == 200
     [row] = response.json()
-    assert row["console_advice"] == {
-        "advised": {"total": 2, "done": 1, "rework": 1},
-        "unadvised": {"total": 1, "done": 1, "rework": 1},
+    assert "console_advice" not in row
+    assert row["architect_advice"] == {
+        "advised": {"total": 0, "done": 0, "rework": 0},
+        "unadvised": {"total": 3, "done": 2, "rework": 2},
     }
+    assert row["rework"] == 2
 
 
 def test_counts_tasks_with_and_without_the_architects_brief(

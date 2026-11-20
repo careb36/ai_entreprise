@@ -14,7 +14,7 @@ import { useAuthStore } from '../store/useAuthStore'
 const base: Omit<SprintSummary, 'id' | 'sprint_name' | 'status'> = {
   goal: null, start_date: null, scope_size: 'S', total: 2, done: 0, blocked: 0, rework: 0,
   second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 },
-  console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } },
+ 
   architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } },
 }
 const running: ManagedSprint = { ...base, id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close gaps' }

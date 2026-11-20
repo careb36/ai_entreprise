@@ -46,10 +46,8 @@ from services.release import integration_state
 from services.tasks import dependencies, sprint_board, task_filter
 from services.tasks.board import (
     count_architect_advice,
-    count_console_advice,
     count_second_attempt,
     no_architect_advice,
-    no_console_advice,
     no_second_attempts,
     rework_request_count,
 )
@@ -292,11 +290,11 @@ async def list_sprints(
     the tasks carried over from an earlier sprint: how many there are, how
     many got done, and the same two numbers for those that came with the
     ScrumMaster's brief, so a person sees whether another attempt, and the
-    brief, pay off. ``console_advice`` splits the tasks into those a console
-    assistant advised on and those none did, with how many got done and how
+    brief, pay off. ``architect_advice`` splits the tasks into those the
+    Architect briefed and those it did not, with how many got done and how
     many rework requests each group drew, so whether that advice helps is a
-    number too. ``architect_advice`` does the same for the Architect's
-    briefs. ``contradiction_rework`` counts the rework requests that say
+    number too (the console assistants' tally, ``console_advice``, went with
+    them, issue #750). ``contradiction_rework`` counts the rework requests that say
     they contradict another task of the same sprint
     (``sprint_board.contradiction_rework``, issue #439). ``cost`` is the
     sprint's tokens and US cents (``run_cost``). ``integration_state`` is
@@ -314,7 +312,6 @@ async def list_sprints(
     counts: dict[int, tuple[int, int, int]] = {}
     rework: dict[int, int] = {}
     attempts: dict[int, dict[str, int]] = {}
-    advice: dict[int, dict[str, dict[str, int]]] = {}
     briefs: dict[int, dict[str, dict[str, int]]] = {}
     contradictions: dict[int, int] = {}
     if sprint_ids:
@@ -350,9 +347,6 @@ async def list_sprints(
             count_second_attempt(
                 attempts.setdefault(sid, no_second_attempts()), status, comments
             )
-            count_console_advice(
-                advice.setdefault(sid, no_console_advice()), status, comments
-            )
             count_architect_advice(
                 briefs.setdefault(sid, no_architect_advice()), status, comments
             )
@@ -385,7 +379,6 @@ async def list_sprints(
             "rework": rework.get(s.id, 0),
             "contradiction_rework": contradictions.get(s.id, 0),
             "second_attempts": attempts.get(s.id, no_second_attempts()),
-            "console_advice": advice.get(s.id, no_console_advice()),
             "architect_advice": briefs.get(s.id, no_architect_advice()),
             "cost": costs.get(s.id) or run_cost.summarize([]),
         }

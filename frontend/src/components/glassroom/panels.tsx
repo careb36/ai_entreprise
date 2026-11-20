@@ -3,65 +3,10 @@ import { Link } from 'react-router-dom'
 import type { SprintRetro } from '../../store/agentStore'
 import { GitBranch, HeartPulse, ShieldAlert } from 'lucide-react'
 import { taskPath } from './identity'
-import { formatTime, phaseLabel } from './format'
+import { phaseLabel } from './format'
 import type {
-  AssistantSummaryEntry, HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
+  HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
 } from './types'
-
-export function AssistantSummaryPanel({ entries }: { entries: AssistantSummaryEntry[] }) {
-  const { t } = useTranslation()
-  if (entries.length === 0) return null
-
-  return (
-    <div className="border-b border-surface-700/60 p-3 space-y-2">
-      <div>
-        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
-          {t('glassroom.assistantSummaryTitle')}
-        </p>
-        <p className="text-[11px] text-gray-500 mt-1">
-          {t('glassroom.assistantSummarySubtitle')}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        {entries.map(entry => {
-          const pillTone = entry.label.includes('Claude')
-            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-            : 'border-sky-500/30 bg-sky-500/10 text-sky-200'
-
-          return (
-            <div key={entry.label} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${pillTone}`}>
-                  {entry.label}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[10px]">
-                <div className="rounded-md bg-emerald-500/10 px-2 py-1.5 text-emerald-300">
-                  <p className="text-[9px] uppercase tracking-wider text-emerald-400/80">{t('glassroom.assistantUsed')}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.used}</p>
-                </div>
-                <div className="rounded-md bg-amber-500/10 px-2 py-1.5 text-amber-300">
-                  <p className="text-[9px] uppercase tracking-wider text-amber-400/80">{t('glassroom.assistantQuotaSkips')}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.quotaSkips}</p>
-                </div>
-                <div className="rounded-md bg-red-500/10 px-2 py-1.5 text-red-300">
-                  <p className="text-[9px] uppercase tracking-wider text-red-400/80">{t('glassroom.assistantFailures')}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.failures}</p>
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
-                <span>{t('glassroom.assistantRequested', { count: entry.requested, defaultValue: 'requested {{count}}' })}</span>
-                <span>{t('glassroom.assistantUnavailable', { count: entry.unavailableSkips, defaultValue: 'unavailable {{count}}' })}</span>
-                {entry.cooldownUntil && <span>{t('glassroom.assistantCooldown', { time: formatTime(entry.cooldownUntil), defaultValue: 'cooldown until {{time}}' })}</span>}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 export function SprintTaskPanel({ tasks, sprintId }: { tasks: SprintTaskEntry[]; sprintId: string }) {
   const { t } = useTranslation()
@@ -237,12 +182,9 @@ export function TaskAutonomyTree({ tasks }: { tasks: TaskAutonomyEntry[] }) {
                 </div>
               ))}
             </div>
-            {(task.blockedReason || task.assistantLabels.length > 0) && (
+            {task.blockedReason && (
               <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
-                {task.assistantLabels.map(label => (
-                  <span key={label} className="rounded-full border border-surface-700 px-1.5 py-0.5">{label}</span>
-                ))}
-                {task.blockedReason && <span className="text-red-300">{task.blockedReason}</span>}
+                <span className="text-red-300">{task.blockedReason}</span>
               </div>
             )}
           </div>

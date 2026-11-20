@@ -81,8 +81,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   checkout (`vscode-daemon/git_workspace.py`); sha256 read back from disk.
 - **Known gap:** `host` mode runs with the user's privileges and is the
   default (`FABRIQUE_SANDBOX_REQUIRED` on the daemon's machine raises every
-  `workspace.execute` to its mode, a request without `sandbox` and the
-  console assistants' consultations included, #525); the backend sends no
+  `workspace.execute` to its mode, a request without `sandbox` included,
+  #525); the backend sends no
   per-company command policy (SECURITY.md §8.3, "What remains open").
 
 ## B4 — Backend ↔ LLM proxy ↔ providers

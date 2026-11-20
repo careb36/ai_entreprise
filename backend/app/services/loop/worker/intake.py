@@ -40,11 +40,20 @@ from services.evidence import delivery_gate
 from services.loop import replicas, run_window_gate, sprint_control
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
-from services.producers.console_assistants import normalize_utc
 from services.tasks import dependencies, task_events, task_projection
 from services.tools import developer_tools
 
 logger = setup_logger("fabrique-task-worker")
+
+
+def normalize_utc(value: datetime | None) -> datetime | None:
+    """A datetime loaded from the database as timezone-aware UTC; ``None`` stays ``None``."""
+    if not value:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
 
 DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
     os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")

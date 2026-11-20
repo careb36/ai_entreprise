@@ -159,7 +159,6 @@ def test_the_developer_prompt_places_the_wiki_before_the_memory(monkeypatch):
         {"id": 1, "title": "T", "comments": []},
         {"role": "Developer"},
         "S",
-        None,
         "MEMORY",
         None,
         None,

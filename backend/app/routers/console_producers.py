@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import AssistantRuntimeState, Company, User
 from pydantic import Field
 from schemas import RequestModel
-from services.producers import console_assistants, console_clis
+from services.producers import cli_cooldowns, console_clis
 from services.workspace import sandbox
 from sqlmodel import Session, select
 
@@ -51,7 +51,7 @@ def _cooldowns(session: Session, company_id: int) -> dict[str, str | None]:
     ).all()
     found = {}
     for row in rows:
-        deadline = console_assistants.normalize_utc(row.cooldown_until)
+        deadline = cli_cooldowns.normalize_utc(row.cooldown_until)
         if deadline and deadline > now:
             found[row.assistant_key] = deadline.isoformat()
     return {cli: found.get(console_clis.cooldown_key(cli)) for cli in console_clis.CLIS}

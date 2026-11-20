@@ -34,7 +34,7 @@ def test_an_unknown_or_required_name_is_ignored_and_named_in_a_warning():
     warnings = startup_warnings(raw)
     assert len(warnings) == 3
     assert "memroy" in warnings[0] and "PROMPT_SECTIONS_OFF" in warnings[0]
-    assert "console_assistant_notes" in warnings[0]  # The known names are listed.
+    assert "sprint_board" in warnings[0]  # The known names are listed.
     assert "task" in warnings[1] and "required" in warnings[1]
     # What is off is said too, so an ablation left on in production is seen.
     assert warnings[2].endswith(": memory.")
@@ -93,7 +93,6 @@ def _developer(monkeypatch, off=frozenset()):
         {"id": 1, "title": "Add login", "description": "A form."},
         {"role": "Developer"},
         "Sprint 1",
-        "tip",
         "old decision",
         "done before",
         None,
@@ -120,6 +119,30 @@ def test_the_developer_prompt_drops_the_sections_turned_off(monkeypatch):
     assert "old decision" in full and "old decision" not in text
     assert "## Task: Add login" in text
     assert measure["off_dropped"] == ["repository", "memory"]
+
+
+def test_a_removed_setting_in_the_environment_is_named_once_and_does_not_stop_startup(
+    monkeypatch,
+):
+    """The console assistants' settings were removed (issue #750); a .env that
+    still sets one loads, and startup says it no longer does anything."""
+    import config
+
+    monkeypatch.setenv("CONSOLE_ASSISTANTS_ENABLED", "true")
+    monkeypatch.setenv("CLAUDE_CLI_COMMAND_TEMPLATE", "claude -p {prompt}")
+    current = config.Settings()
+    warnings = config.removed_settings_in_use(current)
+    assert len(warnings) == 2
+    assert all("no longer does anything" in w and "#750" in w for w in warnings)
+    assert {w.split(" ")[0] for w in warnings} == {
+        "CONSOLE_ASSISTANTS_ENABLED",
+        "CLAUDE_CLI_COMMAND_TEMPLATE",
+    }
+    monkeypatch.delenv("CONSOLE_ASSISTANTS_ENABLED")
+    monkeypatch.delenv("CLAUDE_CLI_COMMAND_TEMPLATE")
+    assert config.removed_settings_in_use(config.Settings()) == []
+    # The console producers' quota cooldown is still read.
+    assert isinstance(current.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES, int)
 
 
 def test_lifecycle_logs_the_warning_at_startup(monkeypatch):

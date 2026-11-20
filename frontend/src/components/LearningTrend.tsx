@@ -12,10 +12,10 @@
  */
 import { useTranslation } from 'react-i18next'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
-import type { BenchCard, ConsoleAdvice, SprintSummary } from '../services/api'
+import type { BenchCard, AdviceTally, SprintSummary } from '../services/api'
 import { BenchReferenceLine, SparkReferenceRule } from './bench/BenchReferenceLine'
 import { benchReference, type BenchReference } from '../lib/benchReference'
-import { architectAdvice, consoleAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
+import { architectAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
 
 const SPARK_POINTS = 12
 const BAR_WIDTH = 8
@@ -132,7 +132,7 @@ function SecondAttemptsCard({ sprints }: { sprints: SprintSummary[] }) {
 
 /** Tasks that got some advice against the rest; nothing until one got it. */
 function AdviceCard({ tally, title, split }: {
-  tally: ConsoleAdvice
+  tally: AdviceTally
   title: string
   split: (values: { rework: string; done: number; total: number; reworkOther: string }) => string
 }) {
@@ -180,14 +180,6 @@ export function LearningTrend({ sprints, benchCards }: { sprints: SprintSummary[
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <SecondAttemptsCard sprints={sprints} />
-        <AdviceCard
-          tally={consoleAdvice(sprints)}
-          title={t('sprints.consoleAdviceTitle', { defaultValue: 'Tasks done with console advice' })}
-          split={values => t('sprints.consoleAdviceSplit', {
-            ...values,
-            defaultValue: '{{rework}} rework requests per task · without advice: {{done}} of {{total}} done, {{reworkOther}} per task',
-          })}
-        />
         <AdviceCard
           tally={architectAdvice(sprints)}
           title={t('sprints.architectAdviceTitle', { defaultValue: "Tasks done with the Architect's brief" })}

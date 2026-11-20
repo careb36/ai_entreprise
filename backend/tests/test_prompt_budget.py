@@ -73,7 +73,6 @@ def _prompt(monkeypatch, budget=None, **context):
         worker_execute.developer_tools, "repository_section", lambda *a, **k: "\n\nREPO"
     )
     args = {
-        "external_advice": None,
         "memory_context": None,
         "completed_tasks_context": None,
         "architect_advice": None,
@@ -86,7 +85,6 @@ def _prompt(monkeypatch, budget=None, **context):
         {"id": 1, "title": "Add login", "description": "A form."},
         {"role": "Developer"},
         "Sprint 1",
-        args["external_advice"],
         args["memory_context"],
         args["completed_tasks_context"],
         args["architect_advice"],
@@ -100,25 +98,26 @@ def _prompt(monkeypatch, budget=None, **context):
 
 def test_the_developer_prompt_is_measured_section_by_section(monkeypatch):
     text, feedback, measure = _prompt(
-        monkeypatch, memory_context="old decision", external_advice="tip"
+        monkeypatch, memory_context="old decision", completed_tasks_context="tip"
     )
     assert feedback == []
     names = [s["name"] for s in measure["sections"]]
     assert names[:2] == ["output_format", "task"]
-    assert {"repository", "memory", "console_assistant_notes"} <= set(names)
+    assert {"repository", "memory", "completed_tasks"} <= set(names)
+    assert "console_assistant_notes" not in names  # Removed, issue #750.
     assert measure["chars"] == len(text) and measure["cut"] == []
     assert sum(s["chars"] for s in measure["sections"]) == len(text)
 
 
-def test_over_budget_the_console_notes_and_memory_go_before_the_repository(monkeypatch):
-    full, _, measure = _prompt(
-        monkeypatch, memory_context="m" * 2000, external_advice="e" * 3000
-    )
-    budget = measure["tokens"] - 700
-    text, _, measure = _prompt(
-        monkeypatch, budget, memory_context="m" * 2000, external_advice="e" * 3000
-    )
-    assert measure["cut"] == ["console_assistant_notes"]
+def test_over_budget_the_completed_tasks_and_memory_go_before_the_repository(
+    monkeypatch,
+):
+    context = {"memory_context": "m" * 2000, "completed_tasks_context": "c" * 1900}
+    full, _, measure = _prompt(monkeypatch, **context)
+    budget = measure["tokens"] - 300
+    text, _, measure = _prompt(monkeypatch, budget, **context)
+    # Memory and completed tasks share priority 5; the later one goes first.
+    assert measure["cut"] == ["completed_tasks"]
     assert "REPO" in text and "m" * 2000 in text and "## Task: Add login" in text
     assert len(text) < len(full)
 

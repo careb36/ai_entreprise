@@ -8,8 +8,7 @@ delivered, and a missing binary is never read from a run that exited 0.
 Console producers: a terminal coding agent produces a role's task, and the
 delivery is what the daemon observes (``services/producers/console_producer.py``,
 ``services/producers/console_clis.py``, ``vscode-daemon/console_run.py``).
-Real git in ``tmp_path`` and the real daemon, with a fake CLI on ``PATH`` (as
-``test_console_assistants`` and the e2e's ``e2e-copilot`` do); the shared
+Real git in ``tmp_path`` and the real daemon, with a fake CLI on ``PATH``; the shared
 fixtures are in ``console_producer_helpers``.
 """
 

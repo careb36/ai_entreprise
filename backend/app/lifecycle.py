@@ -19,7 +19,6 @@ from services.integrations.anchoring import cadence_loop as anchor_cadence_loop
 from services.integrations.outbox_service import process_outbox
 from services.loop import run_window_gate
 from services.loop.task_worker import process_backlog_tasks
-from services.producers import console_capabilities
 from services.producers.agent_worker import process_agent_tasks
 from services.release import integration_jobs
 from services.workspace import daemon_liveness
@@ -102,11 +101,6 @@ async def _start_workers(app, client: NATSClient) -> None:
         await daemon_liveness.listen(client)
     except Exception as exc:  # noqa: BLE001 - The request-based check stays as the fallback.
         logger.warning(f"Not observing the daemon's heartbeat: {exc}")
-
-    # Ask the daemon once which console assistants it can run, so the task
-    # worker does not wait out a timeout per task for a CLI that is absent.
-    if settings.CONSOLE_ASSISTANTS_ENABLED:
-        await console_capabilities.probe_console_assistants(client)
 
     worker_coros = {
         "nats_glassroom_listener": _listen_to_nats(app),
@@ -244,6 +238,10 @@ async def startup(app):
     if bind_warning:
         logger.warning(bind_warning)
     log_prompt_sections_off()
+    from config import removed_settings_in_use
+
+    for warning in removed_settings_in_use(settings):
+        logger.warning(warning)
     client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
     connect_task = asyncio.create_task(
         _connect_nats_and_start_workers(app, client), name="nats_connector"
