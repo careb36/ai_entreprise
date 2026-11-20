@@ -117,6 +117,9 @@ services:
       NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
       NEBIUS_PROXY_URL: ${NEBIUS_PROXY_URL:-https://api.tokenfactory.nebius.com/v1}
       LLM_UPSTREAM_TIMEOUT_SECONDS: ${LLM_UPSTREAM_TIMEOUT_SECONDS:-110}
+      # Empty: a failed request stays with its provider (DeepSeek Pro <-> Flash).
+      LLM_FALLBACK_PROVIDERS: ${LLM_FALLBACK_PROVIDERS:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "5100:5100"

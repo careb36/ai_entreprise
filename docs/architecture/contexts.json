@@ -660,6 +660,9 @@
       "test_database_timezone.py": [
         "platform"
       ],
+      "test_deepseek_only.py": [
+        "management"
+      ],
       "test_delivery_tests.py": [
         "evidence",
         "loop"

@@ -11,10 +11,11 @@ Provides a unified interface for:
   ``GraphNotRecorded``.
 
 The ``embed()`` call is delegated to ``LLMProxyClient`` so this module has no
-direct dependency on any LLM SDK. The proxy embeds with Gemini's
-``text-embedding-004`` only when a Gemini key is configured (DeepSeek, the
-default team, offers no embeddings) and otherwise with a deterministic local
-vector.
+direct dependency on any LLM SDK. DeepSeek, the default team's provider,
+offers no embeddings, so the proxy embeds with a deterministic local vector
+(no key, no outside call) unless the operator chose Gemini's
+``text-embedding-004`` with ``EMBEDDING_PROVIDER=gemini`` (issue #751);
+``/health/deep``'s ``llm.embeddings`` capability says which.
 """
 
 import json

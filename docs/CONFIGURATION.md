@@ -2,6 +2,44 @@
 
 Every environment variable of the backend, the LLM proxy, the broker and the workspace daemon. Moved whole from `CLAUDE.md`, whose index is [here](../CLAUDE.md).
 
+## Minimal configuration: DeepSeek only
+
+The owner's standing decision (2026-11-20, issue #751): La Fabrique runs on
+DeepSeek, and no other configuration may stop the work. Among the providers
+and integrations, `DEEPSEEK_API_KEY` is the only one a sprint needs:
+
+```bash
+cp .env.example .env
+# Set DEEPSEEK_API_KEY, and the platform's own secrets: POSTGRES_PASSWORD,
+# NEO4J_PASSWORD (or NEO4J_ENABLED=false), JWT_SECRET_KEY.
+docker compose up -d
+```
+
+With nothing else set:
+
+- every role plans, executes and reviews on DeepSeek Pro or Flash
+  (`services/models/model_factory.py`);
+- a request that DeepSeek answers with 429 or 5xx (or an empty answer) moves
+  to DeepSeek's other model (Pro to Flash, Flash to Pro) and never to another
+  provider, even when another provider's key is set, unless
+  `LLM_FALLBACK_PROVIDERS` names it (below);
+- memory embeds with a local vector computed in the proxy (DeepSeek has no
+  embeddings endpoint): no key, no outside call, near-identical text found
+  rather than meaning; `EMBEDDING_PROVIDER=gemini` chooses Gemini instead;
+- the knowledge graph, GitHub token, mail, error reports, the Manager,
+  Support and Reviewer agents are off with a named reason, and nothing waits
+  for them.
+
+What is on, off or degraded, and why, is logged once at startup by the
+backend and by the proxy (`Effective capabilities: …`, names and reasons, never
+a value), served by the `capabilities` section of `/health/deep` and shown on
+the Models page (Capabilities). The audit behind this is
+[`docs/design/DEEPSEEK_ONLY.md`](design/DEEPSEEK_ONLY.md).
+
+`POSTGRES_PASSWORD` and `JWT_SECRET_KEY` are the platform's own secrets, not
+integrations: without `JWT_SECRET_KEY` the backend still starts but login
+answers 503, and the Capabilities list says so (`auth: off`).
+
 ## Required Environment Variables
 
 Copy `.env.example` to `.env` and fill in:
@@ -31,9 +69,9 @@ Copy `.env.example` to `.env` and fill in:
   agent, a role variable or a policy names.
 - `GEMINI_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. No
   default role runs on Gemini. It serves `gemini-*`/`gemma-*` model ids an agent,
-  a role variable or a policy names, and the proxy's `/v1/embeddings` (Gemini's
-  embedding model; without the key, a deterministic local vector,
-  `llm-proxy/embedding.py`).
+  a role variable or a policy names, and the proxy's `/v1/embeddings` only when
+  `EMBEDDING_PROVIDER=gemini` (below). The key alone sends no memory and no
+  failed request to Google.
 - `NEBIUS_API_KEY` — optional secret, set in `.env`; read by the LLM proxy. The
   Nebius Token Factory key, needed only for the roles `NEMOTRON_ROLES` names or
   a model id with a vendor segment (`nvidia/…`; README.md, the routing table).
@@ -1040,6 +1078,25 @@ the backend where it says so:
   budget of one chat request's provider calls, fallbacks included; the
   backend's client waits this plus 10 s, so an answer the provider is still
   writing (and billing) is never given up on.
+- `LLM_FALLBACK_PROVIDERS` — default empty, read by the proxy
+  (`llm-proxy/routing.py`, issue #751). After a 429, a 5xx or an empty answer
+  the proxy first tries the same provider's other model (DeepSeek Pro and
+  Flash stand in for each other); then, in order, one catalogue model of each
+  provider this comma-separated list names (`deepseek`, `qwen`, `gemini`; an
+  unknown name is logged and ignored). Empty, a request never leaves the
+  provider it was sent to: configuring a key for one role does not make that
+  provider a processor of every other role's prompts (GDPR arts. 25 and 28).
+  `/health`'s `capabilities.failover` says which applies.
+- `EMBEDDING_PROVIDER` — default `local`, read by the proxy
+  (`llm-proxy/embedding.py`, issue #751). `local`: a deterministic vector
+  computed in the proxy, no key and no outside call; it finds near-identical
+  text, not meaning. `gemini`: Gemini's `text-embedding-004` when
+  `GEMINI_API_KEY` is set (padded with zeros to the 1536 values of
+  `vector_memory.embedding`), the local vector when the key is missing or the
+  call fails. Any other value is the local vector. Vectors from the two
+  sources do not compare with each other, so changing it leaves earlier
+  memories matching poorly. `/health`'s `capabilities.embeddings` says which
+  applies and why.
 - `PROXY_PORT` — default `5100`, read only when the proxy runs as
   `python app.py`. The image runs gunicorn bound to `0.0.0.0:5100`
   (`llm-proxy/Dockerfile`) and ignores it, so the value compose sets changes

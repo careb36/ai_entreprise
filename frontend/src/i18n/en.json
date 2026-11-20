@@ -4834,5 +4834,19 @@
         "not_found": "That identity was not found."
       }
     }
+  },
+  "capabilities": {
+    "title": "Capabilities",
+    "hint": "What this deployment can do with the configuration it has. Off by configuration is not a fault, and nothing here stops a sprint.",
+    "loading": "Checking capabilities…",
+    "unavailable": "Could not read the capabilities.",
+    "name": "Capability",
+    "stateColumn": "State",
+    "reason": "Why",
+    "state": {
+      "on": "on",
+      "off": "off",
+      "degraded": "degraded"
+    }
   }
 }

@@ -215,7 +215,7 @@ def test_refresh_checks_again_and_is_rate_limited(client, proxy, board, http, mo
 
 
 def test_a_request_refused_for_lack_of_credit_is_recorded_and_still_falls_back(
-        client, proxy, board, upstream):
+        cross_provider, client, proxy, board, upstream):
     upstream.set("deepseek", _err(402, "Insufficient Balance"))
     upstream.set("qwen", openai_ok("from qwen"))
     resp = client.post("/v1/chat/completions",
