@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -164,13 +165,19 @@ def execute_shell_command(
 
     asked = sandbox is not None
     request = sandbox if asked else {"mode": "host"}
+    started = time.monotonic()
     try:
         box = sandbox_runner.normalize(request)
         if box["mode"] != "host":
-            return sandbox_runner.run_sandboxed(command, cwd, request, seconds, keep_full)
+            result = sandbox_runner.run_sandboxed(command, cwd, request, seconds, keep_full)
+            # The daemon's own clock, for the evidence (issue #766); a stack
+            # image built first counts in its own ``build_ms``.
+            result["duration_ms"] = int((time.monotonic() - started) * 1000)
+            return result
     except sandbox_runner.SandboxUnavailable as exc:
         return {"success": False, "error": f"sandbox unavailable: {exc}"}
     result = run_on_host(command, cwd, seconds, keep_full)
+    result["duration_ms"] = int((time.monotonic() - started) * 1000)
     if asked:
         # Only a request that asked is told what was applied on the host; one
         # that did not gets the reply it always got. A run the floor moved

@@ -113,7 +113,11 @@ def normalize(request: Any) -> dict[str, Any]:
         "mode": mode,
         "forced_by_daemon": forced,
         "network": bool(raw.get("network", False)),
-        "image": str(raw.get("image") or DEFAULT_IMAGE),
+        # No image and ``stack_image``: the project's own, built from its
+        # stacks (``stack_image.py``, issue #766); a backend from before
+        # sends neither and gets the old default.
+        "image": str(raw.get("image") or ("" if raw.get("stack_image") is True else DEFAULT_IMAGE)),
+        "stack_image": raw.get("stack_image") is True and not raw.get("image"),
         "cpus": _number(raw.get("cpus"), DEFAULT_CPUS, 0.1, 64),
         "memory_mb": int(_number(raw.get("memory_mb"), DEFAULT_MEMORY_MB, 64, 262144)),
         "pids_limit": int(_number(raw.get("pids_limit"), DEFAULT_PIDS, 16, 65536)),
@@ -123,6 +127,21 @@ def normalize(request: Any) -> dict[str, Any]:
         "environment": raw.get("environment") is True,
         "scope": sandbox_cache.clean_scope(raw.get("scope")),
     }
+
+
+def resolve_image(runtime: str, box: dict[str, Any], cwd: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """The box with its image named: the project's stack image when the
+    request asked for it (built now when missing), else as it was. Raises
+    ``SandboxUnavailable`` with the reason when that image cannot be had:
+    never the old default in its place."""
+    if not box.get("stack_image"):
+        return box, None
+    import stack_image
+
+    built = stack_image.ensure(runtime, cwd)
+    if not built.get("image"):
+        raise SandboxUnavailable(f"no stack image for this project: {built.get('error')}")
+    return {**box, "image": built["image"]}, built
 
 
 def sandbox_env(names: list[str]) -> dict[str, str]:
@@ -360,7 +379,9 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full:
     name = f"fabrique-run-{uuid.uuid4().hex[:12]}"
     cache: dict[str, Any] | None = None
     env: dict[str, Any] | None = None
+    stack = None
     if runtime:
+        box, stack = resolve_image(runtime, box, cwd)
         # Run from the image's content ID, observed now (``sandbox_image``).
         run_box, identity = sandbox_image.pinned(runtime, box)
         if box["cache"]:
@@ -374,6 +395,8 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full:
     else:
         argv = bwrap_command(box, command, cwd)
     applied = report(box, runtime)
+    if stack is not None:
+        applied["stack_image"] = stack
     logger.info("Sandboxed (%s): %s in %s", box["mode"], command, cwd)
     run = run_bounded(argv, timeout, keep_full=keep_full)
     spools = {run_logs.KEY: run.pop(run_logs.KEY)} if run_logs.KEY in run else {}

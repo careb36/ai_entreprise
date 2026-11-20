@@ -9,6 +9,10 @@
     "success": true,
     "stdout": "hello\n",
     "stderr": "",
-    "exit_code": 0
-  }
+    "exit_code": 0,
+    "duration_ms": 0
+  },
+  "volatile": [
+    "/duration_ms"
+  ]
 }

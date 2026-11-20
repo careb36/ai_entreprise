@@ -30,12 +30,13 @@ class PolicyUnavailable(RuntimeError):
 
 
 def mode_for(company: Any) -> str:
-    """The company's mode, else the deployment's; ``host`` when unknown."""
+    """The company's mode, else the deployment's; ``container`` when the
+    setting names none (issue #766: never the host by accident)."""
     own = str(getattr(company, "delivery_sandbox", None) or "").strip().lower()
     if own in MODES:
         return own
-    default = str(settings.DELIVERY_SANDBOX or "host").strip().lower()
-    return default if default in MODES else "host"
+    default = str(settings.DELIVERY_SANDBOX or "container").strip().lower()
+    return default if default in MODES else "container"
 
 
 def request_for(company: Any) -> dict[str, Any]:
@@ -43,7 +44,10 @@ def request_for(company: Any) -> dict[str, Any]:
     names = getattr(company, "sandbox_env", None) or []
     return {
         "mode": mode_for(company),
-        "image": settings.DELIVERY_SANDBOX_IMAGE,
+        # No image: the project's own, built by the daemon from its stacks
+        # (``stack_image``, issue #766); a configured one wins, as before.
+        "image": (settings.DELIVERY_SANDBOX_IMAGE or "").strip() or None,
+        "stack_image": not (settings.DELIVERY_SANDBOX_IMAGE or "").strip(),
         "network": settings.DELIVERY_SANDBOX_NETWORK,
         "cpus": settings.DELIVERY_SANDBOX_CPUS,
         "memory_mb": settings.DELIVERY_SANDBOX_MEMORY_MB,

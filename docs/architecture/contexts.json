@@ -123,6 +123,7 @@
         "git_workflow",
         "project_profile",
         "sandbox",
+        "stack_image",
         "workspace_daemon"
       ],
       "modules": []
@@ -1382,6 +1383,9 @@
       "test_ssrf_vectors.py": [
         "integrations",
         "tools"
+      ],
+      "test_stack_image.py": [
+        "workspace"
       ],
       "test_stack_roots.py": [
         "evidence",

@@ -516,11 +516,20 @@ Copy `.env.example` to `.env` and fill in:
   sends the task back for rework. The backend waits `DELIVERY_TEST_TIMEOUT_SECONDS`
   (default `130`; the daemon stops a command after 120 s) for the run's answer.
   It executes agent-written code on the daemon's machine,
-  where `DELIVERY_SANDBOX` says: `host` (default, as before), `container` (an
-  ephemeral container per run: worktree mounted, network off unless
+  where `DELIVERY_SANDBOX` says: `container` (the default since issue #766:
+  an ephemeral container per run, worktree mounted, network off unless
   `DELIVERY_SANDBOX_NETWORK`, limits `DELIVERY_SANDBOX_CPUS` (2),
   `DELIVERY_SANDBOX_MEMORY_MB` (2048) and `DELIVERY_SANDBOX_PIDS` (512),
-  image `DELIVERY_SANDBOX_IMAGE`, every capability dropped) or `bwrap`.
+  every capability dropped), `host` (needs an Owner's `host_sandbox`
+  acknowledgement per company) or `bwrap`. The container's image is the
+  project's own when `DELIVERY_SANDBOX_IMAGE` is empty (the default): the
+  daemon builds it from the project's stacks, read from marker files, with
+  fixed templates (Python with Poetry and pytest, Node with npm, Go, git;
+  `vscode-daemon/stack_image.py`), tags it `fabrique-stack:<sha256 prefix>`,
+  and reuses it; the backend asks for it before a delivery's commands and
+  waits `STACK_IMAGE_BUILD_TIMEOUT_SECONDS` (`1900`; the daemon's own limit is
+  `FABRIQUE_STACK_BUILD_SECONDS`, `1800`). A value in
+  `DELIVERY_SANDBOX_IMAGE` runs every project in that one image, as before.
   A company sets its own (`Company.delivery_sandbox`, and `sandbox_env`: the
   variable names a sandboxed run may see) with `GET`/`PUT
   /v1/companies/{id}/sandbox` (Viewer / Manager). The daemon reports what it

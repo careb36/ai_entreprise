@@ -64,7 +64,7 @@ from services.tools import (
     research_tools,
     workspace_edits,
 )
-from services.workspace import sandbox
+from services.workspace import sandbox, stack_image
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -501,6 +501,9 @@ def toolbox_for(
                 box = sandbox.request_for_company_id(company_id, engine)
             except sandbox.PolicyUnavailable as e:
                 box_error = str(e)
+            # The project's sandbox image before the first test run, which
+            # would otherwise wait for its build (issue #766).
+            stack_image.prepare_from_thread(_request_from_thread, root, box)
             workspace = WorkspaceToolbox(
                 _request_from_thread,
                 root,

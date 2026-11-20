@@ -38,6 +38,7 @@ from services.workspace import (
     folder_commands,
     run_logs,
     sandbox,
+    stack_image,
     stack_roots,
     workspace_daemon,
 )
@@ -73,6 +74,21 @@ _APP_FIELDS = (
     "browser_probe",
     "security_probe",
 )
+
+
+async def prepare_stack_image(ctx: Context) -> None:
+    """Have the daemon build the project's sandbox image before the install
+    and the tests, when the company's sandbox runs in it; the reply goes on
+    the evidence as ``stack_image`` (``stack_image.prepare``)."""
+    try:
+        box = await asyncio.to_thread(
+            sandbox.request_for_sprint, ctx.sprint, ctx.engine
+        )
+    except sandbox.PolicyUnavailable:
+        return  # Each command records the reason itself.
+    built = await stack_image.prepare(ctx.nats, ctx.evidence["workspace_root"], box)
+    if built is not None:
+        ctx.evidence["stack_image"] = built
 
 
 async def install_dependencies(ctx: Context) -> None:
