@@ -19,7 +19,7 @@ class Recorder:
         self.calls = []
         self.response = response
 
-    def __call__(self, url, headers=None, json=None, timeout=None):
+    def __call__(self, url, headers=None, json=None, timeout=None, **_):
         self.calls.append({"url": url, "headers": headers or {}, "json": json})
         return self.response
 
@@ -109,7 +109,7 @@ def test_a_provider_error_that_echoes_the_secrets_is_redacted(client, recorder, 
 
 
 def test_a_transport_error_that_echoes_the_key_is_redacted(client, recorder, proxy, monkeypatch):
-    def boom(url, headers=None, json=None, timeout=None):
+    def boom(url, headers=None, json=None, timeout=None, **_):
         raise proxy.requests.RequestException("connection reset; Authorization: Bearer sk-company")
 
     monkeypatch.setattr(proxy.requests, "post", boom)

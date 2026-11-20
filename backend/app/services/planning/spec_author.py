@@ -105,6 +105,8 @@ def _client(
     )
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
     client.company_id = company_id
+    # The draft is parsed as JSON: thinking off (services/models/thinking.py).
+    client.structured = True
     return client
 
 

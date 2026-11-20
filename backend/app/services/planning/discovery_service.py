@@ -101,6 +101,8 @@ def _ai_suggest_team(
         log = logging.getLogger("fabrique-backend")
 
         client = LLMProxyClient(base_url=llm_proxy_url)
+        # The team is parsed as JSON: thinking off (services/models/thinking.py).
+        client.structured = True
         orchestrator_model = model_for_discovery_role("Architect")
 
         stack_summary = (

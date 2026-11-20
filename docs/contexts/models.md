@@ -6,14 +6,14 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `edit_format` (the edit format per model and the format a delivery was observed in; `loop/worker` reads it), `effort`, `model_factory`, `model_routing`, `run_cost` (the reported tokens and cost of a task, a run or a sprint; `management/rsi_cycle` reads a cycle sprint's tokens through it). Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
-- **Modules:** `bench_schema`, `bench_schema_blocks`, `bench_schema_edit_format`, `bench_schema_swebench`, `bench_scorecards`, `calibration`, `company_models`, `difficulty`, `edit_format`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `usage_csv`, `usage_report`.
+- **Modules:** `bench_schema`, `bench_schema_blocks`, `bench_schema_edit_format`, `bench_schema_swebench`, `bench_scorecards`, `calibration`, `company_models`, `difficulty`, `edit_format`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `thinking`, `usage_csv`, `usage_report`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `model_catalog` (the models.dev fetch) and `provider_client` (`list_models`, raising `ProviderUnreachable`; `provider_connections.validate` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
 
 ### The LLM proxy client
 
-**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. `chat()` / `chat_async()` take a `model` id (default `DEFAULT_MODEL`, `"deepseek-flash"`), a `role`, and an optional `bu_id`.
+**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. `chat()` / `chat_async()` take a `model` id (default `DEFAULT_MODEL`, `"deepseek-flash"`), a `role`, and an optional `bu_id`. Every request names its thinking mode (see **Thinking mode** below; `client.structured = True` for a call whose answer is parsed). It waits `LLM_UPSTREAM_TIMEOUT_SECONDS` plus 15 s; only a request that never reached the proxy (`proxy_unreachable`) is sent again, while a read timeout (`proxy_read_timeout`) or a dropped connection (`proxy_connection_lost`) comes back as a named error.
 
 ### The LLM proxy
 
@@ -26,8 +26,10 @@ The proxy is a set of sibling modules, each with one job; `app.py` is the entry 
 | `app.py` | The configuration (each provider's key, read with `os.getenv`, and URL; `LLM_UPSTREAM_TIMEOUT_SECONDS`), the live catalogue sets and their hourly refresh, and the HTTP routes (`/health`, `/v1/providers`, `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`). It passes this state to the modules below at call time, so a test that replaces a key, a catalogue set, a refresh or `track_usage_in_db` on `app` is seen everywhere. |
 | `routing.py` | Which provider and model serve a requested id (prefix and catalogue, the deprecated Gemini aliases) and the fallback on 429/5xx: one catalogue model per other provider within the request's time budget. |
 | `catalogue.py` | The provider prefixes, tier rules and deprecated ids; fetching one provider's model list (a failed refresh keeps the previous one); the `/v1/models` entries and the recommended orchestrator. |
-| `providers.py` | One chat completion on a deployment provider: Gemini through `gemini.py`, the OpenAI-compatible ones (DeepSeek, Qwen, Nebius) directly. |
-| `upstream.py` | The one POST every provider call goes through, and `UpstreamError`: what counts as a failure and whether another provider may be tried. |
+| `providers.py` | One chat completion on a deployment provider: Gemini through `gemini.py`, the OpenAI-compatible ones (DeepSeek, Qwen, Nebius) directly; a structured DeepSeek call whose reasoning exhausted the budget is retried once with thinking off. |
+| `upstream.py` | The one POST every provider call goes through, read within the call's deadline, and `UpstreamError`: what counts as a failure, its named `reason` (`upstream_timeout`, `empty_content`, `empty_content_reasoning_exhausted`) and whether another provider may be tried. |
+| `thinking.py` | DeepSeek's `thinking` field on the way out: explicit for DeepSeek, absent elsewhere, `LLM_THINKING` applied. |
+| `timeouts.py` / `gunicorn.conf.py` | The upstream budget and the figures derived from it; gunicorn's settings (gthread workers, worker timeout) read from the environment at start. |
 | `gemini.py` | The Gemini request and answer shapes, tools included. |
 | `connections.py` | A company's own provider connection, honoured only with `LLM_PROXY_INTERNAL_TOKEN`, with no fallback to the deployment's providers. |
 | `usage.py` | How an answer's token count is known (`reported` or `estimated`). |
@@ -81,13 +83,58 @@ sends a model only when DeepSeek's live `/models` list has it
 `unknown_model`, never replaced, so if DeepSeek ever drops a name, set
 `AGENT_MODEL_<ROLE>` (or `AGENT_MODEL`) to an id `GET /v1/models` lists.
 
-**Thinking mode.** DeepSeek's thinking mode is on by default
-(https://api-docs.deepseek.com/guides/thinking_mode). Neither the backend nor
-the proxy sets the `thinking` field, so every role, the EngramProcessor's JSON
-extraction included, runs with DeepSeek's default, as `deepseek-v4-pro` did
-before; a caller that sets `thinking` has it forwarded unchanged
-(`llm-proxy/tests/test_deepseek_defaults.py`). Thinking tokens are billed as
-output.
+**Thinking mode** (issues #739, #748, and the fix that followed). DeepSeek
+thinks unless told not to: "When `thinking` is omitted or `null`, the mode
+follows `reasoning_effort`; if `reasoning_effort` is also omitted, thinking is
+enabled" (https://api-docs.deepseek.com/api/create-chat-completion). The
+chain of thought comes back in `reasoning_content`, beside `content`
+(https://api-docs.deepseek.com/guides/thinking_mode), and `max_tokens`
+defaults to 8K without thinking and 64K with it, so the reasoning counts
+against the cap. Left to that default, the planner (4096 tokens), the QA
+review (600) and the engram extraction (2048) spent their budget reasoning and
+got an empty answer. So no call is left to the default; the policy is in one
+place, **`services/models/thinking.py`**, and every call sends
+`thinking: {"type": "enabled" | "disabled"}`:
+
+| Call | Thinking |
+|---|---|
+| Structured: the answer is parsed (`LLMProxyClient.structured = True`): the PO's sprint plans and foundation plan, the QA review's verdict, the Reviewer agent's decision, the discovery team suggestion, the specification drafts, the one-token credit probe; and every call of the EngramProcessor (JSON extraction) | off |
+| Free-form, for PO, Architect, SecOps, Developer and the coding roles, Designer | on, with `LLM_THINKING_RESERVE_TOKENS` (16384) added to the call's `max_tokens` |
+| Free-form, for every other role (QA, ScrumMaster, TechWriter, Manager, Support, Reviewer…) | off |
+
+`LLM_THINKING=on|off` forces every call (`auto` by default). The client sends
+the field in the body and `X-LLM-Purpose: structured|free`; the LangChain
+clients (`ModelFactory.get_model`) send it as `extra_body`. The proxy
+(`llm-proxy/thinking.py`) forwards it to DeepSeek only, sets `disabled` on a
+DeepSeek request that has none, applies the operator's override, and drops the
+field for Qwen, Nebius, Gemini and a company connection that is not DeepSeek's
+API. Thinking tokens are billed as output.
+
+**An empty answer is a named error, never a success.** A 2xx answer with no
+text and no tool call becomes a `502` from the proxy with `reason`
+`empty_content_reasoning_exhausted` (stopped at `finish_reason: length` after
+the reasoning used the budget) or `empty_content` (anything else, JSON mode's
+blank content included); the reasoning is never returned as the answer. Both
+are retriable: the other DeepSeek model stands in, and another provider only
+when `LLM_FALLBACK_PROVIDERS` names one. A structured call that came back
+`empty_content_reasoning_exhausted` is first retried once on the same model
+with thinking off, within the request's budget; the served answer then
+carries `thinking_retry` with the first attempt's reason and tokens. The
+backend's readers carry the reason on: `loop/worker/answers.llm_failure`, and
+the planner's `planner_fallback` (`{"reason": "model_error", "detail":
+"empty_content_reasoning_exhausted: …"}`, [planning](planning.md)), whose
+detail starts with the named reason, an empty 2xx answer included.
+
+**Timeouts.** One setting, `LLM_UPSTREAM_TIMEOUT_SECONDS` (300 s), bounds a
+chat call's provider calls; the proxy enforces it as a deadline on the whole
+body (DeepSeek keeps a slow non-streaming call alive with empty lines,
+https://api-docs.deepseek.com/quick_start/rate_limit, so a socket read timeout
+never fired and gunicorn killed the worker mid-read), answering
+`reason: upstream_timeout`. gunicorn (`llm-proxy/gunicorn.conf.py`, `gthread`
+workers) allows that plus 30 s and the backend's client waits it plus 15 s; a
+client wait that still runs out (`proxy_read_timeout`) or a dropped connection
+(`proxy_connection_lost`) is a named error and is not sent again.
+`llm-proxy/timeouts.py` derives the figures.
 
 **Prices.** `model_prices.PUBLISHED_PRICES` holds DeepSeek's published price
 per million tokens for the two models, which models.dev lags: Flash $0.30

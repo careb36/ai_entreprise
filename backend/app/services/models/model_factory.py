@@ -22,8 +22,9 @@ The default team runs on DeepSeek alone, through the LLM proxy, so only
 (DeepSeek-V4.1-Flash-1017, https://api-docs.deepseek.com/quick_start/pricing,
 read 2026-11-19); the older ``deepseek-v4-flash`` is still accepted there but
 served by the same model. The proxy sends a model only when the provider's
-live ``/models`` list has it. No request sets DeepSeek's ``thinking`` field,
-so DeepSeek's own default (thinking on) applies to every role.
+live ``/models`` list has it. Every request sets DeepSeek's ``thinking`` field
+explicitly, from ``services/models/thinking.py``: DeepSeek's own default
+(thinking on) never applies by omission.
 
 ``model_for_role`` says which settings override these defaults
 (``AGENT_MODEL_<ROLE>``, ``NEMOTRON_ROLES``, ``AGENT_MODEL``).
@@ -40,6 +41,8 @@ from typing import Any, ClassVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
+
+from services.models import thinking
 
 logger = logging.getLogger(__name__)
 
@@ -213,10 +216,15 @@ class ModelFactory:
         config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name=FLASH_MODEL))
         proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
 
+        # Thinking is always explicit (``services/models/thinking.py``): the
+        # EngramProcessor's JSON extraction runs without it, a reasoning role
+        # with it and room for the reasoning on top of its answer budget.
+        mode = thinking.mode_for(role.value, structured=False)
         model = ChatOpenAI(
             model=cls.model_for_role(role),
             temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            max_tokens=thinking.max_tokens_for(mode, config.max_tokens),
+            extra_body={"thinking": {"type": mode}},
             # "proxy-managed" signals to the OpenAI SDK that auth is handled externally.
             api_key="proxy-managed",
             base_url=f"{proxy_url}/v1",

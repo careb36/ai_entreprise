@@ -23,7 +23,8 @@ import json
 import os
 from urllib.parse import urlparse
 
-from upstream import UpstreamError
+import thinking
+from upstream import UpstreamError, check_openai_answer
 from usage import openai_reported_count, openai_text, with_usage
 
 CONNECTION_HEADER = "X-Provider-Connection"
@@ -90,10 +91,13 @@ def call(conn: dict, model: str, data: dict, post, timeout: float) -> tuple[dict
     A provider or transport error that echoes the key or a header value is
     redacted before it travels on: the proxy answers and the backend logs it.
     """
+    # DeepSeek's ``thinking`` field goes only to DeepSeek's own API, explicit.
+    host = (urlparse(conn["base_url"]).hostname or "").lower()
+    flavour = "deepseek" if host == "deepseek.com" or host.endswith(".deepseek.com") else "connection"
     try:
         status, result = post(
             conn["name"], model, f"{conn['base_url']}/chat/completions",
-            request_headers(conn), {**data, "model": model}, timeout,
+            request_headers(conn), {**thinking.prepare(flavour, data), "model": model}, timeout,
         )
     except UpstreamError as exc:
         clean = UpstreamError(
@@ -101,6 +105,6 @@ def call(conn: dict, model: str, data: dict, post, timeout: float) -> tuple[dict
             retriable=exc.retriable,
         )
         raise clean from None
-    if not result.get("choices"):
-        raise UpstreamError(conn["name"], model, status, "response contained no choices", retriable=False)
+    # No choices, or an empty answer, is a named error here as on every route.
+    check_openai_answer(conn["name"], model, status, result)
     return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))

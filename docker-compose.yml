@@ -116,7 +116,13 @@ services:
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
       NEBIUS_PROXY_URL: ${NEBIUS_PROXY_URL:-https://api.tokenfactory.nebius.com/v1}
-      LLM_UPSTREAM_TIMEOUT_SECONDS: ${LLM_UPSTREAM_TIMEOUT_SECONDS:-110}
+      # One budget for a chat call's provider calls; gunicorn's worker timeout
+      # (gunicorn.conf.py) and the backend's wait derive from it.
+      LLM_UPSTREAM_TIMEOUT_SECONDS: ${LLM_UPSTREAM_TIMEOUT_SECONDS:-300}
+      LLM_PROXY_WORKERS: ${LLM_PROXY_WORKERS:-2}
+      LLM_PROXY_THREADS: ${LLM_PROXY_THREADS:-8}
+      # auto (each call's own choice), on or off: DeepSeek's thinking mode.
+      LLM_THINKING: ${LLM_THINKING:-auto}
       # Empty: a failed request stays with its provider (DeepSeek Pro <-> Flash).
       LLM_FALLBACK_PROVIDERS: ${LLM_FALLBACK_PROVIDERS:-}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
@@ -190,6 +196,10 @@ services:
       NATS_TLS_KEY: ${NATS_BACKEND_TLS_KEY:+/etc/fabrique-nats/certs/${NATS_BACKEND_TLS_KEY}}
       LLM_PROXY_URL: http://llm-proxy:5100
       LLM_PROXY_INTERNAL_TOKEN: ${LLM_PROXY_INTERNAL_TOKEN:-}
+      # The same budget the proxy reads: the backend waits it plus 15 s.
+      LLM_UPSTREAM_TIMEOUT_SECONDS: ${LLM_UPSTREAM_TIMEOUT_SECONDS:-300}
+      LLM_THINKING: ${LLM_THINKING:-auto}
+      LLM_THINKING_RESERVE_TOKENS: ${LLM_THINKING_RESERVE_TOKENS:-16384}
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-false}

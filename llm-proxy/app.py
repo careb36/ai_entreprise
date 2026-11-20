@@ -35,6 +35,8 @@ import providers
 import requests  # noqa: F401 - tests replace requests.post through this module
 import routing
 import telemetry
+import thinking
+import timeouts
 import upstream
 from flask import Flask, jsonify, request
 from quota import (
@@ -58,10 +60,11 @@ QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
 # OpenAI-compatible API.  Overridable so a self-hosted Serverless Endpoint can
 # be pointed at without touching code.
 NEBIUS_PROXY_URL = os.getenv("NEBIUS_PROXY_URL", "https://api.tokenfactory.nebius.com/v1")
-# Upper bound for one chat request's provider calls, fallbacks included.  It
-# stays below the backend task client's 120 s timeout so the proxy answers
-# (with an error if need be) before the caller gives up on it.
-LLM_UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110"))
+# Upper bound for one chat request's provider calls, fallbacks and the retry
+# without thinking included (300 s by default, ``timeouts.py``).  gunicorn's
+# worker timeout and the backend client's wait are this plus a margin, so the
+# proxy answers (with a named ``upstream_timeout`` if need be) first.
+LLM_UPSTREAM_TIMEOUT_SECONDS = timeouts.upstream_timeout_seconds()
 # The other providers a failed request may move to, in order (issue #751).
 # Empty, the default: a request stays with its provider (DeepSeek Pro <-> Flash).
 LLM_FALLBACK_PROVIDERS = routing.parse_fallback_providers(os.getenv("LLM_FALLBACK_PROVIDERS", ""))
@@ -204,12 +207,13 @@ def _capabilities() -> dict:
 logger.info("Effective capabilities: %s", _capabilities())
 
 
-def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
+def _call_provider(provider: str, model: str, data: dict, timeout: float,
+                   structured: bool = False) -> tuple[dict, int]:
     # The key and URL are read here, at call time, so a test can replace them.
     key = _provider_key(provider)
     try:
         answer = providers.call_provider(
-            provider, model, data, timeout, api_key=key, base_url=_provider_url(provider))
+            provider, model, data, timeout, api_key=key, base_url=_provider_url(provider), structured=structured)
     except upstream.UpstreamError as exc:
         # A refusal that names the account is recorded; the error travels on
         # unchanged, so the fallback decides exactly as before.
@@ -222,10 +226,14 @@ def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tup
     return answer
 
 
-def _complete_with_fallback(provider: str, model: str, data: dict) -> tuple[dict, int, str, str, dict | None]:
+def _complete_with_fallback(provider: str, model: str, data: dict,
+                            structured: bool = False) -> tuple[dict, int, str, str, dict | None]:
     """The resolved model's answer, or a fallback's (``routing.complete_with_fallback``)."""
+    def call(p: str, m: str, d: dict, t: float) -> tuple[dict, int]:
+        return _call_provider(p, m, d, t, structured=structured)
+
     return routing.complete_with_fallback(
-        provider, model, data, call=_call_provider, targets=_fallback_targets, budget=LLM_UPSTREAM_TIMEOUT_SECONDS)
+        provider, model, data, call=call, targets=_fallback_targets, budget=LLM_UPSTREAM_TIMEOUT_SECONDS)
 
 
 # Refresh models once at startup; background thread refreshes every hour.
@@ -329,12 +337,16 @@ def chat_completions():
         }), 400
 
     provider, model = resolved
+    # A structured call's answer is parsed: one whose reasoning ate the budget
+    # is retried with thinking off (``thinking.py``).
+    structured = request.headers.get("X-LLM-Purpose", "").strip().lower() == thinking.STRUCTURED
     try:
         if conn:  # The company's own key: no fallback to the deployment's providers.
             result, tokens = connections.call(conn, model, data, upstream.post_upstream, LLM_UPSTREAM_TIMEOUT_SECONDS)
             served_provider, served_model, fallback_from = f"connection:{conn['name']}", model, None
         else:
-            result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
+            result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(
+                provider, model, data, structured)
     except upstream.UpstreamError as exc:
         track_usage_in_db(bu_id, upstream.failed_tokens(exc))
         return jsonify(upstream.error_body(exc, requested)), 429 if exc.status == 429 else 502

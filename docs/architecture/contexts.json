@@ -653,6 +653,9 @@
       "test_deepseek_only.py": [
         "management"
       ],
+      "test_deepseek_thinking.py": [
+        "loop"
+      ],
       "test_delivery_tests.py": [
         "evidence",
         "loop"

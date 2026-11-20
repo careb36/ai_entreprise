@@ -101,6 +101,8 @@ def probe_call(model: str, role: str, company_id: int, bu_id: int | None) -> dic
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.max_tokens, client.company_id = 1, company_id
+    # One token cannot hold reasoning and an answer: thinking off.
+    client.structured = True
     client.timeout = CREDIT_PROBE_TIMEOUT_SECONDS
     return client.chat(
         messages=[{"role": "user", "content": "Reply with OK."}],

@@ -40,7 +40,7 @@ class _ByModel:
         self.answers = answers
         self.calls = []
 
-    def __call__(self, url, headers=None, json=None, timeout=None):
+    def __call__(self, url, headers=None, json=None, timeout=None, **_):
         assert "deepseek" in url, f"a request left DeepSeek: {url}"
         self.calls.append(json["model"])
         return self.answers[json["model"]]

@@ -53,7 +53,50 @@ def _client(po: dict[str, Any]) -> LLMProxyClient:
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
     client.company_id = po.get("company_id")
+    # The plan is parsed as JSON: thinking off (services/models/thinking.py).
+    client.structured = True
     return client
+
+
+def _model_failure(result: dict[str, Any]) -> str | None:
+    """The ``model_error`` detail of an answer that cannot be a plan, or ``None``.
+
+    The detail starts with the named reason as observed: the proxy's
+    (``empty_content_reasoning_exhausted``, ``empty_content``,
+    ``upstream_timeout``), the client's (``proxy_read_timeout``,
+    ``proxy_connection_lost``), or ``empty_content`` for a 2xx answer with no
+    text, which is never parsed as an empty plan.
+    """
+    if result.get("error"):
+        body = result.get("detail") if isinstance(result.get("detail"), dict) else {}
+        named = body.get("reason") or result.get("reason")
+        message = str(body.get("message") or result["error"])[:500]
+        if not named or message.startswith(f"{named}:"):
+            return message
+        return f"{named}: {message}"
+    choice = (result.get("choices") or [{}])[0] or {}
+    content = (choice.get("message") or {}).get("content") or ""
+    if not str(content).strip():
+        finish = choice.get("finish_reason") or "none"
+        return f"empty_content: the answer had no text (finish_reason={finish})"
+    return None
+
+
+def _unparseable(exc: Exception, raw: str) -> str:
+    """The ``unparseable`` detail: the parse error and the answer's length."""
+    return f"{type(exc).__name__}: {exc} (answer of {len(raw)} characters)"
+
+
+def _foundation_fallback(
+    company_name: str, agents: list[dict[str, Any]], reason: str, detail: str
+) -> dict[str, Any]:
+    """The deterministic foundation plan, with why the model's was not used."""
+    logger.warning("PO foundation plan not used (%s): %s", reason, detail)
+    return {
+        "goal": f"Establish documentation and configuration foundations for {company_name}",
+        "tasks": _filter_fallback_tasks(agents),
+        "planner_fallback": {"reason": reason, "detail": detail},
+    }
 
 
 # Public API
@@ -109,6 +152,7 @@ def plan_foundation_sprint(
 
     logger.info(f"PO planning foundation sprint with model={po_model}")
 
+    raw = ""
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -116,12 +160,9 @@ def plan_foundation_sprint(
             role="PO",
         )
 
-        if result.get("error"):
-            logger.warning(f"LLM error during sprint planning: {result['error']}")
-            return {
-                "goal": f"Establish documentation and configuration foundations for {company_name}",
-                "tasks": _filter_fallback_tasks(agents),
-            }
+        failure = _model_failure(result)
+        if failure:
+            return _foundation_fallback(company_name, agents, "model_error", failure)
 
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
 
@@ -167,11 +208,9 @@ def plan_foundation_sprint(
         return {"goal": goal, "tasks": validated}
 
     except (json.JSONDecodeError, KeyError, IndexError) as e:
-        logger.warning(f"Failed to parse PO sprint plan: {e}")
-        return {
-            "goal": f"Establish documentation and configuration foundations for {company_name}",
-            "tasks": _filter_fallback_tasks(agents),
-        }
+        return _foundation_fallback(
+            company_name, agents, "unparseable", _unparseable(e, raw)
+        )
     except Exception as e:  # noqa: BLE001 - Planning failures use the deterministic fallback.
         logger.error(f"Unexpected error in sprint planning: {e}")
         return {
@@ -229,6 +268,7 @@ def _plan_with_po(
         """The deterministic plan, with why the backend saw no usable answer."""
         plan = finish(fallback(roster, normalized_scope))
         plan["planner_fallback"] = {"reason": reason, "detail": detail}
+        logger.warning("PO %s plan not used (%s): %s", label, reason, detail)
         return plan
 
     if not po_model:
@@ -253,13 +293,14 @@ def _plan_with_po(
         po_model,
         normalized_scope,
     )
+    raw = ""
     try:
         result = _client(po).chat(
             messages=[{"role": "user", "content": prompt}], model=po_model, role="PO"
         )
-        if result.get("error"):
-            logger.warning("LLM error during %s planning: %s", label, result["error"])
-            return fell_back("model_error", str(result["error"]))
+        failure = _model_failure(result)
+        if failure:
+            return fell_back("model_error", failure)
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         cleaned = raw.strip()
         if cleaned.startswith("```"):
@@ -285,7 +326,6 @@ def _plan_with_po(
             )
         validated = validated[:item_limit]
         if len(validated) < 2:
-            logger.warning("Planner returned too few valid %s tasks", label)
             return fell_back(
                 "too_few_tasks",
                 f"The answer held {len(validated)} usable task(s); a plan needs 2.",
@@ -300,10 +340,9 @@ def _plan_with_po(
             }
         )
     except (json.JSONDecodeError, KeyError, IndexError, AttributeError) as exc:
-        logger.warning("Failed to parse %s sprint plan: %s", label, exc)
-        return fell_back("unparseable", f"{type(exc).__name__}: {exc}")
+        return fell_back("unparseable", _unparseable(exc, raw))
     except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
-        logger.error("Unexpected error planning %s sprint: %s", label, exc)
+        logger.exception("Unexpected error planning %s sprint", label)
         return fell_back("unexpected_error", f"{type(exc).__name__}: {exc}")
 
 
