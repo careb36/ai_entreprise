@@ -19,6 +19,7 @@ from services.evidence import (
     criteria_tests,
     grounding,
     protected_check,
+    required_checks,
     risk,
     secops_checks,
     security_probe,
@@ -384,6 +385,18 @@ def _declared_files(artifact: str | None) -> list[dict]:
     return parse_file_manifest(artifact or "")
 
 
+def _changed_paths(
+    run: AgentRun, evidence: dict | None, delivered: list[dict]
+) -> list[str]:
+    """Every path the delivery changes: declared, delivered or reported written."""
+    paths = [p for p in (run.claims or {}).get("files") or [] if isinstance(p, str)]
+    paths += [f.get("path") for f in delivered if isinstance(f, dict)]
+    writes = (evidence or {}).get("workspace_writes")
+    if isinstance(writes, list):
+        paths += [w.get("path") for w in writes if isinstance(w, dict)]
+    return [p for p in paths if isinstance(p, str) and p]
+
+
 def verify_agent_run(
     session: Session, run: AgentRun, evidence: dict | None
 ) -> Verification:
@@ -493,13 +506,19 @@ def verify_agent_run(
     if guard is not None and guard["outcome"] == VERDICT_UNVERIFIABLE:
         tier_check = risk.held_for_a_person(tier_check, protected_check.UNAVAILABLE)
     checks.append(tier_check)
+    # What the delivery had to show, whatever ran (``required_checks``): a
+    # required check that did not run is unverifiable, never a silent pass.
+    changed = _changed_paths(run, evidence, delivered)
+    checks.extend(required_checks.missing(changed, evidence, checks))
     verdict = aggregate_verdict(checks)
+    recorded = dict(evidence) if evidence else {}
+    recorded["verdict_policy"] = required_checks.policy(changed)
     verification = Verification(
         company_id=run.company_id,
         agent_run_id=run.id,
         verdict=verdict,
         checks=checks,
-        evidence=evidence,
+        evidence=recorded,
     )
     session.add(verification)
     session.flush()

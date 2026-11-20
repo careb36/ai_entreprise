@@ -14,6 +14,7 @@ import grounding_signatures_helpers
 import pytest
 import signatures as daemon_signatures  # the daemon's module, on sys.path via conftest
 import worker_stages
+from _verdicts import assert_verified_but_for_tests
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
@@ -154,7 +155,7 @@ def test_a_delivery_calling_project_code_wrongly_is_verified_with_the_finding(
         {"path": "shop/pricing.py", "names": ["price"]}
     ]
     verification = _verification(db, item["id"])
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     record = verification.evidence["signatures"]
     assert record["observed"] is True and record["files"][0]["sha256"]
     grounded = {c["name"]: c for c in verification.checks}["grounded"]
@@ -178,7 +179,7 @@ def test_an_older_daemon_leaves_the_signatures_not_observed(
     asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
 
     verification = _verification(db, item["id"])
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     record = verification.evidence["signatures"]
     assert record["observed"] is False and "older daemon" in record["reason"]
     grounded = {c["name"]: c for c in verification.checks}["grounded"]

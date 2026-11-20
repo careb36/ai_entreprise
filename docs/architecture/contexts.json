@@ -1105,6 +1105,9 @@
         "evidence",
         "management"
       ],
+      "test_required_checks.py": [
+        "evidence"
+      ],
       "test_review_digest.py": [
         "loop"
       ],
