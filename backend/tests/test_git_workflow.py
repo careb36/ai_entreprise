@@ -17,6 +17,7 @@ from pathlib import Path
 import auth_tokens
 import pytest
 import worker_stages
+from _verdicts import assert_verified_but_for_tests
 from config import settings
 from models import Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
@@ -351,7 +352,7 @@ def test_a_task_delivered_with_the_workflow_lands_on_its_branch_and_is_verified(
         verification = session.exec(
             select(Verification).where(Verification.agent_run_id == run.id)
         ).one()
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     info = verification.evidence["git"]
     assert git(repo, "rev-parse", f"fabrique/task-{item.id}") == info["commit"]
     assert verification.evidence["workspace_root"] == info["worktree"]

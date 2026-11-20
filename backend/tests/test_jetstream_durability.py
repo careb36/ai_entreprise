@@ -21,6 +21,7 @@ from uuid import uuid4
 import nats_client as nats_client_module
 import pytest
 import worker_stages
+from _verdicts import assert_verified_but_for_tests
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
@@ -385,7 +386,7 @@ def test_daemon_report_for_a_queued_delivery_verifies_the_run(db, tmp_path):
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     checks = {c["name"]: c for c in verification.checks}
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     assert checks["files_written"]["outcome"] == "pass"
     assert "delivery_queued" not in verification.evidence
     assert verification.evidence["delivered_after_queue"] is True
@@ -461,7 +462,7 @@ def test_report_arriving_while_the_job_is_published_is_not_lost(db, tmp_path):
     asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     assert worker_record._delivery_gate(sprint["company_id"], item["id"]) is None
 
 

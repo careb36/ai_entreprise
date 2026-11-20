@@ -276,7 +276,16 @@ CASES: tuple[Case, ...] = (
             "files": ["backend/app/auth.py"],
             "risk": {"tier": "low", "reason": "cosmetic"},
         },
-        evidence=_writes("backend/app/auth.py"),
+        # With the daemon's passing test run: a code change needs one to be
+        # verified at all (``services/evidence/required_checks.py``).
+        evidence={
+            **_writes("backend/app/auth.py"),
+            "test_run": {
+                "command": "pytest",
+                "exit_code": 0,
+                "output_tail": "3 passed",
+            },
+        },
         # The verdict may stand: the tier is a classification, not a verdict,
         # and a high tier is what sends the delivery to a person instead.
         accepted=VERIFIED,

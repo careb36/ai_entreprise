@@ -11,6 +11,7 @@ spellings (``Dev``, ``BackendDev``, ``Data``) read as aliases.
 import asyncio
 
 import pytest
+from _verdicts import assert_verified_but_for_tests
 from config import settings
 from models import Company
 from services.contracts import roles
@@ -155,7 +156,7 @@ def test_a_coding_agent_delivers_files_verified_exactly_like_the_developer(
     assert (project / "src" / "auth" / "login.py").read_text().startswith("def login(")
     run, verification, comments = _latest(db, item["id"])
     assert run.claims["files"] == ["src/auth/login.py", "tests/test_login.py"]
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     outcomes = {c["name"]: c["outcome"] for c in verification.checks}
     assert outcomes["files_written"] == "pass"
     assert comments[-1]["text"].startswith(f"Delivered to {project}")

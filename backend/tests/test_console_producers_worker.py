@@ -87,8 +87,13 @@ def test_a_console_producer_delivers_what_the_daemon_observed_and_it_is_verified
     assert generate["files"][0]["source"] == "console_producer"
     [(run, verification)] = _runs(world["engine"], item["id"])
     assert run.producer == "le-fabrique-task-worker" and run.model is None
-    assert verification.verdict == "verified", [
+    # Every check the console run produced passes; the verdict waits on a
+    # test run, which this deployment has off (issue #766).
+    assert verification.verdict == "unverifiable", [
         (c["name"], c["outcome"], c.get("observation")) for c in verification.checks
+    ]
+    assert [c["name"] for c in verification.checks if c["outcome"] != "pass"] == [
+        "tests_run"
     ]
     assert _check(verification, "files_written")["outcome"] == "pass"
     console = _check(verification, "console_run")
