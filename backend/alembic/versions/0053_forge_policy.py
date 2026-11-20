@@ -42,9 +42,7 @@ def upgrade() -> None:
     text = sqlmodel.sql.sqltypes.AutoString
     with op.batch_alter_table("companies", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column(
-                "forge_policy", text(), nullable=False, server_default="none"
-            )
+            sa.Column("forge_policy", text(), nullable=False, server_default="none")
         )
     # The companies that exist now keep what they had: fetch and publish.
     op.execute(sa.text("UPDATE companies SET forge_policy = 'publish'"))

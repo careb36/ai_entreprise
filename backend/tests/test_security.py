@@ -41,7 +41,8 @@ def test_health_check_not_rate_limited(test_client):
     """Verify health check endpoint is accessible."""
     response = test_client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    # Degraded is still up: the suite runs with tests off (issue #766).
+    assert response.json()["status"] in ("healthy", "degraded")
 
 
 def test_security_headers_on_error_responses(test_client):

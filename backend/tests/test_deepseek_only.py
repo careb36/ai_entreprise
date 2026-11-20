@@ -405,7 +405,9 @@ def test_the_deep_health_route_serves_the_capabilities(deepseek_only, monkeypatc
 
     from app.main import app
 
-    async def fake_aggregate(nats_client, nats_state=None, backend_capabilities=None):
+    async def fake_aggregate(
+        nats_client, nats_state=None, backend_capabilities=None, verification_state=None
+    ):
         return {
             "status": "healthy",
             "components": {},

@@ -81,16 +81,17 @@ def upgrade() -> None:
     with op.batch_alter_table("sso_connections", schema=None) as batch:
         batch.add_column(
             sa.Column(
-                "groups_enabled", sa.Boolean(), nullable=False, server_default=sa.false()
+                "groups_enabled",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.false(),
             )
         )
         batch.add_column(
             sa.Column("groups_claim", text(), nullable=False, server_default="groups")
         )
         batch.add_column(
-            sa.Column(
-                "group_role_cap", text(), nullable=False, server_default="Viewer"
-            )
+            sa.Column("group_role_cap", text(), nullable=False, server_default="Viewer")
         )
         batch.create_check_constraint(
             CAP_CHECK, "group_role_cap IN ('Viewer', 'Manager')"
