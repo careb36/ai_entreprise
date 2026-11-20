@@ -3437,7 +3437,15 @@
       }
     },
     "manifest": "Signed manifest",
-    "manifestError": "Could not download the manifest: {{message}}"
+    "manifestError": "Could not download the manifest: {{message}}",
+    "export": {
+      "docx": "DOCX",
+      "pdf": "PDF/A",
+      "manifest": "Signed manifest of the {{format}} export",
+      "manifestHint": "The export's signed manifest: the file's sha256 beside the pack's",
+      "unavailable": "Not available on this server: {{reason}}",
+      "error": "Could not export the pack: {{message}}"
+    }
   },
   "chat": {
     "title": "Chat approvals",

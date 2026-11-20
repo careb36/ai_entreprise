@@ -368,10 +368,20 @@
     "GET /v1/companies/{company_id}/wiki/{slug}/versions": {
       "access": "Viewer"
     },
+    "GET /v1/documentation/exports": {
+      "access": "authenticated",
+      "why": "Which export formats the deployment can render; no company's data."
+    },
     "GET /v1/documentation/{pack_id}": {
       "access": "Viewer"
     },
     "GET /v1/documentation/{pack_id}/documents/{key}": {
+      "access": "Viewer"
+    },
+    "GET /v1/documentation/{pack_id}/export/{fmt}": {
+      "access": "Viewer"
+    },
+    "GET /v1/documentation/{pack_id}/export/{fmt}/manifest": {
       "access": "Viewer"
     },
     "GET /v1/documentation/{pack_id}/manifest": {
