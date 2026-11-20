@@ -336,6 +336,8 @@ services:
       RETENTION_AGENT_RUNS_DAYS: ${RETENTION_AGENT_RUNS_DAYS:-0}
       RETENTION_KPI_TURNS_DAYS: ${RETENTION_KPI_TURNS_DAYS:-0}
       RETENTION_GLASSROOM_DAYS: ${RETENTION_GLASSROOM_DAYS:-0}
+      # Personal notifications: never unbounded (1 to 365; 0 keeps the default).
+      RETENTION_NOTIFICATIONS_DAYS: ${RETENTION_NOTIFICATIONS_DAYS:-90}
     networks:
       - factory-network
     depends_on:

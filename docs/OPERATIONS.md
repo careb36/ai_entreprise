@@ -505,6 +505,39 @@ As a last resort the operator can switch the requirement off in the
 database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
 (that change is not in the audit chain; record it in the incident notes).
 
+## Personal notifications
+
+Each person has their own notifications (issue #683): the bell in the top
+bar counts what is unread, and `/notifications` lists, marks read and
+snoozes them and holds the person's preferences per kind. What writes them:
+
+| Kind | Who receives it | Written when | Security notice |
+|------|-----------------|--------------|-----------------|
+| `sso_break_glass_exclusion`, `sso_break_glass_lifted` | every other Owner | an Owner takes a person out of an SSO-managed team, or lifts that exclusion (also queued on NATS `company.owner_notice`) | yes |
+| `sso_domain_lapsed` | every Owner | a re-check (or a newer proof's conflict check) unverifies a verified SSO domain | yes |
+| `review_requested` | Managers and Owners | QA approved a high-risk delivery that waits for a person (`risk_hold`) | no |
+| `integration_waiting` | Managers and Owners | a sprint's integration stopped and waits for a person (conflict, failing suite, missing branch, daemon unreachable or refused) | no |
+
+- **A security notice cannot be muted** in the app; a person can turn off
+  only its email, and snooze it for at most 24 hours (other kinds: 30 days).
+- **Email** is a copy, sent through the `SMTP_*` settings only while
+  `SMTP_HOST` is set, on for security notices and off for the others by
+  default. It names the kind and nothing else (no task, company or domain).
+  Without SMTP nothing is queued and nothing waits; a failing mail server
+  is retried by the outbox (up to 5 attempts, then the row is `failed`:
+  `SELECT id, retry_count FROM outbox_events WHERE event_type =
+  'notification_email' AND status = 'failed';`).
+- **What a row holds**: the receiver, the company, the kind, a reference to
+  the subject and the integer ids of its link; never a title, a reason or an
+  address. A person who leaves a company stops seeing its notifications at
+  once, and the janitor deletes them on its next run.
+- **Retention**: `RETENTION_NOTIFICATIONS_DAYS` (90), read or not; it is
+  never unbounded (see Retention below).
+- **Nobody received a break-glass notice**: the company has a single Owner
+  (the actor is never notified of their own action), or every other Owner
+  left. The audit row `sso_team_exclusion_created` names the Owners notified
+  (`owners_notified`).
+
 ## Approvals in Slack and Teams
 
 A delivery held for a person's acceptance (the risk hold) can be approved or
@@ -1327,6 +1360,7 @@ deleted with their runs or not at all.
 | `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded versions of a run, with their verifications | the latest version of each run (the evidence of record), and any version a person reviewed, commented on, approved or published |
 | `RETENTION_KPI_TURNS_DAYS` | 0 | KPI turn rows of `audit_log` outside a hash chain (rows without a company, or older than the chain) | any row of a company's chain, and any row a run, verification, approval, review or publication points at |
 | `RETENTION_GLASSROOM_DAYS` | 0 | stored task events of completed and cancelled sprints | the events of open sprints. The live Glassroom keeps its last 50 events per sprint in memory and replays the board, which is never deleted |
+| `RETENTION_NOTIFICATIONS_DAYS` | 90 (never unbounded: `0` or less keeps 90, over 365 is cut to 365) | personal notifications older than that, read or not, and at once those of a person no longer a member of the company | nothing else: a notification is a pointer, its subject is never touched |
 
 Once the database grows, `RETENTION_AGENT_RUNS_DAYS=90` and
 `RETENTION_GLASSROOM_DAYS=90` are reasonable. The janitor logs how many

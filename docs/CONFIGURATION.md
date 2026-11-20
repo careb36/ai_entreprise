@@ -801,6 +801,13 @@ Copy `.env.example` to `.env` and fill in:
   There is no audit retention: `docs/OPERATIONS.md` says how to archive a
   chain with its rows. `BACKUP_DIR`, `BACKUP_KEEP_DAYS` (14) and
   `PG_CONTAINER` steer `scripts/backup.sh`.
+- `RETENTION_NOTIFICATIONS_DAYS` (90) — how long the janitor keeps a
+  personal notification (issue #683), read or not; a person's notifications
+  in a company they left go at the next run whatever their age. Never
+  unbounded: `0`, a negative or a malformed value keeps 90, and anything
+  over 365 is cut to 365. The email copy of a notification uses the `SMTP_*`
+  settings above and is sent only when `SMTP_HOST` is set; without it the
+  notification is still shown in the app and nothing waits on mail.
 - `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (8) — the
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and

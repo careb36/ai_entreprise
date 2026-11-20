@@ -38,6 +38,7 @@ from services.integrations import (
     anchoring,
     chat_approvals,
     chat_regressions,
+    person_notices,
     webhooks,
 )
 
@@ -119,6 +120,9 @@ async def process_outbox(nats_client) -> None:
                         elif event_type in chat_regressions.EVENT_TYPES:
                             # Regressions, information only (issue #682).
                             await chat_regressions.deliver(session, payload, event_id)
+                        elif event_type in person_notices.EVENT_TYPES:
+                            # A personal notification's email copy (issue #683).
+                            await person_notices.deliver_email(session, payload)
 
                         # Mark the event as successfully delivered.
                         session.exec(

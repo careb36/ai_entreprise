@@ -8,8 +8,10 @@ maintenance tasks every 24 hours:
    older than ``RETENTION_OUTBOX_DAYS`` (7), and, when their settings are
    above 0, superseded run versions (``RETENTION_AGENT_RUNS_DAYS``), KPI
    turn rows outside the audit hash chain (``RETENTION_KPI_TURNS_DAYS``) and
-   stored task events of closed sprints (``RETENTION_GLASSROOM_DAYS``). A row
-   of a company's audit chain is never deleted.
+   stored task events of closed sprints (``RETENTION_GLASSROOM_DAYS``), and
+   personal notifications past ``RETENTION_NOTIFICATIONS_DAYS`` (90, never
+   unbounded) or of a person who left the company. A row of a company's
+   audit chain is never deleted.
 
 2. **Vector index rebuild** — runs ``REINDEX INDEX CONCURRENTLY`` on the
    ``vector_memory_idx`` HNSW/IVFFlat index so that ANN search stays fast
