@@ -1,0 +1,3 @@
+Added
+
+* **Tasks that likely repeat each other are detected (issue #766).** Sprint 3 planned "Deliver SSO tests with fake DNS and clock plus docs…" and carried over "Add SSO tests with fake DNS and clock, plus … docs" in the same request, and both ran. `services/tasks/similarity.py` scores two titles without a model (Jaccard of their content words, threshold 0.7, calibrated on the recorded tasks). The match is a claim: a *proposed* `duplicate` relation by `rule:similar_title` that a person confirms or rejects. A carried task that repeats one the new sprint already holds is blocked instead of queued, so the work is done once; two tasks of one plan only get the proposed relation.

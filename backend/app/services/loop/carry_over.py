@@ -12,6 +12,11 @@ that blocks again stays for a person. The ScrumMaster's triage of the block
 (``services.learning.scrum_master``) is honoured: a task it left for a person is not
 carried on the company's own, and its brief for the next attempt travels
 with the new task into the agent's prompt.
+
+A carried task whose title likely repeats a task the new sprint already holds
+(``services.tasks.similarity``; the plan is written before the carry-over) is
+not queued: it is blocked with a proposed ``duplicate`` relation, so the work
+is done once and a person confirms or rejects the match (issue #766).
 """
 
 from datetime import UTC, datetime
@@ -36,6 +41,7 @@ REASON_LIMIT = 500
 # (``carry_over`` rule, issue #394), and a person's note taking it back.
 CARRY_MARK_PREFIX = "Marked for carry-over by the Manager agent"
 CARRY_UNMARK_PREFIX = "Carry-over mark taken back"
+DUPLICATE_HOLD_PREFIX = "Likely duplicate of"
 
 
 class CarryOverError(ValueError):
@@ -159,6 +165,13 @@ def carry_over(
 
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
+    # The tasks the new sprint already holds (its plan's, flushed by the
+    # caller): a clone that repeats one is not queued (issue #766).
+    already = list(
+        session.exec(
+            select(BacklogItem).where(BacklogItem.sprint_id == new_sprint.id)
+        ).all()
+    )
     triages = scrum_master.triages_for(
         session,
         [item for item, _, _ in originals],
@@ -230,7 +243,10 @@ def carry_over(
             confirmed_by=relations.RULE_CARRY_OVER,
         )
 
-        if not held[clone.id]:
+        duplicate = relations.best_duplicate(clone, already)
+        if duplicate is not None:
+            _hold_as_duplicate(session, clone, *duplicate, now)
+        elif not held[clone.id]:
             session.add(
                 OutboxEvent(
                     aggregate_type="backlog_item",
@@ -276,6 +292,32 @@ def carry_over(
             )
             session.add(clone)
     return created
+
+
+def _hold_as_duplicate(
+    session: Session,
+    clone: BacklogItem,
+    other: BacklogItem,
+    score: float,
+    now: datetime,
+) -> None:
+    """Block a carried task that likely repeats one the sprint already has,
+    with a proposed ``duplicate`` relation a person confirms or rejects."""
+    relations.propose_likely_duplicate(session, clone, other, score)
+    task_events.record(
+        session,
+        clone,
+        "blocked",
+        task_events.SYSTEM,
+        status="blocked",
+        text=(
+            f'{DUPLICATE_HOLD_PREFIX} task {other.id} ("{other.title}", title '
+            f"similarity {score:.2f}): not queued, so the work is done once. "
+            "Confirm the duplicate relation to keep it closed, or reject it and "
+            "move this task to To do."
+        ),
+        created_at=now.isoformat(),
+    )
 
 
 def previous_attempt_context(item: dict[str, Any] | BacklogItem) -> str:
