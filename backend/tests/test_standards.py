@@ -4,6 +4,13 @@ without a model: a secret in a delivered file refutes it, code without a
 test, a TODO left behind and an unpinned dependency are findings; a
 specification that says nothing about a quality area gets a warning;
 ``GET /v1/standards`` serves the catalogue and ``docs/STANDARDS.md`` lists it.
+
+A company's own standards (issue #700, ``services.evidence.company_standards_check``)
+are judged at the end: each kind a pure function of observations; written and
+added paths, declared paths (which add to a match and never satisfy one),
+the bytes read back and the baselines read at the activated commit. What
+cannot be judged is ``unverifiable``, never ``pass``; nothing a producer
+claims is read.
 """
 
 import re
@@ -12,7 +19,11 @@ from pathlib import Path
 import pytest
 import worker_stages
 from models.agent_run import AgentRun
+from services.contracts import company_regex
+from services.contracts import company_standards as cs
+from services.evidence import company_standards_check as check
 from services.evidence import standards, verification
+from services.evidence.company_standards_check import Observation
 from services.loop.worker import record as worker_record
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "STANDARDS.md"
@@ -231,3 +242,251 @@ def test_the_catalogue_is_served_and_documented(test_client):
     for s in standards.STANDARDS:
         assert f"**{s['id']}**" in doc, f"{s['id']} is not in docs/STANDARDS.md"
         assert s["title"] in doc
+
+
+# -- A company's own standards (issue #700) ------------------------------------
+
+
+def _std(kind: str, **fields) -> dict:
+    return {
+        "id": "ACME-X-1",
+        "kind": kind,
+        "severity": "blocking",
+        "paths": [],
+        **fields,
+    }
+
+
+def _one(standard, obs, commands=None):
+    return check.evaluate_one(standard, obs, commands=commands)
+
+
+# -- forbid_pattern -------------------------------------------------------------
+
+
+PATTERN = _std(
+    "forbid_pattern",
+    pattern=r"StatusPill",
+    files=["src/pages/**/*.tsx"],
+    **{"except": ["**/*.test.tsx"]},
+)
+
+
+def test_a_forbidden_pattern_fails_citing_file_and_line():
+    obs = Observation(
+        written=["src/pages/A.tsx", "src/pages/A.test.tsx"],
+        files={
+            "src/pages/A.tsx": b"import x\nimport { StatusPill }\n",
+            "src/pages/A.test.tsx": b"StatusPill",
+        },
+    )
+    entry = _one(PATTERN, obs)
+    assert entry["outcome"] == "fail"
+    assert entry["observation"]["matches"] == [{"path": "src/pages/A.tsx", "line": 2}]
+
+
+def test_a_file_not_read_back_is_unverifiable_never_a_pass():
+    obs = Observation(written=["src/pages/A.tsx"], files={"src/pages/A.tsx": None})
+    entry = _one(PATTERN, obs)
+    assert (
+        entry["outcome"] == "unverifiable"
+        and entry["observation"]["reason"] == "unread"
+    )
+
+
+def test_the_byte_budget_spent_is_unverifiable(monkeypatch):
+    monkeypatch.setattr(check, "STANDARD_BUDGET", 10)
+    obs = Observation(written=["src/pages/A.tsx"], files={"src/pages/A.tsx": b"x" * 11})
+    assert _one(PATTERN, obs)["observation"]["reason"] == "budget"
+
+
+def test_without_re2_a_pattern_is_unverifiable(monkeypatch):
+    monkeypatch.setattr(company_regex, "_re2", None)
+    obs = Observation(written=["src/pages/A.tsx"], files={"src/pages/A.tsx": b"ok"})
+    assert _one(PATTERN, obs)["observation"]["reason"] == company_regex.UNAVAILABLE
+
+
+def test_a_backtracking_pattern_finishes_on_a_hostile_file():
+    hostile = _std("forbid_pattern", pattern="(a+)+$", files=["**"])
+    obs = Observation(written=["x.txt"], files={"x.txt": b"a" * 200_000 + b"!"})
+    assert _one(hostile, obs)["outcome"] == "pass"
+
+
+# -- require_together -----------------------------------------------------------
+
+
+I18N = _std(
+    "require_together", when=["i18n/en.json"], then=["i18n/es.json"], on="changed"
+)
+
+
+def test_require_together_fails_without_the_companion():
+    entry = _one(I18N, Observation(written=["i18n/en.json"]))
+    assert entry["outcome"] == "fail" and entry["observation"]["when"] == [
+        "i18n/en.json"
+    ]
+
+
+def test_require_together_passes_with_both_observed():
+    assert (
+        _one(I18N, Observation(written=["i18n/en.json", "i18n/es.json"]))["outcome"]
+        == "pass"
+    )
+
+
+def test_a_declared_path_adds_to_when_and_never_satisfies_then():
+    obs = Observation(written=[], declared=["i18n/en.json", "i18n/es.json"])
+    assert _one(I18N, obs)["outcome"] == "fail"
+
+
+def test_on_added_counts_only_added_paths():
+    doc = _std(
+        "require_together",
+        when=["tests/test_*.py"],
+        then=["docs/TESTING.md"],
+        on="added",
+    )
+    assert _one(doc, Observation(written=["tests/test_a.py"]))["outcome"] == "pass"
+    added = Observation(written=["tests/test_a.py"], added=["tests/test_a.py"])
+    assert _one(doc, added)["outcome"] == "fail"
+
+
+# -- max_lines ------------------------------------------------------------------
+
+
+SIZE = _std("max_lines", limit=3, files=["**/*.py"], baseline="sizes.json")
+
+
+def test_a_file_over_the_limit_fails():
+    obs = Observation(
+        written=["a.py"], files={"a.py": b"1\n2\n3\n4"}, baselines={"sizes.json": {}}
+    )
+    entry = _one(SIZE, obs)
+    assert entry["outcome"] == "fail" and entry["observation"]["over"][0]["lines"] == 4
+
+
+def test_the_baseline_allows_a_file_that_did_not_grow():
+    obs = Observation(
+        written=["a.py"],
+        files={"a.py": b"1\n2\n3\n4\n"},
+        baselines={"sizes.json": {"a.py": 4}},
+    )
+    assert _one(SIZE, obs)["outcome"] == "pass"
+    grown = Observation(
+        written=["a.py"],
+        files={"a.py": b"1\n2\n3\n4\n5\n"},
+        baselines={"sizes.json": {"a.py": 4}},
+    )
+    assert _one(SIZE, grown)["outcome"] == "fail"
+
+
+def test_an_unread_baseline_is_unverifiable():
+    obs = Observation(
+        written=["a.py"],
+        files={"a.py": b"1\n2\n3\n4\n"},
+        baselines={"sizes.json": None},
+    )
+    assert _one(SIZE, obs)["outcome"] == "unverifiable"
+
+
+@pytest.mark.parametrize(
+    "data,lines", [(b"", 0), (b"a", 1), (b"a\n", 1), (b"a\nb", 2), (b"\n\n", 2)]
+)
+def test_lines_are_counted_as_a_reader_counts_them(data, lines):
+    assert check.lines_of(data) == lines
+
+
+# -- forbid_path ----------------------------------------------------------------
+
+
+ENV = _std(
+    "forbid_path",
+    files=[".env", "**/.env", "**/.env.*"],
+    **{"except": ["**/.env.example"]},
+)
+
+
+def test_a_forbidden_path_written_or_declared_fails():
+    assert _one(ENV, Observation(written=["app/.env"]))["outcome"] == "fail"
+    assert _one(ENV, Observation(declared=[".env"]))["outcome"] == "fail"
+    assert _one(ENV, Observation(written=["app/.env.example"]))["outcome"] == "pass"
+
+
+def test_spelling_does_not_hide_a_forbidden_path():
+    assert _one(ENV, Observation(written=["app\\.env"]))["outcome"] == "fail"
+    assert _one(ENV, Observation(written=["./app/../.ENV"]))["outcome"] == "fail"
+
+
+# -- paths, commands, the order -------------------------------------------------
+
+
+def test_a_standard_whose_paths_are_not_touched_is_skipped():
+    scoped = {**ENV, "paths": ["backend/**"]}
+    assert _one(scoped, Observation(written=["frontend/.env"]))["outcome"] == "skipped"
+    assert (
+        _one(scoped, Observation(written=["frontend/.env"], declared=["backend/x"]))[
+            "outcome"
+        ]
+        == "fail"
+    )
+
+
+def _run(**fields):
+    return {
+        "exit_code": 0,
+        "sandbox": {"mode": "container"},
+        "output_sha256": "a" * 64,
+        **fields,
+    }
+
+
+@pytest.mark.parametrize(
+    "run,outcome,reason",
+    [
+        (None, "not_run", "run_by_the_loop_at_delivery"),
+        (_run(), "pass", None),
+        (_run(exit_code=1), "fail", None),
+        (_run(exit_code=127), "unverifiable", "not_runnable"),
+        (_run(exit_code=None), "unverifiable", "no_exit_status"),
+        (_run(timed_out=True), "unverifiable", "no_exit_status"),
+        (_run(refused=True), "unverifiable", "no_exit_status"),
+        (_run(sandbox={"mode": "host"}), "unverifiable", "host_sandbox"),
+    ],
+)
+def test_a_command_is_judged_by_its_observed_run_only(run, outcome, reason):
+    command = _std(
+        "command", command="make lint", guards=[{"path": "Makefile", "exclude": []}]
+    )
+    entry = _one(
+        command, Observation(written=["a.py"]), {"ACME-X-1": run} if run else None
+    )
+    assert entry["outcome"] == outcome
+    assert entry["observation"].get("reason") == reason
+
+
+def test_no_claim_field_is_read():
+    """T9: a producer's summary saying the standard passed changes nothing."""
+    obs = Observation(written=["app/.env"])
+    obs.claims = {"ACME-X-1": "pass"}  # type: ignore[attr-defined]
+    assert _one(ENV, obs)["outcome"] == "fail"
+
+
+def test_the_dry_run_names_what_fails_on_the_source_tree():
+    tree = ["app/.env", "src/pages/A.tsx", "i18n/en.json"]
+    standards = [
+        ENV,
+        {**PATTERN, "id": "ACME-UI-1", "severity": "finding"},
+        {**I18N, "id": "ACME-I18N-1"},
+    ]
+    assert check.dry_run_targets(standards, tree) == ["src/pages/A.tsx"]
+    obs = Observation(
+        written=tree, added=tree, files={"src/pages/A.tsx": b"StatusPill"}
+    )
+    summary = check.dry_run_summary(check.evaluate(standards, obs))
+    assert summary["fails_on_source"] == ["ACME-X-1", "ACME-UI-1", "ACME-I18N-1"]
+    assert summary["blocking_fails_on_source"] == ["ACME-X-1", "ACME-I18N-1"]
+
+
+def test_the_check_name_and_kinds_are_the_closed_list():
+    assert check.CHECK_NAME == "company_standards"
+    assert set(cs.IN_BACKEND_KINDS) | {"command"} == set(cs.KINDS)

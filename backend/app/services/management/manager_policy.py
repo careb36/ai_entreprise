@@ -116,6 +116,9 @@ RULE_DECISIONS = {
 # ``merge_self_change``: merging a kept self-improvement cycle into the
 # factory's own ``main`` is a person's (``services/management/rsi_cycle.py``,
 # decision 1 of ``docs/design/rsi-loop.md``).
+# ``change_standards``: activating, deactivating or reverting a company's
+# standards set (``services/platform/company_standards_setting.py``, issue
+# #700) is a signed-in Owner's, never the agent's, at any autonomy level.
 ALWAYS_ESCALATE = frozenset(
     {
         "cancel_sprint",
@@ -124,6 +127,7 @@ ALWAYS_ESCALATE = frozenset(
         "spend_above_budget",
         "change_protected_paths",
         "merge_self_change",
+        "change_standards",
     }
 )
 LOW_TIERS = ("low", "medium")

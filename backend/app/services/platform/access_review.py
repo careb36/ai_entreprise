@@ -38,7 +38,14 @@ from models import (
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from services.platform import api_tokens, sessions, sod, sso_group_review, teams
+from services.platform import (
+    api_tokens,
+    company_standards_review,
+    sessions,
+    sod,
+    sso_group_review,
+    teams,
+)
 from services.platform.agent_service import AgentService
 
 GRACE_DAYS = 14
@@ -210,14 +217,16 @@ def _tokens(session: Session, company_id: int, now: datetime, threshold: int):
 
 
 def listing(session: Session, company_id: int, now: datetime | None = None):
-    """What an Owner reviews now: members, working API tokens and what the SSO
-    group mapping keeps outside the IdP's say (issue #703, R25, R29)."""
+    """What an Owner reviews now: members, working API tokens, what the SSO
+    group mapping keeps outside the IdP's say (issue #703, R25, R29) and the
+    exceptions to a standard and single-Owner standards (issue #700)."""
     now = now or _now()
     threshold = sod.policy_of(session, company_id).inactive_days
     return {
         "members": _members(session, company_id, now, threshold),
         "tokens": _tokens(session, company_id, now, threshold),
         "sso": sso_group_review.listing(session, company_id, now),
+        "standards": company_standards_review.listing(session, company_id, now),
     }
 
 
@@ -281,7 +290,9 @@ def complete(
     """Record the review: every listed item decided, removals applied, audited."""
     now = now or _now()
     current = listing(session, company_id, now)
-    items = current["members"] + current["tokens"] + current["sso"]
+    items = (
+        current["members"] + current["tokens"] + current["sso"] + current["standards"]
+    )
     chosen = {(d["kind"], int(d["id"])): d["decision"] for d in decisions}
     if any(v not in DECISIONS for v in chosen.values()):
         raise ReviewRefused(422, "Each decision is confirm or remove.")
@@ -327,12 +338,16 @@ def complete(
             "removed": len(removed_users) + len(removed_tokens),
             "inactive": sum(1 for i in items if i["inactive"]),
             "sso": len(current["sso"]),
+            "standards": len(current["standards"]),
         },
         note=" ".join((note or "").split())[:NOTE_MAX] or None,
     )
     session.add(review)
     session.flush()
     sso_done = sso_group_review.apply(session, company_id, by, items, review.id)
+    standards_done = company_standards_review.apply(
+        session, company_id, by, items, review.id
+    )
     audit = AgentService().audit_interaction(
         session=session,
         company_id=company_id,
@@ -347,6 +362,7 @@ def complete(
             "removed_user_ids": removed_users,
             "revoked_token_ids": removed_tokens,
             **sso_done,
+            **standards_done,
         },
         decision_signature=None,
         cost_tokens=0,

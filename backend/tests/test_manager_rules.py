@@ -75,7 +75,7 @@ def daemon():
 def test_the_strict_rules_are_opt_in_and_the_confirmation_set_stays():
     assert sorted(manager_policy.ALWAYS_ESCALATE) == sorted(
         ["cancel_sprint", "delete_sprint", "change_autonomy", "spend_above_budget"]
-        + ["change_protected_paths", "merge_self_change"]
+        + ["change_protected_paths", "merge_self_change", "change_standards"]
     )
     for name in ("approve_specification", "approve_architecture", "accept_high_risk"):
         assert manager_policy.validate({"rules": [name]}).rules == [name]

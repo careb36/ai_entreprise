@@ -341,6 +341,18 @@
     "GET /v1/companies/{company_id}/stack_profile": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/standards": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/standards/exceptions": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/standards/versions": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/standards/versions/{version}": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/team_selection": {
       "access": "Viewer"
     },
@@ -751,6 +763,42 @@
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/sso/test": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/deactivate": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/exceptions": {
+      "access": "Owner",
+      "body": {
+        "standard_id": "STD-SEC-1",
+        "reason": "A vendored file trips the secret scanner.",
+        "compensating_control": "A person reviews each delivery by hand.",
+        "days": 30
+      }
+    },
+    "POST /v1/companies/{company_id}/standards/exceptions/{exception_id}/approve": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/exceptions/{exception_id}/confirm": {
+      "access": "Owner",
+      "body": {
+        "reason": "The company has one Owner for now."
+      }
+    },
+    "POST /v1/companies/{company_id}/standards/exceptions/{exception_id}/reject": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/exceptions/{exception_id}/revoke": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/import": {
+      "access": "Manager"
+    },
+    "POST /v1/companies/{company_id}/standards/versions/{version}/activate": {
+      "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/standards/versions/{version}/reject": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/teams": {

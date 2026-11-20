@@ -164,3 +164,39 @@ Beside the requirements, a specification says what it expects of security, perfo
 *Checked:* the specification check warns on a quality area left out and on a target without a number.  
 *Security target:* the project's security test plan (OWASP WSTG, issue #539) gives the security area a number a test can measure: the share of the WSTG tests that apply to the project observed passing. The documentation pack's check results report it (Risk, `measured`) beside the specification's own target; the Owner sets the threshold, the factory never does.
 
+## A company's own standards
+
+A company adds standards of its own; it never relaxes, waives or replaces one
+of the catalogue's above (issue #700, design in
+[`docs/design/COMPANY_STANDARDS.md`](design/COMPANY_STANDARDS.md)). They live
+in the company's repository, `.fabrique/standards.toml` (TOML only, read with
+`tomllib`; per-folder rules as `[folders."<path>"]` tables), and each is a
+check the factory runs without a model, of one of five kinds fixed in code:
+`command` (a command run in the delivery's sandbox, with the `guards` its
+verdict depends on), `forbid_pattern` (a regular expression, run on RE2 only),
+`require_together`, `max_lines` and `forbid_path`. A rule that needs judgement
+cannot be written as one: it stays a procedure. A file that names a catalogue
+id, anywhere, is refused whole.
+
+- **Import.** A Manager imports the file from the head of the company's
+  default branch, never a task branch; the backend hashes the bytes it
+  received and every guard's files, validates the file (each refusal named)
+  and dry-runs it against that commit, so a rule that would block every task
+  is seen first. The result is a draft; nothing in force changes.
+- **Activation.** A different person, a signed-in Owner, activates it
+  (four-eyes, whatever the company's segregation-of-duties mode). A company
+  with one Owner may activate its own import with a reason; the activation is
+  then flagged in the periodic access review until a second Owner confirms
+  it. A draft with a refusal is not activated, nor one holding a `command`
+  standard unless commands run in the `container` or `bwrap` sandbox. The
+  Manager agent never activates or deactivates a set (`change_standards` is
+  always escalated).
+- **Exceptions.** The only way around a standard, catalogue or company: an
+  Owner requests an exception with a reason, a compensating control and at
+  most 90 days, and a second Owner approves it (the only Owner may confirm
+  alone, flagged in the access review). It lapses on its own and is listed in
+  the access review, where it can be ended.
+
+The Verifier's `company_standards` check, which judges each delivery against
+the set in force beside the catalogue's `standards` check, comes with the
+next pull request of issue #700.

@@ -104,6 +104,7 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.company_standards import CompanyStandardException, CompanyStandardSet
 from models.documentation import DocumentationPack
 from models.event import TaskEvent
 from models.finding import Finding
@@ -465,6 +466,8 @@ SQLModel.metadata.create_all(
         IntakeItem.__table__,
         WstgReview.__table__,
         PersonStatement.__table__,
+        CompanyStandardSet.__table__,
+        CompanyStandardException.__table__,
     ],
 )
 

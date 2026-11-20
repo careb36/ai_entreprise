@@ -37,6 +37,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .company_standards import CompanyStandardException, CompanyStandardSet
 from .documentation import DocumentationPack
 from .event import TaskEvent
 from .finding import Finding
@@ -109,6 +110,8 @@ __all__ = [
     "Company",
     "CompanyInvitation",
     "CompanyMember",
+    "CompanyStandardException",
+    "CompanyStandardSet",
     "CompanyWebhook",
     "DocumentationPack",
     "Finding",

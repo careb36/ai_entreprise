@@ -199,6 +199,37 @@ describe('CompanyDuties', () => {
     ])
   })
 
+  it('lists the exceptions to a standard and a single-Owner standards set, each decided', async () => {
+    const withStandards = {
+      ...review,
+      standards: [
+        { kind: 'standard_exception', id: 7, label: 'STD-SEC-1', standard_id: 'STD-SEC-1', reason: 'A vendored fixture', compensating_control: 'Hand review', expires_at: '2026-12-20T00:00:00', decided_by: 'Bruno', flagged: false, inactive: false },
+        { kind: 'standards_single_owner', id: 2, label: 'v2', version: 2, decided_by: 'ana@example.test', flagged: true, inactive: false },
+      ],
+    }
+    const fetch = vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method !== 'POST' && url.includes('/access-review') ? response(200, withStandards) : api(url, init))
+    vi.stubGlobal('fetch', fetch)
+    renderAs('Owner')
+    const section = await screen.findByRole('region', { name: 'Access review' })
+    expect(within(section).getByText(/Exception to STD-SEC-1 until .*, approved by Bruno: A vendored fixture \(compensating control: Hand review\)/)).toBeInTheDocument()
+    expect(within(section).getByText(/Company standards v2 activated alone by ana@example.test.*decided by a single Owner/)).toBeInTheDocument()
+    for (const name of ['Ana', 'ci', 'v2']) {
+      fireEvent.click(within(within(section).getByRole('group', { name: `Decision for ${name}` })).getByLabelText('Confirm'))
+    }
+    const submit = within(section).getByRole('button', { name: 'Complete the review' })
+    expect(submit).toBeDisabled()
+    fireEvent.click(within(within(section).getByRole('group', { name: 'Decision for STD-SEC-1' })).getByLabelText('Remove'))
+    fireEvent.click(submit)
+    await vi.waitFor(() => expect(calls(fetch, 'POST')).toHaveLength(1))
+    expect(JSON.parse(String((calls(fetch, 'POST')[0][1] as RequestInit).body)).decisions).toEqual([
+      { kind: 'member', id: 11, decision: 'confirm' },
+      { kind: 'token', id: 3, decision: 'confirm' },
+      { kind: 'standard_exception', id: 7, decision: 'remove' },
+      { kind: 'standards_single_owner', id: 2, decision: 'confirm' },
+    ])
+  })
+
   it('grants the single-person exception only with a reason', async () => {
     const fetch = vi.fn(async (url: string, init?: RequestInit) => api(url, init))
     vi.stubGlobal('fetch', fetch)

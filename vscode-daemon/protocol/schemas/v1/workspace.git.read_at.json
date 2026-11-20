@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.git.read_at",
+  "title": "workspace.git.read_at",
+  "description": "Files as they are at the default branch's head commit (or a named commit), never the checkout's: a company's standards file and its guards (git_read_at.py, issue #700). Read locally; no remote is contacted.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.git.read_at",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "base": {
+          "type": "string",
+          "description": "The company's base branch; empty: origin/HEAD's branch, else main, else master. Never the checked-out branch."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+          "description": "Read this commit instead of a branch's head."
+        },
+        "paths": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "string"
+          }
+        },
+        "folders": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string"
+          },
+          "description": "Every file under each folder, recursively, sorted."
+        },
+        "list": {
+          "type": "boolean",
+          "description": "Also list every path at that commit (tree)."
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "base": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "present",
+                  "missing",
+                  "symlink",
+                  "not_file",
+                  "too_large"
+                ]
+              },
+              "content_b64": {
+                "type": "string",
+                "description": "The file's bytes at that commit, base64; the backend hashes them, the daemon never sends a hash."
+              }
+            },
+            "required": [
+              "path",
+              "status"
+            ]
+          }
+        },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "present",
+                  "missing"
+                ]
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "present",
+                        "missing",
+                        "symlink",
+                        "not_file",
+                        "too_large"
+                      ]
+                    },
+                    "content_b64": {
+                      "type": "string",
+                      "description": "The file's bytes at that commit, base64; the backend hashes them, the daemon never sends a hash."
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "status"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "path",
+              "status",
+              "files"
+            ]
+          }
+        },
+        "tree": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tree_truncated": {
+          "type": "boolean"
+        },
+        "sandbox_required": {
+          "type": "string",
+          "description": "This machine's FABRIQUE_SANDBOX_REQUIRED: the sandbox floor it applies to every command."
+        }
+      },
+      "required": [
+        "ok",
+        "commit",
+        "files",
+        "folders",
+        "sandbox_required"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

@@ -4089,7 +4089,10 @@
       "doneLate": "{{when}}: completed late by {{by}}, {{removed}} removed.",
       "ssoExclusion": "Excluded from {{team}} by {{by}}, {{days}} days ago: {{reason}}",
       "ssoException": "Kept by hand in SSO team {{team}} (set by {{by}}, {{days}} days ago)",
-      "ssoManagerPair": "Group {{value}} grants Manager in {{team}}, confirmed alone by {{by}}: a second Owner confirms or removes it"
+      "ssoManagerPair": "Group {{value}} grants Manager in {{team}}, confirmed alone by {{by}}: a second Owner confirms or removes it",
+      "standardException": "Exception to {{standard}} until {{expires}}, approved by {{by}}: {{reason}} (compensating control: {{control}}). Removing it ends it now",
+      "standardsSingleOwner": "Company standards v{{version}} activated alone by {{by}}: a second Owner confirms it, or removing it leaves the catalogue alone in force",
+      "singleOwnerFlag": "decided by a single Owner"
     },
     "report": {
       "title": "Approvals and duties report",
