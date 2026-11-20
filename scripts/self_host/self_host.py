@@ -96,7 +96,9 @@ LA_FABRIQUE_FOLDERS = {
     },
     "llm-proxy": {
         "stack": "python",
-        "install": "poetry install --no-interaction --no-root",
+        # pytest comes from requirements-dev.txt, as in CI, not from Poetry:
+        # without it the sandboxed suite found no pytest (issue #766).
+        "install": "poetry install --no-interaction --no-root && poetry run pip install -q -r requirements-dev.txt",
         "test": "poetry run python -m pytest -q -p no:cacheprovider",
     },
     "vscode-daemon": {"stack": "python", "install": "", "test": f"cd ../backend && {_BACKEND_TESTS}"},

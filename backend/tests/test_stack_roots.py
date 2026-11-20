@@ -376,6 +376,8 @@ def test_the_harness_sets_la_fabrique_s_folders_and_every_delivery_checks():
         and "test:run" in folders["frontend"]["test"]
     )
     assert "pytest" in folders["llm-proxy"]["test"]
+    # Its pytest is in requirements-dev.txt, not in Poetry (issue #766).
+    assert "requirements-dev.txt" in folders["llm-proxy"]["install"]
     assert profile["test"] == ""
     checks = [c["command"] for c in profile["every_delivery"]]
     assert checks == [
