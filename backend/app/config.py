@@ -53,16 +53,23 @@ class Settings(BaseSettings):
     LLM_PROXY_URL: str = "http://localhost:5100"
     # How long the task worker waits for the workspace daemon to confirm file writes.
     WORKSPACE_WRITE_TIMEOUT_SECONDS: float = 30.0
-    # After a verified delivery, run the project's tests through the daemon and
-    # record the exit status as evidence.  Off by default: it executes
-    # agent-written code on the machine running the daemon.
     # Run the Alembic migrations to head at startup (a local database); the
     # container's entrypoint and the e2e run `alembic upgrade head` instead.
     DB_AUTO_UPGRADE: bool = False
-    DELIVERY_TESTS_ENABLED: bool = False
+    # After a delivery, run the project's tests through the daemon, in the
+    # company's sandbox (a container by default), and record the exit status
+    # as evidence. On by default (issue #766): without it no code delivery can
+    # be verified, and a company runs only with an Owner's ``tests_off``
+    # acknowledgement (services/platform/acknowledgements.py).
+    DELIVERY_TESTS_ENABLED: bool = True
     # Test command to run; empty means detect it (npm test / pytest).
     DELIVERY_TEST_COMMAND: str = ""
-    # The daemon itself stops a command after 120 s; wait slightly longer.
+    # How long the daemon lets one test run (the root's tests, a folder's
+    # suite, the Developer's run_tests) go on before it stops it; the daemon
+    # caps it at 900 (issue #766: a real suite takes minutes).
+    DELIVERY_TEST_RUN_SECONDS: int = 600
+    # How long the backend waits for a test run's answer, at least the run's
+    # own limit plus 30 s (``sandbox.test_wait``).
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
     # The daemon's heartbeat (workspace.heartbeat, every <=25 s): with none
     # observed for this long, on the backend's clock, the daemon is ``stale``,
@@ -107,8 +114,10 @@ class Settings(BaseSettings):
     # Container mode: a volume per project, company, manifests and image for
     # what an install leaves outside the worktree (Python's user site, Poetry
     # and Pipenv virtualenvs, Go's GOPATH and caches), writable only by an
-    # install, with the cache's reset and quarantine (issue #315).
-    DELIVERY_SANDBOX_ENV: bool = False
+    # install, with the cache's reset and quarantine (issue #315). On by
+    # default (issue #766): a Poetry project's virtualenv lives there, so
+    # without it the tests find none of what the install installed.
+    DELIVERY_SANDBOX_ENV: bool = True
     # Container mode: the image the application check runs in when its e2e
     # command is a browser test (QA's smoke tests, or a ``web`` profile's
     # e2e), e.g. one built from vscode-daemon/images/browser. Empty keeps

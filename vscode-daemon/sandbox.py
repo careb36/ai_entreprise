@@ -41,6 +41,7 @@ resets the cache. A ``workspace.execute`` without ``sandbox`` is normalized as
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -166,6 +167,50 @@ def container_runtime() -> str:
     )
 
 
+GIT_READ_PATHS = ("HEAD", "objects", "refs", "packed-refs")
+
+
+def git_mounts(cwd: str) -> list[str]:
+    """A worktree's repository, read-only at its own path (issue #766).
+
+    In a ``git worktree`` (every task's, ``fabrique-worktrees/<name>``),
+    ``.git`` is a file naming a folder of the main repository, which the
+    container did not see: every ``git`` call in the tests failed with "not
+    a git repository". What git reads is mounted read-only where the file
+    says (``HEAD``, ``objects``, ``refs``, ``packed-refs`` and the worktree's
+    own folder), so git reads work and nothing can be changed from inside.
+    Never the whole folder: ``config`` may hold a remote's credentials, and
+    the other tasks' worktrees live there too."""
+    marker = os.path.join(cwd, ".git")
+    try:
+        if not os.path.isfile(marker):
+            return []
+        with open(marker, encoding="utf-8") as handle:
+            line = handle.readline().strip()
+    except OSError:
+        return []
+    if not line.startswith("gitdir:"):
+        return []
+    gitdir = os.path.normpath(os.path.join(cwd, line[len("gitdir:"):].strip()))
+    common = gitdir
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as handle:
+            common = os.path.normpath(os.path.join(gitdir, handle.readline().strip()))
+    except OSError:
+        pass
+    root = os.path.abspath(cwd)
+    if not os.path.isdir(common) or common == root or common.startswith(root + os.sep):
+        return []
+    paths = [os.path.join(common, name) for name in GIT_READ_PATHS]
+    if gitdir != common:
+        paths.append(gitdir)
+    args: list[str] = []
+    for path in paths:
+        if os.path.exists(path):  # docker would create a missing one on the host
+            args += ["-v", f"{path}:{path}:ro"]
+    return args
+
+
 def container_command(
     runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None, scratch_mb: int | None = None
 ) -> list[str]:
@@ -188,7 +233,7 @@ def container_command(
         *(
             ["--tmpfs", f"{CONTAINER_WORKDIR}:rw,exec,size={int(scratch_mb)}m"]
             if scratch_mb
-            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw"]
+            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw", *git_mounts(cwd)]
         ),
         "-w", CONTAINER_WORKDIR,
     ]
@@ -199,7 +244,13 @@ def container_command(
             args += ["--userns", "keep-id"]
         else:
             args += ["--user", f"{os.getuid()}:{os.getgid()}"]
-    for key, value in sandbox_env(box["env"]).items():
+    env = sandbox_env(box["env"])
+    # Tools that size themselves by the core count see the host's cores, not
+    # --cpus: pytest-xdist's ``-n auto`` started a worker per host core in a
+    # 2-CPU, 2 GB container and lost them (issue #766). Its own variable says
+    # how many the limit allows; a project's env may still set it.
+    env.setdefault("PYTEST_XDIST_AUTO_NUM_WORKERS", str(max(1, math.ceil(box["cpus"]))))
+    for key, value in env.items():
         args += ["-e", f"{key}={value}"]
     return [*args, *(extra or []), box["image"], "/bin/sh", "-c", command]
 

@@ -15,8 +15,6 @@ import asyncio
 import hashlib
 from typing import Any
 
-from config import settings
-
 from services.workspace import sandbox, stack_roots
 from services.workspace.project_profile import Context
 from services.workspace.workspace_daemon import TEST_OUTPUT_TAIL_CHARS
@@ -75,7 +73,10 @@ async def execute(
             "reason": unavailable or "no sandbox policy",
         }
         return record, ""
-    timeout = float(extra.pop("timeout", settings.DELIVERY_TEST_TIMEOUT_SECONDS))
+    # A suite or an every-delivery command runs as long as a test run may
+    # (issue #766); an install names its own bounds.
+    extra.setdefault("timeout_seconds", sandbox.test_seconds())
+    timeout = float(extra.pop("timeout", sandbox.test_wait()))
     try:
         reply = await ctx.nats.request(
             "workspace.execute",

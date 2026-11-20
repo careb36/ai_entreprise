@@ -584,7 +584,7 @@ def test_moving_from_host_to_container_installs_again(
     installs = sqlite_session.get(Company, company.id).dependency_installs
     assert installs == {
         str(root): {"requirements.txt": "abc"},
-        f"container:{root}": {"requirements.txt": "abc"},
+        f"container:{root}": {"requirements.txt": "abc", "./": "installed"},
     }
     assert len(daemon.requests) == 2
 
