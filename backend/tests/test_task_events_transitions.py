@@ -96,7 +96,7 @@ def _review(monkeypatch, session, item_id, reply):
     asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
 
-GATE_LIMIT = qa_review.AUTOPILOT_MAX_REWORK_CYCLES
+GATE_LIMIT = qa_review.MAX_REWORKS
 _GATE_REWORK = ("reviewed", "gate", "Verifier", "NEEDS WORK: delivery refuted — x")
 _QA_REWORK = ("reviewed", "QA", "QA", "NEEDS WORK: add tests")
 

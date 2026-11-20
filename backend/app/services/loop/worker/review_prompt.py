@@ -12,6 +12,10 @@ claim. A rework writes only what it touches, so the latest run alone hid the
 earlier attempts' files and QA sent back work the branch held (sprint 3,
 task 17; issue #766). Without the workflow, or when the daemon cannot
 answer, QA reads the run's whole files (``review_digest.for_review``).
+
+After the delivery come the Verifier's checks and the end of the test
+output (``review_evidence``): what the platform observed, which QA was never
+shown before (issue #766).
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from services.learning import procedures
 from services.loop import review_digest
 from services.loop.answers import review_format_reminder as _review_format_reminder
 from services.loop.carry_over import previous_attempt_context
+from services.loop.worker import review_evidence
 from services.planning import spec_planning
 from services.platform import forge_policy_setting
 from services.workspace import branch_view
@@ -73,6 +78,7 @@ def build(
                 if review_digest.is_digest(shown)
                 else ""
             )
+            + review_evidence.section(session, sprint.company_id, item.id)
             + "\n\nProvide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
             "If not, start with 'NEEDS WORK:' and explain what's missing."
             + _review_format_reminder(qa_review_failures)

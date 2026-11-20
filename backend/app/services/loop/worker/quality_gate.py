@@ -4,7 +4,7 @@
 fences, an abrupt end) before a delivery goes to QA; ``_send_back_from_quality_gate``
 sends a rejected one back with the reason as ``Quality gate``, and blocks it for
 a person and escalates it to the ScrumMaster once the rework budget it shares
-with the delivery gate and QA (``qa_review.AUTOPILOT_MAX_REWORK_CYCLES``) is
+with the delivery gate and QA (``qa_review.MAX_REWORKS``) is
 spent. The intake calls both before a delivery reaches the daemon. Moved out of
 ``task_worker``, which still re-exports these names.
 """
@@ -96,16 +96,13 @@ async def _send_back_from_quality_gate(
     The checks look at the text's form (length, sections, fences): a
     deterministic opinion, not evidence. It may send work back with the
     reason, like a reviewer, but holding a task for good on it would leave the
-    sprint open forever. After ``qa_review.AUTOPILOT_MAX_REWORK_CYCLES``
+    sprint open forever. After ``qa_review.MAX_REWORKS``
     attempts the task is blocked for a person and escalated to the ScrumMaster.
     """
-    previous_reworks = task_projection.record_from_dict(item).rework_requests_by(
-        QUALITY_GATE_AUTHOR
-    )
-    rework = previous_reworks < qa_review.AUTOPILOT_MAX_REWORK_CYCLES
+    previous_reworks = task_projection.record_from_dict(item).reworks()
+    rework = previous_reworks < qa_review.MAX_REWORKS
     text = (
-        f"NEEDS WORK: {reason}. Deliver the complete result again, with every "
-        "file in full as a path= block."
+        f"NEEDS WORK: {reason}. {qa_review.EDIT_INSTRUCTION}"
         if rework
         else f"Pre-review quality gate failed after {previous_reworks} rework(s) "
         f"— blocked for manual triage: {reason}"

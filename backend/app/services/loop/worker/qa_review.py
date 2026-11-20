@@ -9,8 +9,8 @@ rework budget (``_rework_budget``), the verdict's events, messages and
 escalation (``_record_verdict``) and what it leads to on Glassroom and at the
 sprint's close (``_announce_verdict``). A review that fails is recorded for a
 retry, or pauses the sprint when the provider has no credit (``_review_failed``).
-The rework budget the delivery gate and the quality gate share
-(``AUTOPILOT_MAX_REWORK_CYCLES``) is defined here. Moved out of
+The task's one rework budget (``MAX_REWORKS``), which the delivery gate and
+the quality gate read here too, is defined here. Moved out of
 ``task_worker``, which still re-exports these names.
 """
 
@@ -51,12 +51,38 @@ from services.tasks.board import (
 
 logger = setup_logger("fabrique-task-worker")
 
-MAX_QA_REWORK_CYCLES = 2
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
     "AUTOPILOT_QA_REWORK_ENABLED", "true"
 ).lower() in {"1", "true", "yes", "on"}
-AUTOPILOT_MAX_REWORK_CYCLES = int(
-    os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(MAX_QA_REWORK_CYCLES))
+DEFAULT_MAX_REWORKS = 3
+
+
+def _max_reworks() -> int:
+    """One budget per task across every cause (issue #766): the quality
+    gate, the delivery gate and QA each counted their own two, and sprint 3's
+    task 18 was sent back nine times. ``AUTOPILOT_MAX_REWORK_CYCLES`` is read
+    for one release when ``MAX_REWORKS`` is not set."""
+    raw = os.getenv("MAX_REWORKS")
+    if raw is None and os.getenv("AUTOPILOT_MAX_REWORK_CYCLES") is not None:
+        raw = os.getenv("AUTOPILOT_MAX_REWORK_CYCLES")
+        logger.warning(
+            "AUTOPILOT_MAX_REWORK_CYCLES is deprecated; set MAX_REWORKS "
+            "(one budget per task across every cause)."
+        )
+    try:
+        return max(0, int(raw)) if raw is not None else DEFAULT_MAX_REWORKS
+    except ValueError:
+        return DEFAULT_MAX_REWORKS
+
+
+MAX_REWORKS = _max_reworks()
+# What a rework asks for (issue #766): the earlier attempts are on the task
+# branch, so the agent changes what the problem needs instead of writing every
+# file again, which lost earlier work and grew each attempt.
+EDIT_INSTRUCTION = (
+    "Your earlier attempts are on the task branch: read what is there, change "
+    "only what this problem needs (with workspace__edit where it is offered), "
+    "and deliver only the files you change, each as a path= block."
 )
 
 
@@ -215,11 +241,9 @@ def _rework_budget(
     task_record: Any, reviewer_dict: dict[str, Any], needs_work: bool, risk_hold: bool
 ) -> tuple[int, Any, str]:
     """QA's earlier rework requests, whether another is allowed, and the status it leads to."""
-    previous_reworks = task_record.rework_requests_by(reviewer_dict["name"])
+    previous_reworks = task_record.reworks()
     autopilot_rework_allowed = (
-        needs_work
-        and AUTOPILOT_QA_REWORK_ENABLED
-        and previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+        needs_work and AUTOPILOT_QA_REWORK_ENABLED and previous_reworks < MAX_REWORKS
     )
     if needs_work:
         review_status = "todo" if autopilot_rework_allowed else "blocked"
@@ -261,7 +285,7 @@ def _record_verdict(
             item,
             "sent_back",
             "system",
-            text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
+            text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{MAX_REWORKS}).",
         )
     elif needs_work:
         task_events.record(
@@ -357,14 +381,14 @@ async def _announce_verdict(
                     "task_status": "todo",
                     "phase": "rework",
                     "rework_count": previous_reworks + 1,
-                    "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                    "rework_limit": MAX_REWORKS,
                     "task": f"Reviewed: {item.title}",
-                    "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
+                    "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{MAX_REWORKS}.",
                     "message_key": "glassroom.events.rework_scheduled",
                     "message_params": {
                         "task": item.title,
                         "attempt": previous_reworks + 1,
-                        "limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                        "limit": MAX_REWORKS,
                     },
                     "preview": normalized_review[:200],
                 },
@@ -374,7 +398,7 @@ async def _announce_verdict(
                 item.id,
                 reviewer_dict["name"],
                 previous_reworks + 1,
-                AUTOPILOT_MAX_REWORK_CYCLES,
+                MAX_REWORKS,
             )
         else:
             await publish_glassroom(
@@ -390,7 +414,7 @@ async def _announce_verdict(
                     "task_status": "blocked",
                     "phase": "qa_gate",
                     "rework_count": previous_reworks + 1,
-                    "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                    "rework_limit": MAX_REWORKS,
                     "task": f"Reviewed: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
                     "message_key": "glassroom.events.rework_blocked",
@@ -406,7 +430,7 @@ async def _announce_verdict(
                 item.id,
                 reviewer_dict["name"],
                 previous_reworks + 1,
-                AUTOPILOT_MAX_REWORK_CYCLES,
+                MAX_REWORKS,
             )
     elif risk_hold:
         await publish_glassroom(

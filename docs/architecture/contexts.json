@@ -1395,6 +1395,9 @@
       "test_stack_image.py": [
         "workspace"
       ],
+      "test_one_rework_budget.py": [
+        "loop"
+      ],
       "test_tests_on.py": [
         "evidence",
         "tools"

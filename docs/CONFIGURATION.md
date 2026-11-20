@@ -510,6 +510,13 @@ Copy `.env.example` to `.env` and fill in:
   (`vscode-daemon/daemon.py`). The CLIs the daemon reports on
   `workspace.capabilities`, kept for older backends: since the console
   assistants were removed (issue #750) the backend never asks.
+- `MAX_REWORKS` — optional, default `3` (issue #766). How many times a task
+  is sent back for rework, whatever sent it back (the quality gate, the
+  delivery gate, QA), before it is blocked and escalated to the ScrumMaster;
+  a person's send-back starts the count again. It replaces
+  `AUTOPILOT_MAX_REWORK_CYCLES` (2 per cause, so up to 6 and more), which is
+  still read, with a warning, when `MAX_REWORKS` is not set; it will be
+  removed in the next release.
 - `DELIVERY_TESTS_ENABLED` — optional, default `true` (issue #766; it was
   `false`, and no code delivery could then be verified: a company runs with it
   off only under an Owner's `tests_off` acknowledgement). After an agent's files are

@@ -56,7 +56,7 @@ def test_qa_rework_is_a_request_and_the_last_one_escalates(db, monkeypatch):
         item.comments
         + [
             {"author": "QA", "text": "NEEDS WORK: earlier", "created_at": ""}
-            for _ in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES)
+            for _ in range(qa_review.MAX_REWORKS)
         ]
         + [{"author": "Dev", "text": "another deliverable " * 30, "created_at": ""}]
     )
