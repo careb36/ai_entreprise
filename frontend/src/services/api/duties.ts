@@ -112,6 +112,8 @@ export interface AccessReviewListing {
   tokens: AccessReviewToken[]
   /** Exclusions, manual exceptions and single-Owner Manager pairs (issue #703). */
   sso?: AccessReviewSso[]
+  /** Exceptions to a standard in force and a standards set one Owner activated alone (issue #700). */
+  standards?: AccessReviewStandard[]
   history: {
     id: number
     due_at: string | null
@@ -142,8 +144,24 @@ export interface AccessReviewSso {
   inactive: boolean
 }
 
+/** An exception to a standard, or a standards set the only Owner activated alone (issue #700). */
+export interface AccessReviewStandard {
+  kind: 'standard_exception' | 'standards_single_owner'
+  id: number
+  label: string
+  standard_id?: string
+  reason?: string | null
+  compensating_control?: string
+  expires_at?: string | null
+  version?: number
+  decided_by?: string | null
+  decided_at?: string | null
+  flagged: boolean
+  inactive: boolean
+}
+
 export interface AccessDecision {
-  kind: 'member' | 'token' | AccessReviewSso['kind']
+  kind: 'member' | 'token' | AccessReviewSso['kind'] | AccessReviewStandard['kind']
   id: number
   decision: 'confirm' | 'remove'
 }

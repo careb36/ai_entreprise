@@ -29,7 +29,7 @@ NO_STORE = {"Cache-Control": "no-store"}
 
 class Decision(RequestModel):
     kind: str = Field(
-        pattern="^(member|token|exclusion|manual_exception|manager_pair)$"
+        pattern="^(member|token|exclusion|manual_exception|manager_pair|standard_exception|standards_single_owner)$"
     )
     id: int
     decision: str = Field(pattern="^(confirm|remove)$")

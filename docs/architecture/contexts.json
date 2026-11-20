@@ -19,6 +19,7 @@
       "public": [
         "agent_service",
         "audit_anchors",
+        "company_standards_setting",
         "egress",
         "engram_processor",
         "forge_policy_setting",
@@ -34,6 +35,7 @@
         "rfc3161",
         "run_window_setting",
         "sod",
+        "standard_exceptions",
         "teams",
         "wstg_catalogue"
       ],
@@ -88,6 +90,7 @@
         "app_check",
         "browser_smoke",
         "command_runs",
+        "company_standards_check",
         "console_run",
         "context_read",
         "criteria_tests",
@@ -614,6 +617,16 @@
       ],
       "test_company_models.py": [
         "management"
+      ],
+      "test_company_standards_activation.py": [
+        "platform"
+      ],
+      "test_company_standards_file.py": [
+        "contracts"
+      ],
+      "test_company_standards_import.py": [
+        "planning",
+        "workspace"
       ],
       "test_console_producers_command.py": [
         "loop"
@@ -1363,6 +1376,9 @@
       "test_stack_roots.py": [
         "evidence",
         "release"
+      ],
+      "test_standard_exceptions.py": [
+        "platform"
       ],
       "test_standards.py": [
         "evidence",

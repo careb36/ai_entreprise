@@ -1,8 +1,14 @@
 # Company standards: per-company checks imported from the repository
 
-Status: proposal, 2026-11-18; no code yet. A person reviews it before it
-guides work, and the owner answers the questions in [§12](#12-open-questions-for-the-owner) before the
-first slice. · Part of issue #555 (finding F8, "there are no per-company
+Status: decided (§12, 2026-11-19, PR #746); in implementation under issue
+#700. The first pull request delivers the file format and its validator
+(slice 1), the import from the default branch with the backend's hashes and
+the dry run, the four-eyes Owner activation, `change_standards` in
+`ALWAYS_ESCALATE` (slice 2), the evaluation of the in-backend kinds used by
+the dry run, and the time-boxed exceptions (decision 1) with the access
+review. The Verifier's check, `command` standards on deliveries, the
+measurement and revert proposals, the every-delivery migration, the
+ScrumMaster's drafts and the page come next (slices 3 to 7). · Part of issue #555 (finding F8, "there are no per-company
 standards to import") · SDL practice 3: the threat model is §10, written with
 the `threat-model` skill.
 
@@ -288,6 +294,10 @@ dry run, §4 step 5, checks each against `main` before the Owner activates
 it).
 
 ### 9.1 The file
+
+Kept verbatim as `backend/tests/fixtures/company_standards/la_fabrique.toml`,
+which `test_company_standards_file.py` requires to parse with no refusal:
+change both together.
 
 ```toml
 # .fabrique/standards.toml: La Fabrique's company standards.

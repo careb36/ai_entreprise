@@ -1,0 +1,129 @@
+# The worked example of docs/design/COMPANY_STANDARDS.md section 9.1, copied
+# verbatim: test_company_standards_file.py requires it to parse with no refusal.
+# Change both together.
+# .fabrique/standards.toml: La Fabrique's company standards.
+# Each one adds to the catalogue (docs/STANDARDS.md); none relaxes it.
+format = 1
+
+[[standard]]
+id = "LF-ARCH-1"
+title = "The backend's dependency rule and HTTP adapters"
+rule = """A context imports only the contexts its row in docs/architecture/contexts.json \
+names, only through their public modules; a module under services/ that imports an HTTP \
+library is listed in http_adapters; no cycle between contexts."""
+binds = ["Developer", "Architect"]
+kind = "command"
+command = "python3 scripts/check_architecture.py"
+guards = ["scripts/check_architecture.py", "docs/architecture/contexts.json"]
+paths = ["backend/app/**", "docs/architecture/contexts.json"]
+severity = "blocking"
+owner = "Architect"
+
+[[standard]]
+id = "LF-ARCH-2"
+title = "The frontend's layers and network modules"
+rule = "A frontend module imports only from its layer or below; only the modules in network.modules use fetch, EventSource, WebSocket, XMLHttpRequest or axios."
+binds = ["FrontendDeveloper"]
+kind = "command"
+command = "python3 scripts/check_frontend_architecture.py"
+guards = ["scripts/check_frontend_architecture.py", "docs/architecture/frontend.json"]
+paths = ["frontend/src/**"]
+severity = "blocking"
+owner = "Architect"
+
+[[standard]]
+id = "LF-SIZE-1"
+title = "The file-size ratchet"
+rule = "A source file stays at or under 600 lines; a file already over it may shrink, never grow."
+binds = ["Developer"]
+kind = "command"
+command = "python3 scripts/check_file_sizes.py"
+guards = ["scripts/check_file_sizes.py", "scripts/file_size_baseline.json",
+          "scripts/test_file_size_baseline.json"]
+severity = "blocking"
+owner = "Architect"
+
+[[standard]]
+id = "LF-I18N-1"
+title = "Every string in both languages"
+rule = "A change to the English strings changes the Spanish ones in the same delivery, and the other way round."
+binds = ["FrontendDeveloper", "Designer"]
+kind = "require_together"
+when = ["frontend/src/i18n/en.json"]
+then = ["frontend/src/i18n/es.json"]
+on = "changed"
+severity = "blocking"
+owner = "Designer"
+
+[[standard]]
+id = "LF-I18N-2"
+title = "Same keys in every locale, no key used and missing"
+rule = "en.json and es.json hold the same keys, and every key the code calls exists."
+binds = ["FrontendDeveloper"]
+kind = "command"
+folder = "frontend"
+command = "npx vitest run src/i18n/locales.test.ts src/i18n/coverage.test.ts"
+guards = ["frontend/src/i18n/locales.test.ts", "frontend/src/i18n/coverage.test.ts"]
+paths = ["frontend/src/**"]
+severity = "blocking"
+owner = "Designer"
+
+[[standard]]
+id = "LF-UI-1"
+title = "Status badges come from the design system"
+rule = "A page shows a status with StatusBadge from components/ui; the shell's StatusPill is the services' health only."
+binds = ["FrontendDeveloper"]
+kind = "forbid_pattern"
+pattern = "components/shell/StatusPill"
+files = ["frontend/src/pages/**/*.tsx"]
+except = ["frontend/src/**/*.test.tsx"]
+severity = "finding"
+owner = "Designer"
+
+[[standard]]
+id = "LF-LINT-1"
+title = "The backend passes the pinned ruff"
+rule = "ruff check and ruff format --check pass over app and tests, with the version CI pins."
+binds = ["BackendDeveloper"]
+kind = "command"
+folder = "backend"
+command = "ruff check app tests && ruff format --check app tests"
+guards = ["backend/pyproject.toml"]
+paths = ["backend/**"]
+severity = "blocking"
+owner = "BackendDeveloper"
+
+[[standard]]
+id = "LF-DOC-1"
+title = "A new backend test has its row in TESTING.md"
+rule = "A test file added under backend/tests is listed in docs/TESTING.md in the same delivery."
+binds = ["Developer", "QA"]
+kind = "require_together"
+when = ["backend/tests/test_*.py"]
+then = ["docs/TESTING.md"]
+on = "added"
+severity = "finding"
+owner = "QA"
+
+[[standard]]
+id = "LF-DOC-2"
+title = "A change to the product names itself in the changelog"
+rule = "A delivery that changes the backend's or the frontend's code adds a line to CHANGELOG.md."
+binds = ["Developer"]
+kind = "require_together"
+when = ["backend/app/**", "frontend/src/**"]
+then = ["CHANGELOG.md"]
+on = "changed"
+severity = "finding"
+owner = "TechWriter"
+
+[[standard]]
+id = "LF-SEC-1"
+title = "No environment file in the repository"
+rule = "A .env file is never delivered; configuration is documented in docs/CONFIGURATION.md and read from the environment."
+binds = ["*"]
+kind = "forbid_path"
+files = [".env", "**/.env", "**/.env.*"]
+except = ["**/.env.example"]
+severity = "blocking"
+owner = "SecOps"

@@ -15,6 +15,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.list / read / search / find / map, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, repo_map.py, workspace_edit.py); workspace.signatures: named Python definitions' signatures for the Verifier (signatures.py); workspace.related / graph: the files around a task's seeds, and each changed file's parse for the stored graph (code_graph.py); workspace.console.prepare / collect: a console producer's worktree, then what it changed (console_run.py)
 - workspace.git.publish / merge / diff / base_status / sync_base: push a branch and open its request (gh, glab), merge it locally (local_merge.py), read what it brings (git_diff.py), the base against its remote (git_base.py), or the local base fast-forwarded to it (git_sync.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
+- workspace.git.read_at:  files at the default branch's head commit, never the checkout's: a company's standards and guards (git_read_at.py)
 - workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py); workspace.sandbox.reset: reset a project's dependency cache volume (sandbox_cache.py)
 - workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
 - workspace.deliver:      (JetStream) files queued while offline; result on workspace.delivered
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import app_run
+import git_read_at
 import daemon_status
 import delivery_journal
 from daemon_status import DAEMON_VERSION, host_info  # noqa: F401 - re-exported for callers of daemon.py
@@ -395,7 +397,7 @@ def subscriptions(nc, jetstream=lambda: False):
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS)),
-        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (*host_folders.HANDLERS, *git_sync.HANDLERS, ("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.diff", git_diff.handle_diff), ("workspace.git.base_status", git_base.handle_status))),
+        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (*host_folders.HANDLERS, *git_sync.HANDLERS, *git_read_at.HANDLERS, ("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.diff", git_diff.handle_diff), ("workspace.git.base_status", git_base.handle_status))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
         ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),

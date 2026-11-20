@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useAccessReview, useCompleteAccessReview } from '../hooks/useDuties'
 import { CalendarClock, Clock } from 'lucide-react'
-import { errorDetail, type AccessDecision, type AccessReviewListing, type AccessReviewSso } from '../services/api'
+import { errorDetail, type AccessDecision, type AccessReviewListing, type AccessReviewSso, type AccessReviewStandard } from '../services/api'
 import { Panel, TABLE, TD, TH, TR } from './ui'
 
 type Key = `${AccessDecision['kind']}:${number}`
@@ -14,7 +14,9 @@ const CHOICES: AccessDecision['decision'][] = ['confirm', 'remove']
  * team-derived and effective role, links and last activity, and every working
  * API token, each confirmed or removed by the Owner, and what the SSO group
  * mapping keeps outside the provider's say (issue #703): exclusions, manual
- * exceptions and Manager pairs one Owner confirmed alone. The schedule says
+ * exceptions and Manager pairs one Owner confirmed alone, and the exceptions
+ * to a standard and a standards set one Owner activated alone (issue #700).
+ * The schedule says
  * when the next one is due, and flags a missed one.
  */
 export default function AccessReviewPanel({ companyId }: { companyId: number | null }) {
@@ -50,7 +52,7 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
   const complete = useCompleteAccessReview(companyId)
   const [decisions, setDecisions] = useState<Record<Key, AccessDecision['decision']>>({})
   const [note, setNote] = useState('')
-  const items = [...listing.members, ...listing.tokens, ...(listing.sso ?? [])]
+  const items = [...listing.members, ...listing.tokens, ...(listing.sso ?? []), ...(listing.standards ?? [])]
   const decided = items.every(i => decisions[`${i.kind}:${i.id}`])
 
   function choose(key: Key, value: AccessDecision['decision']) {
@@ -87,7 +89,9 @@ function ReviewForm({ listing, companyId }: { listing: AccessReviewListing; comp
                   ].filter(Boolean).join(' · ')
                 : item.kind === 'token'
                   ? t('duties.review.token', { role: item.role, by: item.created_by ?? '—' })
-                  : ssoAccess(t, item)
+                  : isStandard(item)
+                    ? standardAccess(t, item)
+                    : ssoAccess(t, item)
               return (
                 <tr key={key} className={`${TR} align-top`}>
                   <td className={TD}>
@@ -141,6 +145,24 @@ function ssoAccess(t: TFunction, item: AccessReviewSso) {
     return t('duties.review.ssoException', { team, by: item.created_by ?? '—', days: item.age_days ?? 0 })
   }
   return t('duties.review.ssoManagerPair', { value: item.group_value ?? item.label, team, by: item.decided_by ?? '—' })
+}
+
+function isStandard(item: { kind: string }): item is AccessReviewStandard {
+  return item.kind === 'standard_exception' || item.kind === 'standards_single_owner'
+}
+
+function standardAccess(t: TFunction, item: AccessReviewStandard) {
+  const by = item.decided_by ?? '—'
+  const text = item.kind === 'standard_exception'
+    ? t('duties.review.standardException', {
+        standard: item.standard_id ?? item.label,
+        reason: item.reason ?? '—',
+        control: item.compensating_control ?? '—',
+        expires: item.expires_at ? new Date(item.expires_at).toLocaleDateString() : '—',
+        by,
+      })
+    : t('duties.review.standardsSingleOwner', { version: item.version ?? item.label, by })
+  return item.flagged ? `${text} · ${t('duties.review.singleOwnerFlag')}` : text
 }
 
 function History({ history }: { history: AccessReviewListing['history'] }) {

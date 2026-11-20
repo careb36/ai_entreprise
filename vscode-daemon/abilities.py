@@ -46,6 +46,7 @@ SUBJECTS = (
     "workspace.git.integrate",
     "workspace.git.merge",
     "workspace.git.publish",
+    "workspace.git.read_at",
     "workspace.git.reviews",
     "workspace.git.sync_base",
     "workspace.graph",

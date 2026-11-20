@@ -218,6 +218,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
+| `workspace.git.read_at` | request | `git_read_at.py` | `workspace_root`, `base`?, `commit`?, `paths`?, `folders`?, `list`? | `ok`, `commit`, `base`, `files` (per path `status` and `content_b64`), `folders` (every file under each, sorted), `tree`?, `sandbox_required` (§5.5) |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
 | `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge`, `forge_policy`? (§5.3) | `ok`, the integration branch and its merges, or the conflict, `forge_policy`, `remote_contacted` |
 | `workspace.deliver` | JetStream, consumed | `daemon.py` | — | A delivery queued while the daemon was offline: `job_id`, `workspace_root`, `files`, `git`? |
@@ -408,6 +409,26 @@ the index are as they were. `updated` names `before` and `after`;
 `up_to_date` and `ahead` move nothing. The remote-tracking branch is updated
 only when the outcome is not a refusal. The reply is the daemon's
 observation; the backend records it on the company (`base_sync_observed`).
+
+### 5.5 Files at the default branch's head (additive, issue #700)
+
+`workspace.git.read_at` reads files as a commit has them, never as the
+checkout has them: a company's standards file (`.fabrique/standards.toml`)
+and the files its `command` standards depend on are imported from the
+**default branch's** head (`docs/design/COMPANY_STANDARDS.md` §4), so a
+delivery that edits them cannot change the rule it is judged by. The commit
+is the request's `commit`, else the head of `base`, else of the branch
+`origin/HEAD` names, else `main`, else `master`; never the checked-out
+branch. Read with local git only (`ls-tree`, `cat-file`), whatever the forge
+policy. Each file is `present` with its bytes in base64, or `missing`,
+`symlink` (refused: a link's target is not the file reviewed), `not_file` or
+`too_large` (1 MiB a file, 16 MiB a reply). `folders` lists every file under
+each folder, recursively and sorted. The reply carries bytes, never a hash:
+the backend hashes what it received. `sandbox_required` is the machine's
+`FABRIQUE_SANDBOX_REQUIRED`, which the backend reads before it lets an Owner
+activate a `command` standard (§12 decision 4 of the design). A malformed
+request is a 400, a folder not on this machine a 404, and a folder that is
+not a repository, a branch or commit it does not have, a 409.
 
 ## 6. Conformance fixtures
 

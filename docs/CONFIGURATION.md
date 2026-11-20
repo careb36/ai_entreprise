@@ -528,7 +528,11 @@ Copy `.env.example` to `.env` and fill in:
   check (`services/workspace/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
   for everything (`vscode-daemon/sandbox.py`), a request that names no sandbox
-  included (#525). In container mode the report
+  included (#525). The daemon also reports it when a company's standards are
+  imported (`workspace.git.read_at`, `sandbox_required`): a standards set that
+  holds a `command` standard is activated only when this floor or the
+  company's own sandbox is `container` or `bwrap` (issue #700,
+  `docs/design/COMPANY_STANDARDS.md` §12 decision 4); no new variable. In container mode the report
   names the image that ran (`image_identity`: the content ID and registry
   digest from `image inspect`, observed by the daemon before the run, and the
   container started from that ID; after the run for an image the run pulled;
