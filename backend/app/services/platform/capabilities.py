@@ -237,6 +237,31 @@ def from_proxy(raw: Any) -> dict[str, dict[str, Any]]:
     return out
 
 
+def with_memory_embedding(caps: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """``memory`` as the proxy embeds it (issue #755): on only with a semantic embedding.
+
+    The table alone keeps memory searchable; what finds meaning is the
+    embedding. With the proxy's local model (or a chosen Gemini) loaded,
+    ``llm.embeddings`` is on and so is memory; with the hash vector standing
+    in, memory is degraded with the proxy's reason. When the proxy said
+    nothing, ``memory`` is left as the backend observed it.
+    """
+    memory, embeddings = caps.get("memory"), caps.get("llm.embeddings")
+    if not memory or memory.get("state") != ON or not isinstance(embeddings, dict):
+        return caps
+    model = embeddings.get("model") or embeddings.get("provider") or "the proxy"
+    if embeddings.get("state") == ON:
+        caps["memory"] = _cap(
+            ON, f"pgvector memory, embedded by {model} (llm.embeddings)"
+        )
+    else:
+        caps["memory"] = _cap(
+            DEGRADED,
+            f"pgvector memory is kept, embedded by {model}: {embeddings.get('reason') or 'see llm.embeddings'}",
+        )
+    return caps
+
+
 def log_effective(caps: dict[str, dict[str, Any]]) -> None:
     """The startup self-check: one line per capability, names and reasons only."""
     summary = ", ".join(

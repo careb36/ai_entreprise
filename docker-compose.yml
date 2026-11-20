@@ -125,6 +125,7 @@ services:
       LLM_THINKING: ${LLM_THINKING:-auto}
       # Empty: a failed request stays with its provider (DeepSeek Pro <-> Flash).
       LLM_FALLBACK_PROVIDERS: ${LLM_FALLBACK_PROVIDERS:-}
+      # local: the semantic model baked into the image (issue #755); local-hash or gemini.
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:

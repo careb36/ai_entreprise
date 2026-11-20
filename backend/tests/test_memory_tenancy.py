@@ -15,7 +15,10 @@ def test_memory_store_uses_explicit_company_in_both_stores():
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         client.store("decision", {"company_id": 999}, company_id=7)
     call = session.return_value.__enter__.return_value.execute.call_args
     assert "company_id" in str(call.args[0])
@@ -34,7 +37,10 @@ def test_memory_search_filters_before_limit_and_marks_legacy(companies, legacy):
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         db = session.return_value.__enter__.return_value
         db.execute.return_value = [("old", {}, 0.9, None), ("owned", {}, 0.8, 7)]
         results = client.search_similar(
@@ -83,13 +89,17 @@ def test_engram_vector_insert_has_company_column():
     processor = DeepSeekEngramProcessor()
     with (
         patch("llm_proxy_client.LLMProxyClient") as proxy,
-        patch("sqlmodel.Session") as session,
+        patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         processor._store_in_vector_db("summary", {"company_id": 999}, 7)
     query, params = session.return_value.__enter__.return_value.execute.call_args.args
-    assert "metadata, company_id)" in str(query)
+    assert "metadata, company_id, embedding_model)" in str(query)
     assert params["company_id"] == 7
+    assert params["embedding_model"] == "multilingual-e5-small"
 
 
 def test_graph_schema_backfills_without_rewriting_metadata():

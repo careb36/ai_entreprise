@@ -113,7 +113,10 @@ def test_memory_store_on_pgvector_alone_reports_the_graph_not_recorded():
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         outcome = client.store("decision", {"k": "v"}, company_id=7)
 
     assert outcome == {"vector": "stored", "graph": "not_recorded"}
@@ -127,7 +130,7 @@ def test_memory_store_without_an_embedding_records_nothing():
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = None
+        proxy.return_value.embed_with_model.return_value = None
         outcome = client.store("decision")
 
     assert outcome == {"vector": "not_recorded", "graph": "not_recorded"}
@@ -141,7 +144,10 @@ def test_memory_store_with_the_graph_reports_both():
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session"),
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         outcome = client.store("decision", company_id=7)
 
     assert outcome == {"vector": "stored", "graph": "stored"}
@@ -154,7 +160,10 @@ def test_memory_search_works_without_the_graph():
         patch("llm_proxy_client.LLMProxyClient") as proxy,
         patch("memory_client.Session") as session,
     ):
-        proxy.return_value.embed.return_value = [0.5]
+        proxy.return_value.embed_with_model.return_value = (
+            [0.5],
+            "multilingual-e5-small",
+        )
         db = session.return_value.__enter__.return_value
         db.execute.return_value = [("decision", {}, 0.9, 7)]
         results = client.search_similar("query", company_ids=[7])
@@ -171,7 +180,10 @@ def test_memory_routes_answer_on_pgvector_alone(test_client, graph_off, monkeypa
             patch("llm_proxy_client.LLMProxyClient") as proxy,
             patch("memory_client.Session") as session,
         ):
-            proxy.return_value.embed.return_value = [0.5]
+            proxy.return_value.embed_with_model.return_value = (
+                [0.5],
+                "multilingual-e5-small",
+            )
             db = session.return_value.__enter__.return_value
             db.execute.return_value = [("decision", {}, 0.9, None)]
             stored = test_client.post(

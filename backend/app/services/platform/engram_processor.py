@@ -187,27 +187,10 @@ class DeepSeekEngramProcessor:
     def _store_in_vector_db(
         self, content: str, metadata: dict[str, Any], company_id: int | None = None
     ):
-        """Helper to store in pgvector only."""
-        from database import engine
-        from llm_proxy_client import LLMProxyClient
-        from sqlmodel import Session, text
-
-        client = LLMProxyClient()
-        embedding = client.embed(content)
-        if embedding:
-            with Session(engine) as session:
-                session.execute(
-                    text(
-                        "INSERT INTO vector_memory (content, embedding, metadata, company_id) VALUES (:c, :e, :m, :company_id)"
-                    ),
-                    {
-                        "c": content,
-                        "e": json.dumps(embedding),
-                        "m": json.dumps(metadata),
-                        "company_id": company_id,
-                    },
-                )
-                session.commit()
+        """Helper to store in pgvector only, with the vector's source model (#755)."""
+        MemoryClient(neo4j_driver=None).store_vector(
+            content, metadata, company_id=company_id
+        )
 
     def _determine_engram_type(self, role: str, metadata: dict[str, Any]) -> EngramType:
         """

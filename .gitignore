@@ -90,6 +90,8 @@ ENV/
 # --- Python build artifacts (NOT the project's build/ asset folder) ---
 backend/build/
 llm-proxy/build/
+# The local embedding model, fetched by llm-proxy/fetch_embedding_model.py (#755)
+llm-proxy/models/
 vscode-daemon/build/
 
 # --- Node.js ---
