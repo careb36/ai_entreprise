@@ -14,6 +14,7 @@ until a second Owner confirms it. The exceptions are
 from __future__ import annotations
 
 import pytest
+from config import settings
 from models import AuditLog, CompanyStandardSet
 from services.contracts import company_standards as cs
 from services.management import manager_policy
@@ -317,8 +318,10 @@ def test_a_draft_with_a_refusal_is_not_activated(sqlite_session, test_client):
     ],
 )
 def test_a_command_standard_runs_only_isolated(
-    sqlite_session, test_client, seen, asked, ok
+    sqlite_session, test_client, seen, asked, ok, monkeypatch
 ):
+    # A deployment whose default is the host (the default was host before #766).
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "host")
     company = _company(sqlite_session)
     company.delivery_sandbox = asked
     sqlite_session.add(company)

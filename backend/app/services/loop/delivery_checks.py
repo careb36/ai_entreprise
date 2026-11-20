@@ -88,6 +88,8 @@ async def run_delivery_tests(
     tests alone (a sprint's integration, whose status reads only the test
     run)."""
     ctx = Context(nats_client, sprint, evidence, engine)
+    # The project's sandbox image first, on its own timeout (issue #766).
+    await delivery_commands.prepare_stack_image(ctx)
     await delivery_commands.install_dependencies(ctx)
     await _run_tests(nats_client, sprint, evidence, engine, ctx)
     # The suites of the folders the delivery wrote in and the company's

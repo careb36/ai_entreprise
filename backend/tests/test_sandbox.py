@@ -221,12 +221,12 @@ def test_the_backend_asks_for_the_companys_mode(monkeypatch):
     )
     request = sandbox.request_for(company)
     assert request["mode"] == "bwrap" and request["env"] == ["NPM_TOKEN"]
-    assert (
-        request["network"] is False
-        and request["image"] == settings.DELIVERY_SANDBOX_IMAGE
+    assert request["network"] is False and request["image"] == (
+        settings.DELIVERY_SANDBOX_IMAGE or None
     )
+    # A setting that names no mode falls back to isolation, never the host.
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "nonsense")
-    assert sandbox.mode_for(Company(company_name="y")) == "host"
+    assert sandbox.mode_for(Company(company_name="y")) == "container"
 
 
 def test_the_evidence_keeps_the_daemons_report_and_the_verifier_records_it():
@@ -334,7 +334,7 @@ def test_a_manager_sets_the_companys_sandbox_and_a_viewer_reads_it(
     url = f"/v1/companies/{company.id}/sandbox"
     read = test_client.get(url, headers=viewer)
     assert read.status_code == 200, read.text
-    assert read.json()["mode"] is None and read.json()["effective_mode"] == "host"
+    assert read.json()["mode"] is None and read.json()["effective_mode"] == "container"
     assert test_client.get(url, headers=outsider).status_code == 403
     assert (
         test_client.put(url, json={"mode": "container"}, headers=viewer).status_code
@@ -358,7 +358,7 @@ def test_a_manager_sets_the_companys_sandbox_and_a_viewer_reads_it(
     sqlite_session.expire_all()
     assert sqlite_session.get(Company, company.id).delivery_sandbox == "container"
     cleared = test_client.put(url, json={"mode": ""}, headers=manager).json()
-    assert cleared["mode"] is None and cleared["effective_mode"] == "host"
+    assert cleared["mode"] is None and cleared["effective_mode"] == "container"
 
 
 def test_the_delivery_test_run_sends_the_companys_sandbox(sqlite_session, monkeypatch):

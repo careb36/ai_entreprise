@@ -53,7 +53,7 @@ import nats_scope
 import run_logs
 import git_diff, local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
-import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
+import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, stack_image, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command  # noqa: F401 - re-exported
 _build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -396,7 +396,7 @@ def subscriptions(nc, jetstream=lambda: False):
         ("workspace.status", bound(handle_status, jetstream)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
-        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS, *stack_image.HANDLERS)),
         *((subject, bound(handler, _reply, _request_body)) for subject, handler in (*host_folders.HANDLERS, *git_sync.HANDLERS, *git_read_at.HANDLERS, ("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.diff", git_diff.handle_diff), ("workspace.git.base_status", git_base.handle_status))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),

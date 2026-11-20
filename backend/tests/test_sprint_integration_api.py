@@ -63,6 +63,8 @@ def test_a_manager_integrates_the_suite_runs_on_the_result_and_one_request_is_pu
     assert body["test_run"]["command"].startswith(suite)
     assert [s for s, _ in nats.requests] == [
         "workspace.git.integrate",
+        # The project's sandbox image first (container default, issue #766).
+        "workspace.sandbox.image",
         "workspace.execute",
     ]
     # The suite ran at the integrated commit, in a worktree detached there.

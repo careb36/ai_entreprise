@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.sandbox.image",
+  "title": "workspace.sandbox.image",
+  "description": "The project's sandbox image, built from its stacks from fixed templates when the machine does not have it yet (stack_image.py, issue #766).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.sandbox.image",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The tag fabrique-stack:<16 hex of the Dockerfile's sha256>; null with error when there is none."
+        },
+        "toolchains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dockerfile_sha256": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "built": {
+          "type": "boolean"
+        },
+        "build_ms": {
+          "type": "integer"
+        },
+        "observed_by": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string",
+          "description": "Why there is no image: no container runtime, a failed or timed-out build."
+        }
+      },
+      "required": [
+        "image",
+        "toolchains"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

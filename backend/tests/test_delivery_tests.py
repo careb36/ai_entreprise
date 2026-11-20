@@ -275,7 +275,12 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
     )
 
     verification, checks = _verification(session, sprint["company_id"], item["id"])
-    assert nats.subjects == ["workspace.generate", "workspace.execute"]
+    # The project's sandbox image is asked for first (issue #766).
+    assert nats.subjects == [
+        "workspace.generate",
+        "workspace.sandbox.image",
+        "workspace.execute",
+    ]
     assert checks["tests_run"]["outcome"] == "pass"
     assert checks["claimed_tests_evidenced"]["outcome"] == "pass"
     assert verification.verdict == "verified"

@@ -76,7 +76,10 @@ class Settings(BaseSettings):
     # capability dropped) or ``bwrap`` (bubblewrap namespaces). A company
     # may set its own (``Company.delivery_sandbox``). The daemon reports what
     # it applied, and the Verifier records it (``sandbox``).
-    DELIVERY_SANDBOX: str = "host"
+    # Container by default (issue #766): agent-written code never runs on
+    # the daemon's computer unless a company chose ``host`` and an Owner
+    # acknowledged it (services/platform/acknowledgements.py).
+    DELIVERY_SANDBOX: str = "container"
     # The highest forge policy any company may have (services/contracts/
     # forge_policy.py): ``none``, ``fetch`` or ``publish``; an air-gapped
     # install sets ``none``. An unknown value reads as ``none``.
@@ -86,7 +89,13 @@ class Settings(BaseSettings):
     # wakes at the next window boundary when that comes sooner, and never
     # looks more often than once a minute.
     RUN_WINDOW_RECHECK_SECONDS: int = 300
-    DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
+    # Empty: the daemon builds the project's own image from its stacks
+    # (services/workspace/stack_image.py, issue #766). A value names one image
+    # for every project instead, as before.
+    DELIVERY_SANDBOX_IMAGE: str = ""
+    # How long the backend waits for the daemon to build that image (the
+    # daemon's own limit is FABRIQUE_STACK_BUILD_SECONDS, 1800).
+    STACK_IMAGE_BUILD_TIMEOUT_SECONDS: float = 1900.0
     DELIVERY_SANDBOX_NETWORK: bool = False
     DELIVERY_SANDBOX_CPUS: float = 2.0
     DELIVERY_SANDBOX_MEMORY_MB: int = 2048

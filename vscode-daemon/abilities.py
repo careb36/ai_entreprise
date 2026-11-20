@@ -56,6 +56,7 @@ SUBJECTS = (
     "workspace.map",
     "workspace.read",
     "workspace.related",
+    "workspace.sandbox.image",
     "workspace.sandbox.reset",
     "workspace.search",
     "workspace.signatures",

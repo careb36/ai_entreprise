@@ -310,8 +310,8 @@ Every environment variable, with its default, the component that reads it and
 whether it is a secret, is in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 A few change behaviour noticeably: `AUTH_REQUIRED` (on by default),
 `DELIVERY_TESTS_ENABLED` (the daemon runs the project's tests after each
-delivery; off by default), `DELIVERY_SANDBOX` (`host`, `container` or
-`bwrap`), and `MANAGER_AGENT_ENABLED`, `REVIEWER_AGENT_ENABLED` and
+delivery; off by default), `DELIVERY_SANDBOX` (`container` by default, in the
+project's own image; `host` or `bwrap`), and `MANAGER_AGENT_ENABLED`, `REVIEWER_AGENT_ENABLED` and
 `SUPPORT_AGENT_ENABLED` (off by default).
 
 ## Testing

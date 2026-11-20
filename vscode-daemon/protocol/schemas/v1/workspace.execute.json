@@ -94,6 +94,11 @@
             "null"
           ]
         },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The daemon's clock around the command, in milliseconds (§5.1.3)."
+        },
         "timed_out": {
           "type": "boolean"
         },

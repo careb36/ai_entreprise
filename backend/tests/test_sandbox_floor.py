@@ -71,7 +71,10 @@ def test_the_floor_s_runtime_missing_refuses_never_the_host(
 
 def test_without_the_floor_nothing_changes(tmp_path, monkeypatch):
     monkeypatch.delenv("FABRIQUE_SANDBOX_REQUIRED", raising=False)
-    assert shell_exec.execute_shell_command("echo hi", str(tmp_path)) == {
+    plain = shell_exec.execute_shell_command("echo hi", str(tmp_path))
+    # The daemon's clock is the one addition (issue #766).
+    assert plain.pop("duration_ms") >= 0
+    assert plain == {
         "success": True,
         "stdout": "hi\n",
         "stderr": "",

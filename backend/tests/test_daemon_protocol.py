@@ -283,6 +283,7 @@ def test_the_important_subjects_have_fixtures():
         "workspace.related",
         "workspace.signatures",
         "workspace.sandbox.reset",
+        "workspace.sandbox.image",
     } <= covered
 
 

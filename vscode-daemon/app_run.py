@@ -281,6 +281,8 @@ def _remove(runtime: str, name: str) -> bool:
 def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     runtime = sandbox.container_runtime()
     name = f"fabrique-app-{uuid.uuid4().hex[:12]}"
+    # The project's stack image when asked for (``stack_image.py``).
+    box, stack = sandbox.resolve_image(runtime, box, req["cwd"])
     # From the image's content ID, observed now; reported below (``sandbox_image``).
     run_box, identity = sandbox_image.pinned(runtime, box)
     # The project's dependency cache, as a test run mounts it (``sandbox_cache``).
@@ -294,6 +296,8 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     argv[2:2] = ["-d", "-e", f"PORT={req['port']}", "-e", f"APP_URL={req['app_url']}"]
     out: Dict[str, Any] = {"sandbox": sandbox.report(box, runtime)}
     out["sandbox"]["image_identity"] = identity
+    if stack is not None:
+        out["sandbox"]["stack_image"] = stack
     # From the launch on, the container is removed by name whatever happens:
     # a launch that timed out may still have created it, and a log that cannot
     # be read must not leave it running with the worktree mounted.
