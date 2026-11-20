@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import worker_stages
+from _verdicts import assert_verified_but_for_tests
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
@@ -399,16 +400,16 @@ def test_end_to_end_files_land_and_delivery_is_verified(db, tmp_path, monkeypatc
     assert run.producer == "le-fabrique-task-worker"
     assert run.claims["files"] == ["src/auth/login.py", "tests/test_login.py"]
     assert run.model == "deepseek-chat"
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     assert {c["name"]: c["outcome"] for c in verification.checks}[
         "files_written"
     ] == "pass"
     assert comments[-1]["text"].startswith(f"Delivered to {project}")
-    assert f"evidence run #{run.id} (verified)" in comments[-1]["text"]
+    assert f"evidence run #{run.id} (unverifiable)" in comments[-1]["text"]
     assert "# Artifact: src/auth/login.py" in review
     event = next(p for s, p in nats.published if s == f"glassroom.{sprint['id']}")
     assert event["agent_run_id"] == run.id
-    assert event["verdict"] == "verified"
+    assert event["verdict"] == "unverifiable"
 
 
 def test_end_to_end_daemon_down_is_unverifiable_not_lost(db, tmp_path, monkeypatch):

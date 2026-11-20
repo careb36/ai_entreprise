@@ -57,7 +57,9 @@ def test_reverification_appends_history_and_returns_oldest_first(
     assert second_response.json()["verdict"] == "verified"
     assert len(verification_audits) == 2
     assert sqlite_session.get(Verification, second_response.json()["id"]).evidence == {
-        "ci": {"conclusion": "success", "source": "github-check-run", "ref": "run/125"}
+        "ci": {"conclusion": "success", "source": "github-check-run", "ref": "run/125"},
+        # The policy the verdict was computed under (issue #766).
+        "verdict_policy": {"version": "v1", "required": []},
     }
     assert {
         column.name: getattr(sqlite_session.get(Verification, first_id), column.name)
