@@ -306,7 +306,7 @@ def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
     llm, db, monkeypatch
 ):
     _short_answer(llm)
-    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
+    monkeypatch.setattr(qa_review, "MAX_REWORKS", 1)
     sprint, item = _doc_task(db)
     nats = _task_assign_handler(monkeypatch)
 
@@ -349,7 +349,7 @@ def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
     """Blocked by the gate, the task is escalated and the ScrumMaster's triage is
     recorded with what blocked it; the task stays blocked for a person."""
     _short_answer(llm)
-    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
+    monkeypatch.setattr(qa_review, "MAX_REWORKS", 0)
     asked = []
 
     def _ask(model, system_prompt, prompt, company_id=None):
@@ -418,7 +418,7 @@ def test_a_send_back_gives_the_gate_a_fresh_rework_budget(llm, db, monkeypatch):
     """After a person sends a gate-blocked task back, its first short deliverable
     is sent back for rework again, not blocked on the spot."""
     _short_answer(llm)
-    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
+    monkeypatch.setattr(qa_review, "MAX_REWORKS", 1)
     sprint, item = _doc_task(db)
     item.comments = [
         {

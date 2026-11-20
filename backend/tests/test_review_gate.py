@@ -136,7 +136,7 @@ def test_delivery_gate_blocks_after_the_rework_limit(db, monkeypatch):
     item_id = _item_in_review(db, "refuted")
     item = db.get(BacklogItem, item_id)
     history = []
-    for attempt in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES):
+    for attempt in range(qa_review.MAX_REWORKS):
         history.append(
             {
                 "author": "Verifier",
@@ -233,7 +233,7 @@ def test_a_task_qa_blocks_is_not_retried_by_the_same_cycle(db, monkeypatch):
         item.comments
         + [
             {"author": "QA", "text": "NEEDS WORK: earlier", "created_at": ""}
-            for _ in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES)
+            for _ in range(qa_review.MAX_REWORKS)
         ]
         + [{"author": "Dev", "text": DELIVERABLE, "created_at": ""}]
     )

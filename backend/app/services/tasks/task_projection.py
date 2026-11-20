@@ -303,10 +303,12 @@ class TaskRecord:
             return board.pending_rework_feedback(self.comments)
         return pending_rework_from_events(self.events)
 
-    def rework_requests_by(self, author: str) -> int:
+    def reworks(self) -> int:
+        """Every cause's rework requests since a person's send-back (#766)."""
         if self.events is None:
-            return board.rework_requests_by(self.comments, author)
-        return rework_requests_by_from_events(self.events, author)
+            return board.reworks_since_send_back(self.comments)
+        since = _verdict_events(_since_send_back(self.events))
+        return sum(1 for e in since if _needs_work(e) and _text(e))
 
     def rework_request_count(self) -> int:
         """Every rework request on the task, whoever made it."""

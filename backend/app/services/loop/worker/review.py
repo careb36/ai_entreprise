@@ -287,14 +287,13 @@ async def _send_back_from_delivery_gate(
 ) -> None:
     """Rework for a delivery the daemon refuted or never confirmed; block after the limit."""
     problem, observation = gate
-    previous_gate_reworks = task_record.rework_requests_by(DELIVERY_GATE_AUTHOR)
-    rework = previous_gate_reworks < qa_review.AUTOPILOT_MAX_REWORK_CYCLES
+    previous_gate_reworks = task_record.reworks()
+    rework = previous_gate_reworks < qa_review.MAX_REWORKS
     instruction = (
-        "Fix the code so the project's checks pass and deliver every "
-        "changed file in full as a path= block."
+        "Fix the code so the project's checks pass. "
         if problem in delivery_gate.CODE_PROBLEMS
-        else "Re-run the task and give every file in full as a path= block."
-    )
+        else ""
+    ) + qa_review.EDIT_INSTRUCTION
     gate_event = task_events.record(
         session,
         item,

@@ -189,6 +189,12 @@ def rework_requests_by(comments: Any, author: str) -> int:
     )
 
 
+def reworks_since_send_back(comments: Any) -> int:
+    """Every ``NEEDS WORK:`` request since the last send-back, whoever made it:
+    the task's one rework budget (``MAX_REWORKS``, issue #766)."""
+    return sum(1 for c in since_send_back(comments) if is_rework_request(c))
+
+
 def has_manual_freeze_marker(comments: Any) -> bool:
     """Detect operator comments that intentionally freeze a task out of automation."""
     return any(

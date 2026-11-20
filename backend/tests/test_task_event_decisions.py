@@ -189,7 +189,7 @@ def test_qa_reviews_the_delivered_event_when_its_comment_was_altered(db, monkeyp
 def test_the_rework_budget_is_counted_from_the_events(db, monkeypatch):
     company = _company(db)
     item = _item(db, _sprint(db, company))
-    limit = qa_review.AUTOPILOT_MAX_REWORK_CYCLES
+    limit = qa_review.MAX_REWORKS
     for _ in range(limit):
         task_events.record(
             db, item, "reviewed", "QA", author="QA", text="NEEDS WORK: add tests"
@@ -205,7 +205,8 @@ def test_the_rework_budget_is_counted_from_the_events(db, monkeypatch):
     )
     db.commit()
     _verified_run(db, company, item)
-    # Signed by someone else on the board, the requests would not count as QA's.
+    # Signed by someone else on the board: they still count, one budget for every
+    # cause (issue #766), and they are read from the events.
     for index in range(limit):
         _alter(db, item.id, index, author="Somebody")
 
