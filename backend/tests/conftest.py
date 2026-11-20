@@ -298,6 +298,19 @@ def _integrate_after_close(**payload):
 
 
 @pytest.fixture(autouse=True)
+def audit_log_in_a_temporary_folder(monkeypatch, tmp_path_factory):
+    """The audit log goes to a folder of the test's own, not the container's
+    ``/app/.factory/logs``. Outside a container ``/app`` does not exist or is
+    not writable, and the after-commit write then failed every route that
+    audits (SSO, tokens, Manager rules, chat: about 280 tests on a developer's
+    machine, issue #766), while a runner with ``/app`` passed. A test that
+    reads the log sets its own ``AUDIT_LOG_PATH`` after this one."""
+    folder = tmp_path_factory.mktemp("audit")
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(folder))
+    monkeypatch.setattr(settings, "AUDIT_LOG_PATH", str(folder))
+
+
+@pytest.fixture(autouse=True)
 def disable_auth_for_legacy_tests(monkeypatch):
     # The legacy suite predates authentication enforcement.
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)

@@ -11,19 +11,40 @@ excerpt of each one, sharing ``DIGEST_CHARS`` between them; a file that does
 not fit says how many lines were left out, so a cut is never read as a
 missing part. Each file keeps its ``# Artifact: <path>`` heading, which the
 board and the e2e read. The full files are on disk and in the run's artifact.
+The digest never exceeds its limit: a file the limit leaves no room for is
+named in the index and says its excerpt was left out, so no later cut can
+fall inside a file without saying so.
+
+QA reviews a larger view of the same files (``for_review``): rebuilt from the
+run's artifact, where every file is whole, within ``REVIEW_CHARS``. A digest
+of 3800 characters shared by five files showed each one about 600, and QA
+sent verified work back as "truncated" (sprint 3, tasks 14 and 17). The view
+is rebuilt only when the artifact holds every file the board's digest lists;
+otherwise (a file written through the workspace edit tool, which is not in
+the answer) QA reads the board's digest as before.
 """
 
 from __future__ import annotations
 
+import re
+
+from services.contracts.manifest import MANIFEST_BLOCK, parse_file_manifest
+
 DIGEST_CHARS = 3800
+REVIEW_CHARS = 24000
 HEADER = "Files written"
 MIN_EXCERPT_CHARS = 120
+MARKER_RESERVE = 48
 NOTE = (
     "\n\nThe files listed above were written to the project and checked by the "
     "Verifier. Long files are shown as excerpts by the system: a file cut here "
     "is not a missing part, so do not ask for content only because this view "
     "leaves it out. Judge whether the work meets the task."
 )
+EDIT_NOTE = (
+    "(delivered as SEARCH/REPLACE edits to the existing file, applied and verified)"
+)
+_INDEX_LINE = re.compile(r"^- (\S+) \(\d+ lines, \d+ bytes\)$", re.MULTILINE)
 
 
 def is_digest(text: str) -> bool:
@@ -64,8 +85,41 @@ def build(
         head += f"\n\nDeveloper's note: {prose}"
     headings = sum(len(f"\n\n# Artifact: {path}\n\n") for path, _ in files)
     room = limit - len(head) - headings
-    per_file = max(MIN_EXCERPT_CHARS, room // max(1, len(files)))
+    # Each cut file ends with a one-line marker; keep room for it.
+    per_file = room // max(1, len(files)) - MARKER_RESERVE
     sections = [head]
+    # Too many files to show each: as many as fit get the minimum.
+    per_file = max(per_file, MIN_EXCERPT_CHARS)
+    used = len(head)
     for path, content in files:
-        sections.append(f"# Artifact: {path}\n\n{_excerpt(content, per_file)}")
+        heading = f"# Artifact: {path}\n\n"
+        excerpt = _excerpt(content, per_file)
+        if used + len(heading) + len(excerpt) + 2 > limit:
+            lines = content.count("\n") + 1 if content else 0
+            excerpt = f"[excerpt left out for room: {lines} line(s)]"
+            if used + len(heading) + len(excerpt) + 2 > limit:
+                break
+        sections.append(heading + excerpt)
+        used += len(heading) + len(excerpt) + 2
     return "\n\n".join(sections)
+
+
+def for_review(
+    deliverable: str, artifact: str | None, limit: int = REVIEW_CHARS
+) -> str:
+    """What QA reads of a delivery: the run's whole files within *limit*, when
+    the artifact holds every file the board's digest lists, else the digest."""
+    if not is_digest(deliverable) or not artifact:
+        return deliverable
+    listed = _INDEX_LINE.findall(deliverable.split("\n\n", 1)[0])
+    targets = parse_file_manifest(artifact)
+    if not listed or not set(listed) <= {t["path"] for t in targets}:
+        return deliverable
+    shown = []
+    for target in targets:
+        content = target.get("content") or ""
+        if "edits" in target:
+            content = f"{EDIT_NOTE}\n{content}"
+        shown.append({"path": target["path"], "content": content})
+    prose = MANIFEST_BLOCK.sub("", artifact).strip()
+    return build(shown, prose, limit=limit)

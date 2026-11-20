@@ -265,6 +265,45 @@ def test_stopping_a_sprint_and_a_credit_pause_are_events(db, monkeypatch):
     assert_projection_agrees(db, paused.id)
 
 
+def test_a_transient_model_failure_queues_the_task_again_a_few_times(db):
+    """A provider timeout or a dropped proxy call blocked the task for a
+    person (sprint 3, tasks 12 and 15, issue #766); it is queued again, at
+    most MAX_TRANSIENT_RETRIES times, and a real failure still blocks."""
+    from services.loop.worker import execute, intake
+
+    company = _company(db)
+    sprint = _sprint(db, company)
+    item = _item(db, sprint, status="in_progress")
+    data = {"backlog_item_id": item.id, "sprint_id": sprint.id}
+    timeout = execute.LLMCallError(
+        "LLM call failed: deepseek 502 upstream_timeout: no complete answer within 300s"
+    )
+    for _ in range(intake.MAX_TRANSIENT_RETRIES):
+        asyncio.run(intake._record_failure(_FakeNATS(), data, timeout))
+        db.expire_all()
+        assert db.get(BacklogItem, item.id).status == "todo"
+    asyncio.run(intake._record_failure(_FakeNATS(), data, timeout))
+    db.expire_all()
+    assert db.get(BacklogItem, item.id).status == "blocked"
+    assert _kinds(db, item.id) == ["retried"] * intake.MAX_TRANSIENT_RETRIES + [
+        "blocked"
+    ]
+    assert_projection_agrees(db, item.id)
+
+    other = _item(db, sprint, status="in_progress")
+    refused = execute.LLMCallError("LLM call failed: deepseek 400 invalid request")
+    asyncio.run(
+        intake._record_failure(
+            _FakeNATS(), {"backlog_item_id": other.id, "sprint_id": sprint.id}, refused
+        )
+    )
+    db.expire_all()
+    assert db.get(BacklogItem, other.id).status == "blocked"
+    assert intake.is_transient_llm_failure(
+        "LLM call failed: llm-proxy unreachable proxy_connection_lost: closed"
+    )
+
+
 def _task_run(session, item, company_id):
     run = AgentRun(
         company_id=company_id,

@@ -214,10 +214,65 @@ async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
     return ctx
 
 
+# A provider that did not answer in time, a proxy that dropped the call (a
+# restart), a rate limit or a 5xx: the next attempt may well answer. Each was
+# blocking the task for a person (sprint 3, tasks 12 and 15, issue #766).
+TRANSIENT_LLM_MARKERS = (
+    "upstream_timeout",
+    "proxy_connection_lost",
+    "llm-proxy unreachable",
+    "empty_content",
+    " 429 ",
+    " 500 ",
+    " 502 ",
+    " 503 ",
+    " 504 ",
+)
+TRANSIENT_RETRY_PREFIX = "Transient model failure, queued again"
+MAX_TRANSIENT_RETRIES = 3
+
+
+def is_transient_llm_failure(message: str) -> bool:
+    return any(marker in f" {message} " for marker in TRANSIENT_LLM_MARKERS)
+
+
+def requeue_after_transient_failure(item_id: int, message: str) -> bool:
+    """A task whose model call failed transiently goes back to ``todo``, at
+    most ``MAX_TRANSIENT_RETRIES`` times; ``False`` leaves it to be blocked."""
+    if not is_transient_llm_failure(message):
+        return False
+    with Session(engine) as session:
+        item = session.get(BacklogItem, item_id)
+        if item is None:
+            return False
+        done = sum(
+            1
+            for c in item.comments or []
+            if str(c.get("text") or "").startswith(TRANSIENT_RETRY_PREFIX)
+        )
+        if done >= MAX_TRANSIENT_RETRIES:
+            return False
+        task_events.record(
+            session,
+            item,
+            "retried",
+            task_events.SYSTEM,
+            status="todo",
+            text=(
+                f"{TRANSIENT_RETRY_PREFIX} ({done + 1}/{MAX_TRANSIENT_RETRIES}): "
+                f"{message[:400]}"
+            ),
+        )
+        session.commit()
+    logger.warning("Transient model failure on item=%s; queued again", item_id)
+    return True
+
+
 async def _record_failure(
     nats_client: NATSClient, data: dict[str, Any], e: Exception
 ) -> None:
-    """No credit pauses the sprint; any other failure blocks the task with the error."""
+    """No credit pauses the sprint; a transient model failure queues the task
+    again (a few times); any other failure blocks the task with the error."""
     logger.exception(
         "Error processing task.assign (item=%s): %s",
         data.get("backlog_item_id", "?"),
@@ -238,6 +293,15 @@ async def _record_failure(
         await sprint_control.publish_credit_pause(
             nats_client, data["sprint_id"], credit
         )
+        return
+
+    if (
+        isinstance(e, execute.LLMCallError)
+        and data.get("backlog_item_id")
+        and await asyncio.to_thread(
+            requeue_after_transient_failure, data["backlog_item_id"], str(e)
+        )
+    ):
         return
 
     # Mark as blocked on failure.

@@ -171,6 +171,25 @@ def test_a_passing_branch_moves_main_to_the_checked_merge_and_records_it(repo):
     assert "fake checks: ok" in log.read_text()
 
 
+def test_the_checking_worktree_is_beside_the_checkout_never_under_git(repo):
+    """Vite refuses **/.git/** by default: a worktree under .git loaded no
+    vitest setup file and every frontend suite failed (issue #766)."""
+    branch(repo, "feature", {"feature.txt": "new\n"})
+
+    result = land(repo, "feature")
+
+    assert result.returncode == 0, result.stderr
+    worktrees = git(repo, "worktree", "list", "--porcelain").splitlines()
+    paths = [
+        Path(line.split(" ", 1)[1])
+        for line in worktrees
+        if line.startswith("worktree ")
+    ]
+    beside = repo.parent / f"{repo.name}.land-worktree"
+    assert beside.resolve() in [p.resolve() for p in paths]
+    assert not any(".git" in p.parts for p in paths)
+
+
 def test_main_not_checked_out_is_moved_with_a_compare_and_swap(repo):
     tip = branch(repo, "feature", {"feature.txt": "new\n"})
     git(repo, "checkout", "-q", "feature")

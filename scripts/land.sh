@@ -35,7 +35,9 @@
 #   LAND_MAIN           the trunk (default main)
 #   LAND_REMOTE         the mirror (default origin; no such remote: local only)
 #   LAND_OFFLINE=1      land against local main when the remote cannot be fetched
-#   LAND_WORKTREE       the checking worktree (default .git/fabrique/worktree)
+#   LAND_WORKTREE       the checking worktree (default <checkout>.land-worktree,
+#                       beside the repository: never under .git, where Vite
+#                       refuses to serve files and the frontend tests fail)
 #   LAND_PYTHON         the interpreter that reads the protected list (default python3)
 #   LAND_MAX_ATTEMPTS   merges tried while main keeps moving (default 3)
 #
@@ -65,7 +67,10 @@ LOCK="$STATE/land.lock"
 MAIN="${LAND_MAIN:-main}"
 REMOTE="${LAND_REMOTE:-origin}"
 CHECK_CMD="${LAND_CHECK_CMD:-scripts/check.sh full}"
-WORKTREE="${LAND_WORKTREE:-$STATE/worktree}"
+# Beside the main checkout, never under .git: Vite denies **/.git/** by
+# default, so vitest in a worktree there loaded no setup file and every
+# frontend suite failed (issue #766).
+WORKTREE="${LAND_WORKTREE:-$(dirname "$COMMON").land-worktree}"
 PY="${LAND_PYTHON:-python3}"
 MAX_ATTEMPTS="${LAND_MAX_ATTEMPTS:-3}"
 NOTES_REF="refs/notes/verification"

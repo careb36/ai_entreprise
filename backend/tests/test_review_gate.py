@@ -363,3 +363,43 @@ def test_another_companys_run_cannot_gate_this_task(db, monkeypatch):
     status, _comments = _state(db, item_id)
     assert len(calls) == 1
     assert status == "done"
+
+
+def test_qa_reads_the_company_s_run_files_whole_and_never_another_company_s(
+    db, monkeypatch
+):
+    from services.loop import review_digest
+
+    item_id = _item_in_review(db, "verified")
+    item = db.get(BacklogItem, item_id)
+    company_id = db.get(Sprint, item.sprint_id).company_id
+    whole = "\n".join(f"line {i}" for i in range(1000))
+    targets = [{"path": "src/a.py", "content": whole}]
+    item.comments = [
+        {"author": "Dev", "text": review_digest.build(targets), "created_at": ""}
+    ]
+    db.add(item)
+    run = db.exec(select(AgentRun).where(AgentRun.company_id == company_id)).one()
+    run.artifact_text = f"Done.\n\n```python path=src/a.py\n{whole}\n```"
+    intruder = Company(company_name="Intruder view", autonomy_level=1)
+    db.add_all([run, intruder])
+    db.commit()
+    db.refresh(intruder)
+    db.add(
+        AgentRun(
+            company_id=intruder.id,
+            external_ref=f"task-{item_id}",
+            producer=task_worker.TASK_WORKER_PRODUCER,
+            artifact_text="```python path=src/a.py\nINTRUDER\n```",
+            artifact_digest="d",
+            artifact_size=1,
+            version=99,
+        )
+    )
+    db.commit()
+
+    calls = _run_cycle(monkeypatch, "APPROVED: complete", db, item_id)
+
+    assert len(calls) == 1
+    assert "line 999" in calls[0] and "not shown here" not in calls[0]
+    assert "INTRUDER" not in calls[0]
