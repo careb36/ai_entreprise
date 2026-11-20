@@ -125,7 +125,8 @@ def test_a_folder_never_installed_in_a_container_installs_before_its_suite(
     assert record["first_install"] is True and record["folder"] == "backend"
     sqlite_session.expire_all()
     installs = sqlite_session.get(Company, company.id).dependency_installs
-    assert installs == {f"container:{root}": {"backend/": "installed"}}
+    mark = dependency_install.command_digest("poetry install")
+    assert installs == {f"container:{root}": {"backend/": mark}}
 
     # The next delivery in the same worktree finds the mark: no install.
     again, daemon2, _ = _ctx(
@@ -314,3 +315,32 @@ def test_a_worktree_s_repository_is_mounted_read_only_at_its_own_path(tmp_path):
     (plain / ".git").mkdir(parents=True)
     assert daemon_sandbox.git_mounts(str(plain)) == []
     assert daemon_sandbox.git_mounts(str(tmp_path / "missing")) == []
+
+
+def test_a_changed_install_command_installs_again(
+    sqlite_session, tmp_path, monkeypatch, isolated
+):
+    """The mark keeps the command's digest: a company that changes a
+    folder's install (self-hosting, llm-proxy's requirements-dev.txt) gets it
+    run, where a bare "installed" mark kept the old install."""
+    root = _monorepo(tmp_path)
+    _detected(monkeypatch, root)
+    company = _company(sqlite_session)
+    key = f"container:{root}"
+    old = {key: {"backend/": dependency_install.command_digest("poetry install")}}
+
+    same, daemon, _ = _ctx(sqlite_session, company, root, ["backend/x.py"], old)
+    asyncio.run(dependency_install.install_if_needed(same))
+    assert daemon.executed() == []
+
+    legacy = {key: {"backend/": "installed"}}
+    again, daemon, _ = _ctx(sqlite_session, company, root, ["backend/x.py"], legacy)
+    asyncio.run(dependency_install.install_if_needed(again))
+    assert [p["command"] for p in daemon.executed()] == ["cd backend && poetry install"]
+
+    other = {
+        key: {"backend/": dependency_install.command_digest("poetry install --no-root")}
+    }
+    changed, daemon, _ = _ctx(sqlite_session, company, root, ["backend/x.py"], other)
+    asyncio.run(dependency_install.install_if_needed(changed))
+    assert [p["command"] for p in daemon.executed()] == ["cd backend && poetry install"]

@@ -581,10 +581,10 @@ def test_moving_from_host_to_container_installs_again(
     assert daemon.requests[-1]["sandbox"]["mode"] == "container"
     assert "dependency_install" not in install()
     sqlite_session.expire_all()
-    installs = sqlite_session.get(Company, company.id).dependency_installs
-    assert installs == {
+    mark = dependency_install.command_digest("pip install -r requirements.txt")
+    assert sqlite_session.get(Company, company.id).dependency_installs == {
         str(root): {"requirements.txt": "abc"},
-        f"container:{root}": {"requirements.txt": "abc", "./": "installed"},
+        f"container:{root}": {"requirements.txt": "abc", "./": mark},
     }
     assert len(daemon.requests) == 2
 

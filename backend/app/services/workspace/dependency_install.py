@@ -38,6 +38,7 @@ folder, as before.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any
 
@@ -56,20 +57,28 @@ REPLY_MARGIN_SECONDS = 30.0
 
 # The mark a successful install leaves for a folder (``<folder>/``) or the
 # root (``./``) beside its manifests' sha256: it was installed here once, in
-# this mode. A worktree a task starts from has none, so its first delivery
-# installs whatever its manifests (issue #766: the tests otherwise found
-# nothing installed).
+# this mode, by this command (its digest, ``command_digest``). A worktree a
+# task starts from has none, so its first delivery installs whatever its
+# manifests (issue #766: the tests otherwise found nothing installed); a
+# company that changes a folder's install command gets it run again, where
+# a bare "installed" mark kept the old install (self-hosting, llm-proxy's
+# requirements-dev.txt). A mark from before reads as another command.
 ROOT_MARK = "./"
+
+
+def command_digest(command: str | None) -> str:
+    """The first 16 hex of the install command's sha256."""
+    return "sha256:" + hashlib.sha256(str(command or "").encode()).hexdigest()[:16]
 
 
 def folder_mark(folder: str) -> str:
     return f"{folder}/"
 
 
-def never_installed(installs: Any, key: str, mark: str) -> bool:
-    """Whether no install left *mark* under *key*."""
+def never_installed(installs: Any, key: str, mark: str, command: str | None) -> bool:
+    """Whether no install by *command* left *mark* under *key*."""
     seen = ((installs or {}).get(key) or {}) if isinstance(installs, dict) else {}
-    return not seen.get(mark)
+    return seen.get(mark) != command_digest(command)
 
 
 def install_key(root: str, mode: str | None) -> str:
@@ -129,7 +138,7 @@ def _record_installed(
     company_id: Any,
     key: str,
     manifests: list[dict[str, Any]],
-    marks: tuple[str, ...] = (),
+    marks: dict[str, str] | None = None,
 ) -> None:
     from database import engine as default_engine
     from models.company import Company
@@ -142,7 +151,7 @@ def _record_installed(
         installs = dict(company.dependency_installs or {})
         seen = dict(installs.get(key) or {})
         seen.update({m["path"]: m["sha256"] for m in manifests})
-        seen.update({mark: "installed" for mark in marks})
+        seen.update(marks or {})
         installs[key] = seen
         company.dependency_installs = installs
         session.add(company)
@@ -187,7 +196,7 @@ async def install_if_needed(ctx: Context) -> None:
             for f in running
             if isolated
             and f.get("install")
-            and never_installed(installs, key, folder_mark(f["folder"]))
+            and never_installed(installs, key, folder_mark(f["folder"]), f["install"])
         }
         if own or first:
             await _install_folders(ctx, folders, own, box, unavailable, mode, first)
@@ -197,7 +206,7 @@ async def install_if_needed(ctx: Context) -> None:
     root_first = (
         isolated
         and bool(command and profile.get("stack"))
-        and never_installed(installs, key, ROOT_MARK)
+        and never_installed(installs, key, ROOT_MARK, command)
     )
     if not changed and not root_first:
         return
@@ -279,7 +288,7 @@ async def install_if_needed(ctx: Context) -> None:
                     company_id,
                     install_key(evidence["workspace_root"], mode),
                     covered,
-                    (ROOT_MARK,) if mode != "host" else (),
+                    {ROOT_MARK: command_digest(command)} if mode != "host" else {},
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install: %s", e)
@@ -351,7 +360,9 @@ async def _install_folders(
                     company_id,
                     install_key(evidence["workspace_root"], mode),
                     covered,
-                    (folder_mark(name),) if mode != "host" else (),
+                    {folder_mark(name): command_digest(command)}
+                    if mode != "host"
+                    else {},
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install in %s/: %s", name, e)
