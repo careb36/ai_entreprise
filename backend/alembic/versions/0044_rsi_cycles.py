@@ -69,7 +69,9 @@ def upgrade() -> None:
         sa.Column("resumed_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=True),
-        sa.UniqueConstraint("company_id", "cycle_key", name="uq_rsi_cycles_company_key"),
+        sa.UniqueConstraint(
+            "company_id", "cycle_key", name="uq_rsi_cycles_company_key"
+        ),
     )
     op.create_index(
         "ix_rsi_cycles_company_id", "rsi_cycles", ["company_id"], unique=False

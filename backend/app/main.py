@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
+import config
 import nats_auth
 from config import Settings
 from exception_handlers import register_exception_handlers
@@ -20,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from lifecycle import shutdown, startup
 from metrics import setup_metrics
 from routers.access_review import router as access_review_router
+from routers.acknowledgements import router as acknowledgements_router
 from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
@@ -94,7 +96,7 @@ from services.integrations import (
     person_notices,
     webhooks,
 )
-from services.platform import capabilities
+from services.platform import capabilities, healthcheck
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -235,6 +237,7 @@ app.include_router(sod_router)
 app.include_router(protected_paths_router)
 app.include_router(company_standards_router)
 app.include_router(forge_policy_router)
+app.include_router(acknowledgements_router)
 app.include_router(company_sync_router)
 app.include_router(run_window_router)
 app.include_router(rsi_cycles_router)
@@ -267,22 +270,36 @@ def _nats_health(request: Request) -> dict:
     }
 
 
+def _verification_health() -> dict:
+    # The shared settings object (``config.settings``), read on each call.
+    return healthcheck.verification(
+        bool(config.settings.DELIVERY_TESTS_ENABLED), config.settings.DELIVERY_SANDBOX
+    )
+
+
 @app.get("/health")
 async def health_check(request: Request):
+    """Liveness, and whether deliveries can be verified (issue #766): tests
+    off or the host sandbox make it ``degraded``, still 200."""
     nats_health = _nats_health(request)
+    verification = _verification_health()
     return {
-        "status": "healthy",
+        "status": verification["status"],
         "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         "nats": nats_health,
         "jetstream": nats_health["jetstream"],
+        "verification": verification,
     }
 
 
 @app.get("/health/deep")
 async def deep_health_check(request: Request):
+    """Every component, and the verification section (always 200: the probes'
+    error text is not yet fit for a public error body)."""
     nats_client = getattr(request.app.state, "nats_client", None)
     return await aggregate(
         nats_client,
         nats_state=_nats_state(request),
         backend_capabilities=capabilities.from_state(request.app.state),
+        verification_state=_verification_health(),
     )

@@ -152,7 +152,8 @@ def test_health_reports_nats_state(test_client):
         time.sleep(0.01)
 
     body = test_client.get("/health").json()
-    assert body["status"] == "healthy"
+    # Tests off makes it degraded (issue #766); NATS has no say in that.
+    assert body["status"] == body["verification"]["status"]
     assert "timestamp" in body
     assert body["nats"]["state"] == "connected"
     assert set(body["nats"]) == {

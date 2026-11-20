@@ -64,4 +64,6 @@ def downgrade() -> None:
     if not sa.inspect(op.get_bind()).has_table("vector_memory"):
         return
     op.execute(sa.text("DROP INDEX IF EXISTS ix_vector_memory_embedding_model"))
-    op.execute(sa.text("ALTER TABLE vector_memory DROP COLUMN IF EXISTS embedding_model"))
+    op.execute(
+        sa.text("ALTER TABLE vector_memory DROP COLUMN IF EXISTS embedding_model")
+    )

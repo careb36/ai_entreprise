@@ -34,9 +34,7 @@ def upgrade() -> None:
         )
     with op.batch_alter_table("sprints", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column(
-                "urgent", sa.Boolean(), nullable=False, server_default=sa.false()
-            )
+            sa.Column("urgent", sa.Boolean(), nullable=False, server_default=sa.false())
         )
         batch_op.add_column(
             sa.Column("run_window_wait_until", sa.DateTime(), nullable=True)

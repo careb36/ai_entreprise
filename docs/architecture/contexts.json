@@ -17,6 +17,7 @@
         "contracts"
       ],
       "public": [
+        "acknowledgements",
         "agent_service",
         "audit_anchors",
         "company_standards_setting",
@@ -229,6 +230,7 @@
       "public": [
         "carry_over",
         "delivery_checks",
+        "preconditions",
         "run_review",
         "sod_requesters",
         "sprint_control"
@@ -1339,6 +1341,9 @@
         "loop"
       ],
       "test_sprint_progress.py": [
+        "loop"
+      ],
+      "test_sprint_start_preconditions.py": [
         "loop"
       ],
       "test_sprint_team.py": [
