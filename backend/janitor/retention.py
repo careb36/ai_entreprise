@@ -15,10 +15,6 @@ Each setting is a number of days; ``0`` keeps everything of that kind.
   chain (rows without a company, or written before the chain existed). A row
   of a company's chain is never deleted here: ``GET /v1/audit/chain`` would
   show the gap. The count of chained rows kept is reported.
-- ``RETENTION_GLASSROOM_DAYS`` (0): stored task events (``task_events``) of
-  sprints that are completed or cancelled. The live Glassroom stream is kept
-  in memory (the last 50 events per sprint) and replays the board, which is
-  never deleted.
 - ``RETENTION_NOTIFICATIONS_DAYS`` (90): personal notifications
   (``personal_notifications``, issue #683), read or not, older than the
   cutoff; and, whatever their age, those of a person who is no longer a
@@ -27,9 +23,17 @@ Each setting is a number of days; ``0`` keeps everything of that kind.
   a negative or a malformed value keeps the default, and anything over
   ``NOTIFICATIONS_MAX_DAYS`` (365) is cut to it.
 
-There is no audit retention. Shrinking ``audit_log`` means archiving a
-company's whole chain with its rows (``docs/OPERATIONS.md``), never deleting
-from it.
+There is no audit retention and no task-event retention. Each row of
+``audit_log`` is a link of its company's hash chain, and each ``task_events``
+row a link of its task's chain (``services/tasks/task_events.py``): deleting
+one breaks the chain, and ``verify_chain`` reports the gap. Shrinking either
+means archiving whole chains with their rows (``docs/OPERATIONS.md``), never
+deleting from them. ``RETENTION_GLASSROOM_DAYS`` used to delete the task
+events of closed sprints without looking at the chains; it was removed
+(issue #766, ``docs/design/target/06-evidence-store.md``) and is ignored
+with a warning (``ignored_settings``). For the same reason a run version a
+task event points at, or whose verification one points at, is evidence of
+record and is never deleted.
 
 The statements are plain SQL over a DB-API connection: psycopg2 in the
 janitor's container, ``sqlite3`` in the tests. The connection is not in
@@ -45,15 +49,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 KPI_TURN_ACTIONS = ("execute_task", "qa_review", "architect_consult")
-CLOSED_SPRINT_STATUSES = ("completed", "cancelled")
 AGENT_RUN_BATCH = 500
 NOTIFICATIONS_MAX_DAYS = 365
+# Settings that were removed because they deleted evidence; read only to warn.
+REMOVED_SETTINGS = ("RETENTION_GLASSROOM_DAYS",)
 
 DEFAULTS = {
     "RETENTION_OUTBOX_DAYS": 7,
     "RETENTION_AGENT_RUNS_DAYS": 0,
     "RETENTION_KPI_TURNS_DAYS": 0,
-    "RETENTION_GLASSROOM_DAYS": 0,
     "RETENTION_NOTIFICATIONS_DAYS": 90,
 }
 
@@ -88,6 +92,19 @@ def settings_from_env(env: dict[str, str] | None = None) -> dict[str, int]:
         days["RETENTION_NOTIFICATIONS_DAYS"]
     )
     return days
+
+
+def ignored_settings(env: dict[str, str] | None = None) -> list[str]:
+    """Removed settings still set to delete something: the janitor warns about each."""
+    env = os.environ if env is None else env
+    ignored = []
+    for name in REMOVED_SETTINGS:
+        try:
+            if int(env.get(name, 0)) > 0:
+                ignored.append(name)
+        except (TypeError, ValueError):
+            continue
+    return ignored
 
 
 def bounded_notification_days(days: Any) -> int:
@@ -144,11 +161,18 @@ def _eligible_runs(cutoff_clause: str) -> str:
         f"AND NOT EXISTS (SELECT 1 FROM {table} d WHERE d.agent_run_id = r.id)"
         for table in _DECISIONS_ON_A_RUN
     )
+    # A task event (a link of a hash chain) that names the run or one of its
+    # verifications makes the run evidence of record.
+    kept_for_chains = (
+        "AND NOT EXISTS (SELECT 1 FROM task_events e WHERE e.run_id = r.id) "
+        "AND NOT EXISTS (SELECT 1 FROM task_events e JOIN verifications v "
+        "ON e.verification_id = v.id WHERE v.agent_run_id = r.id)"
+    )
     return (
         f"SELECT r.id FROM agent_runs r WHERE {cutoff_clause} "
         "AND EXISTS (SELECT 1 FROM agent_runs n WHERE n.company_id = r.company_id "
         "AND n.external_ref = r.external_ref AND n.version > r.version) "
-        f"{kept_for_people}"
+        f"{kept_for_people} {kept_for_chains}"
     )
 
 
@@ -253,18 +277,6 @@ def prune_kpi_turns(conn: Any, days: int, now: datetime) -> tuple[int, int]:
     return cursor.rowcount, kept
 
 
-def prune_glassroom(conn: Any, days: int, now: datetime) -> int:
-    if days <= 0:
-        return 0
-    cursor = _execute(
-        conn,
-        "DELETE FROM task_events WHERE created_at < %s AND sprint_id IN "
-        f"(SELECT id FROM sprints WHERE status IN ({_in_list(CLOSED_SPRINT_STATUSES)}))",
-        (_cutoff(conn, days, now),),
-    )
-    return cursor.rowcount
-
-
 def prune_notifications(conn: Any, days: int, now: datetime) -> int:
     """Delete personal notifications past the cutoff, and those whose
     receiver is no longer a member of their company."""
@@ -313,8 +325,6 @@ def _apply(conn: Any, days: dict[str, int], now: datetime) -> dict[str, int]:
     deleted, kept = prune_kpi_turns(conn, days["RETENTION_KPI_TURNS_DAYS"], now)
     report["kpi_turns"] = deleted
     report["kpi_turns_kept_for_chain"] = kept
-    conn.commit()
-    report["task_events"] = prune_glassroom(conn, days["RETENTION_GLASSROOM_DAYS"], now)
     conn.commit()
     report["personal_notifications"] = prune_notifications(
         conn, days["RETENTION_NOTIFICATIONS_DAYS"], now
