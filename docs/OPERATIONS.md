@@ -1405,18 +1405,19 @@ deleted with their runs or not at all.
 | Setting | Default | Deletes | Never deletes |
 |---------|---------|---------|---------------|
 | `RETENTION_OUTBOX_DAYS` | 7 | delivered outbox events | pending and failed events |
-| `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded versions of a run, with their verifications | the latest version of each run (the evidence of record), and any version a person reviewed, commented on, approved or published |
+| `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded versions of a run, with their verifications | the latest version of each run (the evidence of record), any version a person reviewed, commented on, approved or published, and any version a task event points at (directly or through its verification) |
 | `RETENTION_KPI_TURNS_DAYS` | 0 | KPI turn rows of `audit_log` outside a hash chain (rows without a company, or older than the chain) | any row of a company's chain, and any row a run, verification, approval, review or publication points at |
-| `RETENTION_GLASSROOM_DAYS` | 0 | stored task events of completed and cancelled sprints | the events of open sprints. The live Glassroom keeps its last 50 events per sprint in memory and replays the board, which is never deleted |
 | `RETENTION_NOTIFICATIONS_DAYS` | 90 (never unbounded: `0` or less keeps 90, over 365 is cut to 365) | personal notifications older than that, read or not, and at once those of a person no longer a member of the company | nothing else: a notification is a pointer, its subject is never touched |
 
-Once the database grows, `RETENTION_AGENT_RUNS_DAYS=90` and
-`RETENTION_GLASSROOM_DAYS=90` are reasonable. The janitor logs how many
-chained KPI turns it kept because the chain needs them.
+Once the database grows, `RETENTION_AGENT_RUNS_DAYS=90` is reasonable. The
+janitor logs how many chained KPI turns it kept because the chain needs them.
 
-There is **no audit retention**, on purpose: every row of a company's audit
-log is a link of its hash chain, and deleting one shows as a gap in
-`GET /v1/audit/chain`.
+There is **no audit retention and no task-event retention**, on purpose:
+every row of a company's audit log is a link of its hash chain, and every
+task event a link of its task's chain; deleting one shows as a gap
+(`GET /v1/audit/chain`, `verify_chain`). `RETENTION_GLASSROOM_DAYS` used to
+delete the task events of closed sprints without looking at the chains; it
+was removed (issue #766) and the janitor logs a warning when it is still set.
 
 **Archiving the audit chain.** To keep old audit rows outside the live
 database, archive a company's whole chain, never part of it:

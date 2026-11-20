@@ -19,8 +19,10 @@ models created, the way the janitor runs them over psycopg2.
   is never unbounded (``0`` keeps 90, over 365 is cut to 365).
 """
 
+import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from models import (
@@ -255,15 +257,18 @@ def test_a_turn_a_run_points_at_is_kept(db):
     assert _apply(path, RETENTION_KPI_TURNS_DAYS=30)["kpi_turns"] == 0
 
 
-def test_task_events_of_closed_sprints_go(db):
+def test_task_events_are_never_deleted_whatever_the_settings(db):
+    """Each task event is a link of its task's hash chain (issue #766).
+
+    ``RETENTION_GLASSROOM_DAYS`` deleted those of closed sprints without
+    looking at the chains; it is gone, and setting it deletes nothing.
+    """
     session, company_id, path = db
-    sprints = {}
     for status in ("completed", "cancelled", "active"):
         sprint = Sprint(company_id=company_id, sprint_name=status, status=status)
         session.add(sprint)
         session.commit()
         session.refresh(sprint)
-        sprints[status] = sprint.id
         for created_at in (OLD, RECENT):
             session.add(
                 TaskEvent(
@@ -275,11 +280,90 @@ def test_task_events_of_closed_sprints_go(db):
             )
     session.commit()
 
-    report = _apply(path, RETENTION_GLASSROOM_DAYS=30)
+    report = _apply(path, RETENTION_GLASSROOM_DAYS=30, RETENTION_AGENT_RUNS_DAYS=30)
 
-    assert report["task_events"] == 2
-    assert _count(session, TaskEvent, TaskEvent.sprint_id == sprints["active"]) == 2
-    assert _count(session, TaskEvent) == 4
+    assert "task_events" not in report
+    assert _count(session, TaskEvent) == 6
+
+
+def test_a_run_version_a_task_event_points_at_is_kept(db):
+    """A superseded version named by a chained event, directly or through its
+    verification, is evidence of record (issue #766)."""
+    session, company_id, path = db
+    sprint = Sprint(company_id=company_id, sprint_name="s", status="completed")
+    session.add(sprint)
+    session.commit()
+    session.refresh(sprint)
+    by_run = _run(session, company_id, "task-1", 1, OLD)
+    _run(session, company_id, "task-1", 2, OLD)
+    by_verification = _run(session, company_id, "task-2", 1, OLD)
+    _run(session, company_id, "task-2", 2, OLD)
+    free = _run(session, company_id, "task-3", 1, OLD)
+    _run(session, company_id, "task-3", 2, OLD)
+    verification = session.exec(
+        select(Verification).where(Verification.agent_run_id == by_verification.id)
+    ).one()
+    session.add(
+        TaskEvent(
+            company_id=company_id,
+            sprint_id=sprint.id,
+            event_type="verified",
+            run_id=by_run.id,
+            created_at=OLD,
+        )
+    )
+    session.add(
+        TaskEvent(
+            company_id=company_id,
+            sprint_id=sprint.id,
+            event_type="verified",
+            verification_id=verification.id,
+            created_at=OLD,
+        )
+    )
+    session.commit()
+    ids = (by_run.id, by_verification.id, free.id)
+
+    report = _apply(path, RETENTION_AGENT_RUNS_DAYS=30)
+
+    assert report["agent_runs"] == 1
+    session.expire_all()
+    assert session.get(AgentRun, ids[0]) is not None
+    assert session.get(AgentRun, ids[1]) is not None
+    assert session.get(AgentRun, ids[2]) is None
+
+
+def test_a_removed_setting_still_set_is_named_for_a_warning():
+    assert retention.ignored_settings({"RETENTION_GLASSROOM_DAYS": "90"}) == [
+        "RETENTION_GLASSROOM_DAYS"
+    ]
+    assert retention.ignored_settings({"RETENTION_GLASSROOM_DAYS": "0"}) == []
+    assert retention.ignored_settings({"RETENTION_GLASSROOM_DAYS": "soon"}) == []
+    assert retention.ignored_settings({}) == []
+
+
+# The only code allowed to delete task events, and why. Deleting a link
+# breaks a chain; deleting every event of a sprint at once removes whole
+# chains and leaves no gap.
+WHOLE_CHAIN_DELETES = {
+    # A sprint with no evidence (only the System's bookkeeping events) is
+    # deleted with all its events: ``evidence_of`` refuses otherwise.
+    "app/services/loop/sprint_archive.py",
+}
+
+
+def test_no_code_deletes_task_events():
+    """A static guard: nothing in the backend issues a DELETE on task events,
+    except a whole-chain delete listed above with its reason."""
+    backend = Path(__file__).resolve().parents[1]
+    offenders = {
+        str(path.relative_to(backend))
+        for folder in ("app", "janitor")
+        for path in (backend / folder).rglob("*.py")
+        if re.search(r"DELETE\s+FROM\s+task_events", path.read_text(), re.IGNORECASE)
+        or re.search(r"delete\(\s*TaskEvent\b", path.read_text())
+    }
+    assert offenders == WHOLE_CHAIN_DELETES
 
 
 def test_zero_keeps_everything(db):
@@ -293,7 +377,6 @@ def test_zero_keeps_everything(db):
         RETENTION_OUTBOX_DAYS=0,
         RETENTION_AGENT_RUNS_DAYS=0,
         RETENTION_KPI_TURNS_DAYS=0,
-        RETENTION_GLASSROOM_DAYS=0,
     )
 
     assert set(report.values()) == {0}
@@ -308,7 +391,6 @@ def test_settings_come_from_the_environment_with_safe_defaults():
         "RETENTION_OUTBOX_DAYS": 7,
         "RETENTION_AGENT_RUNS_DAYS": 90,
         "RETENTION_KPI_TURNS_DAYS": 0,
-        "RETENTION_GLASSROOM_DAYS": 0,
         "RETENTION_NOTIFICATIONS_DAYS": 90,
     }
     assert (
