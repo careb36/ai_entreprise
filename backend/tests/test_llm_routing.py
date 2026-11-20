@@ -287,11 +287,22 @@ def test_llm_failure_is_recorded_on_the_board(llm, db, monkeypatch, response, ex
     _company, sprint, item = _board(db, role="Developer", agent_model="")
     nats = _task_assign_handler(monkeypatch)
 
-    asyncio.run(
-        nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})
-    )
+    # A 500 is transient: queued again MAX_TRANSIENT_RETRIES times, each
+    # saying why, then blocked with the error (issue #766). An empty answer
+    # blocks at once.
+    transient = intake.is_transient_llm_failure(expected)
+    attempts = intake.MAX_TRANSIENT_RETRIES + 1 if transient else 1
+    for attempt in range(attempts):
+        asyncio.run(
+            nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})
+        )
+        db.expire_all()
+        if attempt < attempts - 1:
+            stored = db.get(BacklogItem, item.id)
+            assert stored.status == "todo"
+            assert stored.comments[-1]["text"].startswith(intake.TRANSIENT_RETRY_PREFIX)
+            assert stored.comments[-1]["text"].endswith(expected)
 
-    db.expire_all()
     stored = db.get(BacklogItem, item.id)
     comments = stored.comments
     if isinstance(comments, str):
