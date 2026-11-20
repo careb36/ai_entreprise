@@ -73,8 +73,10 @@ async def _qa_review(
 ) -> None:
     """QA reviews one delivery; a task QA leaves blocked joins ``quality_gate_blocked_ids``."""
     # Build review prompt
+    # The task branch as the daemon reads it: every attempt, not only this one.
+    branch = await review_prompt.task_branch(session, nats_client, item, sprint)
     prompt_text = review_prompt.build(
-        session, item, sprint, reviewer_dict, deliverable, qa_review_failures
+        session, item, sprint, reviewer_dict, deliverable, qa_review_failures, branch
     )
 
     try:
