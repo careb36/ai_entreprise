@@ -117,6 +117,7 @@
         "platform"
       ],
       "public": [
+        "branch_view",
         "daemon_liveness",
         "delivery_commands",
         "git_workflow",
@@ -528,6 +529,9 @@
         "tasks"
       ],
       "test_board_moves.py": [
+        "loop"
+      ],
+      "test_branch_view.py": [
         "loop"
       ],
       "test_board_moves_carry.py": [
