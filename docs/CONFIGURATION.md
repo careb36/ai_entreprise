@@ -807,12 +807,15 @@ Copy `.env.example` to `.env` and fill in:
   and the backend refuses to start on a database behind head
   (`app/migrations.py`, `CONTRIBUTING.md` §5).
 - `RETENTION_OUTBOX_DAYS` (7), `RETENTION_AGENT_RUNS_DAYS`,
-  `RETENTION_KPI_TURNS_DAYS`, `RETENTION_GLASSROOM_DAYS` (0, keep all) — what
+  `RETENTION_KPI_TURNS_DAYS` (0, keep all) — what
   the janitor deletes (`backend/janitor/retention.py`): delivered outbox
   events; superseded run versions with their verifications (never the latest
   version, nor one a person reviewed, approved, commented on or published);
   KPI turn rows of `audit_log` outside a company's hash chain (a chained row
-  is never deleted, and counted as kept); task events of closed sprints.
+  is never deleted, and counted as kept). Task events are never deleted:
+  each is a link of its task's hash chain. `RETENTION_GLASSROOM_DAYS`, which
+  deleted those of closed sprints, was removed (issue #766); the janitor
+  warns when it is still set.
   There is no audit retention: `docs/OPERATIONS.md` says how to archive a
   chain with its rows. `BACKUP_DIR`, `BACKUP_KEEP_DAYS` (14) and
   `PG_CONTAINER` steer `scripts/backup.sh`.
