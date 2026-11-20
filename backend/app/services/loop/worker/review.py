@@ -226,6 +226,12 @@ async def _block_exhausted_reviews(
             "phase": "qa_review",
             "task": f"Reviewing: {item.title}",
             "message": f"❌ {reviewer_dict['name']} review failed {MAX_QA_REVIEW_FAILURES} times for: {item.title}. Marked as blocked.",
+            "message_key": "glassroom.events.review_failed_blocked",
+            "message_params": {
+                "agent": reviewer_dict["name"],
+                "task": item.title,
+                "count": MAX_QA_REVIEW_FAILURES,
+            },
         },
     )
 
@@ -264,6 +270,8 @@ async def _block_missing_deliverable(
             "phase": "qa_review",
             "task": f"Reviewing: {item.title}",
             "message": f"❌ {reviewer_dict['name']} cannot review {item.title}: missing deliverable. Marked as blocked.",
+            "message_key": "glassroom.events.missing_deliverable",
+            "message_params": {"agent": reviewer_dict["name"], "task": item.title},
         },
     )
 
@@ -338,6 +346,12 @@ async def _send_back_from_delivery_gate(
             "phase": "delivery_gate",
             "task": f"Reviewed: {item.title}",
             "message": f"🧱 {problem.capitalize()} for {item.title}: {observation}",
+            "message_key": "glassroom.events.delivery_gate",
+            "message_params": {
+                "problem": problem,
+                "task": item.title,
+                "detail": observation,
+            },
         },
     )
 
@@ -409,6 +423,8 @@ async def _recover_to_review(
                 "phase": "blocked_recovery",
                 "task": item.title,
                 "message": f"♻️ Recovered blocked task with existing deliverable: {item.title} moved back to QA review.",
+                "message_key": "glassroom.events.recovered_to_review",
+                "message_params": {"task": item.title},
             },
         )
 
@@ -447,6 +463,8 @@ async def _requeue_blocked(
                 "phase": "retry",
                 "task": item.title,
                 "message": f"🔄 Retrying blocked task: {item.title}",
+                "message_key": "glassroom.events.retrying",
+                "message_params": {"task": item.title},
             },
         )
 

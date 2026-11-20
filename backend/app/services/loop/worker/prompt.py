@@ -14,10 +14,11 @@ from typing import Any
 
 from database import engine
 from logging_config import setup_logger
-from models import BacklogItem, Sprint
+from models import BacklogItem, Company, Sprint
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
-from services.contracts import edit_blocks
+from services.contracts import edit_blocks, language
 from services.evidence import standards
 from services.learning import procedures, retrospective
 from services.models import edit_format as edit_formats
@@ -197,3 +198,17 @@ def _load_procedures_context(company_id: int | None, role: str | None) -> str:
     return standards.prompt_section(role) + procedures.prompt_context(
         engine, company_id, role
     )
+
+
+def language_note(company_id: int | None, db_engine: Any = None) -> str:
+    """The prompt line asking for the person's prose in the company's
+    language (``Company.doc_language``); empty for English."""
+    if company_id is None:
+        return ""
+    try:
+        with Session(db_engine or engine) as session:
+            company = session.get(Company, company_id)
+    except SQLAlchemyError as exc:  # The prompt still runs, in English.
+        logger.warning("Company language unavailable for %s: %s", company_id, exc)
+        return ""
+    return language.person_note(company.doc_language if company else None)

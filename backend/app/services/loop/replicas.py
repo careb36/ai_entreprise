@@ -155,6 +155,8 @@ async def recover_stale(engine: Engine, nats_client: Any) -> list[dict[str, Any]
                 "phase": "restart_recovery",
                 "task": item["title"],
                 "message": f"♻️ Recovered: no live worker held {item['title']}; returned to todo for autonomous redispatch.",
+                "message_key": "glassroom.events.recovered",
+                "message_params": {"task": item["title"]},
             },
         )
     return recovered

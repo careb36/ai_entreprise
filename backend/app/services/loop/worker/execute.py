@@ -253,7 +253,9 @@ def _execute_task(
     # The requested model's edit format (#689), kept for the run's evidence.
     agent["edit_format"] = edit_format.format_for(model, settings.EDIT_FORMAT_BY_MODEL)
 
-    system_prompt = _developer_system_prompt(agent)
+    system_prompt = _developer_system_prompt(agent) + prompt.language_note(
+        company_id, engine
+    )
     user_prompt, _rework_feedback, measure = _developer_prompt(
         item,
         agent,
@@ -389,6 +391,7 @@ def _consult_architect(
         f"specializing in {architect.get('specialty') or 'system design'}. "
         "You advise developers with concise, decisive technical briefs."
     )
+    system_prompt += prompt.language_note(sprint["company_id"], engine)
     request = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
     )
@@ -476,6 +479,11 @@ async def _architect_brief(
                 "phase": "architect_consult",
                 "task": item["title"],
                 "message": f"📐 {agent.get('name') or agent['role']} is consulting the Architect on: {item['title']}",
+                "message_key": "glassroom.events.architect_consulting",
+                "message_params": {
+                    "agent": agent.get("name") or agent["role"],
+                    "task": item["title"],
+                },
             },
         )
         architect_advice = await asyncio.to_thread(
@@ -535,6 +543,8 @@ async def _architect_brief(
                     "phase": "architect_consult",
                     "task": item["title"],
                     "message": f"📐 Architect brief delivered for: {item['title']}",
+                    "message_key": "glassroom.events.architect_consulted",
+                    "message_params": {"task": item["title"]},
                     "preview": architect_advice[:200],
                 },
             )

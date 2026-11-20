@@ -159,6 +159,9 @@ async def _send_back_from_quality_gate(
                 if rework
                 else f"❌ Pre-review gate blocked deliverable for: {item['title']} ({reason})."
             ),
+            "message_key": "glassroom.events."
+            + ("gate_rework" if rework else "gate_blocked"),
+            "message_params": {"task": item["title"], "detail": reason},
             "preview": deliverable[:200] if deliverable else "",
         },
     )

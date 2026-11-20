@@ -333,6 +333,8 @@ async def _record_failure(
                 "task_id": data.get("backlog_item_id"),
                 "task_status": "blocked",
                 "message": f"❌ Task failed: {str(e)[:200]}",
+                "message_key": "glassroom.events.failed",
+                "message_params": {"error": str(e)[:200]},
             },
         )
 
@@ -388,6 +390,8 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                         "phase": "todo_recovery",
                         "task": item.title,
                         "message": f"♻️ Recovered todo task with existing deliverable: {item.title} moved to QA review.",
+                        "message_key": "glassroom.events.recovered_to_review",
+                        "message_params": {"task": item.title},
                         "preview": existing_deliverable[:200],
                     },
                 )
@@ -431,6 +435,11 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "phase": "queued",
                     "task": item.title,
                     "message": f"📬 Task queued for autonomous execution: {item.title} → {item.assignee or 'Dev'}",
+                    "message_key": "glassroom.events.queued",
+                    "message_params": {
+                        "task": item.title,
+                        "agent": item.assignee or "Dev",
+                    },
                 },
             )
         session.commit()

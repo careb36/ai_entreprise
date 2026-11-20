@@ -197,6 +197,11 @@ async def _announce_claim(
             "phase": "claimed",
             "task": item["title"],
             "message": f"🚀 {agent.get('name') or agent['role']} started working on: {item['title']}",
+            "message_key": "glassroom.events.claimed",
+            "message_params": {
+                "agent": agent.get("name") or agent["role"],
+                "task": item["title"],
+            },
         },
     )
 
@@ -214,6 +219,11 @@ async def _announce_claim(
             "phase": "context",
             "task": item["title"],
             "message": f"🧭 {agent.get('name') or agent['role']} claimed the card and is gathering context for: {item['title']}",
+            "message_key": "glassroom.events.gathering",
+            "message_params": {
+                "agent": agent.get("name") or agent["role"],
+                "task": item["title"],
+            },
         },
     )
 
@@ -289,6 +299,8 @@ async def _announce_context(
                 "phase": "memory_retrieved",
                 "task": item["title"],
                 "message": f"🧠 Memory context retrieved for: {item['title']}",
+                "message_key": "glassroom.events.memory",
+                "message_params": {"task": item["title"]},
             },
         )
 
@@ -318,6 +330,11 @@ async def _produce(
             "phase": "execution",
             "task": item["title"],
             "message": f"🛠️ {agent.get('name') or agent['role']} is executing autonomously on: {item['title']}",
+            "message_key": "glassroom.events.executing",
+            "message_params": {
+                "agent": agent.get("name") or agent["role"],
+                "task": item["title"],
+            },
         },
     )
 
@@ -355,6 +372,11 @@ async def _produce(
             "phase": "deliverable",
             "task": item["title"],
             "message": f"📦 {agent.get('name') or agent['role']} produced a deliverable for: {item['title']}. Running quality checks before QA handoff.",
+            "message_key": "glassroom.events.deliverable_ready",
+            "message_params": {
+                "agent": agent.get("name") or agent["role"],
+                "task": item["title"],
+            },
             "preview": deliverable[:200] if deliverable else "",
         },
     )
@@ -456,6 +478,8 @@ async def _hand_to_qa(
             "phase": "qa_handoff",
             "task": item["title"],
             "message": f"🧪 {item['title']} moved to QA review.",
+            "message_key": "glassroom.events.review_handoff",
+            "message_params": {"task": item["title"]},
             "preview": deliverable[:200] if deliverable else "",
         },
     )
@@ -474,6 +498,11 @@ async def _hand_to_qa(
             "phase": "implementation_complete",
             "task": item["title"],
             "message": f"✅ {agent.get('name') or agent['role']} completed: {item['title']}",
+            "message_key": "glassroom.events.agent_complete",
+            "message_params": {
+                "agent": agent.get("name") or agent["role"],
+                "task": item["title"],
+            },
             "preview": deliverable[:200] if deliverable else "",
         },
     )
