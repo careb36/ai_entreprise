@@ -898,9 +898,6 @@
         "evidence",
         "loop"
       ],
-      "test_memory_embedding_model.py": [
-        "platform"
-      ],
       "test_memory_graph.py": [
         "management"
       ],

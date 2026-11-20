@@ -42,3 +42,10 @@ npm:caniuse-lite | CC-BY-4.0 | 2026-12-31 | pending the owner's decision: CC-BY-
 # its package.json and LICENSE-MIT), which package-lock.json does not record.
 # It reaches the runtime set through globalize.
 npm:cldrjs | UNKNOWN | 2026-12-31 | the lockfile has no licence field; the package states MIT in its legacy `licenses` array, to be confirmed by the owner
+
+# numpy declares every licence of the code it bundles: BSD-3-Clause for numpy
+# itself, and 0BSD, MIT, Zlib and CC0-1.0 for vendored parts (Zlib is a
+# permissive, attribution-only licence, like MIT). The LLM proxy needs it
+# through onnxruntime, which runs the local embedding model (issue #755).
+# Deciding: add Zlib to ALLOWED in scripts/licence_scan.py, or keep this.
+pypi:numpy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | 2027-02-20 | pending the owner's decision: Zlib is not on the allowlist (llm-proxy, through onnxruntime for the local embedding model)
