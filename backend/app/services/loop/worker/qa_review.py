@@ -1,7 +1,7 @@
 """QA's review of one delivered task (ADR 0014, the task worker's review stage).
 
 The review cycle (``review``) hands ``_qa_review`` each ``in_review`` task that
-passed its checks and the delivery gate: the review prompt (``_review_prompt``),
+passed its checks and the delivery gate: the review prompt (``review_prompt.build``),
 the QA model's answer (``_call_llm_for_review``; only an explicit ``APPROVED:``
 or ``NEEDS WORK:`` is a verdict), the hold for a person on an approved delivery
 (``_person_hold``: a high risk tier, or the company's autonomy level), the
@@ -23,22 +23,17 @@ from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from models import AgentMessage, BacklogItem, Company, Sprint
-from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
 from nats_client import NATSClient
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from services.contracts.manifest import parse_file_manifest
-from services.evidence import risk, standards
-from services.learning import procedures
-from services.loop import review_digest, sprint_control
+from services.evidence import risk
+from services.loop import sprint_control
 from services.loop.answers import REVIEW_MAX_TOKENS
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
-from services.loop.answers import review_format_reminder as _review_format_reminder
-from services.loop.carry_over import previous_attempt_context
-from services.loop.worker import close, execute, messages, record
+from services.loop.worker import close, execute, messages, record, review_prompt
 from services.models import model_routing
-from services.planning import spec_planning
 from services.platform import protected_paths_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
@@ -65,54 +60,6 @@ AUTOPILOT_MAX_REWORK_CYCLES = int(
 )
 
 
-def _review_prompt(
-    session: Session,
-    item: BacklogItem,
-    sprint: Sprint,
-    reviewer_dict: dict[str, Any],
-    deliverable: str,
-    qa_review_failures: int,
-) -> str:
-    """What QA is asked about one delivery, with the task's context and procedures."""
-    if review_digest.is_digest(deliverable):
-        # The run's whole files, within REVIEW_CHARS; the digest bounds itself.
-        shown = review_digest.for_review(
-            deliverable, _run_artifact(session, sprint.company_id, item.id)
-        )
-    else:
-        shown = deliverable[: review_digest.DIGEST_CHARS]
-    return (
-        f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
-        f"Description: {item.description or 'N/A'}\n\n"
-        f"--- DELIVERABLE ---\n{shown}\n--- END ---"
-        + (review_digest.NOTE if review_digest.is_digest(shown) else "")
-        + "\n\nProvide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
-        "If not, start with 'NEEDS WORK:' and explain what's missing."
-        + _review_format_reminder(qa_review_failures)
-        # A second attempt is judged against what blocked the first and
-        # the ScrumMaster's brief for it, the same context the agent had.
-        + previous_attempt_context(item)
-        + spec_planning.requirements_for(session, sprint, item)
-        + standards.prompt_section(reviewer_dict["role"])
-    ) + procedures.procedures_prompt(
-        procedures.active_procedures(session, sprint.company_id, reviewer_dict["role"])
-    )
-
-
-def _run_artifact(session: Session, company_id: int, item_id: int) -> str | None:
-    """The company's latest task-worker run's artifact for the task: every file whole."""
-    run = session.exec(
-        select(AgentRun)
-        .where(
-            AgentRun.company_id == company_id,
-            AgentRun.external_ref == f"task-{item_id}",
-            AgentRun.producer == TASK_WORKER_PRODUCER,
-        )
-        .order_by(AgentRun.version.desc())
-    ).first()
-    return run.artifact_text if run is not None else None
-
-
 async def _qa_review(
     session: Session,
     nats_client: NATSClient,
@@ -126,7 +73,7 @@ async def _qa_review(
 ) -> None:
     """QA reviews one delivery; a task QA leaves blocked joins ``quality_gate_blocked_ids``."""
     # Build review prompt
-    review_prompt = _review_prompt(
+    prompt_text = review_prompt.build(
         session, item, sprint, reviewer_dict, deliverable, qa_review_failures
     )
 
@@ -145,6 +92,8 @@ async def _qa_review(
                 "phase": "qa_review",
                 "task": f"Reviewing: {item.title}",
                 "message": f"🔍 {reviewer_dict['name']} is reviewing: {item.title}",
+                "message_key": "glassroom.events.review_started",
+                "message_params": {"agent": reviewer_dict["name"], "task": item.title},
             },
         )
 
@@ -152,7 +101,7 @@ async def _qa_review(
             functools.partial(
                 _call_llm_for_review,
                 reviewer_dict,
-                review_prompt,
+                prompt_text,
                 company_id=sprint.company_id,
                 sprint_id=sprint.id,
                 backlog_item_id=item.id,
@@ -409,6 +358,12 @@ async def _announce_verdict(
                     "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
                     "task": f"Reviewed: {item.title}",
                     "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
+                    "message_key": "glassroom.events.rework_scheduled",
+                    "message_params": {
+                        "task": item.title,
+                        "attempt": previous_reworks + 1,
+                        "limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                    },
                     "preview": normalized_review[:200],
                 },
             )
@@ -436,6 +391,11 @@ async def _announce_verdict(
                     "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
                     "task": f"Reviewed: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
+                    "message_key": "glassroom.events.rework_blocked",
+                    "message_params": {
+                        "agent": reviewer_dict["name"],
+                        "task": item.title,
+                    },
                     "preview": normalized_review[:200],
                 },
             )
@@ -463,6 +423,8 @@ async def _announce_verdict(
                 "task": f"Reviewed: {item.title}",
                 "message": f"🛡️ {reviewer_dict['name']} approved {item.title}; "
                 "high-risk delivery, waiting for a person to accept it.",
+                "message_key": "glassroom.events.awaiting_person",
+                "message_params": {"agent": reviewer_dict["name"], "task": item.title},
                 "preview": "; ".join(risk_check.get("reasons") or [])[:200],
             },
         )
@@ -486,6 +448,8 @@ async def _announce_verdict(
                 "phase": "qa_approved",
                 "task": f"Reviewed: {item.title}",
                 "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
+                "message_key": "glassroom.events.approved",
+                "message_params": {"agent": reviewer_dict["name"], "task": item.title},
                 "preview": normalized_review[:200],
             },
         )
@@ -534,6 +498,8 @@ async def _review_failed(
             "phase": "qa_review",
             "task": f"Reviewing: {item.title}",
             "message": f"❌ {reviewer_dict['name']} review failed for: {item.title}. Will retry.",
+            "message_key": "glassroom.events.review_error",
+            "message_params": {"agent": reviewer_dict["name"], "task": item.title},
         },
     )
 

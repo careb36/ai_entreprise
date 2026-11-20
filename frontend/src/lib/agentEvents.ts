@@ -1,3 +1,5 @@
+import i18n from '../i18n'
+
 export type AgentFsmState = 'idle' | 'active' | 'waiting' | 'error'
 
 export type GlassroomTaskPhase =
@@ -111,8 +113,23 @@ function coerceNumber(value: unknown): number | undefined {
   return undefined
 }
 
+/**
+ * The event's text in the interface language: the backend sends a fixed
+ * message as `message_key` and `message_params` beside its English `message`,
+ * which stays the fallback for a key this build does not know.
+ */
+function localizedMessage(raw: Record<string, unknown>): string {
+  const key = coerceText(raw.message_key)
+  if (!key || !i18n.exists(key)) return ''
+  const params =
+    raw.message_params && typeof raw.message_params === 'object'
+      ? (raw.message_params as Record<string, unknown>)
+      : {}
+  return i18n.t(key, params)
+}
+
 function extractMessage(raw: Record<string, unknown>): string {
-  return coerceText(raw.message, coerceText(raw.content, ''))
+  return localizedMessage(raw) || coerceText(raw.message, coerceText(raw.content, ''))
 }
 
 function extractTask(raw: Record<string, unknown>, fallbackTitle: string): TaskTelemetry | undefined {
@@ -181,7 +198,7 @@ export function normalizeSSEEvent(raw: Record<string, unknown>): AgentEvent | nu
     return {
       ...base,
       kind: 'system',
-      content: `Connected to GlassRoom stream for sprint ${sprintId}.`,
+      content: i18n.t('glassroom.events.connected', { sprint: sprintId }),
     }
   }
 

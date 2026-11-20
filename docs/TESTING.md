@@ -140,6 +140,7 @@ Test files:
 
 | File | What it covers |
 |------|----------------|
+| `test_agent_language.py` | Agents write to the person in the company's language: `language.person_note` asks for Spanish prose and keeps the markers (`APPROVED:`, `NEEDS WORK:`), empty for English or an unknown value; QA's prompt ends with it for an `es` company and not for an `en` one; every `glassroom.events.*` key the worker sends has its text in `en.json` and `es.json` |
 | `test_glassroom_sse.py` | SSE fan-out and stream ordering; the replayed history carries the same event ids on every connection, so a reconnecting client can tell it from new events |
 | `test_orchestration_metrics.py` | Orchestration metric helpers |
 | `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
@@ -977,6 +978,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/components/ReviewPanel.test.tsx` | Submitting a review (the decision picked, the text trimmed, how many line comments go with it), the backend's refusal shown, what a review did, the history, a Viewer reads only |
 | `src/components/IntegrationReview.test.tsx` | The sprint integration's review in its view: the latest review and the merge gate's state, a Viewer reads only; a Manager opens the daemon's diff, comments on a line (the body sent names the integration, the file, the side and the line, never a hash) and approves; an Owner turns the gate off |
 | `src/components/CostSummary.test.tsx` | Cost as currency (`$0.42`, more decimals below a cent), tokens in and out, "price unknown" with its reason and never `$0.00`, estimated tokens labelled apart, a total when the split was not recorded, no model calls; the run and task cards load their cost; the run page, the task page and the sprint list show it (`EvidenceDetail.test.tsx`, `TaskDetails.test.tsx`, `Sprints.test.tsx`) |
+| `src/lib/agentEvents.test.ts` | A Glassroom message with `message_key` shown in the interface language (Spanish and English), the English `message` for a key the build does not know, an agent's own message as written |
 | `src/lib/patch.test.ts` | A file's hunks as review rows with their old and new line numbers |
 | `src/lib/sprintStatus.test.ts` | A completed sprint shown as integrating or integration failed from the backend's `integration_state`, completed once integrated or with none, any other status unchanged (#699) |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
