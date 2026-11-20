@@ -8,8 +8,10 @@ loaded module and replace ``requests.post`` with a fake.
 """
 
 import importlib.util
+import json as json_module
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,7 @@ os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 os.environ.pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", None)
 os.environ.pop("LLM_UPSTREAM_TIMEOUT_SECONDS", None)
+os.environ.pop("LLM_THINKING", None)
 
 
 def _load_proxy():
@@ -38,15 +41,30 @@ proxy_module = _load_proxy()
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, body=None, text: str | None = None):
+    """A provider's answer; ``chunks`` (with ``delay`` seconds before each)
+    stands in for a body that arrives slowly, keep-alive lines included."""
+
+    def __init__(self, status_code: int, body=None, text: str | None = None,
+                 chunks: list[bytes] | None = None, delay: float = 0.0):
         self.status_code = status_code
         self._body = body
-        self.text = text if text is not None else ("" if body is None else str(body))
+        self.text = text if text is not None else ("" if body is None else json_module.dumps(body))
+        self._chunks = chunks
+        self._delay = delay
 
     def json(self):
         if self._body is None:
             raise ValueError("no JSON body")
         return self._body
+
+    def iter_content(self, chunk_size=None):
+        for chunk in self._chunks if self._chunks is not None else [self.text.encode()]:
+            if self._delay:
+                time.sleep(self._delay)
+            yield chunk
+
+    def close(self):
+        pass
 
 
 class FakeUpstream:
@@ -71,10 +89,13 @@ class FakeUpstream:
             return "gemini"
         raise AssertionError(f"unexpected upstream URL {url}")
 
-    def __call__(self, url, headers=None, json=None, timeout=None):
+    def __call__(self, url, headers=None, json=None, timeout=None, **_):
         provider = self.provider_of(url)
-        self.calls.append({"provider": provider, "url": url, "json": json, "timeout": timeout})
-        return self.responses[provider]
+        self.calls.append({"provider": provider, "url": url, "json": json, "timeout": timeout,
+                           "headers": headers or {}})
+        answer = self.responses[provider]
+        # A list answers in order: one response per call.
+        return answer.pop(0) if isinstance(answer, list) else answer
 
     def providers_called(self) -> list[str]:
         return [call["provider"] for call in self.calls]

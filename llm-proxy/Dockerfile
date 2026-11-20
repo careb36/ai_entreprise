@@ -30,8 +30,12 @@ RUN pip install --no-cache-dir gunicorn 'setuptools<81'
 # 'upstream'` and the container dies before serving a single request.
 # A new top-level module in llm-proxy/ has to be added here too.
 COPY app.py catalogue.py connections.py embedding.py gemini.py provider_keys.py provider_status.py providers.py quota.py routing.py \
-     telemetry.py upstream.py usage.py /app/
+     telemetry.py thinking.py timeouts.py upstream.py usage.py gunicorn.conf.py /app/
 
 EXPOSE 5100
 
-CMD ["gunicorn", "-b", "0.0.0.0:5100", "-w", "2", "--timeout", "120", "app:app"]
+# gunicorn.conf.py reads the environment at start: the gthread worker class
+# (LLM_PROXY_WORKERS processes of LLM_PROXY_THREADS threads, 2 x 8 by default)
+# and a worker timeout of LLM_UPSTREAM_TIMEOUT_SECONDS plus a margin, so the
+# proxy's own upstream deadline always answers before a worker is killed.
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

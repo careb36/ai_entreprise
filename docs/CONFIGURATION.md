@@ -1030,15 +1030,40 @@ the backend where it says so:
 - `LLM_PROXY_URL` — backend, default `http://localhost:5100` (`config.py`,
   `app/llm_proxy_client.py`, `services/models/model_factory.py`); compose and
   `.env.example` set `http://llm-proxy:5100`. Where every model call goes.
-- `LLM_UPSTREAM_TIMEOUT_SECONDS` — default `110`, read by the proxy
-  (`llm-proxy/app.py`) and by the backend (`app/llm_proxy_client.py`). The time
-  budget of one chat request's provider calls, fallbacks included; the
-  backend's client waits this plus 10 s, so an answer the provider is still
-  writing (and billing) is never given up on.
+- `LLM_UPSTREAM_TIMEOUT_SECONDS` — default `300`, read by the proxy
+  (`llm-proxy/timeouts.py`, `llm-proxy/gunicorn.conf.py`) and by the backend
+  (`app/llm_proxy_client.py`); compose passes it to both. The time budget of
+  one chat request's provider calls, fallbacks and the retry without thinking
+  included. The proxy stops reading a provider's answer at the budget even
+  while DeepSeek keeps the connection alive with empty lines, and answers
+  `502` with `reason: upstream_timeout`. gunicorn's worker timeout is this
+  plus 30 s and the backend waits this plus 15 s, so the proxy always answers
+  first; a backend wait that still runs out is `reason: proxy_read_timeout`,
+  and a connection the proxy dropped `proxy_connection_lost`, neither sent
+  again (the proxy may be billing it). 300 s because a DeepSeek call that
+  reasons first (thinking mode) can take minutes; it was 110.
+- `LLM_PROXY_WORKERS` / `LLM_PROXY_THREADS` — defaults `2` and `8`, read by
+  `llm-proxy/gunicorn.conf.py`. The proxy runs gunicorn's `gthread` worker
+  class: one long call holds one thread, not a worker, and `/health` still
+  answers while two thinking calls run.
+- `LLM_THINKING` — default `auto`, read by the backend
+  (`services/models/thinking.py`) and by the proxy (`llm-proxy/thinking.py`).
+  DeepSeek's thinking mode, sent on every DeepSeek call as
+  `thinking: {"type": "enabled" | "disabled"}`
+  (https://api-docs.deepseek.com/guides/thinking_mode); without it DeepSeek
+  thinks by default. `auto` follows the policy in
+  [`contexts/models.md`](contexts/models.md) (off for calls whose answer is
+  parsed, on for the reasoning roles' free-form calls); `on` or `off` forces
+  every call. With `on`, a structured call whose reasoning used the whole
+  budget is still retried once with thinking off.
+- `LLM_THINKING_RESERVE_TOKENS` — backend, default `16384`
+  (`services/models/thinking.py`). Added to a thinking call's `max_tokens`
+  for the reasoning, which DeepSeek counts against it, so a role's answer
+  budget stays its own.
 - `PROXY_PORT` — default `5100`, read only when the proxy runs as
   `python app.py`. The image runs gunicorn bound to `0.0.0.0:5100`
-  (`llm-proxy/Dockerfile`) and ignores it, so the value compose sets changes
-  nothing; change the port in the Dockerfile and the `ports:` mapping instead.
+  (`llm-proxy/gunicorn.conf.py`) and ignores it, so the value compose sets
+  changes nothing; change the port there and in the `ports:` mapping instead.
 - `LLM_PROXY_INTERNAL_TOKEN` — in the list at the top.
 - `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` —
   default unset; compose sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`.

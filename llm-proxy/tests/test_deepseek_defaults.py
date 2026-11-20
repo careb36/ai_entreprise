@@ -3,10 +3,12 @@ The default team's two DeepSeek models through the proxy.
 
 The backend's role defaults (``services/models/model_factory.py``) name
 ``deepseek-v4-pro`` and ``deepseek-flash``. Both must pass the proxy's check
-(prefix and live catalogue) and reach DeepSeek with the caller's body as it
-was: the proxy sets no ``thinking`` field, so DeepSeek's own default (thinking
-on, https://api-docs.deepseek.com/guides/thinking_mode) applies, and a caller
-that sets one has it forwarded unchanged.
+(prefix and live catalogue) and reach DeepSeek with the caller's body. The
+``thinking`` field is always explicit (``thinking.py``): a caller's valid
+setting is forwarded unchanged, and a request without one gets ``disabled``
+rather than DeepSeek's own default (thinking on,
+https://api-docs.deepseek.com/guides/thinking_mode). The thinking tests are
+in ``test_thinking.py``.
 """
 
 import catalogue
@@ -31,12 +33,12 @@ def test_a_default_model_reaches_deepseek_under_its_own_name(client, upstream, m
     assert resp.get_json().get("served_model") == model
 
 
-def test_the_proxy_does_not_choose_deepseeks_thinking_mode(client, upstream):
+def test_a_request_without_thinking_never_gets_deepseeks_default(client, upstream):
     upstream.set("deepseek", openai_ok())
 
     _chat(client, "deepseek-flash")
 
-    assert "thinking" not in upstream.calls[0]["json"]
+    assert upstream.calls[0]["json"]["thinking"] == {"type": "disabled"}
 
 
 def test_a_callers_thinking_setting_is_forwarded_unchanged(client, upstream):

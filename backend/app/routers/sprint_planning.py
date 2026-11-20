@@ -78,6 +78,8 @@ def _serialize_plan_response(
         # Criteria of the specification no task covers (planned from one).
         "uncovered": plan.get("uncovered", []),
         "specification_id": plan.get("specification_id"),
+        # Why the PO's plan was not used, as observed, when a template stands in.
+        "fallback_reason": plan.get("fallback_reason"),
     }
 
 

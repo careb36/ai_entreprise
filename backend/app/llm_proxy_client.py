@@ -37,21 +37,91 @@ def _json_body(response: Any) -> dict[str, Any] | None:
     return body if isinstance(body, dict) else None
 
 
-# How long a call may wait: the proxy's own upstream budget (its
-# ``LLM_UPSTREAM_TIMEOUT_SECONDS``, 110 by default) plus a margin. A shorter
-# wait gives up on an answer the provider is still writing and has billed.
-DEFAULT_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110")) + 10
+# The proxy's upstream budget when ``LLM_UPSTREAM_TIMEOUT_SECONDS`` is unset
+# (``llm-proxy/timeouts.py`` holds the same default): long enough for a
+# DeepSeek call that reasons before it answers.
+DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 300.0
+# What the client waits beyond the proxy's budget: the proxy's own work and
+# the time to send its answer, timeout or not, back. A shorter wait gives up
+# on an answer the provider is still writing and has billed.
+READ_TIMEOUT_MARGIN_SECONDS = 15.0
+# The header that tells the proxy a call's answer is parsed, so it may retry
+# one whose reasoning used the whole budget with thinking off.
+PURPOSE_HEADER = "X-LLM-Purpose"
+
+# The named reasons an answer carries in ``reason`` when the proxy gave none.
+PROXY_READ_TIMEOUT = "proxy_read_timeout"
+PROXY_CONNECTION_LOST = "proxy_connection_lost"
+PROXY_UNREACHABLE = "proxy_unreachable"
+
+
+def upstream_timeout_seconds() -> float:
+    """``LLM_UPSTREAM_TIMEOUT_SECONDS``, or the default when unset or not a positive number."""
+    try:
+        value = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", ""))
+    except ValueError:
+        return DEFAULT_UPSTREAM_TIMEOUT_SECONDS
+    return value if value > 0 else DEFAULT_UPSTREAM_TIMEOUT_SECONDS
+
+
+def read_timeout_seconds() -> float:
+    """How long a call waits for the proxy: its upstream budget plus a margin,
+    so the proxy always answers (with a named error if need be) first."""
+    return upstream_timeout_seconds() + READ_TIMEOUT_MARGIN_SECONDS
+
+
+DEFAULT_TIMEOUT_SECONDS = read_timeout_seconds()
 
 
 def _payload(
-    messages: list, model: str, max_tokens: int | None, tools: list | None = None
+    messages: list,
+    model: str,
+    max_tokens: int | None,
+    tools: list | None = None,
+    *,
+    role: str | None = None,
+    structured: bool = False,
 ) -> dict[str, Any]:
+    """The request body, with the call's thinking mode always explicit
+    (``services/models/thinking.py``): never DeepSeek's implicit default."""
+    from services.models import thinking
+
     payload: dict[str, Any] = {"messages": messages, "model": model}
-    if max_tokens:
-        payload["max_tokens"] = int(max_tokens)
+    payload.update(
+        thinking.request_fields(role, structured=structured, max_tokens=max_tokens)
+    )
     if tools:
         payload["tools"] = tools
     return payload
+
+
+def _transport_failure(exc: Exception) -> tuple[str, bool]:
+    """The named reason of a request that got no answer, and whether it may be
+    sent again: only one that never reached the proxy is (sending one the
+    proxy received would bill its upstream call twice)."""
+    text = str(exc)
+    if (
+        isinstance(
+            exc, (requests.ConnectTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+        )
+        or "NewConnectionError" in text
+        or "Failed to establish" in text
+        or "Connection refused" in text
+    ):
+        return PROXY_UNREACHABLE, True
+    if isinstance(exc, (requests.Timeout, httpx.TimeoutException)):
+        return PROXY_READ_TIMEOUT, False
+    return PROXY_CONNECTION_LOST, False
+
+
+def _failure_answer(reason: str, exc: Exception, timeout: float) -> dict[str, Any]:
+    """The answer of a call the proxy never answered, its reason named."""
+    described = {
+        PROXY_READ_TIMEOUT: f"no answer from the LLM proxy within {timeout:.0f}s",
+        PROXY_CONNECTION_LOST: "the LLM proxy closed the connection before answering",
+        PROXY_UNREACHABLE: "the LLM proxy could not be reached",
+    }[reason]
+    return {"error": f"{reason}: {described} ({exc})", "ok": False, "reason": reason}
 
 
 class LLMProxyClient:
@@ -65,10 +135,13 @@ class LLMProxyClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
-        self.timeout = DEFAULT_TIMEOUT_SECONDS
+        self.timeout = read_timeout_seconds()
         # A cap on the answer for the calls whose form is fixed (a review, a
         # brief, a plan); ``None`` leaves the provider's own limit.
         self.max_tokens: int | None = None
+        # Whether the answer is parsed (JSON, a verdict, a probe): such a call
+        # runs with thinking off (``services/models/thinking.py``).
+        self.structured = False
         self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
         # The company whose provider connections a ``conn:<id>:<model>`` may use.
         self.company_id: int | None = None
@@ -84,6 +157,7 @@ class LLMProxyClient:
         }
         if bu_id:
             headers["X-Business-Unit-ID"] = str(bu_id)
+        headers[PURPOSE_HEADER] = "structured" if self.structured else "free"
 
         # Propagate OpenTelemetry context (TraceParent)
         propagate.inject(headers)
@@ -102,6 +176,23 @@ class LLMProxyClient:
             return model, {"error": f"provider connection: {exc}", "ok": False}
         headers.update(extra)
         return sent, None
+
+    def _request(
+        self,
+        messages: list,
+        model: str,
+        role: str,
+        max_tokens: int | None,
+        tools: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        return _payload(
+            messages,
+            model,
+            max_tokens or self.max_tokens,
+            tools,
+            role=role,
+            structured=self.structured,
+        )
 
     def chat(
         self,
@@ -126,7 +217,7 @@ class LLMProxyClient:
         model, refused = self._route(model, headers)
         if refused:
             return refused
-        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
+        payload = self._request(messages, model, role, max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -156,6 +247,16 @@ class LLMProxyClient:
                 }
 
             except requests.RequestException as e:
+                reason, resend = _transport_failure(e)
+                if not resend:
+                    logger.error(
+                        "LLM proxy request for model=%s role=%s got no answer (%s): %s; not resent",
+                        model,
+                        role,
+                        reason,
+                        e,
+                    )
+                    return _failure_answer(reason, e, self.timeout)
                 if attempt < self.max_retries:
                     delay = self.retry_backoff_sec * (attempt + 1)
                     logger.warning(
@@ -170,8 +271,8 @@ class LLMProxyClient:
                     time.sleep(delay)
                     continue
 
-                logger.error(f"LLM Proxy call failed after retries: {e}")
-                return {"error": str(e), "ok": False}
+                logger.error("LLM Proxy call failed after retries: %s", e)
+                return _failure_answer(reason, e, self.timeout)
 
     async def chat_async(
         self,
@@ -189,7 +290,7 @@ class LLMProxyClient:
         model, refused = await asyncio.to_thread(self._route, model, headers)
         if refused:
             return refused
-        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
+        payload = self._request(messages, model, role, max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -224,6 +325,16 @@ class LLMProxyClient:
                 }
 
             except httpx.RequestError as e:
+                reason, resend = _transport_failure(e)
+                if not resend:
+                    logger.error(
+                        "LLM proxy async request for model=%s role=%s got no answer (%s): %s; not resent",
+                        model,
+                        role,
+                        reason,
+                        e,
+                    )
+                    return _failure_answer(reason, e, self.timeout)
                 if attempt < self.max_retries:
                     delay = self.retry_backoff_sec * (attempt + 1)
                     logger.warning(
@@ -239,7 +350,7 @@ class LLMProxyClient:
                     continue
 
                 logger.error("LLM Proxy async call failed after retries: %s", e)
-                return {"error": str(e), "ok": False}
+                return _failure_answer(reason, e, self.timeout)
 
     def get_available_models(self) -> dict:
         """

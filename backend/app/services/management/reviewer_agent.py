@@ -252,6 +252,8 @@ def ask_llm(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.max_tokens, client.company_id = ANSWER_MAX_TOKENS, company_id
+    # The decision line is parsed: thinking off (services/models/thinking.py).
+    client.structured = True
     model = model or default_model_for_role(REVIEWER_ROLE)
     result = client.chat(
         messages=[{"role": "user", "content": prompt}], model=model, role=REVIEWER_ROLE

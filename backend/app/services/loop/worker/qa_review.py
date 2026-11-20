@@ -532,6 +532,8 @@ def _call_llm_for_review(
     """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
+    # The verdict word is parsed: thinking off (services/models/thinking.py).
+    client.structured = True
     request = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         request.insert(0, {"role": "system", "content": agent["system_prompt"]})

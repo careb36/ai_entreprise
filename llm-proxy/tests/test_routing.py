@@ -137,7 +137,8 @@ def test_an_empty_answer_falls_back_to_another_provider(client, upstream):
     body = resp.get_json()
     assert upstream.providers_called() == ["deepseek", "qwen"]
     assert body["choices"][0]["message"]["content"] == "answer from qwen"
-    assert body["fallback_from"]["message"] == "empty response"
+    assert body["fallback_from"]["reason"] == "empty_content"
+    assert body["fallback_from"]["message"].startswith("empty_content: finish_reason=stop")
 
 
 def test_an_empty_answer_everywhere_is_a_502_naming_it(client, upstream):
@@ -150,7 +151,8 @@ def test_an_empty_answer_everywhere_is_a_502_naming_it(client, upstream):
 
     assert resp.status_code == 502
     body = resp.get_json()
-    assert (body["provider"], body["message"]) == ("deepseek", "empty response")
+    assert (body["provider"], body["reason"]) == ("deepseek", "empty_content")
+    assert body["message"].startswith("empty_content: ")
 
 
 def test_a_tool_call_without_text_is_an_answer(client, upstream):
@@ -167,14 +169,18 @@ def test_a_tool_call_without_text_is_an_answer(client, upstream):
     assert resp.get_json()["choices"][0]["message"]["tool_calls"] == [call]
 
 
-def test_an_empty_answer_cut_at_the_length_limit_is_returned_as_cut(client, upstream):
+def test_an_empty_answer_cut_at_the_length_limit_is_an_error_not_a_success(client, upstream):
+    """No 200 carries an empty answer, cut or not: the caller gets a reason."""
     upstream.set("deepseek", _openai_body({"role": "assistant", "content": ""}, "length"))
+    for provider in ("qwen", "gemini"):
+        upstream.set(provider, FakeResponse(503, {"message": "down"}))
 
     resp = _chat(client, "deepseek-v4-pro")
 
-    assert resp.status_code == 200
-    assert upstream.providers_called() == ["deepseek"]
-    assert resp.get_json()["choices"][0]["finish_reason"] == "length"
+    assert resp.status_code == 502
+    body = resp.get_json()
+    assert body["reason"] == "empty_content"
+    assert body["message"].startswith("empty_content: finish_reason=length")
 
 
 def test_quota_error_falls_back_to_a_catalogue_model(client, upstream):
@@ -269,13 +275,14 @@ def test_failed_fallbacks_return_the_original_error(client, upstream):
     assert [a["provider"] for a in body["attempts"]] == ["qwen", "deepseek", "gemini"]
 
 
-def test_upstream_timeout_defaults_to_110_seconds(client, upstream, proxy):
+def test_upstream_timeout_defaults_to_300_seconds(client, upstream, proxy):
     upstream.set("deepseek", openai_ok())
 
     _chat(client, "deepseek-v4-pro")
 
-    assert upstream.calls[0]["timeout"] == 110
-    assert proxy.LLM_UPSTREAM_TIMEOUT_SECONDS == 110
+    # (connect, read): the read part is the budget; the deadline covers the whole body.
+    assert upstream.calls[0]["timeout"] == (10.0, 300.0)
+    assert proxy.LLM_UPSTREAM_TIMEOUT_SECONDS == 300
 
 
 def test_nemotron_routes_to_nebius_token_factory(nebius, client, upstream):
