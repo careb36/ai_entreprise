@@ -692,6 +692,9 @@
       "test_discovery_team_models.py": [
         "planning"
       ],
+      "test_documentation_export_router.py": [
+        "planning"
+      ],
       "test_documentation_router.py": [
         "loop"
       ],
@@ -974,6 +977,9 @@
         "planning"
       ],
       "test_project_docs_domain_checks.py": [
+        "planning"
+      ],
+      "test_project_docs_export.py": [
         "planning"
       ],
       "test_project_docs_final.py": [

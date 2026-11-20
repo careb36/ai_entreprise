@@ -715,15 +715,17 @@ domain are done too (#692: approval before work, backlog churn, iterations on
 time, usage against the quota, sprint teams). The stakeholder register from members, teams and
 approvals plus a person's external list is done too (`stakeholder_register.md`,
 #691). After that: DOCX/PDF export and organisation templates (phase 4, with a signed
-manifest of the pack; the manifest is built, see Phase 4 below), the COBIT governance matrix (phase 5; the ITIL transition set is done,
+manifest of the pack; the manifest and the export are built, templates are
+designed, see Phase 4 below), the COBIT governance matrix (phase 5; the ITIL transition set is done,
 `transition.md`, #696), and bench grading of packs against person-written expectations.
 The C4 code level from the stored code graph is built (issue #693, under
 "Architecture diagrams, C4").
 
 ## Phase 4: the signed manifest, export and organisation templates
 
-Issue #694. The first slice builds the manifest; export waits on a dependency
-decision; templates are designed here and not built.
+Issue #694. The first slice built the manifest; the second builds the DOCX and
+PDF export on the dependency decision below; templates are designed here and
+not built.
 
 ### The signed manifest (built)
 
@@ -778,12 +780,110 @@ decision; templates are designed here and not built.
   compile time, not only once approved, and the approval row already carries
   its inputs digest.
 
-Next, in the same module: a manifest per export (the DOCX and PDF bytes'
-sha256 added as files of their own) and a manifest file written beside the
-pack (`docs/project/MANIFEST.json`) when an approved pack is written, compared
-with the daemon's reported hashes.
+A manifest per export is built (`build_export`, below). Next, in the same
+module: a manifest file written beside the pack (`docs/project/MANIFEST.json`)
+when an approved pack is written, compared with the daemon's reported hashes.
 
-### Export to DOCX and PDF
+### Export to DOCX and PDF (built)
+
+**Status (2026-11-20): built** in `project_docs/export.py`,
+`export_markdown.py`, `export_docx.py`, `export_pdf.py` and
+`routers/documentation_export.py`, on the decision that follows.
+
+- **Routes.** `GET /v1/documentation/{pack_id}/export/{docx|pdf}` (Viewer, the
+  pack's read role, `docs/architecture/authorization.json`) sends the file with
+  `X-Content-SHA256`, the sha256 the backend computed over the bytes it sends;
+  `GET .../export/{fmt}/manifest` (Viewer) sends the export's manifest, its
+  digest, its signature and the audit chain's record of the pack;
+  `GET /v1/documentation/exports` (any signed-in caller) says which formats the
+  deployment can render and why one cannot. An unknown format is a 404 after
+  the role check, so an outsider learns nothing from it. The page shows a DOCX
+  and a PDF/A button, each with its manifest, beside the pack's manifest.
+- **From the stored pack only.** The routes take no field: `export.source_of`
+  reads `pack.documents` as compiled and adds a cover page with the version,
+  the status (a draft says "not approved"), the compile time, the inputs
+  digest and the digest of the pack's manifest, so a printed copy points back
+  to the record. Each document starts on a new page with its title as a level
+  1 heading.
+- **The pack's own subset, our parser.** `export_markdown.parse` reads ATX
+  headings, paragraphs, bullet and numbered lists nested by indentation, pipe
+  tables (escaped pipes stay in their cell), block quotes and fenced code;
+  inline, `**strong**`, `_emphasis_`, code spans, backslash escapes and the
+  three entities `sanitize.md_inline` writes. No Markdown library, no raw HTML,
+  no link and no image: the text comes out as text, escaped again by each
+  renderer for its own format (HTML escaping for the PDF, XML text nodes for
+  the DOCX). Citations (`[S1]`), the sources list with its digests, the claim
+  marks, the person sections and the person's statements are text and block
+  quotes in that Markdown, so they are carried unchanged; a Mermaid block is
+  shown as its source under the label "Diagram, as its Mermaid source (drawn in
+  the app)" (es: "Diagrama, como su código Mermaid…"), not drawn.
+- **DOCX.** Word's built-in styles (Title, Heading 1 to 3, List Bullet and List
+  Number with their levels, Quote, Table Grid), so the reader's navigation pane
+  and styles apply; the header row of every table repeats on each page; the
+  document language (`en-GB` or `es-ES`) is set on the run defaults.
+- **PDF.** HTML the module builds, laid out by WeasyPrint with the `pdf/a-3b`
+  variant and `pdf_tags`; the finisher renumbers the table-header ids
+  WeasyPrint takes from memory addresses and adds the XMP `pdfuaid:part` 1
+  declaration with the extension schema PDF/A asks for (a WeasyPrint variant
+  declares one standard only). The URL fetcher refuses every URL, so the
+  content cannot pull a font, image or stylesheet from a network or the disk.
+  No running header or footer: WeasyPrint leaves margin-box text outside the
+  structure tree, which PDF/UA-1 forbids, so pages carry no page numbers;
+  the PDF outline (bookmarks) comes from the headings. Fonts: DejaVu Sans,
+  Sans Mono (Latin with Spanish, Greek, Cyrillic), all embedded as subsets.
+- **Reproducible bytes.** The DOCX's core properties carry the compile time
+  and its zip entries one fixed timestamp; the PDF's dates are the compile
+  time, its file identifier the hash of its content, and fontTools' subset
+  timestamp follows `SOURCE_DATE_EPOCH`, set to the compile time for the render
+  only, under a lock (one PDF renders at a time per process, which also bounds
+  the CPU a burst of downloads takes; a 44-page pack renders in about 8 s, in a
+  thread). The same pack in the same status gives the same sha256 across
+  processes and hash seeds, so the export's manifest can be checked against a
+  file found later. Approving a pack changes its cover, hence its export.
+- **The export's manifest.** `pack_manifest.build_export` is the pack's
+  manifest with the export added as one more file (`export/<file name>`, the
+  sha256 and size the backend computed), `type`
+  `la-fabrique.documentation-pack-export-manifest`, `pack_manifest_sha256` (the
+  digest the audit chain holds), the format, the renderer and its version and
+  the standards the file declares. Signed and verified as the pack's manifest
+  is; it is derived on request, like it, so nothing new is stored and no audit
+  row is written per download.
+- **Degrading.** python-docx and WeasyPrint are imported only when an export
+  is asked for. A library or a native library that cannot load (WeasyPrint
+  without Pango) makes that format answer 503 with the loader's message
+  (`export.ExportUnavailable`, `export.availability`); the backend starts, and
+  the other format and the Markdown pack keep working. The PDF tests are
+  skipped with that reason where the native libraries are absent.
+- **Image.** `backend/Dockerfile` installs `libpango-1.0-0` (with HarfBuzz),
+  `libpangoft2-1.0-0` and `fonts-dejavu-core` from the distribution
+  (`docs/OPERATIONS.md` gives the size).
+- **Licences.** python-docx (MIT), lxml (BSD), WeasyPrint (BSD-3-Clause) and
+  their other dependencies are on the allowlist except Pillow (MIT-CMU, a
+  permissive HPND variant) and Pyphen (GPL, LGPL or MPL 1.1 at the user's
+  choice, taken under MPL 1.1, unmodified): both are listed in
+  `.github/licence-exceptions.txt` pending the owner's decision, as the scan
+  requires.
+
+**What is verified and what is declared.** The tests
+(`test_project_docs_export.py`) check on the bytes: the XMP declares
+`pdfaid:part` 3 with conformance B and `pdfuaid:part` 1 with its extension
+schema, the title and dates; the catalog has the structure tree, `MarkInfo`
+marked, the language, `DisplayDocTitle` and the sRGB output intent
+(`GTS_PDFA1`); every font descriptor has an embedded font file; the structure
+holds H1, H2, P, L/LI, Table/TH/TD and BlockQuote; no JavaScript and no URI.
+That is a structural check, not an ISO validation. veraPDF 1.30.4 (the
+reference validator, Java) passed a 44-page pack and the test pack for both
+`3b` and `ua1` when this was built; the test that runs it
+(`test_verapdf_passes_the_pdf_for_pdf_a_3b_and_pdf_ua_1`) runs only where a
+`verapdf` command is installed and is skipped, never passed, otherwise, and
+CI does not install it. veraPDF's PDF/UA-1 profile covers the machine-checkable
+Matterhorn conditions only; the human checks of PDF/UA (reading order makes
+sense, alternative text is meaningful) are not verified by anything here. The
+DOCX claims no standard; its structure (styles, header rows, language) is
+checked by reading it back with python-docx. The fonts are subset by
+fontTools, the path validated: the image leaves out HarfBuzz's subsetter
+(`libharfbuzz-subset0`), which WeasyPrint would otherwise prefer and which has
+been validated neither with veraPDF nor for reproducible bytes.
 
 **Decision (2026-11-19, delegated by the owner):** DOCX with **python-docx** (MIT, with lxml, BSD) and PDF with **WeasyPrint** (BSD-3-Clause), both pinned by hash in the lock. WeasyPrint is chosen over reportlab and fpdf2 for the standards it can produce: **PDF/A-3b** for long-term archiving of audit evidence (ISO 19005-3) and **PDF/UA-1** for accessible documents (ISO 14289-1), with real typography and fonts for every script the packs are written in. Its native libraries (Pango, HarfBuzz) go into the backend image from the distribution's packages, and the image's SBOM and vulnerability scan cover them. fpdf2 is ruled out by its copyleft licence; the standard library alone is ruled out because a hand-written PDF writer cannot meet PDF/A or PDF/UA. Export runs in the backend from the stored pack, never from client input, and each export's sha256 enters the manifest.
 

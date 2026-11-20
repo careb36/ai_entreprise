@@ -785,6 +785,34 @@ it never falls back to the runner's own Python. `--in-process-measure` and
 and the report says `isolation: in_process`, which the fitness decision
 refuses.
 
+## Documentation export (DOCX and PDF)
+
+A documentation pack downloads as DOCX or as PDF/A-3b declaring PDF/UA-1
+(issue #694; `docs/design/PROJECT_DOCUMENTATION.md`, "Export to DOCX and
+PDF"). DOCX needs only Python packages. PDF needs WeasyPrint's native
+libraries, which `backend/Dockerfile` installs from Debian: `libpango-1.0-0`
+(with HarfBuzz, fontconfig, FreeType, GLib, FriBidi and libthai),
+`libpangoft2-1.0-0` and `fonts-dejavu-core`.
+
+- **Image size.** About +100 MB uncompressed, estimated, not measured: the
+  Python packages take about 79 MB installed (fontTools 28 MB, Pillow 21 MB
+  with its bundled libraries, lxml 12 MB, Pyphen's dictionaries 6 MB,
+  WeasyPrint, python-docx, pydyf, tinycss2 and the rest about 12 MB), and the
+  Debian packages with their dependencies about 20 to 25 MB. Measure it on
+  the first build with `docker image ls` before and after, and write the
+  figure here.
+- **Running outside the image.** On a host without Pango (the backend run
+  natively, a slim image of your own), the backend starts and DOCX works; the
+  PDF route answers 503 with the loader's message, and
+  `GET /v1/documentation/exports` names it. Install the three packages above
+  (`apt-get install libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core`, or
+  `brew install pango` on macOS) and restart.
+- **Cost.** A PDF renders in a thread of the backend, one at a time per
+  process; a 44-page pack takes about 8 seconds of one CPU. DOCX takes well
+  under a second.
+- **Fonts.** The PDF embeds DejaVu Sans and Sans Mono subsets; a pack in a
+  script DejaVu does not cover would need another font package in the image.
+
 ## When something is wrong
 
 **The daemon is absent.** `GET /v1/workspace/status` says `absent` (NATS

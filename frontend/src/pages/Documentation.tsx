@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Archive, BookOpen, CheckCircle, CircleCheck, FolderOutput, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react'
 import { C4DiagramView } from '../components/C4DiagramView'
 import { ManifestDownload } from '../components/documentation/ManifestDownload'
+import { ExportDownloads } from '../components/documentation/ExportDownloads'
 import { PersonSections } from '../components/documentation/PersonSections'
 import { PackMarkdown } from '../components/PackMarkdown'
 import { EmptyState, LoadError, LoadingLine, PageHeader, Panel, Spinner, StatusBadge, type StatusTone, Toolbar } from '../components/ui'
@@ -89,6 +90,7 @@ function PackView({ pack, canManage, isOwner }: { pack: DocumentationPack; canMa
           </button>
         )}
         <ManifestDownload packId={pack.id} />
+        <ExportDownloads packId={pack.id} />
         {canManage && pack.status === 'approved' && (
           <button type="button" className="btn-tool" disabled={write.isPending} onClick={() => write.mutate(pack.id)}>
             {write.isPending ? <Spinner size={13} /> : <FolderOutput size={13} aria-hidden="true" />} {t('documentation.write')}

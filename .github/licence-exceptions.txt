@@ -42,3 +42,14 @@ npm:caniuse-lite | CC-BY-4.0 | 2026-12-31 | pending the owner's decision: CC-BY-
 # its package.json and LICENSE-MIT), which package-lock.json does not record.
 # It reaches the runtime set through globalize.
 npm:cldrjs | UNKNOWN | 2026-12-31 | the lockfile has no licence field; the package states MIT in its legacy `licenses` array, to be confirmed by the owner
+
+# Pillow is under MIT-CMU (the historical PIL licence, an HPND variant):
+# permissive, attribution only. It reaches the runtime set through WeasyPrint
+# (the documentation pack's PDF export, issue #694, decided on 2026-11-19).
+# Deciding: add MIT-CMU to ALLOWED in scripts/licence_scan.py, or keep this.
+pypi:pillow | MIT-CMU | 2026-12-31 | pending the owner's decision: MIT-CMU (HPND-style, permissive) is not on the allowlist (backend, through WeasyPrint)
+# Pyphen (hyphenation dictionaries) is offered under GPL, LGPL or MPL 1.1, at
+# the user's choice; La Fabrique takes it under MPL 1.1 and uses it unmodified.
+# It reaches the runtime set through WeasyPrint (issue #694). Deciding: accept
+# MPL-1.1 for an unmodified package, as MPL-2.0 already is, or keep this.
+pypi:pyphen | (GPL OR LGPL OR Mozilla Public License 1.1 (MPL 1.1)) | 2026-12-31 | pending the owner's decision: taken under MPL 1.1, used unmodified (backend, through WeasyPrint)

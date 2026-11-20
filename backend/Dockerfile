@@ -2,11 +2,22 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies. Pango (which brings HarfBuzz) and the DejaVu
+# fonts (Latin with Spanish, Greek, Cyrillic; sans, serif and mono) are what
+# WeasyPrint needs to write the documentation pack as PDF (issue #694,
+# docs/design/PROJECT_DOCUMENTATION.md, "Export to DOCX and PDF"); they come
+# from the distribution, so the image's SBOM and vulnerability scan cover them.
+# HarfBuzz's subsetter (libharfbuzz-subset0) is left out on purpose: without it
+# WeasyPrint subsets fonts with fontTools, the path validated with veraPDF and
+# reproducible under SOURCE_DATE_EPOCH. Without these packages only the PDF
+# export is unavailable, with the reason named.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
