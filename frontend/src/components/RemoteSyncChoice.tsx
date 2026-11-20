@@ -20,7 +20,6 @@ import { Loader2, RefreshCw } from 'lucide-react'
 import { errorDetail, type ForgePolicy, type WorkspaceInspection } from '../services/api'
 import { useCheckRemote, useFolderGitCheck, type FolderGitCheck } from '../services/baseSync'
 import { useCapabilities } from '../hooks/useQueries'
-import { BaseStatusNotes } from './GitWorkflowPanel'
 
 export const FORGE_POLICIES: ForgePolicy[] = ['none', 'fetch', 'publish']
 
@@ -83,6 +82,22 @@ function Observed({ observed, remote }: { observed: FolderGitCheck | undefined; 
   )
 }
 
+/** What "Check remote" observed: counts and a code, never the remote's own words. */
+function Counts({ checked }: { checked: FolderGitCheck }) {
+  const { t } = useTranslation()
+  const behind = checked.base_behind_remote ?? 0
+  const ahead = checked.base_ahead_of_remote ?? 0
+  const values = { behind, ahead, base: checked.base_ref ?? '', remote: checked.base_remote ?? checked.base_not_on_remote ?? '' }
+  let key = 'upToDate'
+  if (checked.remote_unreachable) key = checked.remote_unreachable === 'remote_needs_interaction' ? 'needsInteraction' : 'unreachable'
+  else if (checked.base_not_on_remote) key = 'notOnRemote'
+  else if (behind && ahead) key = 'diverged'
+  else if (behind) key = 'behind'
+  else if (ahead) key = 'ahead'
+  const warn = key !== 'upToDate' && key !== 'ahead'
+  return <p role={warn ? 'alert' : 'status'} className={`text-xs ${warn ? 'text-amber-300' : 'text-emerald-300'}`}>{t(`remoteSync.checked.${key}`, values)}</p>
+}
+
 export function RemoteSyncChoice({ inspection, base, choice, onChange }: {
   inspection: WorkspaceInspection | null | undefined
   base: string | null
@@ -104,6 +119,7 @@ export function RemoteSyncChoice({ inspection, base, choice, onChange }: {
     <fieldset className="mt-3 space-y-2 border-t border-surface-700 pt-3">
       <legend className="text-[13px] font-medium text-gray-100">{t('remoteSync.title')}</legend>
       <Observed observed={checked ?? local.data} remote={remote} />
+      {local.isError && <p role="alert" className="text-xs text-amber-300">{errorDetail(local.error)}</p>}
       {remote && (
         <div className="space-y-1">
           <button type="button" className="btn-tool h-7 border border-surface-700 px-2" disabled={check.isPending}
@@ -116,7 +132,7 @@ export function RemoteSyncChoice({ inspection, base, choice, onChange }: {
           <p className="text-xs text-gray-400">{t('remoteSync.checkHint', { remote })}</p>
           {check.isError && <p role="alert" className="text-xs text-red-300">{errorDetail(check.error)}</p>}
           {checked && (checked.remote_contacted
-            ? <BaseStatusNotes status={checked} />
+            ? <Counts checked={checked} />
             : <p role="note" className="text-xs text-amber-300">{t('remoteSync.notContacted', { ceiling: checked.forge_policy_max ?? '' })}</p>)}
         </div>
       )}

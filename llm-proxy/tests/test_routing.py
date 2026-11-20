@@ -127,7 +127,7 @@ def _openai_body(message: dict, finish_reason: str = "stop") -> FakeResponse:
     )
 
 
-def test_an_empty_answer_falls_back_to_another_provider(client, upstream):
+def test_an_empty_answer_falls_back_to_another_provider(cross_provider, client, upstream):
     upstream.set("deepseek", _openai_body({"role": "assistant", "content": "  "}))
     upstream.set("qwen", openai_ok("answer from qwen"))
 
@@ -135,7 +135,8 @@ def test_an_empty_answer_falls_back_to_another_provider(client, upstream):
 
     assert resp.status_code == 200
     body = resp.get_json()
-    assert upstream.providers_called() == ["deepseek", "qwen"]
+    # DeepSeek's other model first, then the providers the operator allowed.
+    assert upstream.providers_called() == ["deepseek", "deepseek", "qwen"]
     assert body["choices"][0]["message"]["content"] == "answer from qwen"
     assert body["fallback_from"]["reason"] == "empty_content"
     assert body["fallback_from"]["message"].startswith("empty_content: finish_reason=stop")
@@ -183,7 +184,7 @@ def test_an_empty_answer_cut_at_the_length_limit_is_an_error_not_a_success(clien
     assert body["message"].startswith("empty_content: finish_reason=length")
 
 
-def test_quota_error_falls_back_to_a_catalogue_model(client, upstream):
+def test_quota_error_falls_back_to_a_catalogue_model(cross_provider, client, upstream):
     upstream.set("deepseek", FakeResponse(429, {"error": {"message": "quota exhausted"}}))
     upstream.set("qwen", openai_ok("answer from qwen"))
 
@@ -191,14 +192,15 @@ def test_quota_error_falls_back_to_a_catalogue_model(client, upstream):
 
     assert resp.status_code == 200
     body = resp.get_json()
-    assert upstream.providers_called() == ["deepseek", "qwen"]
-    assert upstream.calls[1]["json"]["model"] == "qwen3.6-flash"
+    assert upstream.providers_called() == ["deepseek", "deepseek", "qwen"]
+    assert upstream.calls[1]["json"]["model"] == "deepseek-flash"
+    assert upstream.calls[2]["json"]["model"] == "qwen3.6-flash"
     assert body.get("served_model") == "qwen3.6-flash"
     assert body.get("fallback_from", {}).get("status") == 429
     assert body["choices"][0]["message"]["content"] == "answer from qwen"
 
 
-def test_5xx_fallback_skips_candidates_missing_from_the_catalogue(client, upstream, proxy, monkeypatch):
+def test_5xx_fallback_skips_candidates_missing_from_the_catalogue(cross_provider, client, upstream, proxy, monkeypatch):
     # DeepSeek is configured but its catalogue lacks the fallback candidate.
     monkeypatch.setattr(proxy, "_available_deepseek_models", {"deepseek-v4-pro"})
     upstream.set("gemini", FakeResponse(503, {"error": {"message": "overloaded"}}))
@@ -221,14 +223,14 @@ def test_5xx_fallback_skips_candidates_missing_from_the_catalogue(client, upstre
         FakeResponse(200, {"error": {"message": "insufficient_quota"}}),
     ],
 )
-def test_a_provider_without_credit_falls_back(client, upstream, response):
+def test_a_provider_without_credit_falls_back(cross_provider, client, upstream, response):
     upstream.set("deepseek", response)
     upstream.set("qwen", openai_ok("answer from qwen"))
 
     resp = _chat(client, "deepseek-v4-pro")
 
     assert resp.status_code == 200
-    assert upstream.providers_called() == ["deepseek", "qwen"]
+    assert upstream.providers_called() == ["deepseek", "deepseek", "qwen"]
     assert resp.get_json()["fallback_from"]["status"] == response.status_code
 
 
@@ -262,7 +264,7 @@ def test_no_credit_anywhere_keeps_the_402_for_the_backend(client, upstream):
     assert resp.get_json()["status"] == 402
 
 
-def test_failed_fallbacks_return_the_original_error(client, upstream):
+def test_failed_fallbacks_return_the_original_error(cross_provider, client, upstream):
     upstream.set("qwen", FakeResponse(500, {"message": "qwen down"}))
     upstream.set("deepseek", FakeResponse(503, {"message": "deepseek down"}))
     upstream.set("gemini", FakeResponse(500, {"message": "gemini down"}))
@@ -420,7 +422,7 @@ def _empty_with_usage(tokens: int) -> FakeResponse:
     )
 
 
-def test_an_empty_answer_s_reported_tokens_are_charged_apart(client, upstream, proxy, monkeypatch):
+def test_an_empty_answer_s_reported_tokens_are_charged_apart(cross_provider, client, upstream, proxy, monkeypatch):
     charged = []
     monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
     upstream.set("deepseek", _empty_with_usage(1000))
@@ -432,13 +434,14 @@ def test_an_empty_answer_s_reported_tokens_are_charged_apart(client, upstream, p
         headers={"X-Business-Unit-ID": "7"},
     ).get_json()
 
-    # The served answer's usage is its own; the empty call's tokens are charged beside it.
+    # The served answer's usage is its own; the empty calls' tokens (DeepSeek
+    # Pro, then Flash) are charged beside it.
     assert body["usage"]["total_tokens"] == 12
-    assert body["fallback_from"]["failed_attempts_tokens"] == 1000
-    assert charged == [1012]
+    assert body["fallback_from"]["failed_attempts_tokens"] == 2000
+    assert charged == [2012]
 
 
-def test_when_every_provider_fails_their_reported_tokens_are_still_charged(client, upstream, proxy, monkeypatch):
+def test_when_every_provider_fails_their_reported_tokens_are_still_charged(cross_provider, client, upstream, proxy, monkeypatch):
     charged = []
     monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
     upstream.set("deepseek", _empty_with_usage(300))
@@ -454,8 +457,8 @@ def test_when_every_provider_fails_their_reported_tokens_are_still_charged(clien
     assert resp.status_code == 502
     body = resp.get_json()
     assert body["tokens"] == 300
-    assert [a.get("tokens") for a in body["attempts"]] == [300, 200, None]
-    assert charged == [500]
+    assert [a.get("tokens") for a in body["attempts"]] == [300, 300, 200, None]
+    assert charged == [800]
 
 
 def test_a_failure_that_reported_no_tokens_charges_nothing(client, upstream, proxy, monkeypatch):

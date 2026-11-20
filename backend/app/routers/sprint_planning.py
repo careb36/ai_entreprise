@@ -7,6 +7,10 @@ specification, and the team it suggests for the request.
   tasks (``services/planning/sprint_team.py``).
 - ``POST /v1/plan_self_improvement_sprint``: the factory's own next slice,
   with ``team`` too.
+- Both carry ``objective`` (the person's, whole) and ``planner_fallback``:
+  when the planner's model did not answer usably, the reason as observed and
+  a ``plan_id`` the backend recorded (``services/planning/planner_fallback.py``);
+  ``start_sprint`` with that ``plan_id`` records it on the sprint.
 - ``GET``/``PUT /v1/companies/{id}/team_selection`` (Viewer / Manager): how a
   sprint's team is chosen, ``suggested`` (the default) or ``automatic``.
 
@@ -25,7 +29,7 @@ from schemas import (
     SelfImprovementSprintRequest,
     SprintPlanRequest,
 )
-from services.planning import spec_planning, sprint_team
+from services.planning import planner_fallback, spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -78,8 +82,23 @@ def _serialize_plan_response(
         # Criteria of the specification no task covers (planned from one).
         "uncovered": plan.get("uncovered", []),
         "specification_id": plan.get("specification_id"),
-        # Why the PO's plan was not used, as observed, when a template stands in.
-        "fallback_reason": plan.get("fallback_reason"),
+        # The person's objective, whole (``Sprint.objective`` once started).
+        "objective": plan.get("objective"),
+        # Not None when the planner's model did not answer usably: the reason
+        # as the backend observed it, and the ``plan_id`` of its record.
+        "planner_fallback": plan.get("planner_fallback"),
+        "plan_id": plan.get("plan_id"),
+        # Items of the objective the scope left out of a fallback plan.
+        "unplanned_items": plan.get("unplanned_items", []),
+    }
+
+
+def _recorded(session: Session, company_id: int, kind: str, plan: dict) -> dict:
+    """*plan* with the ``plan_id`` of its fallback record, when it fell back."""
+    fallback = plan.get("planner_fallback")
+    return {
+        **plan,
+        "plan_id": planner_fallback.record_plan(session, company_id, kind, fallback),
     }
 
 
@@ -116,6 +135,9 @@ async def plan_sprint(
         )
         plan = await asyncio.to_thread(spec_planning.plan_from, request)
         plan["specification_id"] = spec.id
+        # The person's note, whole: their input beside the specification.
+        plan["objective"] = req.prompt or None
+        plan = _recorded(session, req.company_id, "specification", plan)
         return _serialize_plan_response(
             plan,
             scope_size,
@@ -136,6 +158,7 @@ async def plan_sprint(
         project_path=discovery.project_path if discovery else None,
         team=team,
     )
+    plan = _recorded(session, req.company_id, "execution", plan)
     return _serialize_plan_response(
         plan,
         scope_size,
@@ -179,6 +202,7 @@ async def plan_self_improvement_sprint(
         project_path=discovery.project_path if discovery else None,
         team=team,
     )
+    plan = _recorded(session, req.company_id, "self_improvement", plan)
 
     return _serialize_plan_response(
         plan,

@@ -115,12 +115,15 @@ text and no tool call becomes a `502` from the proxy with `reason`
 `empty_content_reasoning_exhausted` (stopped at `finish_reason: length` after
 the reasoning used the budget) or `empty_content` (anything else, JSON mode's
 blank content included); the reasoning is never returned as the answer. Both
-may fall back to another provider. A structured call that came back
+are retriable: the other DeepSeek model stands in, and another provider only
+when `LLM_FALLBACK_PROVIDERS` names one. A structured call that came back
 `empty_content_reasoning_exhausted` is first retried once on the same model
 with thinking off, within the request's budget; the served answer then
 carries `thinking_retry` with the first attempt's reason and tokens. The
-backend's readers (`loop/worker/answers.llm_failure`, the planner's
-`fallback_reason`) carry the reason on.
+backend's readers carry the reason on: `loop/worker/answers.llm_failure`, and
+the planner's `planner_fallback` (`{"reason": "model_error", "detail":
+"empty_content_reasoning_exhausted: …"}`, [planning](planning.md)), whose
+detail starts with the named reason, an empty 2xx answer included.
 
 **Timeouts.** One setting, `LLM_UPSTREAM_TIMEOUT_SECONDS` (300 s), bounds a
 chat call's provider calls; the proxy enforces it as a deadline on the whole

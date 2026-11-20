@@ -26,6 +26,9 @@ loses a commit. It refuses, changing nothing and saying why, when:
   the checkout that has the base (``operation_in_progress``), or that
   checkout has uncommitted changes to tracked files (``dirty``); both are
   read before the remote is contacted;
+- the remote wants a passphrase, a password or an unknown host key
+  confirmed (``remote_needs_interaction``): nothing prompts (``git_env``,
+  ``-o BatchMode=yes``), so it fails at once instead of waiting out its time;
 - the remote cannot be read (``remote_unreachable``, with git's reason);
 - both sides moved (``diverged``, naming both counts).
 
@@ -46,6 +49,7 @@ from typing import Any, Dict, Optional
 
 import forge_gate
 import git_base
+import git_env
 import git_local
 from git_workspace import GitError, run_git, valid_branch
 from local_merge import checked_out_in
@@ -101,6 +105,9 @@ def _fetch(root: Path, remote: str, there: str) -> tuple:
             reason = str(e)
         if reason and "couldn't find remote ref" in reason.lower():
             return None, ("base_not_on_remote", f"{remote} has no branch {there}")
+        if reason and git_env.needs_interaction(reason):
+            # It asked nothing (git_env): a passphrase, a password or a host key is the person's to give.
+            return None, (git_env.NEEDS_INTERACTION, reason[-500:])
         if reason:
             return None, ("remote_unreachable", reason[-500:])
         tip = git_base._commit(root, temp)

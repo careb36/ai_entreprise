@@ -7,6 +7,27 @@ What happens from `POST /v1/start_sprint` to the close of a sprint, step by step
 Tasks are executed by the **task worker**, split by stage into `backend/app/services/loop/worker/` (ADR 0014): `intake` (the consumer, the claim, queue markers, dispatch) and `task_run` (one claimed task up to QA's handoff), `prompt`, `execute`, `deliver`, `record`, `review` (with `qa_review` and `quality_gate`), `close` (with `procedures_round`), `messages` and the shared `board_writes`; `services/loop/task_worker.py` is the facade that re-exports them (`process_backlog_tasks`, the `engine`), and `services/task_worker.py` a shim of it;
 the LangGraph graph is only an optional kickoff conversation.
 
+0. Before the sprint exists, `POST /v1/plan_sprint` asks the PO for a plan
+   (`services/planning/sprint_planner.py`). The objective the person wrote is
+   never cut: the plan carries it whole as `objective`, apart from the
+   model's one-line `goal`, and `start_sprint` stores it as
+   `Sprint.objective` (TEXT, migration `0056`). When the planner's model does
+   not answer usably (no model, an error or timeout, an answer that is not a
+   plan, too few tasks), the plan is made without it (`sprint_fallbacks`):
+   its goal is the objective whole, the PO's task cites it whole, and when
+   the objective lists explicit items (Markdown headings or a numbered list,
+   read without a model by `objective_text`), each item is a task whose
+   description is the item's text as written; items beyond the scope are
+   named in `unplanned_items`, never dropped. The backend records the
+   fallback with the reason it observed (`planner_fallback` in the audit
+   log, `services/planning/planner_fallback.py`) and returns its `plan_id`;
+   the plan preview says "the planner's model did not answer; this is a
+   generic plan" with a "Retry planning" button. `start_sprint` with that
+   `plan_id` reads the backend's own row back and records it on the sprint
+   (`sprint:<id>:planning`); the board shows the note, the objective whole on
+   demand, and, for a Manager, "Retry planning", which opens the planner
+   with the objective. A `plan_id` the backend did not record (or another
+   company's) records nothing.
 1. `POST /v1/start_sprint` writes the sprint with its team (`services/planning/sprint_team.py`; or `POST /v1/init_company` Sprint 0, which with `start_now: false` stays `planned` until `POST /v1/sprints/{id}/start`, and which a folder the daemon observes to be a repository with code does not get at all unless the request asks — `services/loop/foundation_setup.py`, retrospective F8), one `BacklogItem` per task and one
    outbox event per task on `task.assign`; the outbox processor stores them in the
    JetStream stream `FABRIQUE_TASKS` (an outbox row completes only once stored).

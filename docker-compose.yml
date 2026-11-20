@@ -123,6 +123,9 @@ services:
       LLM_PROXY_THREADS: ${LLM_PROXY_THREADS:-8}
       # auto (each call's own choice), on or off: DeepSeek's thinking mode.
       LLM_THINKING: ${LLM_THINKING:-auto}
+      # Empty: a failed request stays with its provider (DeepSeek Pro <-> Flash).
+      LLM_FALLBACK_PROVIDERS: ${LLM_FALLBACK_PROVIDERS:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "5100:5100"

@@ -4,7 +4,8 @@ The application writes from ``asyncio.to_thread`` while the event loop goes
 on with sessions of its own; on the test engine every session of every
 thread gets the same ``sqlite3`` connection. A session closed on one thread
 must not roll back another thread's open transaction, a write on one thread
-waits for another's transaction instead of joining it, and sessions on one
+waits for another's transaction instead of joining it, a read on another
+thread waits for it too (never seeing uncommitted rows), and sessions on one
 thread still see each other's flushed rows. Before, the sprint integration
 job failed on a loaded runner with ``cannot rollback - no transaction is
 active``, and a thread's committed rows could be lost.
@@ -58,14 +59,45 @@ def test_a_session_closed_on_one_thread_leaves_another_threads_transaction_open(
 
     worker = _in_thread(other_thread)
     assert written.wait(10)
-    # A read on this thread, ended by a rollback when its session closes.
+    # A session on this thread that checks the connection out, ended by a
+    # rollback when it closes (a read would wait for the other transaction).
     with Session(engine) as session:
-        session.exec(text(f"SELECT count(*) FROM {TABLE}")).one()
+        session.connection()
     closed.set()
     worker.join(10)
 
     assert failures == []
     assert _values(engine) == ["other"]
+
+
+def test_a_read_on_another_thread_never_sees_rows_not_yet_committed(engine):
+    """As on Postgres (READ COMMITTED): a background thread half way through a
+    write is never read half written. The read waits for the commit
+    (``test_code_graph_store``'s section read a graph whose files were
+    flushed and whose definitions were not yet, about 1 run in 40 under -n 8)."""
+    written, reading = threading.Event(), threading.Event()
+    failures = []
+
+    def other_thread():
+        try:
+            with Session(engine) as session:
+                session.exec(text(f"INSERT INTO {TABLE} VALUES ('first')"))
+                written.set()
+                assert reading.wait(10)
+                threading.Event().wait(0.2)  # the read below is waiting now
+                session.exec(text(f"INSERT INTO {TABLE} VALUES ('second')"))
+                session.commit()
+        except Exception as exc:  # noqa: BLE001 - reported by the test thread
+            failures.append(exc)
+
+    worker = _in_thread(other_thread)
+    assert written.wait(10)
+    reading.set()
+    seen = _values(engine)
+    worker.join(10)
+
+    assert failures == []
+    assert seen == ["first", "second"]
 
 
 def test_a_write_waits_for_another_threads_transaction_instead_of_joining_it(

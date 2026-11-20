@@ -65,6 +65,9 @@ NEBIUS_PROXY_URL = os.getenv("NEBIUS_PROXY_URL", "https://api.tokenfactory.nebiu
 # worker timeout and the backend client's wait are this plus a margin, so the
 # proxy answers (with a named ``upstream_timeout`` if need be) first.
 LLM_UPSTREAM_TIMEOUT_SECONDS = timeouts.upstream_timeout_seconds()
+# The other providers a failed request may move to, in order (issue #751).
+# Empty, the default: a request stays with its provider (DeepSeek Pro <-> Flash).
+LLM_FALLBACK_PROVIDERS = routing.parse_fallback_providers(os.getenv("LLM_FALLBACK_PROVIDERS", ""))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
@@ -186,9 +189,22 @@ def resolve_model(requested: str) -> tuple[str, str] | None:
     return routing.resolve(requested, _provider_catalogue)
 
 
-def _fallback_targets(failed_provider: str) -> list[tuple[str, str]]:
-    """Catalogue models to try, one per other provider, after a 429/5xx."""
-    return routing.fallback_targets(failed_provider, _provider_catalogue)
+def _fallback_targets(failed_provider: str, failed_model: str = "") -> list[tuple[str, str]]:
+    """Catalogue models to try after a 429/5xx (``routing.fallback_targets``)."""
+    return routing.fallback_targets(failed_provider, _provider_catalogue, failed_model=failed_model,
+                                    cross_providers=LLM_FALLBACK_PROVIDERS)
+
+
+def _capabilities() -> dict:
+    """What this proxy can do with the configuration it has: names and reasons, never a key."""
+    return {
+        "providers_configured": [p for p in provider_status.PROVIDERS if _provider_key(p)],
+        "embeddings": embedding.capability(_provider_key("gemini")),
+        "failover": routing.failover_scope(LLM_FALLBACK_PROVIDERS),
+    }
+
+
+logger.info("Effective capabilities: %s", _capabilities())
 
 
 def _call_provider(provider: str, model: str, data: dict, timeout: float,
@@ -240,7 +256,7 @@ app.after_request(add_quota_warning_header)
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models),
-                    "providers": _provider_status.snapshot()})
+                    "providers": _provider_status.snapshot(), "capabilities": _capabilities()})
 
 
 @app.route("/v1/providers")
@@ -356,7 +372,8 @@ def embeddings():
     if not text.strip():
         return jsonify({"error": "input is required"}), 400
 
-    body, tokens = embedding.embed(text, data, api_key=_provider_key("gemini"), base_url=GEMINI_PROXY_URL)
+    body, tokens = embedding.embed(text, data, api_key=embedding.key_for(_provider_key("gemini")),
+                                   base_url=GEMINI_PROXY_URL)
     if tokens:
         track_usage_in_db(bu_id, tokens)
     return jsonify(body)

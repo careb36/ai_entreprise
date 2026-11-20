@@ -42,6 +42,13 @@ Factory leaves local or cloud execution of its Droids to the operator.
 
 ### Check the model keys
 
+DeepSeek is the only provider a sprint needs (issue #751): with
+`DEEPSEEK_API_KEY` alone, a request DeepSeek fails with 429 or 5xx moves to
+its other model (Pro and Flash) and never to another provider unless
+`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally. When DeepSeek
+itself is out of credit, the sprint pauses on the 402 (`sprint_control`) and
+says so; top up and resume.
+
 The proxy records what each provider answered, but a key check is not
 always a credit check:
 
@@ -629,6 +636,21 @@ https address, or run as a stdio wrapper.
   `llm_proxy` component carries the proxy's `providers` block as it is:
   the proxy being up does not mean a provider can serve (a key without
   credit is `no_credit`), and this does not change the severity.
+- `/health/deep`'s `capabilities` section (issue #751) names what this
+  deployment can do with the configuration it has: each entry is `on`, `off`
+  or `degraded` with its `reason`, never a setting's value. The backend's
+  (`auth`, `memory`, `knowledge_graph`, `github_token`, `forge`, `mail`,
+  `webhooks`, `sso`, `error_reports`, `research_tools`, `grounding_lookups`,
+  `model_catalog_refresh`, the Manager, Support and Reviewer agents,
+  `credential_encryption`, `audit_signing`) sit beside the proxy's
+  (`llm.providers`, `llm.embeddings`, `llm.failover`; `llm: off` when the
+  proxy did not say). The Models page shows the same list (Capabilities).
+  Off by configuration is not a fault and changes no status; the same list
+  is logged once at startup by the backend and by the proxy
+  (`Effective capabilities: …`). With DeepSeek alone, expect
+  `llm.embeddings: degraded` (the local vector: DeepSeek has no embeddings
+  endpoint) and `llm.failover: on, same_provider` (Pro and Flash stand in for
+  each other); `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,

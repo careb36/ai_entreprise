@@ -9,12 +9,9 @@ fast-forward the local base branch to its remote's tip
 commit, no rebase, no reset; a diverged, dirty, mid-rebase or unreachable
 repository is refused, changing nothing, with the reason.
 
-- ``check_folder``: what the form shows before the company exists
-  (``workspace.git.base_status``): the remote URL without credentials, the
-  current and base branch, whether the checkout is clean and, only when the
-  Owner pressed "Check remote", how far the base is behind or ahead after a
-  fetch of that one branch. The fetch is the Owner's explicit request,
-  capped by ``FORGE_POLICY_MAX``; without it, nothing is contacted.
+What the form shows before the company exists, and who may ask for it, is
+``folder_check.py``.
+
 - ``request_sync``: the daemon's fast-forward under a forge policy. Under
   ``none`` it answers ``forge_disabled`` without sending anything, and the
   daemon refuses it again on its side (``forge_gate``, issue #727).
@@ -46,8 +43,6 @@ from services.workspace.workspace_daemon import (
 AUDIT_ACTION = "base_sync_observed"
 # The daemon's fetch of one branch (20 s there), the fast-forward and the reply.
 SYNC_TIMEOUT_SECONDS = 35.0
-# A fetch of one branch on the daemon (15 s there) and its reply.
-CHECK_TIMEOUT_SECONDS = 25.0
 # What the record keeps of the daemon's answer.
 _KEPT = (
     "ok",
@@ -65,29 +60,6 @@ _KEPT = (
     "forge_policy",
     "remote_contacted",
 )
-
-
-async def check_folder(
-    nats_client: Any, path: str, base: str | None, contact: bool
-) -> dict[str, Any]:
-    """The folder's base as the daemon observed it now; the remote is read only when *contact*."""
-    ceiling = forge_policy_setting.ceiling()
-    policy = forge_policy.cap(
-        forge_policy.FETCH if contact else forge_policy.NONE, ceiling
-    )
-    common = {"forge_policy_max": ceiling}
-    try:
-        observed = await daemon_request(
-            nats_client,
-            "workspace.git.base_status",
-            {"workspace_root": path, "base": base or "", "forge_policy": policy},
-            CHECK_TIMEOUT_SECONDS,
-        )
-    except DaemonUnavailable:
-        return {**common, "state": "unknown", "reason": "No workspace daemon answered"}
-    except DaemonError as e:
-        return {**common, "state": "unknown", "reason": e.message}
-    return {**common, "state": "observed", "path": path, **observed}
 
 
 async def request_sync(

@@ -53,6 +53,7 @@
             "base_not_on_remote",
             "operation_in_progress",
             "dirty",
+            "remote_needs_interaction",
             "remote_unreachable",
             "diverged",
             "not_moved"

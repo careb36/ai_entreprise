@@ -178,6 +178,7 @@
         "arch_author",
         "arch_check",
         "document_approval",
+        "planner_fallback",
         "spec_check",
         "spec_planning",
         "sprint_planner",
@@ -659,6 +660,9 @@
       "test_database_timezone.py": [
         "platform"
       ],
+      "test_deepseek_only.py": [
+        "management"
+      ],
       "test_deepseek_thinking.py": [
         "loop"
       ],
@@ -754,6 +758,12 @@
       ],
       "test_git_base.py": [
         "release"
+      ],
+      "test_git_check_limits.py": [
+        "release"
+      ],
+      "test_git_never_prompts.py": [
+        "workspace"
       ],
       "test_git_publish.py": [
         "release"
@@ -954,6 +964,9 @@
       ],
       "test_passwords.py": [
         "platform"
+      ],
+      "test_planner_fallback.py": [
+        "release"
       ],
       "test_playwright_pin.py": [
         "workspace"

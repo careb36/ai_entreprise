@@ -22,6 +22,8 @@ sys.path.insert(0, str(_APP_PATH.parent))
 
 for _key in ("GEMINI_API_KEY", "DEEPSEEK_API_KEY", "QWEN_API_KEY", "NEBIUS_API_KEY"):
     os.environ[_key] = ""
+os.environ.pop("LLM_FALLBACK_PROVIDERS", None)
+os.environ.pop("EMBEDDING_PROVIDER", None)
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 os.environ.pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", None)
@@ -139,6 +141,14 @@ def nebius(proxy, monkeypatch):
     monkeypatch.setattr(proxy, "_available_nebius_models",
                         {"nvidia/Llama-3.1-Nemotron-70B-Instruct", "nvidia/Nemotron-Nano-9B"})
     monkeypatch.setattr(proxy, "_refresh_nebius_models", lambda: None)
+    return proxy
+
+
+@pytest.fixture()
+def cross_provider(proxy, monkeypatch):
+    """The proxy with ``LLM_FALLBACK_PROVIDERS=deepseek,qwen,gemini``: a failed
+    request may leave its provider (off by default, issue #751)."""
+    monkeypatch.setattr(proxy, "LLM_FALLBACK_PROVIDERS", ("deepseek", "qwen", "gemini"))
     return proxy
 
 

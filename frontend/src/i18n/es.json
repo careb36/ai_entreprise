@@ -2935,6 +2935,23 @@
       "all": "Sin equipo elegido: todos los roles que contrató la empresa."
     }
   },
+  "plannerFallback": {
+    "title": "El modelo del planificador no respondió; este es un plan genérico.",
+    "reasons": {
+      "no_model": "El PO no tiene asignado un modelo de planificación.",
+      "model_error": "El modelo de planificación respondió con un error (o se agotó el tiempo).",
+      "unparseable": "La respuesta del modelo de planificación no se pudo leer como un plan.",
+      "too_few_tasks": "La respuesta del modelo de planificación tenía muy pocas tareas utilizables.",
+      "unexpected_error": "La planificación falló con un error inesperado."
+    },
+    "observed": "Observado: {{detail}}",
+    "kept": "Tu objetivo se conserva completo: es el objetivo del sprint, la tarea del PO lo cita y cada ítem que enumeraste es una tarea propia. Vuelve a planificar para obtener un plan del modelo.",
+    "unplanned_one": "{{count}} ítem no cupo en el alcance y no es una tarea: {{items}}. Elige un alcance mayor o vuelve a planificar.",
+    "unplanned_other": "{{count}} ítems no cupieron en el alcance y no son tareas: {{items}}. Elige un alcance mayor o vuelve a planificar.",
+    "retry": "Reintentar la planificación",
+    "objective_one": "El objetivo tal como se escribió ({{count}} carácter)",
+    "objective_other": "El objetivo tal como se escribió ({{count}} caracteres)"
+  },
   "cost": {
     "runTitle": "Costo de esta ejecución",
     "taskTitle": "Costo de esta tarea",
@@ -2991,7 +3008,7 @@
       "publish": "Leer y publicar (publish)"
     },
     "sync": "Poner al día mi copia local",
-    "syncHint": "Antes de que la empresa lea la carpeta, la rama base avanza rápido (fast-forward) hasta su remoto. Nunca una fusión, un rebase ni un reset: un repositorio divergente, con cambios o a mitad de un rebase se deja como está, y la empresa se crea igualmente.",
+    "syncHint": "Antes de que la empresa lea la carpeta, la rama base avanza rápido (fast-forward) hasta su remoto. Nunca una fusión, un rebase ni un reset: un repositorio divergente, con cambios o a mitad de un rebase se deja como está, y la empresa se crea igualmente. Si la base avanzó, el stack del proyecto se vuelve a leer de los archivos actualizados.",
     "syncAction": "Poner al día la copia local",
     "behindNotice": "Tu copia local va {{count}} commit(s) por detrás de {{remote}} ({{base}}). Las ramas del sprint parten de {{remote}}; tu copia se deja como está hasta que la pongas al día.",
     "refused": "La copia local no se puso al día ({{outcome}}): {{reason}}",
@@ -3011,7 +3028,17 @@
       "not_moved": "no se pudo mover la base",
       "daemon_unavailable": "ningún daemon del espacio de trabajo respondió",
       "refused": "el daemon lo rechazó",
-      "no_folder": "la empresa no tiene carpeta de proyecto"
+      "no_folder": "la empresa no tiene carpeta de proyecto",
+      "remote_needs_interaction": "el remoto pidió una frase de paso, una contraseña o una clave de host"
+    },
+    "checked": {
+      "upToDate": "{{base}} está al día con {{remote}}.",
+      "ahead": "{{base}} tiene {{ahead}} commit(s) que {{remote}} no tiene.",
+      "behind": "{{base}} va {{behind}} commit(s) por detrás de {{remote}}.",
+      "diverged": "{{base}} y {{remote}} han divergido ({{ahead}} commit(s) solo aquí, {{behind}} solo allí): no puede avanzar rápido.",
+      "notOnRemote": "El remoto no tiene la rama {{remote}}.",
+      "unreachable": "No se pudo leer el remoto desde el ordenador del daemon.",
+      "needsInteraction": "El remoto pidió una frase de paso, una contraseña o una clave de host nueva, y aquí nunca se pregunta nada: añade la clave a tu agente ssh o confirma el host una vez en una terminal (git fetch), y vuelve a comprobar."
     }
   },
   "forgePolicy": {
@@ -4806,6 +4833,20 @@
         "no_connection": "El inicio de sesión único de esta empresa no está activado.",
         "not_found": "No se encontró esa identidad."
       }
+    }
+  },
+  "capabilities": {
+    "title": "Capacidades",
+    "hint": "Lo que este despliegue puede hacer con la configuración que tiene. Desactivado por configuración no es una falla, y nada de esto detiene un sprint.",
+    "loading": "Comprobando capacidades…",
+    "unavailable": "No se pudieron leer las capacidades.",
+    "name": "Capacidad",
+    "stateColumn": "Estado",
+    "reason": "Motivo",
+    "state": {
+      "on": "activada",
+      "off": "desactivada",
+      "degraded": "degradada"
     }
   }
 }

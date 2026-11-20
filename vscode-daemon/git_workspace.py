@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote, urlsplit
 
 import forge_gate
+import git_env
 
 GIT_TIMEOUT_SECONDS = 60
 WORKTREES_DIR = "fabrique-worktrees"
@@ -56,8 +57,8 @@ def error_body(e: Exception, status: int = 409) -> Dict[str, Any]:
 def run_git(
     args: list[str], cwd: Path, check: bool = True, timeout: float = GIT_TIMEOUT_SECONDS
 ) -> subprocess.CompletedProcess:
-    """``git <args>`` in *cwd*: no shell, no prompt, C locale, bounded in time."""
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
+    """``git <args>`` in *cwd*: no shell, no prompt (``git_env``), C locale, bounded in time."""
+    env = git_env.env_for(args, cwd)
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv, no shell.
             ["git", *args],

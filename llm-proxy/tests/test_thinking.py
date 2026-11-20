@@ -106,13 +106,17 @@ def test_the_retry_is_for_structured_calls_only(client, others_down):
 
 
 def test_a_failed_retry_keeps_its_own_reason(client, others_down):
+    # Pro: exhausted, then empty without thinking; DeepSeek Flash stands in, empty too.
     others_down.set("deepseek", [_deepseek("", "length", reasoning="r", tokens=10),
-                                 _deepseek("   ", "stop", tokens=5)])
+                                 _deepseek("   ", "stop", tokens=5),
+                                 _deepseek("", "stop", tokens=5)])
 
     resp = _chat(client, headers=STRUCTURED, thinking={"type": "enabled"})
 
     assert resp.status_code == 502
-    assert resp.get_json()["attempts"][0]["reason"] == "empty_content"
+    attempts = resp.get_json()["attempts"]
+    assert [a["model"] for a in attempts] == ["deepseek-v4-pro", "deepseek-flash"]
+    assert attempts[0]["reason"] == "empty_content"
 
 
 # --- (c) empty content otherwise --------------------------------------------------
@@ -188,6 +192,8 @@ def test_only_deepseek_receives_the_thinking_field(client, upstream):
 
 def test_a_fallback_from_deepseek_drops_the_field(client, upstream, proxy, monkeypatch):
     monkeypatch.setattr(proxy, "_available_deepseek_models", {"deepseek-v4-pro"})
+    # Leaving DeepSeek is opt-in (LLM_FALLBACK_PROVIDERS, issue #751).
+    monkeypatch.setattr(proxy, "LLM_FALLBACK_PROVIDERS", proxy.routing.parse_fallback_providers("qwen"))
     upstream.set("deepseek", FakeResponse(503, {"message": "busy"}))
     upstream.set("qwen", openai_ok("from qwen"))
 

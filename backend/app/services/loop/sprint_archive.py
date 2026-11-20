@@ -62,6 +62,7 @@ from sqlalchemy import text as sql_text
 from sqlmodel import Session, select
 
 from services.loop.sprint_control import CANCELLED, PLANNED
+from services.planning import planner_fallback
 from services.platform.agent_service import AgentService
 
 REMOVABLE_STATUSES = (PLANNED, CANCELLED, "completed")
@@ -218,7 +219,10 @@ def evidence_of(session: Session, sprint: Sprint) -> list[str]:
             AuditLog.company_id == sprint.company_id,
             or_(
                 AuditLog.interaction_id.is_(None),
-                AuditLog.interaction_id != _admin_ref(sid),
+                # Its administration and its planner's fallback record no work.
+                AuditLog.interaction_id.not_in(
+                    [_admin_ref(sid), planner_fallback.sprint_ref(sid)]
+                ),
             ),
             or_(*about),
         ),

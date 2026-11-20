@@ -126,7 +126,9 @@ def test_the_planner_records_the_named_reason_of_its_fallback(proxy_posts):
     plan = sprint_planner.plan_execution_sprint("Acme", "Ship docs", "S", agents)
 
     assert plan["tasks"], "the deterministic plan stands in"
-    assert plan["fallback_reason"].startswith(
+    fallback = plan["planner_fallback"]
+    assert fallback["reason"] == "model_error"
+    assert fallback["detail"].startswith(
         "empty_content_reasoning_exhausted: finish_reason=length"
     )
     assert proxy_posts[0]["json"]["thinking"] == {"type": "disabled"}
@@ -146,9 +148,10 @@ def test_an_empty_2xx_plan_is_named_not_parsed(monkeypatch):
 
     plan = sprint_planner.plan_execution_sprint("Acme", "Ship docs", "S", agents)
 
-    assert plan["fallback_reason"] == (
-        "empty_content: the answer had no text (finish_reason=stop)"
-    )
+    assert plan["planner_fallback"] == {
+        "reason": "model_error",
+        "detail": "empty_content: the answer had no text (finish_reason=stop)",
+    }
 
 
 def test_an_unparseable_plan_names_the_parse_error(monkeypatch):
@@ -164,7 +167,25 @@ def test_an_unparseable_plan_names_the_parse_error(monkeypatch):
 
     plan = sprint_planner.plan_execution_sprint("Acme", "Ship docs", "S", agents)
 
-    assert plan["fallback_reason"].startswith("unparseable: Expecting value")
+    assert plan["planner_fallback"]["reason"] == "unparseable"
+    assert plan["planner_fallback"]["detail"].startswith(
+        "JSONDecodeError: Expecting value"
+    )
+    assert plan["planner_fallback"]["detail"].endswith("(answer of 20 characters)")
+
+
+def test_the_foundation_plan_records_its_fallback_the_same_way(proxy_posts):
+    agents = [{"role": r, "name": r, "model": "deepseek-v4-pro"} for r in ("PO", "Dev")]
+
+    plan = sprint_planner.plan_foundation_sprint(
+        "Acme", agents, {"language": "python"}, None
+    )
+
+    assert plan["tasks"]
+    assert plan["planner_fallback"]["reason"] == "model_error"
+    assert plan["planner_fallback"]["detail"].startswith(
+        "empty_content_reasoning_exhausted: "
+    )
 
 
 def test_the_qa_review_fails_with_the_named_reason(proxy_posts):

@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Layers, Loader2, Play, Sparkles } from 'lucide-react'
 import type { SprintPlanResponse } from '../services/api'
 import type { InboxTaskWithManager } from '../services/manager'
@@ -16,6 +16,7 @@ import { secondAttempts } from '../lib/learningTrend'
 import { useSpecifications } from '../services/specifications'
 import { SprintTeamChips, SprintTeamPicker } from './SprintTeam'
 import { planFitsTeam, sameTeam, useRoleLabel } from '../lib/sprintTeam'
+import { ObjectiveText, PlannerFallbackNote } from './PlannerFallback'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,9 @@ export const ROLE_DISPLAY: Record<string, { label: string; initials: string; col
 
 export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
   const { t } = useTranslation()
-  const [goal, setGoal] = useState('')
+  // "Plan again" on a board planned without the model brings its objective here, whole.
+  const handedObjective = (useLocation().state as { objective?: string } | null)?.objective
+  const [goal, setGoal] = useState(handedObjective ?? '')
   const [scope, setScope] = useState<'S' | 'M' | 'L'>('M')
   const [plannedSprint, setPlannedSprint] = useState<SprintPlanResponse | null>(null)
   const [planSource, setPlanSource] = useState<'manual' | 'autonomous' | null>(null)
@@ -218,6 +221,9 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         start_date: new Date().toISOString().split('T')[0],
         scope_size: scope,
         goal: plannedSprint.goal,
+        // The person's objective whole, and the backend's record of a fallback plan.
+        ...(plannedSprint.objective ? { objective: plannedSprint.objective } : {}),
+        ...(plannedSprint.plan_id ? { plan_id: plannedSprint.plan_id } : {}),
         backlog_items: plannedSprint.tasks,
         ...(carryOver.length > 0 ? { carry_over_ids: carryOver } : {}),
         // The plan shown, not the selector: a selector changed after planning
@@ -364,7 +370,15 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
             </span>
           </div>
 
-          <p className="text-xs text-gray-400">{plannedSprint.goal}</p>
+          <PlannerFallbackNote
+            fallback={plannedSprint.planner_fallback}
+            unplannedItems={plannedSprint.unplanned_items}
+            onRetry={planSource === 'autonomous' ? generateAutonomousPlan : generatePlan}
+            busy={busy}
+          />
+
+          <p className="text-xs text-gray-400 line-clamp-3 whitespace-pre-wrap">{plannedSprint.goal}</p>
+          {plannedSprint.objective && <ObjectiveText objective={plannedSprint.objective} />}
 
           {planSource === 'autonomous' && (
             <p className="text-[11px] text-brand-200/80">
@@ -383,7 +397,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                         <span className="ml-1.5 badge border bg-violet-900/40 text-violet-300 border-violet-700/40">{t('kanban.acceptanceTests')}</span>
                       )}
                     </p>
-                    <p className="text-[11px] text-gray-500 mt-1">{task.description}</p>
+                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-4 whitespace-pre-wrap" title={task.description}>{task.description}</p>
                     {task.covers && task.covers.length > 0 && (
                       <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-gray-500">
                         <span>{t('specifications.plan.covers', { defaultValue: 'Covers' })}</span>

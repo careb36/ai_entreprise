@@ -24,6 +24,9 @@ this machine, no shell, no prompt, bounded in time), the way
   tag or a remote ref named explicitly: the local start, as before;
 - the fetch fails (offline, credentials refused): the local start, with
   ``remote_unreachable`` and git's reason. A fetch never blocks a delivery.
+  Nothing prompts (``git_env``): a remote that wants a passphrase, a password
+  or a host key fails at once, with ``remote_needs_interaction: true`` and
+  the reason prefixed ``remote_needs_interaction:``.
 
 What was observed goes on the answer: ``base_commit`` (where the branch
 started), ``base_ref``, ``base_remote`` and ``base_remote_commit``, and
@@ -48,6 +51,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import forge_gate
+import git_env
 import git_local
 from git_workspace import GitError, run_git, valid_branch
 
@@ -161,6 +165,10 @@ def _observe(root: Path, base: str, fetch_timeout: Optional[float], policy: str,
         observed.update(base_remote=None, base_not_on_remote=f"{remote}/{there}")
         return observed
     if reason:
+        if git_env.needs_interaction(reason):
+            # The remote wanted a passphrase, a password or a host key: asked nothing (git_env).
+            observed["remote_needs_interaction"] = True
+            reason = f"{git_env.NEEDS_INTERACTION}: {reason}"
         observed["remote_unreachable"] = reason[-500:]
         return observed
     remote_tip = _commit(root, tracking)
@@ -207,8 +215,9 @@ def behind_remote_at_publish(root: Path, base: str, commit: str, policy: str = f
     fetched = run_git(["fetch", "--no-tags", "--quiet", "origin", f"+refs/heads/{base}:{tracking}"],
                       root, check=False, timeout=FETCH_TIMEOUT_SECONDS)
     if fetched.returncode != 0 or _commit(root, tracking) is None:
-        raise GitError(f"could not read origin/{base} to check the branch is current: "
-                       f"{(fetched.stderr or fetched.stdout).strip() or 'no such branch'}")
+        said = (fetched.stderr or fetched.stdout).strip() or "no such branch"
+        named = f"{git_env.NEEDS_INTERACTION}: " if git_env.needs_interaction(said) else ""
+        raise GitError(f"could not read origin/{base} to check the branch is current: {named}{said}")
     return _count(root, commit, tracking)
 
 

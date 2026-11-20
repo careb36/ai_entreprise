@@ -90,6 +90,11 @@ async def init_company(
     # asks for the sprint or declines it.
     observed = await foundation_setup.observe_folder(nats, req.project_path)
     foundation = foundation_setup.decide(observed, req.foundation_sprint)
+    # The wizard's Scan read the folder before the fast-forward: the stack is
+    # read again from this inspection, so it matches what the agents read.
+    stack = await company_sync.stack_after_sync(
+        synced, observed["project"], req.detected_stack
+    )
     service = CompanyService(session)
     try:
         result = service.init_company(
@@ -99,7 +104,7 @@ async def init_company(
             autonomy_level=req.autonomy_level,
             permissions=req.permissions,
             project_path=req.project_path,
-            detected_stack=req.detected_stack,
+            detected_stack=stack,
             owner_user_id=user.id if user is not None else None,
             start_now=req.start_now,
             git_workflow=git_setup.workflow_for(
@@ -115,6 +120,8 @@ async def init_company(
         # The decision and its reason, with the daemon's observation beside
         # it (services/loop/foundation_setup.py).
         result["foundation_sprint"] = foundation
+        if stack is not req.detected_stack:
+            result["detected_stack"] = stack  # read again after the sync
     except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.
         logger.error(f"Company initialization failed: {exc}")
         if synced is not None:
