@@ -37,7 +37,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import replicas, run_window_gate, sprint_control
+from services.loop import preconditions, replicas, run_window_gate, sprint_control
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
 from services.tasks import dependencies, task_events, task_projection
@@ -197,6 +197,12 @@ async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
     # Outside the company's run window the next model turn waits (issue #736).
     if item.get("status") == "todo" and await asyncio.to_thread(
         run_window_gate.hold_task, engine, item["id"]
+    ):
+        return None
+    # A company that runs with tests off or agent code on the host needs an
+    # Owner's acknowledgement; without one the sprint pauses (issue #766).
+    if item.get("status") == "todo" and await asyncio.to_thread(
+        preconditions.hold_task, engine, item["id"]
     ):
         return None
     # Guard against duplicate task.assign events for the same item: one

@@ -33,7 +33,9 @@ def _scope(text) -> list[sa.Column]:
         sa.Column(
             "company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False
         ),
-        sa.Column("sprint_id", sa.Integer(), sa.ForeignKey("sprints.id"), nullable=False),
+        sa.Column(
+            "sprint_id", sa.Integer(), sa.ForeignKey("sprints.id"), nullable=False
+        ),
         sa.Column(
             "integration_id",
             sa.Integer(),

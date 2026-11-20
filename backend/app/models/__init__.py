@@ -8,6 +8,7 @@ imported, so this ``__init__`` must be imported before
 ``database.prepare_database()`` (or a migration) is called.
 """
 
+from .acknowledgement import CompanyAcknowledgement
 from .agent_message import AgentMessage
 from .agent_run import AgentRun, AgentRunApproval, Verification
 from .api_token import ApiToken
@@ -109,6 +110,7 @@ __all__ = [
     "CodeGraphFile",
     "CodeGraphReference",
     "Company",
+    "CompanyAcknowledgement",
     "CompanyInvitation",
     "CompanyMember",
     "CompanyStandardException",

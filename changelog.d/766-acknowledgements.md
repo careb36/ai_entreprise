@@ -1,0 +1,5 @@
+Added
+
+* **A sprint runs only when its deliveries can be verified, or an Owner said they know they cannot (issue #766).** With tests off (`DELIVERY_TESTS_ENABLED`) no code delivery can be verified, and with the host sandbox agent-written code runs without isolation. A company with either now needs an Owner's recorded acknowledgement, with a reason and an end (1 to 90 days): `GET/POST /v1/companies/{id}/acknowledgements`, `DELETE …/{ack_id}`, audited, never deleted. Without it, `POST /v1/start_sprint`, `/start`, `/resume` and `/dispatch` answer 409 with `missing_acknowledgements`, the Manager agent cannot resume the sprint, and the task worker pauses a sprint whose task was queued by any other path. `/health` and `/health/deep` gain a `verification` section and say `degraded` with the reasons while tests are off or the default sandbox is `host`; both still answer 200.
+
+  **Upgrading:** a deployment on the defaults (tests off, host sandbox) must record both acknowledgements for each company before its sprints start again, or turn the tests on and isolate agent code.
