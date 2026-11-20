@@ -448,7 +448,12 @@ Copy `.env.example` to `.env` and fill in:
   refuses a wider value with 409. On the daemon it caps whatever a request
   asks for, so `none` on a computer means it never fetches, pushes or reads a
   request from a forge. An unknown value reads as `none`. An air-gapped
-  install sets `none` on both.
+  install sets `none` on both. `GET /v1/capabilities` names it
+  (`forge_policy_max`), so the New company form offers nothing above it.
+- `GIT_CHECK_RATE_LIMIT` — optional, default `10/minute`, read by the
+  backend (`routers/company_sync.py`): how often one account may call
+  `POST /v1/workspace/git_check`, the New company form's folder check and
+  "Check remote" (issue #745; slowapi, `RATE_LIMIT_STORAGE_URI`).
 - `RUN_WINDOW_RECHECK_SECONDS` — optional, default `300`, read by the backend
   (`config.py`, `services/loop/run_window_gate.py`). The longest the run-window
   worker sleeps between two looks at the sprints whose work waits for their

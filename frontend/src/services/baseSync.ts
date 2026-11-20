@@ -13,8 +13,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type BaseSyncResult, type ForgePolicy } from './api'
 import type { GitBaseStatus } from './workControl'
 
-/** The folder as the daemon observed it for the form, and the deployment's ceiling. */
-export interface FolderGitCheck extends GitBaseStatus {
+/**
+ * The folder as the daemon observed it for the form, and the deployment's
+ * ceiling: branch names, flags and counts only (no commit ids, no text from
+ * the remote; `remote_unreachable` is a code).
+ */
+export interface FolderGitCheck extends Omit<GitBaseStatus, 'remote_unreachable' | 'base_commit' | 'base_remote_commit' | 'path'> {
   forge_policy_max?: ForgePolicy
   current_branch?: string | null
   clean?: boolean
@@ -22,6 +26,9 @@ export interface FolderGitCheck extends GitBaseStatus {
   remote_url?: string | null
   remote_contacted?: boolean
   base_remote_not_contacted?: string
+  base_not_on_remote?: string
+  remote_unreachable?: 'remote_unreachable' | 'remote_needs_interaction'
+  remote_needs_interaction?: boolean
 }
 
 export const baseSyncApi = {

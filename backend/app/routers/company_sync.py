@@ -2,7 +2,8 @@
 ``services/release/base_sync.py``).
 
 - ``POST /v1/workspace/git_check``                what the New company form shows: the folder's remote,
-  branches and checkout, and, with ``contact_remote``, how far its base is behind (authenticated)
+  branches and checkout, and, with ``contact_remote``, how far its base is behind (authenticated,
+  then held to ``folder_check.may_check``, ``GIT_CHECK_RATE_LIMIT`` per account, and audited)
 - ``POST /v1/companies/{id}/git/sync_base``       "Bring the local copy up to date" on the settings (Manager)
 
 and the two halves of ``POST /v1/init_company`` that concern it
@@ -17,6 +18,8 @@ stops the creation.
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
 from auth_policy import (
@@ -24,14 +27,19 @@ from auth_policy import (
     require_authenticated,
     require_company_role,
 )
+from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Company, User
 from pydantic import Field
 from schemas import CompanyInitRequest, RequestModel
+from security import limiter
 from services.contracts import forge_policy
+from services.planning.discovery_service import detect_stack
 from services.platform import forge_policy_setting, sod
-from services.release import base_sync, git_setup
+from services.release import base_sync, folder_check, git_setup
+from services.workspace.workspace_daemon import materialized_snapshot
+from slowapi.util import get_remote_address
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Company"])
@@ -74,6 +82,39 @@ async def before_creation(
     return await base_sync.request_sync(nats_client, path, base, _requested_policy(req))
 
 
+async def stack_after_sync(
+    synced: dict[str, Any] | None,
+    project: dict[str, Any] | None,
+    requested: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """The stack read again from the inspection after a fast-forward that moved the base; else *requested*.
+
+    The wizard's Scan ran on the folder before "Bring my local copy up to
+    date"; once the base moved, the deterministic scan runs on the daemon's
+    new snapshot, so the stack recorded is the one the agents will read. The
+    team the Scan suggested is kept (``team_source`` too): the Owner chose it.
+    """
+    if (
+        not synced
+        or synced.get("outcome") != "updated"
+        or not isinstance(project, dict)
+    ):
+        return requested
+    snapshot = project.get("snapshot")
+    if not isinstance(snapshot, dict) or not project.get("is_dir"):
+        return requested
+
+    def scan() -> dict[str, Any]:
+        with materialized_snapshot(snapshot) as mirror:
+            return detect_stack(Path(mirror), project.get("name"))
+
+    stack = await asyncio.to_thread(scan)
+    if isinstance(requested, dict) and requested.get("team_source"):
+        stack["team_source"] = requested["team_source"]
+    stack["read_after_sync"] = True
+    return stack
+
+
 def after_creation(
     session: Session,
     user: User | None,
@@ -96,21 +137,55 @@ def after_creation(
     return result
 
 
-@router.post("/workspace/git_check")
-async def check_folder_git(
-    payload: FolderGitCheck,
+def _git_check_limit() -> str:
+    return settings.GIT_CHECK_RATE_LIMIT
+
+
+def _per_account(request: Request) -> str:
+    """The limiter's key: the signed-in account, else the client's address."""
+    return getattr(request.state, "rate_account", None) or get_remote_address(request)
+
+
+def _account(
     request: Request,
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+) -> User | None:
+    """The caller, named on the request for the limiter (which runs after the dependencies)."""
+    request.state.rate_account = f"user:{user.id}" if user is not None else None
+    return user
+
+
+@router.post("/workspace/git_check")
+@limiter.limit(_git_check_limit, key_func=_per_account)
+async def check_folder_git(
+    request: Request,
+    payload: FolderGitCheck,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(_account),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """The folder's base as the daemon observed it now; the remote is read only on ``contact_remote``."""
+    """The folder's base as the daemon observed it now, limited to what the form shows (``folder_check.py``)."""
     require_authenticated(user)
+    if not folder_check.may_check(session, user):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "On a deployment with several accounts, only an account that "
+                "already belongs to a company, or the deployment's first "
+                "account, may check a folder before creating a company"
+            ),
+        )
     base = git_setup.clean_base(payload.git_base_branch)
-    return await base_sync.check_folder(
+    path = payload.project_path.strip()
+    observed = await folder_check.check_folder(
         getattr(request.app.state, "nats_client", None),
-        payload.project_path.strip(),
+        path,
         base,
         payload.contact_remote,
     )
+    answer = folder_check.form_answer(observed)
+    if payload.contact_remote:
+        folder_check.record(session, path, answer, **_actor(session, user))
+    return answer
 
 
 @router.post("/companies/{company_id}/git/sync_base")

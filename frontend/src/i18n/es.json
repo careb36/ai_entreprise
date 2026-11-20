@@ -2991,7 +2991,7 @@
       "publish": "Leer y publicar (publish)"
     },
     "sync": "Poner al día mi copia local",
-    "syncHint": "Antes de que la empresa lea la carpeta, la rama base avanza rápido (fast-forward) hasta su remoto. Nunca una fusión, un rebase ni un reset: un repositorio divergente, con cambios o a mitad de un rebase se deja como está, y la empresa se crea igualmente.",
+    "syncHint": "Antes de que la empresa lea la carpeta, la rama base avanza rápido (fast-forward) hasta su remoto. Nunca una fusión, un rebase ni un reset: un repositorio divergente, con cambios o a mitad de un rebase se deja como está, y la empresa se crea igualmente. Si la base avanzó, el stack del proyecto se vuelve a leer de los archivos actualizados.",
     "syncAction": "Poner al día la copia local",
     "behindNotice": "Tu copia local va {{count}} commit(s) por detrás de {{remote}} ({{base}}). Las ramas del sprint parten de {{remote}}; tu copia se deja como está hasta que la pongas al día.",
     "refused": "La copia local no se puso al día ({{outcome}}): {{reason}}",
@@ -3011,7 +3011,17 @@
       "not_moved": "no se pudo mover la base",
       "daemon_unavailable": "ningún daemon del espacio de trabajo respondió",
       "refused": "el daemon lo rechazó",
-      "no_folder": "la empresa no tiene carpeta de proyecto"
+      "no_folder": "la empresa no tiene carpeta de proyecto",
+      "remote_needs_interaction": "el remoto pidió una frase de paso, una contraseña o una clave de host"
+    },
+    "checked": {
+      "upToDate": "{{base}} está al día con {{remote}}.",
+      "ahead": "{{base}} tiene {{ahead}} commit(s) que {{remote}} no tiene.",
+      "behind": "{{base}} va {{behind}} commit(s) por detrás de {{remote}}.",
+      "diverged": "{{base}} y {{remote}} han divergido ({{ahead}} commit(s) solo aquí, {{behind}} solo allí): no puede avanzar rápido.",
+      "notOnRemote": "El remoto no tiene la rama {{remote}}.",
+      "unreachable": "No se pudo leer el remoto desde el ordenador del daemon.",
+      "needsInteraction": "El remoto pidió una frase de paso, una contraseña o una clave de host nueva, y aquí nunca se pregunta nada: añade la clave a tu agente ssh o confirma el host una vez en una terminal (git fetch), y vuelve a comprobar."
     }
   },
   "forgePolicy": {

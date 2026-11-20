@@ -371,6 +371,17 @@ compromised one that leaves the field out can widen contact (NIST SP 800-53
 AC-6, CM-7). The field is announced as the `forge_policy` feature of each of
 these subjects (§2.1).
 
+**Never a prompt** (`git_env.py`, issue #745). Every git command runs with
+`GIT_TERMINAL_PROMPT=0`, an empty `GIT_ASKPASS` and `GCM_INTERACTIVE=never`;
+one that can reach a remote (`fetch`, `push`, `pull`, `ls-remote`, `clone`)
+also with `GIT_SSH_COMMAND`: the person's own (`GIT_SSH_COMMAND`, else
+`core.sshCommand`, else `GIT_SSH`, else `ssh`) with `-o BatchMode=yes` right
+after the program, before their options, so it wins over a `BatchMode=no`
+of theirs (ssh keeps the first value). A remote that wants a passphrase, a password or an unknown host
+key fails at once: the base's observation says `remote_needs_interaction:
+true` with the reason prefixed `remote_needs_interaction:`, and
+`workspace.git.sync_base` answers that outcome.
+
 `workspace.git.sync_base` (§5.4) is a remote operation like the fetch of the
 base: under `none` it refuses with `outcome: "forge_disabled"` and
 `remote_contacted: false`, and runs no remote command.
@@ -388,7 +399,9 @@ Before contacting the remote it refuses, changing nothing, when a rebase,
 merge, cherry-pick or revert is unfinished (`operation_in_progress`) or the
 base's checkout has uncommitted changes to tracked files (`dirty`). After the
 fetch it refuses when both sides moved (`diverged`, with `behind` and
-`ahead`) or the remote could not be read (`remote_unreachable`). A refusal is
+`ahead`), the remote wanted a passphrase, a password or an unknown host key
+confirmed (`remote_needs_interaction`), or the remote could not be read
+(`remote_unreachable`). A refusal is
 `ok: false` with the `outcome` and a `reason`, never an `error`: the refs and
 the index are as they were. `updated` names `before` and `after`;
 `up_to_date` and `ahead` move nothing. The remote-tracking branch is updated

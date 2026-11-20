@@ -2991,7 +2991,7 @@
       "publish": "Read and publish (publish)"
     },
     "sync": "Bring my local copy up to date",
-    "syncHint": "Before the company reads the folder, the base branch is fast-forwarded to its remote. Never a merge, a rebase or a reset: a diverged, dirty or mid-rebase repository is left as it is, and the company is created either way.",
+    "syncHint": "Before the company reads the folder, the base branch is fast-forwarded to its remote. Never a merge, a rebase or a reset: a diverged, dirty or mid-rebase repository is left as it is, and the company is created either way. When the base moved, the project's stack is read again from the updated files.",
     "syncAction": "Bring the local copy up to date",
     "behindNotice": "Your local copy is {{count}} commit(s) behind {{remote}} ({{base}}). Sprint branches start from {{remote}}; your checkout is left as it is until you bring it up to date.",
     "refused": "The local copy was not brought up to date ({{outcome}}): {{reason}}",
@@ -3011,7 +3011,17 @@
       "not_moved": "the base could not be moved",
       "daemon_unavailable": "no workspace daemon answered",
       "refused": "the daemon refused",
-      "no_folder": "the company has no project folder"
+      "no_folder": "the company has no project folder",
+      "remote_needs_interaction": "the remote asked for a passphrase, a password or a host key"
+    },
+    "checked": {
+      "upToDate": "{{base}} is up to date with {{remote}}.",
+      "ahead": "{{base}} has {{ahead}} commit(s) {{remote}} does not have.",
+      "behind": "{{base}} is {{behind}} commit(s) behind {{remote}}.",
+      "diverged": "{{base}} and {{remote}} have diverged ({{ahead}} commit(s) only here, {{behind}} only there): it cannot be fast-forwarded.",
+      "notOnRemote": "The remote has no branch {{remote}}.",
+      "unreachable": "The remote could not be read from the daemon's computer.",
+      "needsInteraction": "The remote asked for a passphrase, a password or a new host key, and nothing is ever asked here: add the key to your ssh agent, or confirm the host once in a terminal (git fetch), then check again."
     }
   },
   "forgePolicy": {

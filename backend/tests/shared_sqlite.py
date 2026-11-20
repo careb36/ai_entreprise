@@ -19,9 +19,12 @@ connections would have it:
 * every call into the connection is made under one lock, so no two threads
   are inside ``sqlite3`` at once (``check_same_thread=False`` leaves that to
   the caller);
-* a write through another checkout, from another thread, waits for that
-  transaction to end instead of joining it; reads go on, and still see the
-  rows flushed on the connection, as before;
+* a statement through another checkout, from another thread, waits for that
+  transaction to end: a write instead of joining it, and a read instead of
+  seeing rows that thread flushed and has not committed, which a Postgres
+  connection never sees (READ COMMITTED). Reads that went on were how a
+  background code-graph sync was read half written
+  (``test_code_graph_store``, about 1 run in 40 under ``-n 8``);
 * ``commit()`` and ``rollback()`` through such a checkout end nothing: it
   has no transaction of its own (had it written, it would own it).
 
@@ -41,8 +44,6 @@ from typing import Any
 # a wait that long is a test holding a transaction open while it waits on
 # the thread that wants to write.
 WAIT_SECONDS = 30.0
-# Statements that never open a transaction in ``sqlite3``'s default mode.
-_READS = ("SELECT", "PRAGMA", "EXPLAIN")
 
 
 class SerializedConnection(sqlite3.Connection):
@@ -138,12 +139,12 @@ def install(engine: Any) -> None:
             root = getattr(context, "root_connection", None)
             checkout = root.connection if root is not None else None
             with raw.turn:
-                writes = not statement.lstrip().upper().startswith(_READS)
-                if writes and not raw.turn.wait_for(
-                    lambda: _shares(raw, checkout), WAIT_SECONDS
-                ):
+                # Reads wait too: on the one connection they would see the
+                # rows another thread flushed and has not committed, which no
+                # Postgres connection ever sees (READ COMMITTED).
+                if not raw.turn.wait_for(lambda: _shares(raw, checkout), WAIT_SECONDS):
                     raise RuntimeError(
-                        "a write waited on another checkout's open transaction "
+                        "a statement waited on another checkout's open transaction "
                         f"for {WAIT_SECONDS:.0f} s (tests/shared_sqlite.py)"
                     )
                 try:
