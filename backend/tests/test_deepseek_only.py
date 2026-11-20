@@ -28,7 +28,6 @@ from services.models import model_factory
 from services.models.model_factory import AgentRole, ModelFactory
 from services.planning import discovery_team
 from services.platform import capabilities, healthcheck
-from services.producers import console_assistants
 
 OTHER_PROVIDER_ENV = (
     "GEMINI_API_KEY",
@@ -140,16 +139,11 @@ def test_a_task_runs_from_the_board_to_review_on_deepseek_alone(
     monkeypatch.setattr(worker_execute, "LLMProxyClient", _DeepSeekOnlyProxy)
     monkeypatch.setattr(qa_review, "LLMProxyClient", _DeepSeekOnlyProxy)
     monkeypatch.setattr(worker_execute, "ARCHITECT_CONSULT_ENABLED", False)
-    # Memory, lessons and console advice run for real elsewhere; here they add nothing.
+    # Memory and lessons run for real elsewhere; here they add nothing.
     monkeypatch.setattr(prompt, "_load_recent_lessons", lambda *args: "")
     monkeypatch.setattr(
         prompt, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
     )
-
-    async def _no_assistants(nats, item, agent, sprint, resolve_workspace_root):
-        return {"combined": "", "sources": []}
-
-    monkeypatch.setattr(console_assistants, "collect_advice", _no_assistants)
 
     company = Company(company_name=f"DeepSeek only {uuid4().hex[:8]}", autonomy_level=2)
     sqlite_session.add(company)
