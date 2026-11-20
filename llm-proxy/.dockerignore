@@ -1,0 +1,4 @@
+# A developer's copy of the embedding model (fetch_embedding_model.py): the
+# image fetches and verifies its own in the embedding-model stage.
+models/
+__pycache__/

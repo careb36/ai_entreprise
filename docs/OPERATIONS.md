@@ -18,8 +18,9 @@ Factory leaves local or cloud execution of its Droids to the operator.
    other role and agent, so it needs only `DEEPSEEK_API_KEY`. `AGENT_MODEL`
    set to another provider's model needs that provider's key instead.
    Optional: `QWEN_API_KEY` (no default role uses it), `GEMINI_API_KEY` (no
-   default role uses it; Gemini model ids and the proxy's embeddings, which
-   fall back to a local vector without it) and `NEBIUS_API_KEY` (only for
+   default role uses it; Gemini model ids, and the proxy's embeddings only
+   with `EMBEDDING_PROVIDER=gemini`: by default memory is embedded by a local
+   model in the proxy) and `NEBIUS_API_KEY` (only for
    `NEMOTRON_ROLES` or `nvidia/…` ids). The keys go to the LLM proxy only.
    DeepSeek's API processes requests in China: before personal or client
    data goes through it, see `DEEPSEEK_API_KEY` in `docs/CONFIGURATION.md`
@@ -45,7 +46,8 @@ Factory leaves local or cloud execution of its Droids to the operator.
 DeepSeek is the only provider a sprint needs (issue #751): with
 `DEEPSEEK_API_KEY` alone, a request DeepSeek fails with 429 or 5xx moves to
 its other model (Pro and Flash) and never to another provider unless
-`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally. When DeepSeek
+`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally (a semantic
+model in the proxy image, issue #755). When DeepSeek
 itself is out of credit, the sprint pauses on the 402 (`sprint_control`) and
 says so; top up and resume.
 
@@ -505,6 +507,39 @@ As a last resort the operator can switch the requirement off in the
 database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
 (that change is not in the audit chain; record it in the incident notes).
 
+## Personal notifications
+
+Each person has their own notifications (issue #683): the bell in the top
+bar counts what is unread, and `/notifications` lists, marks read and
+snoozes them and holds the person's preferences per kind. What writes them:
+
+| Kind | Who receives it | Written when | Security notice |
+|------|-----------------|--------------|-----------------|
+| `sso_break_glass_exclusion`, `sso_break_glass_lifted` | every other Owner | an Owner takes a person out of an SSO-managed team, or lifts that exclusion (also queued on NATS `company.owner_notice`) | yes |
+| `sso_domain_lapsed` | every Owner | a re-check (or a newer proof's conflict check) unverifies a verified SSO domain | yes |
+| `review_requested` | Managers and Owners | QA approved a high-risk delivery that waits for a person (`risk_hold`) | no |
+| `integration_waiting` | Managers and Owners | a sprint's integration stopped and waits for a person (conflict, failing suite, missing branch, daemon unreachable or refused) | no |
+
+- **A security notice cannot be muted** in the app; a person can turn off
+  only its email, and snooze it for at most 24 hours (other kinds: 30 days).
+- **Email** is a copy, sent through the `SMTP_*` settings only while
+  `SMTP_HOST` is set, on for security notices and off for the others by
+  default. It names the kind and nothing else (no task, company or domain).
+  Without SMTP nothing is queued and nothing waits; a failing mail server
+  is retried by the outbox (up to 5 attempts, then the row is `failed`:
+  `SELECT id, retry_count FROM outbox_events WHERE event_type =
+  'notification_email' AND status = 'failed';`).
+- **What a row holds**: the receiver, the company, the kind, a reference to
+  the subject and the integer ids of its link; never a title, a reason or an
+  address. A person who leaves a company stops seeing its notifications at
+  once, and the janitor deletes them on its next run.
+- **Retention**: `RETENTION_NOTIFICATIONS_DAYS` (90), read or not; it is
+  never unbounded (see Retention below).
+- **Nobody received a break-glass notice**: the company has a single Owner
+  (the actor is never notified of their own action), or every other Owner
+  left. The audit row `sso_team_exclusion_created` names the Owners notified
+  (`owners_notified`).
+
 ## Approvals in Slack and Teams
 
 A delivery held for a person's acceptance (the risk hold) can be approved or
@@ -650,9 +685,25 @@ https address, or run as a stdio wrapper.
   Off by configuration is not a fault and changes no status; the same list
   is logged once at startup by the backend and by the proxy
   (`Effective capabilities: …`). With DeepSeek alone, expect
-  `llm.embeddings: degraded` (the local vector: DeepSeek has no embeddings
-  endpoint) and `llm.failover: on, same_provider` (Pro and Flash stand in for
-  each other); `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
+  `llm.embeddings: on` (the local model `multilingual-e5-small`: DeepSeek has
+  no embeddings endpoint), `memory: on`, and `llm.failover: on,
+  same_provider` (Pro and Flash stand in for each other);
+  `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
+- **`llm.embeddings: degraded` and `memory: degraded`** mean the hash vector
+  stands in for the local model; the reason says why. A file missing or not
+  matching its sha256 (an image built without the model stage, or a mounted
+  `EMBEDDING_MODEL_DIR`): rebuild the proxy image (`docker compose build
+  llm-proxy`), which fetches and verifies the model, or outside the image run
+  `python llm-proxy/fetch_embedding_model.py`. The runtime missing: the
+  proxy's Poetry environment is out of date (`poetry install` in
+  `llm-proxy/`). The self-check failed: the CPU's int8 kernels lost too much;
+  memory keeps working on the hash vector. Memory never errors either
+  way, and once the model loads, the backend re-embeds at its next start the
+  rows the hash vector wrote (`Memory: N rows re-embedded` in its log; a
+  search compares only rows of one model meanwhile). Each proxy worker holds
+  the model, about 400 MB more memory per worker (`LLM_PROXY_WORKERS`, 2 by
+  default); on a machine short of memory, `EMBEDDING_PROVIDER=local-hash`
+  keeps the proxy at its earlier size.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,
@@ -1355,6 +1406,7 @@ deleted with their runs or not at all.
 | `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded versions of a run, with their verifications | the latest version of each run (the evidence of record), and any version a person reviewed, commented on, approved or published |
 | `RETENTION_KPI_TURNS_DAYS` | 0 | KPI turn rows of `audit_log` outside a hash chain (rows without a company, or older than the chain) | any row of a company's chain, and any row a run, verification, approval, review or publication points at |
 | `RETENTION_GLASSROOM_DAYS` | 0 | stored task events of completed and cancelled sprints | the events of open sprints. The live Glassroom keeps its last 50 events per sprint in memory and replays the board, which is never deleted |
+| `RETENTION_NOTIFICATIONS_DAYS` | 90 (never unbounded: `0` or less keeps 90, over 365 is cut to 365) | personal notifications older than that, read or not, and at once those of a person no longer a member of the company | nothing else: a notification is a pointer, its subject is never touched |
 
 Once the database grows, `RETENTION_AGENT_RUNS_DAYS=90` and
 `RETENTION_GLASSROOM_DAYS=90` are reasonable. The janitor logs how many

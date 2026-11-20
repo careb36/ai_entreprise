@@ -4838,5 +4838,60 @@
       "off": "desactivada",
       "degraded": "degradada"
     }
+  },
+  "personalNotifications": {
+    "title": "Notificaciones",
+    "subtitle": "Tus avisos, en las empresas de las que sos miembro. Solo vos los ves.",
+    "bell": "Notificaciones",
+    "bellUnread_one": "Notificaciones: {{count}} sin leer",
+    "bellUnread_other": "Notificaciones: {{count}} sin leer",
+    "listTitle": "Tus notificaciones",
+    "filterLabel": "Mostrar notificaciones",
+    "states": {
+      "unread": "Sin leer",
+      "snoozed": "Pospuestas",
+      "all": "Todas"
+    },
+    "empty": {
+      "unread": "No hay nada sin leer.",
+      "snoozed": "No hay nada pospuesto.",
+      "all": "Todavía no hay notificaciones."
+    },
+    "kinds": {
+      "sso_break_glass_exclusion": "Un Owner sacó a un miembro de un equipo gestionado por SSO (acceso de emergencia)",
+      "sso_break_glass_lifted": "Un Owner levantó una exclusión de emergencia de un equipo",
+      "sso_domain_lapsed": "Un dominio del inicio de sesión único dejó de estar verificado",
+      "review_requested": "Una entrega espera que una persona la acepte",
+      "integration_waiting": "La integración de un sprint espera a una persona",
+      "other": "Una notificación"
+    },
+    "security": "Aviso de seguridad",
+    "unread": "Sin leer",
+    "company": "Empresa {{id}}",
+    "snoozedUntil": "pospuesta hasta {{date}}",
+    "open": "Abrir",
+    "markRead": "Marcar como leída",
+    "markUnread": "Marcar como no leída",
+    "markAllRead": "Marcar todas como leídas",
+    "snooze": "Posponer",
+    "snoozeChoose": "Elegí…",
+    "snoozeFor_one": "{{count}} hora",
+    "snoozeFor_other": "{{count}} horas",
+    "unsnooze": "Traer de vuelta ahora",
+    "preferencesTitle": "Qué te llega",
+    "inApp": "En la aplicación",
+    "email": "Por correo",
+    "emailAvailable": "El correo es una copia del aviso de la aplicación y solo dice qué tipo de aviso te espera.",
+    "emailUnavailable": "Esta instalación no tiene servidor de correo: los avisos se muestran solo en la aplicación.",
+    "securityLocked": "Un aviso de seguridad siempre se muestra en la aplicación; solo podés cambiar su correo.",
+    "errors": {
+      "security_notice_in_app": "Un aviso de seguridad no se puede apagar en la aplicación.",
+      "email_needs_in_app": "El correo es una copia del aviso de la aplicación: dejá la aplicación activada para recibirlo.",
+      "snooze_too_long": "Un aviso se puede posponer 30 días como máximo.",
+      "security_snooze_too_long": "Un aviso de seguridad se puede posponer 24 horas como máximo.",
+      "snooze_in_the_past": "Elegí un momento en el futuro.",
+      "already_read": "Este aviso ya está leído.",
+      "notification_not_found": "Este aviso ya no existe."
+    }
   }
 }

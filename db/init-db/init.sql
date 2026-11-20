@@ -169,6 +169,8 @@ CREATE TABLE IF NOT EXISTS vector_memory (
     company_id INTEGER REFERENCES companies(id),
     content TEXT NOT NULL,
     embedding vector(1536),
+    -- The vector's source, as the LLM proxy names it (issue #755, migration 0057)
+    embedding_model VARCHAR(100),
     metadata JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

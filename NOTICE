@@ -37,3 +37,11 @@ vscode-daemon/images/browser/probe-browser.js are adapted from AixleHQ/flow
 (https://github.com/AixleHQ/flow), docker/base/Dockerfile and
 docker/base/probe-browser.js at commit f9efa22, Copyright 2026 Dualboot
 Partners, LLC, licensed under the Apache License 2.0.
+
+The llm-proxy image includes the multilingual-e5-small sentence-embedding
+model (https://huggingface.co/intfloat/multilingual-e5-small, revision
+614241f622f53c4eeff9890bdc4f31cfecc418b3: onnx/model_qint8_avx512_vnni.onnx
+and onnx/tokenizer.json, pinned by sha256 in llm-proxy/embedding_model.json),
+by its authors (Wang et al., "Multilingual E5 Text Embeddings: A Technical
+Report", arXiv:2402.05672), licensed under the MIT License. The files are
+fetched at image build time and are not in this repository.

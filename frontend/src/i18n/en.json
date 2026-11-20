@@ -4838,5 +4838,60 @@
       "off": "off",
       "degraded": "degraded"
     }
+  },
+  "personalNotifications": {
+    "title": "Notifications",
+    "subtitle": "Your own notices, in the companies you belong to. Only you can see them.",
+    "bell": "Notifications",
+    "bellUnread_one": "Notifications: {{count}} unread",
+    "bellUnread_other": "Notifications: {{count}} unread",
+    "listTitle": "Your notifications",
+    "filterLabel": "Show notifications",
+    "states": {
+      "unread": "Unread",
+      "snoozed": "Snoozed",
+      "all": "All"
+    },
+    "empty": {
+      "unread": "Nothing unread.",
+      "snoozed": "Nothing snoozed.",
+      "all": "No notifications yet."
+    },
+    "kinds": {
+      "sso_break_glass_exclusion": "An Owner took a member out of an SSO-managed team (break-glass)",
+      "sso_break_glass_lifted": "An Owner lifted a break-glass team exclusion",
+      "sso_domain_lapsed": "A single sign-on domain is no longer verified",
+      "review_requested": "A delivery waits for a person to accept it",
+      "integration_waiting": "A sprint's integration waits for a person",
+      "other": "A notification"
+    },
+    "security": "Security notice",
+    "unread": "Unread",
+    "company": "Company {{id}}",
+    "snoozedUntil": "snoozed until {{date}}",
+    "open": "Open",
+    "markRead": "Mark read",
+    "markUnread": "Mark unread",
+    "markAllRead": "Mark all read",
+    "snooze": "Snooze",
+    "snoozeChoose": "Choose…",
+    "snoozeFor_one": "{{count}} hour",
+    "snoozeFor_other": "{{count}} hours",
+    "unsnooze": "Bring back now",
+    "preferencesTitle": "What reaches you",
+    "inApp": "In the app",
+    "email": "By email",
+    "emailAvailable": "Email is a copy of the notice in the app and says only what kind of notice is waiting.",
+    "emailUnavailable": "This deployment has no mail server, so notices are shown in the app only.",
+    "securityLocked": "A security notice is always shown in the app; you can change only its email.",
+    "errors": {
+      "security_notice_in_app": "A security notice cannot be turned off in the app.",
+      "email_needs_in_app": "Email is a copy of the notice in the app: keep the app on to get it.",
+      "snooze_too_long": "A notice can be snoozed for 30 days at most.",
+      "security_snooze_too_long": "A security notice can be snoozed for 24 hours at most.",
+      "snooze_in_the_past": "Choose a moment in the future.",
+      "already_read": "This notice is already read.",
+      "notification_not_found": "This notice no longer exists."
+    }
   }
 }

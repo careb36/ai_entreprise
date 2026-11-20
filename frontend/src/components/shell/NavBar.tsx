@@ -9,6 +9,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { StatusPill } from './StatusPill'
 import { sectionForPath, useNavLinks } from './navLinks'
 import { CountPill } from '../ui/CountPill'
+import { NotificationBell } from '../NotificationBell'
 
 /** The top bar: logo, primary links, language, the Company menu, service status and the mobile menu. */
 export function NavBar() {
@@ -100,6 +101,7 @@ export function NavBar() {
       {/* Right side */}
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <LanguageSwitcher />
+        <NotificationBell enabled={authenticated} />
         {authenticated && (
           <>
             <div ref={companyRef} className="relative" onBlur={event => {

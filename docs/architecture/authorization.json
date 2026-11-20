@@ -446,6 +446,18 @@
       "access": "public",
       "why": "One provider of the public catalogue."
     },
+    "GET /v1/notifications": {
+      "access": "authenticated",
+      "why": "The caller's own notifications, in the companies they are still a member of."
+    },
+    "GET /v1/notifications/count": {
+      "access": "authenticated",
+      "why": "The unread count of the caller's own notifications."
+    },
+    "GET /v1/notifications/preferences": {
+      "access": "authenticated",
+      "why": "The caller's own preferences per kind of notification."
+    },
     "GET /v1/procedures": {
       "access": "Viewer"
     },
@@ -868,6 +880,18 @@
     "POST /v1/memory/store": {
       "access": "Manager"
     },
+    "POST /v1/notifications/read": {
+      "access": "authenticated",
+      "why": "Marks the caller's own notifications read."
+    },
+    "POST /v1/notifications/{notification_id}/read": {
+      "access": "authenticated",
+      "why": "The caller's own notifications only; another person's is a 404, and an API token is refused."
+    },
+    "POST /v1/notifications/{notification_id}/snooze": {
+      "access": "authenticated",
+      "why": "The caller's own notifications only; another person's is a 404, and an API token is refused."
+    },
     "POST /v1/plan_self_improvement_sprint": {
       "access": "Manager"
     },
@@ -1076,6 +1100,14 @@
     },
     "PUT /v1/companies/{company_id}/wiki/{slug}": {
       "access": "Manager"
+    },
+    "PUT /v1/notifications/preferences/{kind}": {
+      "access": "authenticated",
+      "why": "The caller's own preference for one kind; a security notice cannot leave the app.",
+      "body": {
+        "in_app": true,
+        "email": false
+      }
     },
     "PUT /v1/specifications/{spec_id}": {
       "access": "Manager"
