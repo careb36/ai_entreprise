@@ -1,12 +1,15 @@
 """The sprint planner's deterministic plans, used when no model answers usably.
 
 The foundation tasks filtered to the hired roles, and the execution and
-self-improvement backlogs bounded by the scope. ``sprint_planner``
+self-improvement backlogs bounded by the scope. The execution plan keeps the
+person's objective whole and its explicit items as tasks
+(``objective_text``). ``sprint_planner``
 re-exports every name.
 """
 
 from typing import Any
 
+from services.planning.objective_text import display_name, objective_items
 from services.planning.sprint_context import _ensure_execution_team
 
 # Fallback tasks when the LLM is unavailable
@@ -77,19 +80,78 @@ def _filter_fallback_tasks(agents: list[dict[str, Any]]) -> list[dict[str, Any]]
     return [t for t in _FALLBACK_TASKS if t["assignee"] in available_roles]
 
 
+# A task's title on the board; the item's whole text is its description.
+ITEM_TITLE_LIMIT = 80
+SPRINT_NAME_LIMIT = 40
+
+_REFINE = (
+    "Turn the prompt into explicit delivery criteria, non-goals, and success "
+    "checks. The planner's model did not answer, so this plan was made without "
+    "it; the objective below is the person's, whole and as written.\n\n"
+    "Objective:\n{objective}"
+)
+
+
+def _item_tasks(
+    items: list[dict[str, str]], room: int
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """One task per item the room allows, its text whole; the titles left out.
+
+    Each goes to the Developer; ``sprint_team.fit_tasks`` gives it to a hired
+    developer role (or the team's) when there is no Developer.
+    """
+    tasks = [
+        {
+            "title": display_name(item["title"], ITEM_TITLE_LIMIT),
+            "description": (
+                f"{item['text']}\n\n(Item {number} of {len(items)} of the "
+                "sprint's objective, as the person wrote it; the whole "
+                "objective is the sprint's goal.)"
+            ),
+            "priority": "high",
+            "assignee": "Developer",
+        }
+        for number, item in enumerate(items[:room], start=1)
+    ]
+    return tasks, [item["title"] for item in items[room:]]
+
+
 def _build_execution_fallback(
     objective: str, agents: list[dict[str, Any]], scope_size: str
 ) -> dict[str, Any]:
-    """Deterministic fallback when no planner model is available."""
+    """Deterministic plan when no planner model answers usably.
+
+    The objective is never cut: the goal is the objective whole, the PO's
+    task cites it whole, and the sprint's name is a label (shortened with an
+    ellipsis) over it. When the objective lists explicit items (Markdown
+    headings or a numbered list), each becomes a task whose description is
+    the item's text as written; items beyond the scope are named in
+    ``unplanned_items``, never dropped silently.
+    """
     team = _ensure_execution_team(agents)
     available_roles = {a.get("role") for a in team}
+    refine = {
+        "title": "Refine sprint objective and acceptance criteria",
+        "description": _REFINE.format(objective=objective),
+        "priority": "critical",
+        "assignee": "PO",
+    }
+    scoped_limit = {"S": 4, "M": 8, "L": 12}.get(scope_size.upper(), 8)
+    name = display_name(objective, SPRINT_NAME_LIMIT) or "Execution"
+    plan: dict[str, Any] = {
+        "sprint_name": f"Sprint - {name}",
+        "goal": objective,
+        "unplanned_items": [],
+    }
+    items = objective_items(objective)
+    if items:
+        lead = [refine] if "PO" in available_roles else []
+        tasks, plan["unplanned_items"] = _item_tasks(items, scoped_limit - len(lead))
+        plan["tasks"] = lead + tasks
+        return plan
+
     defaults = [
-        {
-            "title": "Refine sprint objective and acceptance criteria",
-            "description": f"Turn the prompt into explicit delivery criteria, non-goals, and success checks. Base objective: {objective[:220]}",
-            "priority": "critical",
-            "assignee": "PO",
-        },
+        refine,
         {
             "title": "Design implementation slice",
             "description": "Define the smallest architecture and execution slice that fits this sprint, including dependencies and guardrails.",
@@ -109,17 +171,11 @@ def _build_execution_fallback(
             "assignee": "QA",
         },
     ]
-
-    scoped_limit = {"S": 4, "M": 8, "L": 12}.get(scope_size.upper(), 8)
     tasks = [t for t in defaults if t["assignee"] in available_roles][:scoped_limit]
     if not tasks:
         tasks = defaults[: min(4, scoped_limit)]
-
-    return {
-        "sprint_name": f"Sprint - {objective[:40].strip() or 'Execution'}",
-        "goal": f"Plan and execute the highest-value slice of: {objective[:90].strip()}",
-        "tasks": tasks,
-    }
+    plan["tasks"] = tasks
+    return plan
 
 
 def _build_self_improvement_fallback(

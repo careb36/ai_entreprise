@@ -178,6 +178,7 @@
         "arch_author",
         "arch_check",
         "document_approval",
+        "planner_fallback",
         "spec_check",
         "spec_planning",
         "sprint_planner",
@@ -951,6 +952,9 @@
       ],
       "test_passwords.py": [
         "platform"
+      ],
+      "test_planner_fallback.py": [
+        "release"
       ],
       "test_playwright_pin.py": [
         "workspace"

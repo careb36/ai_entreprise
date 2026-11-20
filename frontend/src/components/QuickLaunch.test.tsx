@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuickLaunch } from './QuickLaunch'
@@ -131,5 +131,63 @@ describe('planning a sprint from a specification', () => {
     expect(planMutation.mutateAsync).toHaveBeenCalledWith({ company_id: 42, prompt: 'Take payments', scope_size: 'M' })
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
     expect(screen.queryByText('Covers')).not.toBeInTheDocument()
+  })
+})
+
+describe('a plan made without the planner model', () => {
+  const objective = `# Sprint\n\n${'## 1. Item one\n- WHEN a person writes, THE SYSTEM SHALL keep it.\n'.repeat(80)}`
+  const fallbackPlan: SprintPlanResponse = {
+    sprint_name: 'Sprint - Sprint…',
+    goal: objective,
+    scope_size: 'S',
+    objective,
+    plan_id: 'abc123',
+    planner_fallback: { reason: 'model_error', detail: 'timeout after 30s' },
+    unplanned_items: ['4. Item four'],
+    tasks: [{ title: 'Refine', description: `Objective:\n${objective}`, assignee: 'PO', priority: 'critical' }],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: null })
+    vi.mocked(useInitCompany).mockReturnValue(mutation() as never)
+    vi.mocked(usePlanSelfImprovementSprint).mockReturnValue(mutation() as never)
+    vi.mocked(useInbox).mockReturnValue({ data: { blocked_tasks: [], proposals: [], pending_runs: 0, total: 0 } } as never)
+    vi.mocked(useSprints).mockReturnValue({ data: [] } as never)
+    vi.mocked(useSpecifications).mockReturnValue({ data: { specifications: [] } } as never)
+  })
+
+  it('says so with the observed reason, offers a retry, and launches with the objective whole and the plan id', async () => {
+    const planMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue(fallbackPlan) })
+    const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(usePlanSprint).mockReturnValue(planMutation as never)
+    vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
+    renderPlanner()
+
+    fireEvent.change(screen.getByPlaceholderText('Describe the sprint goal…'), { target: { value: objective } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Plan' }))
+    const note = await screen.findByRole('alert')
+    expect(note).toHaveTextContent("The planner's model did not answer; this is a generic plan.")
+    expect(note).toHaveTextContent('Observed: timeout after 30s')
+    expect(note).toHaveTextContent('1 item did not fit the scope and is not a task: 4. Item four.')
+
+    fireEvent.click(within(note).getByRole('button', { name: 'Retry planning' }))
+    await waitFor(() => expect(planMutation.mutateAsync).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Sprint' }))
+    expect(await screen.findByTestId('board')).toBeInTheDocument()
+    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ objective, plan_id: 'abc123', goal: objective }))
+  })
+
+  it('starts from the objective a board hands back for planning again', () => {
+    vi.mocked(usePlanSprint).mockReturnValue(mutation() as never)
+    vi.mocked(useStartSprint).mockReturnValue(mutation() as never)
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/', state: { objective } }]}>
+        <QuickLaunch onSuccess={vi.fn()} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByPlaceholderText('Describe the sprint goal…')).toHaveValue(objective)
   })
 })

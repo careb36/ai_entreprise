@@ -11,7 +11,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON
+from sqlalchemy import JSON, Text
 from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
 
@@ -58,6 +58,10 @@ class Sprint(SQLModel, table=True):
     # (``services/loop/sprint_control.py`` says which of them let agents work).
     status: str = "active"
     goal: str | None = None  # Sprint goal statement for the team
+    # The objective the person wrote, whole and as written (migration 0056):
+    # input, never cut, and apart from ``goal``, which the planner's model may
+    # write. Empty for a sprint started without a prompt.
+    objective: str | None = Field(default=None, sa_column=Column(Text))
     # Why the sprint is paused, when the worker paused it (e.g. no credit).
     pause_reason: str | None = None
     # The approved specification this sprint was planned from, if any.

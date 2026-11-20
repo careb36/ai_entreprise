@@ -133,9 +133,8 @@ def plan_prompt(
     note: str = "",
 ) -> str:
     note_section = (
-        f"## Note from the person planning\n{note.strip()[:2000]}\n\n"
-        if note.strip()
-        else ""
+        # The person's note whole: never cut (issue: planner fallback).
+        f"## Note from the person planning\n{note.strip()}\n\n" if note.strip() else ""
     )
     return (
         f"You are {po_name}, the PO. Plan a sprint from the specification below: "
@@ -324,6 +323,8 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
     # never goes to a role the company does not have.
     allowed = request["roles"]
     parsed: Any = None
+    # Why the backend saw no usable answer, as observed; None when it did.
+    fallback: dict[str, str] | None = None
     try:
         answer = spec_author.ask(
             request["model"],
@@ -337,6 +338,12 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(parsed, dict):
             raise TypeError("not an object")
     except (spec_author.SpecAuthorError, ValueError, TypeError) as exc:
+        reason = (
+            "model_error"
+            if isinstance(exc, spec_author.SpecAuthorError)
+            else "unparseable"
+        )
+        fallback = {"reason": reason, "detail": f"{type(exc).__name__}: {exc}"}
         logger.warning(
             "PO could not plan from specification %s: %s",
             request["specification_id"],
@@ -354,6 +361,10 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
     )
     if not tasks:
         plan = plan_fallback(content, item_limit, allowed)
+        fallback = fallback or {
+            "reason": "too_few_tasks",
+            "detail": "The answer held no usable task.",
+        }
     else:
         tasks = sprint_team.fit_tasks(tasks, allowed or [])
         tasks = _with_tests(tasks, content, item_limit, allowed)
@@ -371,7 +382,12 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
         request.get("team") or request.get("hired") or request["roles"],
         plan["tasks"],
     )
-    return {**plan, "suggested_team": team, "team_reasons": reasons}
+    return {
+        **plan,
+        "planner_fallback": fallback if not tasks else None,
+        "suggested_team": team,
+        "team_reasons": reasons,
+    }
 
 
 def plan(
