@@ -1075,7 +1075,9 @@ scripts/land.sh --verify <sha>       # re-run the checks on <sha>, compare with 
 ```
 
 **What a landing does.** It fetches `main` from `origin`, merges `main` and the
-branch in a worktree it keeps at `.git/fabrique/worktree` (reset and cleaned
+branch in a worktree it keeps beside the checkout, `<checkout>.land-worktree`
+(never under `.git`: Vite denies `**/.git/**`, and vitest there loaded no
+setup file, so every frontend suite failed; reset and cleaned
 first; a merge commit with `main` as first parent, never a rebase), runs
 `scripts/check.sh full` on that merge commit and, when it exits 0, writes the
 record and fast-forwards local `main` (through `git merge --ff-only` in the
