@@ -378,6 +378,8 @@ def test_the_harness_sets_la_fabrique_s_folders_and_every_delivery_checks():
     assert "pytest" in folders["llm-proxy"]["test"]
     # Its pytest is in requirements-dev.txt, not in Poetry (issue #766).
     assert "requirements-dev.txt" in folders["llm-proxy"]["install"]
+    # The daemon runs its own suite, not the backend's a second time.
+    assert "../backend" not in folders["vscode-daemon"]["test"]
     assert profile["test"] == ""
     checks = [c["command"] for c in profile["every_delivery"]]
     assert checks == [
