@@ -23,9 +23,11 @@ With nothing else set:
   to DeepSeek's other model (Pro to Flash, Flash to Pro) and never to another
   provider, even when another provider's key is set, unless
   `LLM_FALLBACK_PROVIDERS` names it (below);
-- memory embeds with a local vector computed in the proxy (DeepSeek has no
-  embeddings endpoint): no key, no outside call, near-identical text found
-  rather than meaning; `EMBEDDING_PROVIDER=gemini` chooses Gemini instead;
+- memory embeds with a local semantic model run on CPU in the proxy
+  (multilingual-e5-small; DeepSeek has no embeddings endpoint): no key, no
+  outside call, meaning found in Spanish and English; the hash vector stands
+  in, reported as degraded, when the model cannot load;
+  `EMBEDDING_PROVIDER=gemini` chooses Gemini instead;
 - the knowledge graph, GitHub token, mail, error reports, the Manager,
   Support and Reviewer agents are off with a named reason, and nothing waits
   for them.
@@ -805,6 +807,13 @@ Copy `.env.example` to `.env` and fill in:
   There is no audit retention: `docs/OPERATIONS.md` says how to archive a
   chain with its rows. `BACKUP_DIR`, `BACKUP_KEEP_DAYS` (14) and
   `PG_CONTAINER` steer `scripts/backup.sh`.
+- `RETENTION_NOTIFICATIONS_DAYS` (90) — how long the janitor keeps a
+  personal notification (issue #683), read or not; a person's notifications
+  in a company they left go at the next run whatever their age. Never
+  unbounded: `0`, a negative or a malformed value keeps 90, and anything
+  over 365 is cut to 365. The email copy of a notification uses the `SMTP_*`
+  settings above and is sent only when `SMTP_HOST` is set; without it the
+  notification is still shown in the app and nothing waits on mail.
 - `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (8) — the
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
@@ -1106,15 +1115,55 @@ the backend where it says so:
   provider a processor of every other role's prompts (GDPR arts. 25 and 28).
   `/health`'s `capabilities.failover` says which applies.
 - `EMBEDDING_PROVIDER` — default `local`, read by the proxy
-  (`llm-proxy/embedding.py`, issue #751). `local`: a deterministic vector
-  computed in the proxy, no key and no outside call; it finds near-identical
-  text, not meaning. `gemini`: Gemini's `text-embedding-004` when
-  `GEMINI_API_KEY` is set (padded with zeros to the 1536 values of
-  `vector_memory.embedding`), the local vector when the key is missing or the
-  call fails. Any other value is the local vector. Vectors from the two
-  sources do not compare with each other, so changing it leaves earlier
-  memories matching poorly. `/health`'s `capabilities.embeddings` says which
-  applies and why.
+  (`llm-proxy/embedding.py`; issues #751, #755).
+  - `local`: the local semantic model, `intfloat/multilingual-e5-small`
+    (`llm-proxy/local_model.py`), run with ONNX Runtime on CPU in the proxy:
+    no key, no outside call, nothing leaves the proxy. 384 values per text,
+    padded with zeros to the 1536 of `vector_memory.embedding` (zeros change
+    neither the norm nor the cosine distance); text past 512 tokens is cut.
+    When the model cannot load (a file missing or not matching its pinned
+    sha256, the runtime missing, or its startup self-check failing), the hash
+    vector stands in and `capabilities.embeddings` is `degraded` with the
+    reason.
+  - `local-hash`: the deterministic hash vector of #751, on purpose (a
+    machine short of memory, say). It finds near-identical text, not meaning,
+    and is reported as `degraded`.
+  - `gemini`: Gemini's `text-embedding-004` when `GEMINI_API_KEY` is set
+    (padded with zeros to 1536); the local model (or the hash vector) when the
+    key is missing or the call fails. Google becomes a processor of the
+    company's memory (GDPR art. 28), which is why it is never the default.
+  - Any other value is `local`, reported as `degraded` with the reason.
+
+  Every answer names its `model`; the backend stores it in
+  `vector_memory.embedding_model` (migration 0057), compares only vectors of
+  the same model, and at each start re-embeds rows another source wrote once
+  the semantic model answers (never towards the hash vector). `/health`'s
+  `capabilities.embeddings` says which applies and why, and `/health/deep`'s
+  `memory` is `on` only when the embedding is semantic.
+
+  Why this model (issue #755, read 2026-11-20). MIT licence; 118 M
+  parameters; the int8 ONNX export the model's own repository publishes is
+  118 MB (`onnx/model_qint8_avx512_vnni.onnx`, plus a 17 MB tokenizer). On
+  MMTEB's MTEB(Multilingual) (Enevoldsen et al., 2025, arXiv:2502.13595,
+  table 2) it scores 55.5 mean over tasks, against 48.8 for
+  `paraphrase-multilingual-MiniLM-L12-v2` (Apache-2.0, the same size) and
+  52.0 for `paraphrase-multilingual-mpnet-base-v2` (twice the size); on
+  MTEB(Europe) 55.0 against 51.7 for the MiniLM. Larger multilingual models
+  (`multilingual-e5-base` 57.0, `bge-m3`) cost two to five times the memory
+  and latency for a few points. ONNX Runtime (MIT) with `tokenizers`
+  (Apache-2.0) and NumPy (BSD-3-Clause) runs it without a deep-learning
+  framework: on a 4-core x86 CPU it loads in 0.9 s (hashes and self-check
+  included) and embeds a memory in 11 to 12 ms (70 ms at 512 tokens).
+- `EMBEDDING_MODEL_DIR` — default `models/multilingual-e5-small` next to
+  `llm-proxy/local_model.py`; the image sets `/app/models/multilingual-e5-small`.
+  Where the proxy reads `model.onnx` and `tokenizer.json`. The image fetches
+  them at build time from the pinned revision in `llm-proxy/embedding_model.json`
+  and checks each against its sha256 (`llm-proxy/fetch_embedding_model.py`; a
+  mismatch fails the build); the proxy checks them again before loading and
+  never downloads anything. Outside the image, run
+  `python llm-proxy/fetch_embedding_model.py` once.
+- `EMBEDDING_THREADS` — default `2`, read by the proxy: ONNX Runtime's threads
+  per proxy worker for one embedding.
 - `PROXY_PORT` — default `5100`, read only when the proxy runs as
   `python app.py`. The image runs gunicorn bound to `0.0.0.0:5100`
   (`llm-proxy/gunicorn.conf.py`) and ignores it, so the value compose sets

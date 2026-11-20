@@ -15,7 +15,8 @@
   of an SSO-managed team at once with a reason; the mapping never adds them
   back while it is in force; every other Owner is notified through the
   outbox in the same transaction; any Owner lifts it with a reason, and
-  lifting re-adds nobody.
+  lifting re-adds nobody. The other Owners also get a personal notification
+  each (issue #683, ``notifications``), a security notice they cannot mute.
 - **Role** (R16): a mapped team's role is never raised; its pairs go first.
 
 Each change writes an audit row left for the caller's commit, with the
@@ -41,14 +42,19 @@ from models import (
 )
 from sqlmodel import Session, select
 
+from services.platform import notifications, teams
 from services.platform import sso_groups as rules
-from services.platform import teams
 from services.platform.agent_service import AgentService
 
 PREVIEW_TTL = timedelta(minutes=15)
 REASON_RANGE = (10, 500)
 NOTICE_SUBJECT = "company.owner_notice"
 BREAK_GLASS_ROUTE = "POST /v1/companies/{company_id}/teams/{team_id}/exclusions"
+# The personal notification each notice to the Owners becomes (issue #683).
+PERSONAL_KINDS = {
+    "sso_team_exclusion_created": "sso_break_glass_exclusion",
+    "sso_team_exclusion_lifted": "sso_break_glass_lifted",
+}
 
 
 class ControlRefused(ValueError):
@@ -95,8 +101,9 @@ def _audit(session: Session, team: Team, actor: User, action: str, **result) -> 
 def notify_owners(
     session: Session, company_id: int, actor: User, kind: str, data: dict
 ) -> list[int]:
-    """Queue a notice to every other Owner of the company in the outbox, in
-    the caller's transaction (R27, R28); the Owners notified."""
+    """Queue a notice to every other Owner of the company in the outbox, and
+    write each of them a personal notification, in the caller's transaction
+    (R27, R28; issue #683); the Owners notified."""
     owners = sorted(
         session.exec(
             select(CompanyMember.user_id).where(
@@ -124,6 +131,17 @@ def notify_owners(
                 },
             )
         )
+        personal = PERSONAL_KINDS.get(kind)
+        if personal and data.get("exclusion_id") is not None:
+            notifications.notify(
+                session,
+                company_id,
+                owners,
+                personal,
+                subject_id=data["exclusion_id"],
+                context=data,
+                dedupe_key=f"{personal}:{data['exclusion_id']}",
+            )
     return owners
 
 

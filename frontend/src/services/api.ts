@@ -14,6 +14,7 @@ import { githubEndpoints } from './api/github'
 import { invitationEndpoints } from './api/invitations'
 import { memoryEndpoints } from './api/memory'
 import { messageEndpoints } from './api/messages'
+import { notificationEndpoints } from './api/notifications'
 import { progressEndpoints } from './api/progress'
 import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
@@ -44,6 +45,7 @@ export * from './api/github'
 export * from './api/invitations'
 export * from './api/memory'
 export * from './api/messages'
+export * from './api/notifications'
 export * from './api/progress'
 export * from './api/sprints'
 export * from './api/sso'
@@ -94,6 +96,7 @@ const endpoints = {
   ...runWindowEndpoints(http),
   ...findingEndpoints(http),
   ...benchEndpoints(http),
+  ...notificationEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)

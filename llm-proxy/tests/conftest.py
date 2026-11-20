@@ -162,3 +162,14 @@ def upstream(proxy, monkeypatch):
 @pytest.fixture()
 def client(proxy):
     return proxy.app.test_client()
+
+
+@pytest.fixture()
+def model_unavailable(monkeypatch, tmp_path):
+    """The local embedding model cannot load (its directory is empty): the hash vector stands in."""
+    import local_model
+
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", str(tmp_path / "no-model"))
+    local_model.reset()
+    yield local_model
+    local_model.reset()

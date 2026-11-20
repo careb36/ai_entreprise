@@ -115,6 +115,7 @@ from models.integration_review import IntegrationReview, IntegrationReviewCommen
 from models.invitation import CompanyInvitation
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
+from models.notification import NotificationPreference, PersonalNotification
 from models.person_statement import PersonStatement
 from models.procedure import Procedure
 from models.progress import SprintProgressSnapshot
@@ -468,6 +469,8 @@ SQLModel.metadata.create_all(
         PersonStatement.__table__,
         CompanyStandardSet.__table__,
         CompanyStandardException.__table__,
+        PersonalNotification.__table__,
+        NotificationPreference.__table__,
     ],
 )
 

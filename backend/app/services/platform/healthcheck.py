@@ -210,8 +210,10 @@ async def aggregate(
     if nats_state is not None:
         document["nats"] = nats_state
     if backend_capabilities is not None:
-        document["capabilities"] = {
-            **backend_capabilities,
-            **capabilities.from_proxy(llm_result.pop("capabilities", None)),
-        }
+        document["capabilities"] = capabilities.with_memory_embedding(
+            {
+                **backend_capabilities,
+                **capabilities.from_proxy(llm_result.pop("capabilities", None)),
+            }
+        )
     return document

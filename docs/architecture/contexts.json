@@ -26,7 +26,9 @@
         "glassroom",
         "hooks",
         "locks",
+        "mail",
         "memory_graph",
+        "notifications",
         "orchestration_metrics",
         "protected_paths_setting",
         "rework_mentions",
@@ -1472,6 +1474,9 @@
       "test_wstg_plan.py": [
         "evidence",
         "planning"
+      ],
+      "test_personal_notifications.py": [
+        "integrations"
       ]
     }
   }

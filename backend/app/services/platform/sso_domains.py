@@ -19,6 +19,13 @@ releases it only on a definite negative. ``recheck_due`` looks every domain
 up again each ``SSO_DOMAIN_RECHECK_HOURS``; ``run_rechecks`` is its loop,
 one replica at a time. Each re-check, and each cycle of that loop, is
 counted for ``/metrics`` (``sso_metrics``).
+
+A verified domain that stops being verified without an Owner asking (a
+re-check or a conflict's definite negative) is a lapse: every Owner of the
+company gets a personal security notice (``notify_lapsed``, issue #683).
+The 14-day ``lapsed_unconfirmed`` rule of docs/design/SSO.md decision 5 is
+not built yet (#684); when it is, it calls ``notify_lapsed`` with that
+reason in the same transaction as the status change.
 """
 
 from __future__ import annotations
@@ -34,7 +41,7 @@ from models import SsoDomain, SsoDomainCheck
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
-from services.platform import dns_client, locks, sso_metrics
+from services.platform import dns_client, locks, notifications, sso_metrics
 from services.platform.agent_service import AgentService
 
 logger = setup_logger("fabrique-sso-domains")
@@ -226,6 +233,26 @@ def _audit(
     )
 
 
+LAPSE_REASONS = ("definite_negative", "lapsed_unconfirmed")
+
+
+def notify_lapsed(session: Session, row: SsoDomain, reason: str) -> list[int]:
+    """Tell every Owner of *row*'s company that the domain lapsed, in the
+    caller's transaction (a security notice: never muted in the app); the
+    Owners notified. The notice carries the domain row's id, never the
+    domain's name: the Owners read it on the SSO page."""
+    if reason not in LAPSE_REASONS:
+        raise ValueError(f"unknown lapse reason {reason!r}")
+    return notifications.notify(
+        session,
+        row.company_id,
+        notifications.owners(session, row.company_id),
+        "sso_domain_lapsed",
+        subject_id=row.id,
+        dedupe_key=f"sso_domain_lapsed:{row.id}:{reason}:{_now().date().isoformat()}",
+    )
+
+
 def check(
     session: Session, row: SsoDomain, *, trigger: str, requested_by: str | None = None
 ) -> dict[str, Any]:
@@ -267,6 +294,8 @@ def check(
     row.last_checked_at, row.last_outcome = now, outcome
     session.add(row)
     sso_metrics.record_domain_recheck(trigger, outcome)
+    if before == "verified" and row.status != "verified" and trigger != "owner":
+        notify_lapsed(session, row, "definite_negative")
     if row.status != before:
         action = (
             "sso_domain_verified"

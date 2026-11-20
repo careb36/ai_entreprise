@@ -12,10 +12,11 @@ time-boxed exceptions to a standard (issue #700;
 No existing row changes. A company with no row is held to the catalogue
 alone, as before.
 
-Follows 0056 (the sprint's objective).
+Follows 0058 (personal notifications, #762, renumbered after 0057, the
+embedding model of the vector memory, #760).
 
-Revision ID: 0057
-Revises: 0056
+Revision ID: 0059
+Revises: 0058
 Create Date: 2026-11-20 16:00:00 UTC
 """
 
@@ -26,8 +27,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0057"
-down_revision = "0056"
+revision = "0059"
+down_revision = "0058"
 branch_labels = None
 depends_on = None
 

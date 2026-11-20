@@ -14,14 +14,26 @@ models created, the way the janitor runs them over psycopg2.
   and is counted as kept.
 - Task events of closed sprints go; an open sprint's stay.
 - ``0`` keeps everything, and a malformed setting keeps the default.
+- Personal notifications (issue #683) go after the setting, read or not,
+  and at once for a person no longer a member of the company; their setting
+  is never unbounded (``0`` keeps 90, over 365 is cut to 365).
 """
 
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from models import AuditLog, Company, OutboxEvent, Sprint, TaskEvent
+from models import (
+    AuditLog,
+    Company,
+    CompanyMember,
+    OutboxEvent,
+    Sprint,
+    TaskEvent,
+    User,
+)
 from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.notification import PersonalNotification
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from janitor import retention
@@ -297,6 +309,7 @@ def test_settings_come_from_the_environment_with_safe_defaults():
         "RETENTION_AGENT_RUNS_DAYS": 90,
         "RETENTION_KPI_TURNS_DAYS": 0,
         "RETENTION_GLASSROOM_DAYS": 0,
+        "RETENTION_NOTIFICATIONS_DAYS": 90,
     }
     assert (
         retention.settings_from_env({"RETENTION_OUTBOX_DAYS": "-3"})[
@@ -304,6 +317,54 @@ def test_settings_come_from_the_environment_with_safe_defaults():
         ]
         == 0
     )
+
+
+def test_personal_notifications_go_after_the_setting_and_when_the_person_left(db):
+    session, company_id, path = db
+    users = []
+    for label in ("stays", "left"):
+        user = User(email=f"{label}@example.com", full_name=label, password_hash="x")
+        session.add(user)
+        session.commit()
+        users.append(user.id)
+    stays, left = users
+    session.add(CompanyMember(company_id=company_id, user_id=stays, human_role="Owner"))
+    for user_id, created_at, read in (
+        (stays, OLD - timedelta(days=60), True),
+        (stays, OLD - timedelta(days=60), False),
+        (stays, RECENT, False),
+        (left, RECENT, False),
+    ):
+        session.add(
+            PersonalNotification(
+                user_id=user_id,
+                company_id=company_id,
+                kind="review_requested",
+                subject_type="task",
+                subject_id=1,
+                created_at=created_at,
+                read_at=created_at if read else None,
+            )
+        )
+    session.commit()
+
+    # 0 does not mean "keep everything" here: the default (90 days) applies.
+    report = _apply(path, RETENTION_NOTIFICATIONS_DAYS=0)
+
+    assert report["personal_notifications"] == 3
+    (kept,) = session.exec(select(PersonalNotification)).all()
+    assert (kept.user_id, kept.created_at) == (stays, RECENT)
+
+
+def test_the_notification_setting_is_never_unbounded():
+    def days(value):
+        return retention.settings_from_env({"RETENTION_NOTIFICATIONS_DAYS": value})[
+            "RETENTION_NOTIFICATIONS_DAYS"
+        ]
+
+    assert days("30") == 30
+    assert days("0") == days("-4") == days("soon") == 90
+    assert days("10000") == retention.NOTIFICATIONS_MAX_DAYS == 365
 
 
 # The janitor's connection: no password, no start (issue found in PR #675).
