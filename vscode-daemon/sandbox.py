@@ -167,15 +167,20 @@ def container_runtime() -> str:
     )
 
 
+GIT_READ_PATHS = ("HEAD", "objects", "refs", "packed-refs")
+
+
 def git_mounts(cwd: str) -> list[str]:
     """A worktree's repository, read-only at its own path (issue #766).
 
     In a ``git worktree`` (every task's, ``fabrique-worktrees/<name>``),
     ``.git`` is a file naming a folder of the main repository, which the
     container did not see: every ``git`` call in the tests failed with "not
-    a git repository". The repository's common folder (objects, refs and the
-    worktree's own folder) is mounted read-only where the file says, so git
-    reads work and nothing in the repository can be changed from inside."""
+    a git repository". What git reads is mounted read-only where the file
+    says (``HEAD``, ``objects``, ``refs``, ``packed-refs`` and the worktree's
+    own folder), so git reads work and nothing can be changed from inside.
+    Never the whole folder: ``config`` may hold a remote's credentials, and
+    the other tasks' worktrees live there too."""
     marker = os.path.join(cwd, ".git")
     try:
         if not os.path.isfile(marker):
@@ -196,7 +201,14 @@ def git_mounts(cwd: str) -> list[str]:
     root = os.path.abspath(cwd)
     if not os.path.isdir(common) or common == root or common.startswith(root + os.sep):
         return []
-    return ["-v", f"{common}:{common}:ro"]
+    paths = [os.path.join(common, name) for name in GIT_READ_PATHS]
+    if gitdir != common:
+        paths.append(gitdir)
+    args: list[str] = []
+    for path in paths:
+        if os.path.exists(path):  # docker would create a missing one on the host
+            args += ["-v", f"{path}:{path}:ro"]
+    return args
 
 
 def container_command(

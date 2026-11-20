@@ -283,27 +283,32 @@ def test_on_the_host_the_tool_installs_nothing():
 
 def test_a_worktree_s_repository_is_mounted_read_only_at_its_own_path(tmp_path):
     """In a task's worktree ``.git`` names a folder of the main repository;
-    without it in the container every git call in the tests failed."""
+    without it in the container every git call in the tests failed. Only
+    what git reads is mounted: never ``config`` (a remote's credentials) nor
+    the other tasks' worktrees."""
     import sandbox as daemon_sandbox  # the daemon's module, via conftest
 
     common = tmp_path / "repo" / ".git"
     own = common / "worktrees" / "task-1"
     own.mkdir(parents=True)
     (own / "commondir").write_text("../..\n")
-    tree = tmp_path / "repo" / ".git" / "fabrique-worktrees" / "task-1"
+    for name in ("objects", "refs"):
+        (common / name).mkdir()
+    (common / "HEAD").write_text("ref: refs/heads/main\n")
+    (common / "config").write_text("[remote]\n url = https://token@example\n")
+    tree = common / "fabrique-worktrees" / "task-1"
     tree.mkdir(parents=True)
+    (common / "fabrique-worktrees" / "task-2").mkdir()
     (tree / ".git").write_text(f"gitdir: {own}\n")
 
-    # La Fabrique's worktrees sit inside the common folder: it is mounted.
-    assert daemon_sandbox.git_mounts(str(tree)) == ["-v", f"{common}:{common}:ro"]
+    mounts = daemon_sandbox.git_mounts(str(tree))
 
-    outside = tmp_path / "work" / "task-2"
-    outside.mkdir(parents=True)
-    (outside / ".git").write_text(f"gitdir: {own}\n")
-    assert daemon_sandbox.git_mounts(str(outside)) == [
-        "-v",
-        f"{common}:{common}:ro",
-    ]
+    sources = mounts[1::2]
+    assert all(m == "-v" for m in mounts[::2])
+    assert sources == [
+        f"{common / name}:{common / name}:ro" for name in ("HEAD", "objects", "refs")
+    ] + [f"{own}:{own}:ro"]
+    assert not any("config" in s or "fabrique-worktrees" in s for s in sources)
     # A plain checkout, or no repository: nothing.
     plain = tmp_path / "plain"
     (plain / ".git").mkdir(parents=True)
