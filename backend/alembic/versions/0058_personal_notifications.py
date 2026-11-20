@@ -6,10 +6,10 @@ notice is about (``subject_type``, ``subject_id``, a few integer ids in
 ``context``), never a copy of its text; ``notification_preferences`` one row
 per person and kind they changed. Nothing existing changes.
 
-Follows 0056 (sprint objective).
+Follows 0057 (vector memory embedding model).
 
-Revision ID: 0057
-Revises: 0056
+Revision ID: 0058
+Revises: 0057
 Create Date: 2026-11-20 16:00:00 UTC
 """
 
@@ -20,8 +20,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0057"
-down_revision = "0056"
+revision = "0058"
+down_revision = "0057"
 branch_labels = None
 depends_on = None
 
