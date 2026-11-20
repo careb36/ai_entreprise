@@ -332,7 +332,8 @@ def test_janitor_drops_retired_queue_before_cleanup(monkeypatch, sqlite_session)
     monkeypatch.setattr(janitor, "get_db_connection", lambda: connection)
     janitor.run_janitor_tasks()
     janitor.run_janitor_tasks()
-    # Retention (janitor/retention.py) runs with its defaults: only the outbox.
+    # Retention (janitor/retention.py) runs with its defaults: the outbox and
+    # the personal notifications (never unbounded, issue #683).
     expected = [
         call("DROP TABLE IF EXISTS task_queue"),
         call("SET TIME ZONE 'UTC'"),
@@ -340,6 +341,8 @@ def test_janitor_drops_retired_queue_before_cleanup(monkeypatch, sqlite_session)
             "DELETE FROM outbox_events WHERE status = 'completed' AND processed_at < %s",
             (ANY,),
         ),
+        call("DELETE FROM personal_notifications WHERE created_at < %s", (ANY,)),
+        call(ANY, ()),  # and those of a person who left the company
         call("REINDEX INDEX CONCURRENTLY vector_memory_idx"),
     ]
     assert connection.autocommit is True

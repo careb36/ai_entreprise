@@ -53,6 +53,7 @@ from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.model_settings import router as model_settings_router
+from routers.notifications import router as notifications_router
 from routers.person_sections import router as person_sections_router
 from routers.procedures import router as procedures_router
 from routers.protected_paths import router as protected_paths_router
@@ -88,6 +89,7 @@ from services.integrations import (
     anchoring,
     chat_approvals,
     chat_regressions,
+    person_notices,
     webhooks,
 )
 from services.platform import capabilities
@@ -101,6 +103,9 @@ webhooks.install()
 chat_approvals.install()
 # A regression the factory observed is posted there too, information only (issue #682).
 chat_regressions.install()
+# A risk hold or an integration waiting for a person notifies the people
+# who may act on it, one row each (issue #683).
+person_notices.install()
 # A closed sprint or a release anchors the audit chain's head (issue #542).
 anchoring.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
@@ -201,6 +206,7 @@ app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
 app.include_router(task_views_router)
+app.include_router(notifications_router)
 app.include_router(sprint_progress_router)
 app.include_router(task_relations_router)
 app.include_router(wiki_router)

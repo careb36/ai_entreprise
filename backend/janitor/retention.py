@@ -19,6 +19,13 @@ Each setting is a number of days; ``0`` keeps everything of that kind.
   sprints that are completed or cancelled. The live Glassroom stream is kept
   in memory (the last 50 events per sprint) and replays the board, which is
   never deleted.
+- ``RETENTION_NOTIFICATIONS_DAYS`` (90): personal notifications
+  (``personal_notifications``, issue #683), read or not, older than the
+  cutoff; and, whatever their age, those of a person who is no longer a
+  member of the company they were written in (purpose limitation: the
+  receiver can no longer act on them). This one is never unbounded: ``0``,
+  a negative or a malformed value keeps the default, and anything over
+  ``NOTIFICATIONS_MAX_DAYS`` (365) is cut to it.
 
 There is no audit retention. Shrinking ``audit_log`` means archiving a
 company's whole chain with its rows (``docs/OPERATIONS.md``), never deleting
@@ -40,12 +47,14 @@ from typing import Any
 KPI_TURN_ACTIONS = ("execute_task", "qa_review", "architect_consult")
 CLOSED_SPRINT_STATUSES = ("completed", "cancelled")
 AGENT_RUN_BATCH = 500
+NOTIFICATIONS_MAX_DAYS = 365
 
 DEFAULTS = {
     "RETENTION_OUTBOX_DAYS": 7,
     "RETENTION_AGENT_RUNS_DAYS": 0,
     "RETENTION_KPI_TURNS_DAYS": 0,
     "RETENTION_GLASSROOM_DAYS": 0,
+    "RETENTION_NOTIFICATIONS_DAYS": 90,
 }
 
 # Tables whose rows point at an audit row: a row they point at is kept.
@@ -75,7 +84,22 @@ def settings_from_env(env: dict[str, str] | None = None) -> dict[str, int]:
             days[name] = max(0, int(env.get(name, default)))
         except (TypeError, ValueError):
             days[name] = default
+    days["RETENTION_NOTIFICATIONS_DAYS"] = bounded_notification_days(
+        days["RETENTION_NOTIFICATIONS_DAYS"]
+    )
     return days
+
+
+def bounded_notification_days(days: Any) -> int:
+    """Personal notifications are always deleted at some age: ``0`` or less
+    keeps the default, over ``NOTIFICATIONS_MAX_DAYS`` is cut to it."""
+    try:
+        value = int(days)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        return DEFAULTS["RETENTION_NOTIFICATIONS_DAYS"]
+    return min(value, NOTIFICATIONS_MAX_DAYS)
 
 
 def _is_sqlite(conn: Any) -> bool:
@@ -241,6 +265,24 @@ def prune_glassroom(conn: Any, days: int, now: datetime) -> int:
     return cursor.rowcount
 
 
+def prune_notifications(conn: Any, days: int, now: datetime) -> int:
+    """Delete personal notifications past the cutoff, and those whose
+    receiver is no longer a member of their company."""
+    days = bounded_notification_days(days)
+    aged = _execute(
+        conn,
+        "DELETE FROM personal_notifications WHERE created_at < %s",
+        (_cutoff(conn, days, now),),
+    ).rowcount
+    left = _execute(
+        conn,
+        "DELETE FROM personal_notifications WHERE NOT EXISTS (SELECT 1 FROM "
+        "company_members m WHERE m.company_id = personal_notifications.company_id "
+        "AND m.user_id = personal_notifications.user_id)",
+    ).rowcount
+    return aged + left
+
+
 def apply(
     conn: Any, days: dict[str, int] | None = None, now: datetime | None = None
 ) -> dict[str, int]:
@@ -273,5 +315,9 @@ def _apply(conn: Any, days: dict[str, int], now: datetime) -> dict[str, int]:
     report["kpi_turns_kept_for_chain"] = kept
     conn.commit()
     report["task_events"] = prune_glassroom(conn, days["RETENTION_GLASSROOM_DAYS"], now)
+    conn.commit()
+    report["personal_notifications"] = prune_notifications(
+        conn, days["RETENTION_NOTIFICATIONS_DAYS"], now
+    )
     conn.commit()
     return report

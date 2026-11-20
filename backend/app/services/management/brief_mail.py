@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
-import ssl
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
@@ -33,8 +32,9 @@ from models.manager import ManagerPolicy
 from sqlmodel import Session, select
 
 from services.management import manager_brief
-from services.platform import locks, teams
+from services.platform import locks, mail, teams
 from services.platform.agent_service import AgentService
+from services.platform.mail import smtp_send
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _naive(moment: datetime) -> datetime:
 
 
 def enabled() -> bool:
-    return bool(settings.SMTP_HOST.strip())
+    return mail.enabled()
 
 
 def recipients(session: Session, company_id: int) -> list[str]:
@@ -201,24 +201,6 @@ def render(company: Company, data: dict[str, Any]) -> tuple[str, str]:
     return subject, "\n".join(body) + "\n"
 
 
-def smtp_send(message: EmailMessage) -> None:
-    """Send *message* through the configured SMTP server."""
-    host, port = settings.SMTP_HOST.strip(), settings.SMTP_PORT
-    timeout = settings.SMTP_TIMEOUT_SECONDS
-    if settings.SMTP_SSL:
-        server: smtplib.SMTP = smtplib.SMTP_SSL(
-            host, port, timeout=timeout, context=ssl.create_default_context()
-        )
-    else:
-        server = smtplib.SMTP(host, port, timeout=timeout)
-    with server:
-        if settings.SMTP_STARTTLS and not settings.SMTP_SSL:
-            server.starttls(context=ssl.create_default_context())
-        if settings.SMTP_USER:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.send_message(message)
-
-
 def _audit(session: Session, company_id: int, result: dict[str, Any]) -> None:
     AgentService().audit_interaction(
         session=session,
@@ -252,9 +234,7 @@ def send_company(
     subject, text = render(company, data)
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = (
-        settings.SMTP_FROM or settings.SMTP_USER or "la-fabrique@localhost"
-    )
+    message["From"] = mail.sender()
     message["To"] = ", ".join(to)
     message.set_content(text)
     try:
