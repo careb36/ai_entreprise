@@ -67,6 +67,10 @@ def test_the_recorded_duplicate_scores_above_the_threshold_and_unrelated_work_be
     assert not similarity.likely_duplicate(CARDS_CODE, CARDS_STRINGS)
     assert similarity.similarity("", SPRINT_2_TASK) == 0.0
     assert similarity.words("Adds the docs") == {"doc"}
+    # Numbered items of one plan are different work (the objective fallback).
+    assert not similarity.likely_duplicate(
+        "Item 1: keep the person's input", "Item 2: keep the person's input"
+    )
 
 
 def test_a_carried_task_that_repeats_one_in_the_new_sprint_is_held_not_queued(

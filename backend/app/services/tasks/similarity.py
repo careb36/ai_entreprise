@@ -9,7 +9,7 @@ reviewed twice, with nothing to say so (issue #766).
 ``similarity`` is deterministic and needs no model: the Jaccard index of the
 titles' content words, lowercased, without stop words or the generic verbs a
 planner opens a title with ("add", "deliver", "implement"), and with a plural
-``s`` dropped. On the tasks recorded so far, the duplicate pair scores 0.78,
+``s`` dropped; a number is kept, so "Item 1" and "Item 2" stay apart. On the tasks recorded so far, the duplicate pair scores 0.78,
 the same work planned again in the next sprint 0.60 to 1.00, and no unrelated
 pair reaches 0.5 (two tasks about the same cards, one for the code and one
 for its strings, score below it). ``THRESHOLD`` is 0.7.
@@ -90,7 +90,9 @@ def words(title: str) -> frozenset[str]:
     return frozenset(
         _singular(w)
         for w in _WORD.findall((title or "").lower())
-        if len(w) >= MIN_WORD and w not in STOP_WORDS
+        # A number is kept whatever its length: "Item 1" and "Item 2" of a
+        # plan are different work, not one task written twice.
+        if (w.isdigit() or len(w) >= MIN_WORD) and w not in STOP_WORDS
     )
 
 
