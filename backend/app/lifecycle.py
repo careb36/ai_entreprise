@@ -164,8 +164,46 @@ def _start_memory(app, has_vector_memory: bool) -> None:
                 task.add_done_callback(_on_task_done)
     if has_vector_memory:
         app.state.memory_client = MemoryClient(neo4j_driver=driver)
+        _schedule(_reembed_memory_later(app), "memory_reembed")
     else:
         logger.info("No vector_memory table: memory search and store are off.")
+
+
+def _schedule(coro, name: str) -> None:
+    """Run *coro* in the background when there is an event loop; close it otherwise."""
+    try:
+        task = asyncio.get_running_loop().create_task(coro, name=name)
+    except RuntimeError:  # no event loop (a synchronous caller)
+        coro.close()
+        return
+    _background_tasks.add(task)
+    task.add_done_callback(_on_task_done)
+
+
+REEMBED_DELAY_SECONDS = 30.0
+
+
+async def _reembed_memory_later(app) -> int:
+    """Re-embed memories another source embedded, once the proxy is up (#755).
+
+    Vectors from different sources do not compare, and a search compares only
+    rows of the query's model, so rows written by the hash vector (or Gemini)
+    are written again by the local semantic model when it answers. Best
+    effort: a failure is logged and memory keeps working; the next start tries
+    again.
+    """
+    await asyncio.sleep(REEMBED_DELAY_SECONDS)
+    client = getattr(app.state, "memory_client", None)
+    if client is None:
+        return 0
+    try:
+        count = await asyncio.to_thread(client.reembed_stale)
+    except Exception as exc:  # noqa: BLE001 - Re-embedding is optional; memory keeps working.
+        logger.warning("Memory re-embedding stopped: %s", exc)
+        return 0
+    if count:
+        logger.info("Memory: %d rows re-embedded with the current model.", count)
+    return count
 
 
 GRAPH_RETRY_SECONDS = 15.0

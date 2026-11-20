@@ -374,6 +374,18 @@ class LLMProxyClient:
         self, text: str, role: str = "Developer", bu_id: int | None = None
     ) -> list | None:
         """Retrieve a dense vector embedding."""
+        answer = self.embed_with_model(text, role, bu_id)
+        return answer[0] if answer else None
+
+    def embed_with_model(
+        self, text: str, role: str = "Developer", bu_id: int | None = None
+    ) -> tuple[list, str] | None:
+        """``(vector, model)`` for *text*, or ``None`` when the proxy gave none.
+
+        The model names the vector's source (``multilingual-e5-small``, the
+        hash vector ``local-fallback-embedding``, Gemini's model): vectors from
+        different sources do not compare, so memory records it (issue #755).
+        """
         try:
             headers = self._get_headers(role, bu_id)
             response = requests.post(
@@ -383,10 +395,11 @@ class LLMProxyClient:
                 timeout=self.timeout,
             )
             response.raise_for_status()
-            # The proxy returns {"data": [{"embedding": [...]}]} (OpenAI style)
-            data = response.json().get("data", [])
-            if data:
-                return data[0].get("embedding")
+            # The proxy returns {"data": [{"embedding": [...]}], "model": ...} (OpenAI style)
+            body = response.json()
+            data = body.get("data", [])
+            if data and data[0].get("embedding"):
+                return data[0]["embedding"], str(body.get("model") or "")
             return None
         except requests.RequestException as e:
             logger.error(f"LLM Proxy embedding failed: {e}")

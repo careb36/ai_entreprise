@@ -18,8 +18,9 @@ Factory leaves local or cloud execution of its Droids to the operator.
    other role and agent, so it needs only `DEEPSEEK_API_KEY`. `AGENT_MODEL`
    set to another provider's model needs that provider's key instead.
    Optional: `QWEN_API_KEY` (no default role uses it), `GEMINI_API_KEY` (no
-   default role uses it; Gemini model ids and the proxy's embeddings, which
-   fall back to a local vector without it) and `NEBIUS_API_KEY` (only for
+   default role uses it; Gemini model ids, and the proxy's embeddings only
+   with `EMBEDDING_PROVIDER=gemini`: by default memory is embedded by a local
+   model in the proxy) and `NEBIUS_API_KEY` (only for
    `NEMOTRON_ROLES` or `nvidia/…` ids). The keys go to the LLM proxy only.
    DeepSeek's API processes requests in China: before personal or client
    data goes through it, see `DEEPSEEK_API_KEY` in `docs/CONFIGURATION.md`
@@ -45,7 +46,8 @@ Factory leaves local or cloud execution of its Droids to the operator.
 DeepSeek is the only provider a sprint needs (issue #751): with
 `DEEPSEEK_API_KEY` alone, a request DeepSeek fails with 429 or 5xx moves to
 its other model (Pro and Flash) and never to another provider unless
-`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally. When DeepSeek
+`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally (a semantic
+model in the proxy image, issue #755). When DeepSeek
 itself is out of credit, the sprint pauses on the 402 (`sprint_control`) and
 says so; top up and resume.
 
@@ -650,9 +652,25 @@ https address, or run as a stdio wrapper.
   Off by configuration is not a fault and changes no status; the same list
   is logged once at startup by the backend and by the proxy
   (`Effective capabilities: …`). With DeepSeek alone, expect
-  `llm.embeddings: degraded` (the local vector: DeepSeek has no embeddings
-  endpoint) and `llm.failover: on, same_provider` (Pro and Flash stand in for
-  each other); `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
+  `llm.embeddings: on` (the local model `multilingual-e5-small`: DeepSeek has
+  no embeddings endpoint), `memory: on`, and `llm.failover: on,
+  same_provider` (Pro and Flash stand in for each other);
+  `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
+- **`llm.embeddings: degraded` and `memory: degraded`** mean the hash vector
+  stands in for the local model; the reason says why. A file missing or not
+  matching its sha256 (an image built without the model stage, or a mounted
+  `EMBEDDING_MODEL_DIR`): rebuild the proxy image (`docker compose build
+  llm-proxy`), which fetches and verifies the model, or outside the image run
+  `python llm-proxy/fetch_embedding_model.py`. The runtime missing: the
+  proxy's Poetry environment is out of date (`poetry install` in
+  `llm-proxy/`). The self-check failed: the CPU's int8 kernels lost too much;
+  memory keeps working on the hash vector. Memory never errors either
+  way, and once the model loads, the backend re-embeds at its next start the
+  rows the hash vector wrote (`Memory: N rows re-embedded` in its log; a
+  search compares only rows of one model meanwhile). Each proxy worker holds
+  the model, about 400 MB more memory per worker (`LLM_PROXY_WORKERS`, 2 by
+  default); on a machine short of memory, `EMBEDDING_PROVIDER=local-hash`
+  keeps the proxy at its earlier size.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,

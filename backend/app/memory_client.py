@@ -10,22 +10,45 @@ Provides a unified interface for:
   writes are skipped and reported as not recorded, and graph reads raise
   ``GraphNotRecorded``.
 
-The ``embed()`` call is delegated to ``LLMProxyClient`` so this module has no
-direct dependency on any LLM SDK. DeepSeek, the default team's provider,
-offers no embeddings, so the proxy embeds with a deterministic local vector
-(no key, no outside call) unless the operator chose Gemini's
-``text-embedding-004`` with ``EMBEDDING_PROVIDER=gemini`` (issue #751);
+Embedding is delegated to ``LLMProxyClient`` so this module has no direct
+dependency on any LLM SDK. DeepSeek, the default team's provider, offers no
+embeddings, so the proxy embeds with a local semantic model on CPU
+(multilingual-e5-small, issue #755; no key, no outside call), with the hash
+vector of issue #751 standing in when the model cannot load, or with Gemini's
+``text-embedding-004`` when the operator chose ``EMBEDDING_PROVIDER=gemini``;
 ``/health/deep``'s ``llm.embeddings`` capability says which.
+
+Vectors from different sources do not compare, so each row records its
+source in ``vector_memory.embedding_model`` (migration 0057), a search
+compares only rows of the query's model, and ``reembed_stale`` writes the
+other rows again once a semantic model answers (never towards the hash
+vector, which would lose meaning).
 """
 
 import json
+import logging
 from typing import Any
 
 from database import engine
 from sqlmodel import Session, text
 
+logger = logging.getLogger(__name__)
+
 NOT_RECORDED = "not_recorded"
 STORED = "stored"
+# The proxy's name for its hash vector: never a target for re-embedding.
+HASH_MODEL = "local-fallback-embedding"
+_INSERT = """
+    INSERT INTO vector_memory (content, embedding, metadata, company_id, embedding_model)
+    VALUES (:content, :embedding, :metadata, :company_id, :embedding_model)
+"""
+
+
+def _embedding(content: str) -> tuple[list, str] | None:
+    """``(vector, model)`` from the proxy, or ``None`` when it gave none."""
+    from llm_proxy_client import LLMProxyClient
+
+    return LLMProxyClient().embed_with_model(content)
 
 
 class GraphNotRecorded(RuntimeError):
@@ -83,31 +106,10 @@ class MemoryClient:
             ``{"vector": ..., "graph": ...}``, each ``"stored"`` or
             ``"not_recorded"``: what was actually kept, never assumed.
         """
-        from llm_proxy_client import LLMProxyClient
-
-        client = LLMProxyClient()
-        embedding = client.embed(content)
-        outcome = {"vector": NOT_RECORDED, "graph": NOT_RECORDED}
-
-        if embedding:
-            # Store vector representation for ANN similarity search.
-            with Session(self.engine) as session:
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO vector_memory (content, embedding, metadata, company_id)
-                        VALUES (:content, :embedding, :metadata, :company_id)
-                        """
-                    ),
-                    {
-                        "content": content,
-                        "company_id": company_id,
-                        "embedding": json.dumps(embedding),
-                        "metadata": json.dumps(metadata or {}),
-                    },
-                )
-                session.commit()
-            outcome["vector"] = STORED
+        outcome = {
+            "vector": self.store_vector(content, metadata, company_id=company_id),
+            "graph": NOT_RECORDED,
+        }
 
         if self.neo4j_driver is None:
             return outcome
@@ -128,6 +130,78 @@ class MemoryClient:
             )
         outcome["graph"] = STORED
         return outcome
+
+    def store_vector(
+        self,
+        content: str,
+        metadata: dict | None = None,
+        *,
+        company_id: int | None = None,
+    ) -> str:
+        """Embed *content* and insert it into pgvector with its source model.
+
+        ``"stored"``, or ``"not_recorded"`` when the proxy gave no vector.
+        """
+        answer = _embedding(content)
+        if not answer:
+            return NOT_RECORDED
+        embedding, model = answer
+        with Session(self.engine) as session:
+            session.execute(
+                text(_INSERT),
+                {
+                    "content": content,
+                    "company_id": company_id,
+                    "embedding": json.dumps(embedding),
+                    "metadata": json.dumps(metadata or {}),
+                    "embedding_model": model or None,
+                },
+            )
+            session.commit()
+        return STORED
+
+    def reembed_stale(self, limit: int = 5000, batch: int = 100) -> int:
+        """Write again, with the proxy's current model, rows another source embedded.
+
+        Runs only when that model is a semantic one (not the hash vector), and
+        stops at the first text the proxy does not answer with that model (it
+        went away, or fell back). Returns how many rows were re-embedded.
+        """
+        probe = _embedding("memory")
+        if not probe or not probe[1] or probe[1] == HASH_MODEL:
+            return 0
+        model = probe[1]
+        done = 0
+        while done < limit:
+            with Session(self.engine) as session:
+                rows = session.execute(
+                    text(
+                        "SELECT id, content FROM vector_memory "
+                        "WHERE embedding_model IS DISTINCT FROM :model ORDER BY id LIMIT :batch"
+                    ),
+                    {"model": model, "batch": min(batch, limit - done)},
+                ).all()
+                if not rows:
+                    break
+                for row_id, content in rows:
+                    answer = _embedding(content)
+                    if not answer or answer[1] != model:
+                        session.commit()
+                        return done
+                    session.execute(
+                        text(
+                            "UPDATE vector_memory SET embedding = CAST(:embedding AS vector), "
+                            "embedding_model = :model WHERE id = :id"
+                        ),
+                        {
+                            "embedding": json.dumps(answer[0]),
+                            "model": model,
+                            "id": row_id,
+                        },
+                    )
+                    done += 1
+                session.commit()
+        return done
 
     def search_similar(
         self,
@@ -151,22 +225,24 @@ class MemoryClient:
             List of dicts with keys ``content``, ``metadata``, ``similarity``
             (float in [0, 1] where 1 = identical).
         """
-        from llm_proxy_client import LLMProxyClient
-
-        client = LLMProxyClient()
-        embedding = client.embed(query)
-
-        if not embedding:
+        answer = _embedding(query)
+        if not answer:
             return []
+        embedding, model = answer
 
-        company_filter = ""
+        conditions = []
         params = {"embedding": json.dumps(embedding), "limit": limit}
+        if model:
+            # Only vectors from the query's source compare with it.
+            conditions.append("embedding_model = :embedding_model")
+            params["embedding_model"] = model
         if company_ids is not None:
-            company_filter = "WHERE (company_id = ANY(:company_ids)"
+            scope = "company_id = ANY(:company_ids)"
             if include_legacy:
-                company_filter += " OR company_id IS NULL"
-            company_filter += ")"
+                scope += " OR company_id IS NULL"
+            conditions.append(f"({scope})")
             params["company_ids"] = company_ids
+        company_filter = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         with Session(self.engine) as session:
             # Cast the parameter to vector so pgvector accepts it.
