@@ -30,13 +30,26 @@ from routers.documentation import _load
 
 router = APIRouter(tags=["Core"])
 
+# One render at a time per event loop: a burst of downloads waits here, on the
+# loop, instead of taking every worker thread while a PDF holds its lock.
+_RENDERS: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+
+
+def _renders() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    if loop not in _RENDERS:
+        _RENDERS.clear()
+        _RENDERS[loop] = asyncio.Semaphore(1)
+    return _RENDERS[loop]
+
 
 async def _render(pack, fmt: str) -> exports.Export:
     # Checked after the role, like a document key: an outsider learns nothing.
     if fmt not in exports.FORMATS:
         raise HTTPException(status_code=404, detail="No such export format")
     try:
-        return await asyncio.to_thread(exports.export, pack, fmt)
+        async with _renders():
+            return await asyncio.to_thread(exports.export, pack, fmt)
     except exports.ExportUnavailable as exc:
         raise HTTPException(
             status_code=503,
