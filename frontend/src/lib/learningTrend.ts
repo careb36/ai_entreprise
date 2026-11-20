@@ -7,7 +7,7 @@
  * anything. Only completed sprints with at least one task count: an active
  * sprint's numbers are still moving and an empty one measures nothing.
  */
-import type { AdviceGroup, ConsoleAdvice, SecondAttempts, SprintSummary } from '../services/api'
+import type { AdviceGroup, AdviceTally, SecondAttempts, SprintSummary } from '../services/api'
 
 export interface SprintPoint {
   id: number
@@ -54,23 +54,20 @@ export function secondAttempts(sprints: SprintSummary[]): SecondAttempts {
  * not, each with how many got done and how many rework requests they drew.
  * The advice is a claim; this is what the boards say.
  */
-function adviceTally(sprints: SprintSummary[], pick: (sprint: SprintSummary) => ConsoleAdvice | undefined): ConsoleAdvice {
+function adviceTally(sprints: SprintSummary[], pick: (sprint: SprintSummary) => AdviceTally | undefined): AdviceTally {
   const add = (sum: AdviceGroup, group?: AdviceGroup) => {
     if (!group) return
     sum.total += group.total
     sum.done += group.done
     sum.rework += group.rework
   }
-  const tally: ConsoleAdvice = { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }
+  const tally: AdviceTally = { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }
   for (const sprint of sprints.filter(closed)) {
     add(tally.advised, pick(sprint)?.advised)
     add(tally.unadvised, pick(sprint)?.unadvised)
   }
   return tally
 }
-
-/** Tasks a console assistant advised on against the rest. */
-export const consoleAdvice = (sprints: SprintSummary[]) => adviceTally(sprints, sprint => sprint.console_advice)
 
 /** Tasks the Architect briefed against the rest. */
 export const architectAdvice = (sprints: SprintSummary[]) => adviceTally(sprints, sprint => sprint.architect_advice)

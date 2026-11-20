@@ -76,8 +76,9 @@ MAX_OUTPUT_BYTES = 1024 * 1024
 RUNTIME_FAILURE_EXIT = 125
 _BWRAP_RO = ("/usr", "/bin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/sbin")
 # What a request may say a command is for; anything else reads as ``test``.
-# ``assistant``: a console assistant's consultation (the backend's
-# ``console_assistants``), advice rather than agent-written code.
+# ``assistant``: a console assistant's consultation, advice rather than
+# agent-written code; sent only by backends before issue #750 removed the
+# console assistants, and still accepted from them.
 PURPOSES = ("test", "install", "check", "assistant")
 
 

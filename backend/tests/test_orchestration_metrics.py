@@ -195,15 +195,20 @@ def test_should_not_consult_architect_for_routine_dev_task():
     assert not should_consult_architect(item, _DEV, [])
 
 
-def test_should_not_consult_architect_for_non_developer_roles():
+def test_the_architect_advises_the_roles_a_console_assistant_used_to_but_not_itself():
+    """Issue #750: the planning and architecture advice the external CLI gave
+    QA, PO and ScrumMaster comes from the team's Architect by default."""
     item = {
         "title": "Design system architecture",
         "description": "",
         "priority": "critical",
     }
     assert not should_consult_architect(item, {"role": "Architect"}, [])
-    assert not should_consult_architect(item, {"role": "QA"}, [])
-    assert not should_consult_architect(item, {"role": "PO"}, [])
+    assert not should_consult_architect(item, {"role": "TechWriter"}, [])
+    for role in ("QA", "PO", "ScrumMaster", "Scrum Master", "BackendDeveloper"):
+        assert should_consult_architect(item, {"role": role}, []), role
+    routine = {"title": "Rename a field", "description": "", "priority": "low"}
+    assert not should_consult_architect(routine, {"role": "PO"}, [])
 
 
 def test_should_consult_architect_respects_feature_flag():

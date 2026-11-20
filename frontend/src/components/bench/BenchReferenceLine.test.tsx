@@ -10,7 +10,7 @@ const noAdvice = { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total
 const sprint = (id: number, name: string, rework: number, blocked: number): SprintSummary => ({
   id, sprint_name: name, status: 'completed', goal: null, start_date: null, scope_size: 'S',
   total: 4, done: 4 - blocked, blocked, rework,
-  second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, console_advice: noAdvice, architect_advice: noAdvice,
+  second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, architect_advice: noAdvice,
 })
 // Rework per task 0.50 then 0.25; blocked share 25% then 0%.
 const SPRINTS = [sprint(1, 'Sprint 1', 2, 1), sprint(2, 'Sprint 2', 1, 0)]

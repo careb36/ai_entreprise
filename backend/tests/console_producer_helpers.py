@@ -21,7 +21,7 @@ from models import AssistantRuntimeState, Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
 from models.company import ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services.producers import console_assistants
+from services.producers import cli_cooldowns
 from sqlmodel import Session, select
 
 _DAEMON_DIR = Path(__file__).resolve().parents[2] / "vscode-daemon"
@@ -142,7 +142,7 @@ def world(sqlite_session, repo, monkeypatch, tmp_path):
     engine = sqlite_session.get_bind()
     AssistantRuntimeState.__table__.create(engine, checkfirst=True)
     worker_stages.use_engine(monkeypatch, engine)
-    monkeypatch.setattr(console_assistants, "engine", engine)
+    monkeypatch.setattr(cli_cooldowns, "engine", engine)
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "host")
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
     company = Company(

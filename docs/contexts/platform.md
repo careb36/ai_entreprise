@@ -76,7 +76,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 - `token_usage`: the cost paragraph in [models](models.md).
 - `wstg_catalogue` (the OWASP WSTG tests with their versioned ids, read from `app/data/wstg/catalogue.json`, CC BY-SA 4.0, built by `scripts/wstg_catalogue.py`): the security test plan in [planning](planning.md).
-- `glassroom` (`publish_glassroom`): the console assistants paragraph in [producers](producers.md).
+- `glassroom` (`publish_glassroom`): the paragraph on the removed console assistants in [producers](producers.md).
 - `hooks` (`sprint.closed`): the integration paragraph in [release](release.md) and step 11 of [the migration record](../architecture/MIGRATION.md).
 - `api_tokens`, `memory_graph` (`NEO4J_ENABLED`), the audit chain and the bus's credentials: [configuration](../CONFIGURATION.md).
 

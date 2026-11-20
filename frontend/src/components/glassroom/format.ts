@@ -60,12 +60,6 @@ export function formatAgeShort(ms: number): string {
   return formatElapsed(ms)
 }
 
-export function parseCooldownUntil(detail?: string): string | undefined {
-  if (!detail) return undefined
-  const match = detail.match(/cooldown_until=([^\s]+)/)
-  return match?.[1]
-}
-
 export function hasDeliverableComment(comment: { author: string; text: string; created_at: string }): boolean {
   const text = (comment.text || '').trim()
   if (!text || comment.author === 'System') return false

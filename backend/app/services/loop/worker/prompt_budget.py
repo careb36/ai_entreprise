@@ -58,7 +58,6 @@ SECTION_NAMES = (
     "previous_attempt",
     "completed_tasks",
     "sprint_board",
-    "console_assistant_notes",
     "architect_brief",
     "review_feedback",
 )

@@ -531,7 +531,6 @@ def _prompt(company_id, item):
         None,
         None,
         None,
-        None,
         company_id,
         None,
         None,

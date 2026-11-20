@@ -83,40 +83,6 @@ export function PreviewCard({ preview, task }: { preview: string; task?: string 
   )
 }
 
-export function AssistantBadge({ msg }: { msg: AgentMessage }) {
-  const { t } = useTranslation()
-  if (!msg.assistantLabel) return null
-
-  const palette = msg.assistantLabel.includes('Claude')
-    ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-    : 'border-sky-500/30 bg-sky-500/10 text-sky-200'
-
-  const decisionTone: Record<string, string> = {
-    used: 'text-emerald-300',
-    requested: 'text-sky-300',
-    skipped_quota_cooldown: 'text-amber-300',
-    quota_cooldown: 'text-amber-300',
-    unavailable: 'text-gray-400',
-    failed: 'text-red-300',
-  }
-
-  return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold ${palette}`}>
-        {msg.assistantLabel}
-      </span>
-      {msg.assistantPurpose && (
-        <span className="text-gray-400">{msg.assistantPurpose}</span>
-      )}
-      {msg.assistantDecision && (
-        <span className={decisionTone[msg.assistantDecision] ?? 'text-gray-400'}>
-          {t(`glassroom.assistantDecisions.${msg.assistantDecision}`, { defaultValue: msg.assistantDecision.split('_').join(' ') })}
-        </span>
-      )}
-    </div>
-  )
-}
-
 export function DateSeparator({ date }: { date: string }) {
   return (
     <div className="flex items-center gap-3 py-2 px-4">

@@ -2,21 +2,20 @@ import { useTranslation } from 'react-i18next'
 import type { SprintRetro } from '../../store/agentStore'
 import { getAgent } from './identity'
 import type {
-  AssistantSummaryEntry, HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
+  HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
 } from './types'
 import { AgentAvatar } from './atoms'
 import {
-  AssistantSummaryPanel, HealthPanel, QuotaTelemetryPanel, SprintRetroPanel, SprintTaskPanel, TaskAutonomyTree,
+  HealthPanel, QuotaTelemetryPanel, SprintRetroPanel, SprintTaskPanel, TaskAutonomyTree,
 } from './panels'
 
 // ── Right panel: agent detail ─────────────────────────────────────────────────
 
-export function RightPanel({ sprintId, agentStates, messageCount, isConnected, assistantSummary, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
+export function RightPanel({ sprintId, agentStates, messageCount, isConnected, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
   sprintId: string
   agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string; lastTaskTitle?: string; lastTaskId?: number; lastSemanticType?: string }>
   messageCount: number
   isConnected: boolean
-  assistantSummary: AssistantSummaryEntry[]
   sprintTasks: SprintTaskEntry[]
   healthEntries: HealthPanelEntry[]
   autonomyTree: TaskAutonomyEntry[]
@@ -37,7 +36,6 @@ export function RightPanel({ sprintId, agentStates, messageCount, isConnected, a
       <QuotaTelemetryPanel quota={quotaTelemetry} />
       <SprintTaskPanel tasks={sprintTasks} sprintId={sprintId} />
       <TaskAutonomyTree tasks={autonomyTree} />
-      <AssistantSummaryPanel entries={assistantSummary} />
 
       <div className="py-2 space-y-px shrink-0">
         {entries.length === 0 ? (

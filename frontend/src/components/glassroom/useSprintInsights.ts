@@ -2,49 +2,10 @@ import { useMemo } from 'react'
 import type { TFunction } from 'i18next'
 import type { AgentLiveState, AgentMessage, SprintRetro } from '../../store/agentStore'
 import type { BacklogItem, SprintBoard } from '../../services/api'
-import { extractBlockedReason, formatAgeShort, hasDeliverableComment, parseCooldownUntil, phaseLabel } from './format'
+import { extractBlockedReason, formatAgeShort, hasDeliverableComment, phaseLabel } from './format'
 import type {
-  AssistantSummaryEntry, HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
+  HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
 } from './types'
-
-/** Per console assistant: how often it was used, skipped for quota, failed or requested. */
-export function useAssistantSummary(messages: AgentMessage[]) {
-  return useMemo<AssistantSummaryEntry[]>(() => {
-    const summary = new Map<string, AssistantSummaryEntry>()
-    for (const msg of messages) {
-      if (!msg.assistantLabel || !msg.assistantDecision) continue
-      const current = summary.get(msg.assistantLabel) ?? {
-        label: msg.assistantLabel,
-        used: 0,
-        quotaSkips: 0,
-        failures: 0,
-        unavailableSkips: 0,
-        requested: 0,
-        cooldownUntil: undefined,
-        lastDecision: undefined,
-      }
-
-      if (msg.assistantDecision === 'used') {
-        current.used += 1
-      } else if (msg.assistantDecision === 'quota_cooldown' || msg.assistantDecision === 'skipped_quota_cooldown') {
-        current.quotaSkips += 1
-      } else if (msg.assistantDecision === 'failed' || msg.assistantDecision === 'unavailable') {
-        current.failures += 1
-      } else if (msg.assistantDecision === 'requested') {
-        current.requested += 1
-      } else if (msg.assistantDecision === 'unavailable_cooldown' || msg.assistantDecision === 'skipped_unavailable_cooldown') {
-        current.unavailableSkips += 1
-      }
-
-      current.lastDecision = msg.assistantDecision
-      current.cooldownUntil = parseCooldownUntil(msg.assistantDetail) || current.cooldownUntil
-
-      summary.set(msg.assistantLabel, current)
-    }
-
-    return [...summary.values()].sort((left, right) => left.label.localeCompare(right.label))
-  }, [messages])
-}
 
 /** The sprint's tasks, in progress first. */
 export function useSprintTasks(board: SprintBoard | undefined) {
@@ -135,7 +96,6 @@ export function useAutonomyTree(messages: AgentMessage[], sprintTasks: SprintTas
       const deliverableCount = (task.comments || []).filter(hasDeliverableComment).length
       const currentPhase = [...relatedMessages].reverse().find(msg => msg.taskPhase)?.taskPhase || 'unknown'
       const blockedReason = task.status === 'blocked' ? extractBlockedReason(task.comments) : undefined
-      const assistantLabels = [...new Set(relatedMessages.map(msg => msg.assistantLabel).filter(Boolean) as string[])]
 
       const stepStates: TaskAutonomyEntry['stepStates'] = [
         {
@@ -180,7 +140,6 @@ export function useAutonomyTree(messages: AgentMessage[], sprintTasks: SprintTas
         reviewCount,
         deliverableCount,
         blockedReason,
-        assistantLabels,
         stepStates,
       }
     }).sort((left, right) => {

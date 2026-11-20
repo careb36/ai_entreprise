@@ -4,7 +4,6 @@ import { type GlassroomStream, openGlassroomStream } from '../services/api/strea
 import {
   type AgentEvent,
   type AgentFsmState,
-  type AssistantTelemetry,
   type TaskTelemetry,
   type AgentRetrospectiveEvent,
   normalizeSSEEvent,
@@ -27,10 +26,6 @@ export interface AgentMessage {
   reworkCount?: number
   reworkLimit?: number
   preview?: string
-  assistantLabel?: string
-  assistantPurpose?: string
-  assistantDecision?: string
-  assistantDetail?: string
   content: string
   type: 'message' | 'action' | 'status' | 'error' | 'agent_start' | 'agent_complete'
 }
@@ -45,15 +40,6 @@ export interface AgentLiveState {
   lastTaskTitle?: string
   lastTaskId?: number
   lastSemanticType?: string
-}
-
-function assistantMetaFromTelemetry(assistant?: AssistantTelemetry) {
-  return {
-    assistantLabel: assistant?.label,
-    assistantPurpose: assistant?.purpose,
-    assistantDecision: assistant?.decision,
-    assistantDetail: assistant?.detail,
-  }
 }
 
 function taskMetaFromTelemetry(task?: TaskTelemetry) {
@@ -167,7 +153,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
         const normalized = normalizeSSEEvent(raw)
         if (normalized) {
-          const assistantMeta = assistantMetaFromTelemetry(normalized.assistant)
           const taskMeta = taskMetaFromTelemetry(normalized.task)
           const messageBase = {
             id: String(raw.id || normalized.eventId || crypto.randomUUID()),
@@ -177,7 +162,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             semanticType: normalized.semanticType,
             source: normalized.source,
             ...taskMeta,
-            ...assistantMeta,
           }
 
           // Track memory hit counter.
@@ -254,10 +238,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           reworkCount: typeof raw.rework_count === 'number' ? raw.rework_count : undefined,
           reworkLimit: typeof raw.rework_limit === 'number' ? raw.rework_limit : undefined,
           preview: typeof raw.preview === 'string' ? raw.preview : undefined,
-          assistantLabel: typeof raw.assistant_label === 'string' ? raw.assistant_label : undefined,
-          assistantPurpose: typeof raw.assistant_purpose === 'string' ? raw.assistant_purpose : undefined,
-          assistantDecision: typeof raw.assistant_decision === 'string' ? raw.assistant_decision : undefined,
-          assistantDetail: typeof raw.assistant_detail === 'string' ? raw.assistant_detail : undefined,
           content: String(raw.content || JSON.stringify(raw)),
           type:
             raw.type === 'agent_start' ||

@@ -4,7 +4,9 @@
 with the workspace, research and MCP tools of its role (each call an
 observation); ``_architect_brief`` asks the company's Architect for a brief,
 or an edit plan (``edit_plan``), before a design-sensitive, reworked or hard
-Developer task, and ``_consult_architect`` is that call. Moved out of
+task of a coding role, QA, PO or ScrumMaster (the team's own advice, on the
+Architect's role default model unless the company chose one; issue #750), and
+``_consult_architect`` is that call. Moved out of
 ``task_worker``, which still re-exports these names.
 """
 
@@ -83,7 +85,6 @@ def _developer_prompt(
     item: dict[str, Any],
     agent: dict[str, Any],
     sprint_name: str,
-    external_advice: str | None,
     memory_context: str | None,
     completed_tasks_context: str | None,
     architect_advice: str | None,
@@ -190,18 +191,6 @@ def _developer_prompt(
             sprint_notes.PRIORITY,
         )
     )
-    if external_advice:
-        sections.append(
-            Section(
-                "console_assistant_notes",
-                "\n\n## External Console Assistant Notes\n"
-                "The following advice was gathered from configured terminal assistants such as GitHub Copilot CLI or Claude CLI. "
-                "Treat it as optional supporting context, not as a replacement for reasoning about the current repository. "
-                "Prefer preserving working behavior over blindly following suggestions.\n\n"
-                f"{external_advice[:4000]}",
-                6,
-            )
-        )
     # A plan, or guidance.
     sections.append(
         Section("architect_brief", edit_plan.prompt_section(architect_advice))
@@ -226,7 +215,6 @@ def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
     sprint_name: str,
-    external_advice: str | None = None,
     memory_context: str | None = None,
     completed_tasks_context: str | None = None,
     architect_advice: str | None = None,
@@ -270,7 +258,6 @@ def _execute_task(
         item,
         agent,
         sprint_name,
-        external_advice,
         memory_context,
         completed_tasks_context,
         architect_advice,

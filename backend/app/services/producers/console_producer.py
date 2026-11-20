@@ -10,10 +10,10 @@ what it changed there. What is taken, and from where:
   bypassed (``--yolo`` in Flow, the long flag here), Gemini with ``--yolo``
   and ``-p``, Cursor's agent with ``--force`` and ``-p``; the prompt as the
   command's last argument (Flow: ``"$(cat /tmp/.aixle-prompt)"``; here the
-  task's prompt shell-quoted, as ``console_assistants`` quotes it);
+  task's prompt shell-quoted);
 - the quota messages each CLI prints when its provider stops it, from Flow's
   ``app/services/quota_error_detector.rb`` (``console_clis.QUOTA_PATTERNS``), feeding the
-  per-company cooldown ``console_assistants`` keeps in ``AssistantRuntimeState``;
+  per-company cooldown ``cli_cooldowns`` keeps in ``AssistantRuntimeState``;
 - the isolation: Flow runs each session in a container with ``/workspace``
   and bounded memory, CPU and processes; here the CLI runs in the task's Git
   worktree through ``workspace.execute`` with the company's sandbox
@@ -56,7 +56,7 @@ from config import settings
 from logging_config import setup_logger
 
 from services.platform.glassroom import publish_glassroom
-from services.producers import console_assistants, console_clis
+from services.producers import cli_cooldowns, console_clis
 from services.producers.console_clis import (  # noqa: F401 - re-exported.
     CLIS,
     check_console_run,
@@ -173,21 +173,20 @@ def start_cooldown(
     company_id: int, cli: str, result: dict[str, Any], output: str
 ) -> str | None:
     """The cooldown a quota stop or a missing binary starts, by kind (an
-    ``AssistantRuntimeState`` row under ``console_clis.cooldown_key``, apart
-    from the host adviser's)."""
+    ``AssistantRuntimeState`` row under ``console_clis.cooldown_key``)."""
     if console_clis.quota_hit(cli, output):
-        minutes, kind = console_assistants.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES, "quota"
-        reset = console_assistants.parse_claude_reset_time(output)
+        minutes, kind = cli_cooldowns.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES, "quota"
+        reset = cli_cooldowns.parse_claude_reset_time(output)
     elif console_clis.missing_binary(result):
         minutes, kind = (
-            console_assistants.ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES,
+            cli_cooldowns.ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES,
             "missing",
         )
         reset = None
     else:
         return None
     deadline = reset or datetime.now(UTC) + timedelta(minutes=max(1, minutes))
-    console_assistants.set_runtime_state(
+    cli_cooldowns.set_runtime_state(
         company_id,
         console_clis.cooldown_key(cli),
         cooldown_until=deadline,
@@ -328,7 +327,7 @@ async def _where(
 
     label, company_id = CLIS[cli]["label"], sprint["company_id"]
     deadline = await asyncio.to_thread(
-        console_assistants.cooldown_until, company_id, console_clis.cooldown_key(cli)
+        cli_cooldowns.cooldown_until, company_id, console_clis.cooldown_key(cli)
     )
     spec = await asyncio.to_thread(
         git_workflow.delivery_spec, host.engine(), sprint, item

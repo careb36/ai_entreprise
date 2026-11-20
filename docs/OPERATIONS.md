@@ -209,7 +209,9 @@ again.
 4. `docker compose up -d`. The backend's entrypoint migrates to head. With
    several replicas, start one first and the others once it is up: Alembic
    takes no lock of its own.
-5. Check `GET /health/deep` and the Glassroom of a running sprint.
+5. Check `GET /health/deep` and the Glassroom of a running sprint, and the
+   backend's startup log for a setting that no longer does anything
+   (`is set but no longer does anything`); remove it from `.env`.
 
 To roll back: stop everything, run `scripts/backup.sh restore <file> --yes`
 (it replaces the whole database, below), check out the previous release,
@@ -1061,6 +1063,31 @@ admin bypass, deliberately, or approved by another owner. The pull request
 that adds the check fails it by design (the base has no copy of the script
 yet, and the head's is never run).
 
+## Third-party CLIs on the daemon's computer
+
+The only way a terminal CLI (Claude Code, Codex, Gemini CLI, Cursor) works
+on a company's tasks is a console producer a Manager named for a role on
+the Models page (`PUT /v1/companies/{id}/console_producers`; issue #750 and
+SECURITY.md §7.4). Nothing turns one on by detection or by default.
+
+- **Check that none runs:** `GET /v1/companies/{id}/console_producers`
+  answers `{"producers": {}}` for a company that never chose one; the
+  Glassroom shows a `producer.console` event for every console run.
+- **The console assistants are gone** (issue #750): before, the backend asked
+  any Copilot CLI or Claude CLI it found on the daemon's computer for advice
+  on a task, on by default, under the account signed in there. Their
+  settings (`CONSOLE_ASSISTANTS_ENABLED`, `CONSOLE_ASSISTANT_*`,
+  `COPILOT_CLI_COMMAND_TEMPLATE` and the `CLAUDE_CLI_*` ones except
+  `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES`) do nothing now; the backend starts
+  with them and logs `<NAME> is set but no longer does anything` once per
+  name at startup. Remove them from `.env`. No migration: rows the
+  assistants left in `assistant_runtime_state` (keys `claude`, `copilot`) are
+  no longer read, and board notes they wrote stay as history.
+- **Where the second opinion comes from now:** the Architect's consultation
+  (`ARCHITECT_CONSULT_ENABLED`, on by default), on the Architect's model
+  (DeepSeek Pro unless the company or `AGENT_MODEL_ARCHITECT` chose
+  another). A company without an Architect agent gets no brief.
+
 ## Forge policy
 
 A company's git contacts an outside forge only as its forge policy allows
@@ -1364,9 +1391,8 @@ What makes several replicas safe (`backend/app/services/loop/replicas.py`,
 - **The Support and Reviewer agents' cycles** run under their own locks.
 - **The outbox** takes its rows with `FOR UPDATE SKIP LOCKED` and publishes
   with `outbox-<id>` as the message id.
-- **Assistant cooldowns** are stored in `assistant_runtime_state`. The
-  daemon capability probe and the Glassroom buffer are per replica and need
-  nothing shared.
+- **Console producers' cooldowns** are stored in `assistant_runtime_state`.
+  The Glassroom buffer is per replica and needs nothing shared.
 
 A replica holds one more Postgres connection while it works on a task, and
 one for each cycle it leads. Size `max_connections` for about

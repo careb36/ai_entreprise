@@ -10,11 +10,8 @@
 #      is too short for the text checks, is sent back twice and then blocked
 #      for a person; the sprint closes anyway, with its retrospective, and the
 #      ScrumMaster's proposal is adopted (autonomy level 3).
-#      Every task is advised by a fake Copilot CLI (e2e-copilot) on the
-#      daemon's PATH; the advice reaches the agents' prompts and the sprint
-#      list counts the tasks as advised. With E2E_SANDBOX=container the
-#      assistants go to the company's sandbox, whose network is off, so they
-#      are skipped with the reason and no task is advised (issue #525).
+#      No external CLI advises any task: the console assistants were
+#      removed (issue #750); the second opinion is the Architect's brief.
 #   2. The blocked task is listed in the inbox.
 #   3. An Architect joins the team (after the foundation sprint, so that one
 #      stays as planned). start_sprint with carry_over_ids gives the blocked
@@ -192,20 +189,14 @@ conn.close()
 EOF
 
 rm -f "$PROMPTS" "$CONNECTIONS"
-# A console assistant the daemon can run, under its own name so a real
-# Copilot or Claude CLI on this machine is never asked.
-ADVICE="Fake Copilot advice: keep each module beside its test."
-mkdir -p "$WORK/bin"
-printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
-chmod +x "$WORK/bin/e2e-copilot"
 FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS \
   FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 mkdir -p "$WORK/no-browsers"
-env $DAEMON_NATS_ENV PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot PLAYWRIGHT_BROWSERS_PATH="$WORK/no-browsers" \
+env $DAEMON_NATS_ENV PLAYWRIGHT_BROWSERS_PATH="$WORK/no-browsers" \
   NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" FABRIQUE_HEARTBEAT_SECONDS=2 "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
 trap cleanup EXIT
-# The backend asks the daemon once, at startup, which assistants it can run.
+# The daemon is up before the backend starts.
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
 grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }
 # The schema through the migrations, and the models and the migrations must
@@ -220,7 +211,6 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
     NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
-    CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_APP_CHECK_ENABLED=true \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
@@ -266,7 +256,6 @@ retry_decisions() { api "$API/v1/messages?company_id=$CID&kind=decision" | json 
 active_procedures() { api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')"; }
 procedure_result() { api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == '$1'), '')"; }
 prompt_seen() { if [ "$(grep -c "$1" "$PROMPTS")" -ge 1 ]; then echo yes; else echo no; fi; }
-advice_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['unadvised']['total']) for s in d if s['id'] == $1 for a in [s['console_advice']])"; }
 brief_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['advised']['rework']) for s in d if s['id'] == $1 for a in [s['architect_advice']])"; }
 
 echo "1. init_company → foundation sprint"
@@ -300,16 +289,8 @@ check "the sprint starts with two tasks" test "$(echo "$NEW" | json "len(d.get('
 check "Sprint 1 closes" wait_sprint "$S1"
 echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
-if [ "$SANDBOX" = "container" ]; then
-  # The assistants run in the company's sandbox (issue #525): network off, so
-  # they are not consulted, with the reason, and the tasks go on unadvised.
-  check "no console assistant ran outside the company's sandbox" test "$(advice_counts "$S1")" = "(0, 0, 2)"
-  check "the skip says why" grep -q "Console assistants not consulted for item=.*DELIVERY_SANDBOX_NETWORK" "$WORK/backend.log"
-  check "and no advice reached a prompt" test "$(grep -c "$ADVICE" "$PROMPTS")" = 0
-else
-  check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
-  check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
-fi
+# The console assistants were removed (issue #750): no prompt carries a CLI's notes.
+check "no external CLI's notes reached a prompt" test "$(grep -c 'External Console Assistant Notes' "$PROMPTS")" = 0
 check "the factory's standards bind the Developer before the task, and QA's review" test "$(prompt_seen "## Quality standards.*STD-SEC-1 No secret in the repository, ever \[checked\].*## Task: Add parser")" = yes -a "$(prompt_seen "reviewing the following deliverable for the task: 'Add parser'.*## Quality standards.*STD-QA-2 Review against the criteria")" = yes
 check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
 check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes

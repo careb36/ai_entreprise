@@ -335,9 +335,10 @@ ran: never the host. Without a floor nothing changes: the host, and **no
 before this change reads the same replies. The report appears whenever the
 command left the host, because then the evidence must say where it ran.
 `sandbox.purpose` takes `test`, `install`, `check` or `assistant` (a console
-assistant's consultation, sent by `services/producers/console_assistants.py`
-with the company's sandbox, its network setting and the names in
-`sandbox_env` and `console_env`); anything else reads as `test`, so an older
+assistant's consultation, sent by backends before issue #750 with the
+company's sandbox, its network setting and the names in `sandbox_env` and
+`console_env`; the backend no longer sends it, and the daemon keeps
+accepting it for older backends); anything else reads as `test`, so an older
 daemon treats `assistant` as `test`. Both are additive: protocol version 1.
 The application check (`workspace.app.check`) already normalized a missing
 `sandbox` the same way.

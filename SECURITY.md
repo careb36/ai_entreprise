@@ -665,6 +665,39 @@ capability, forbid privilege escalation and run as the host user (§8.3).
 - Constrain Cypher queries. Use parameterized queries and avoid string concatenation.
 - For graph data containing relationships between entities, consider row-level security via custom procedures or separate databases per tenant.
 
+### 7.4 Third-party processors
+
+A provider that receives a company's code, tasks or repository context
+processes it for that company: GDPR art. 28 (a processor acts on the
+controller's documented instructions) and, for a provider outside the EEA,
+art. 44 (transfers); ISO/IEC 27001:2022 A.5.19 to A.5.23 (supplier
+relationships and cloud services are chosen, agreed and recorded); NIST SP
+800-53 AC-20 (use of an external system is authorised explicitly). The rule
+here is the strictest of these, with data protection by default (GDPR
+art. 25): **no provider receives a company's context unless a person chose
+it for that company, and the choice is recorded.** Nothing is sent because
+a tool happens to be installed.
+
+Who may receive a company's context, and how each is chosen:
+
+| Recipient | What it receives | How it is chosen |
+|---|---|---|
+| The model providers behind the LLM proxy (DeepSeek by default; Gemini, Qwen, Nebius when their keys are set) | The prompts of the company's agents | The deployment's keys and the company's model choices (`docs/CONFIGURATION.md`, the Models page), audited |
+| A console producer's CLI provider (Anthropic, OpenAI, Google, Cursor) | The task's prompt and worktree, inside the company's sandbox | A Manager names the CLI for a role (`PUT /v1/companies/{id}/console_producers`); never on by default or by detection; the provider's key is listed by name in `console_env` |
+| A forge (GitHub, GitLab, Bitbucket) | Branches and pull requests | The company's forge policy, set by an Owner (`forge_policy`, audited) |
+| An MCP server | What a tool call sends | The operator's allowlist and a Manager's registration (§8.7) |
+
+**Removed, issue #750: the console assistants.** Until then the task worker
+asked any Copilot CLI or Claude CLI the daemon found on the host for advice
+on a task, on by default (`CONSOLE_ASSISTANTS_ENABLED=true`): the CLI ran
+under the account signed in on that computer, billed to it, and received the
+task and the repository's context, with no decision recorded anywhere. That
+broke the rule above twice: on by default, and chosen by detection. It was
+removed rather than put behind a setting because the team already gives the
+second opinion on its own models (the Architect's consultation), so the
+third party added a processor and a cost for advice the product already
+had. Its settings are ignored if still set, and named once at startup.
+
 ---
 
 ## 8. LLM and Agent Security
@@ -752,24 +785,14 @@ Requests that carry a `sandbox`: the delivery test run
 (`services/tools/developer_tools.py`), the lint after an edit
 (`services/tools/edit_lint.py`), the dependency install
 (`services/workspace/dependency_install.py`), a console producer's run
-(`services/producers/console_producer.py`), a console assistant's
-consultation and the application check (`vscode-daemon/app_run.py`).
+(`services/producers/console_producer.py`) and the application check
+(`vscode-daemon/app_run.py`).
 
-**Console assistants** (`services/producers/console_assistants.py`,
-`assistant_sandbox.py`; issue #525) send the company's sandbox with purpose
-`assistant`: its mode, the network as `DELIVERY_SANDBOX_NETWORK` sets it (off
-by default), no dependency cache, and only the variable *names* in the
-company's `sandbox_env` and `console_env` (the provider's key is listed in
-`console_env`; its value stays on the daemon's machine). In a `container` or
-`bwrap` sandbox with the network off the assistant is not asked; when the
-daemon's reply shows its sandbox stopped the CLI (the floor's runtime
-missing, the CLI not in the image, no network to the provider) the
-consultation is skipped and cools down. Either way the Glassroom says why
-(`skipped_sandbox`, with the daemon's sandbox report), and the task goes on:
-the advice is optional and never evidence. A company on `host` with a daemon
-without a floor runs them on the host, as before. No command policy is sent
-for this path: the backend has none for it (the console producer's allow
-list names a producer CLI's own argv, not an assistant's template).
+**Console assistants: removed** (issue #750). They asked a terminal CLI on
+the daemon's machine for advice on a task, under the person's own account;
+§7.4 says why they were removed rather than kept behind a setting. The
+daemon still accepts the sandbox purpose `assistant` from an older backend;
+this backend never sends it.
 
 **Which image ran, and the dependency cache** (issue #315,
 `docs/design/EXECUTION_ENVIRONMENT.md`; the cache and its quarantine are
@@ -849,12 +872,6 @@ agent-written, which is what the sandbox is for.
   producer's, which allows only that CLI's own command
   (`services/producers/console_clis.py`, `command_policy`). Without a policy
   and without `FABRIQUE_COMMAND_DENY`, every command runs.
-- A console assistant's sandbox mounts the project folder (the person's
-  checkout, not a task worktree) read-write, as every sandboxed run mounts its
-  folder; on the host it had the whole machine, so this is narrower, but the
-  advice needs only a read-only mount. With the network on and the provider's
-  key in its environment, a prompt-injected assistant can reach any host the
-  sandbox allows.
 - The sandbox's network is on or off; there is no egress allowlist.
 - The dependency cache is writable by every run of a project, so one run can
   leave something for the next; that is why it is off by default and removed
