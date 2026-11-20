@@ -1,0 +1,190 @@
+{
+  "account": {
+    "git_user_name": "openhands",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "c088c4a92a777a15ed280652d0c1e42a8df38915",
+    "name": "feat/tests-on"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "f5d5192ec3d7ee1bb922fbccdaf41cefb9c1128c",
+  "duration_seconds": 441.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-20T19:45:55Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-43-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/f5d5192ec3d7ee1bb922fbccdaf41cefb9c1128c.20261120T193834Z.log",
+    "sha256": "e1f83cda4831194d56353abed085345e37f3b8e0b62cf6d9f68c91655e5bddd6"
+  },
+  "main_before": "4411ee21176cf9d469338d6b928344f931915ccb",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "4411ee21176cf9d469338d6b928344f931915ccb",
+    "c088c4a92a777a15ed280652d0c1e42a8df38915"
+  ],
+  "protected_paths": [
+    {
+      "path": ".github/CODEOWNERS",
+      "pattern": ".github/CODEOWNERS"
+    },
+    {
+      "path": "backend/app/services/evidence/protected_list.json",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/required_checks.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/verification.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/tests/test_agent_tools_delivery.py",
+      "pattern": "backend/tests/test_agent_tools_delivery.py"
+    },
+    {
+      "path": "backend/tests/test_app_check.py",
+      "pattern": "backend/tests/test_app_check.py"
+    },
+    {
+      "path": "backend/tests/test_browser_image.py",
+      "pattern": "backend/tests/test_browser_image.py"
+    },
+    {
+      "path": "backend/tests/test_delivery_tests.py",
+      "pattern": "backend/tests/test_delivery_tests.py"
+    },
+    {
+      "path": "backend/tests/test_grounding_signature_check.py",
+      "pattern": "backend/tests/test_grounding_signature_check.py"
+    },
+    {
+      "path": "backend/tests/test_required_checks.py",
+      "pattern": "backend/tests/test_required_checks.py"
+    },
+    {
+      "path": "backend/tests/test_roles.py",
+      "pattern": "backend/tests/test_roles.py"
+    },
+    {
+      "path": "backend/tests/test_task_delivery.py",
+      "pattern": "backend/tests/test_task_delivery.py"
+    },
+    {
+      "path": "bench/verifier/cases.py",
+      "pattern": "bench/**"
+    },
+    {
+      "path": "docs/architecture/contexts.json",
+      "pattern": "docs/architecture/contexts.json"
+    },
+    {
+      "path": "vscode-daemon/sandbox.py",
+      "pattern": "vscode-daemon/sandbox.py"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "93070dbc8936662fa1456d9d71970b615338553c",
+  "started_at": "2026-11-20T19:38:34Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 327.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 19.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 4.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 62.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 21.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "aa758a1af8e82214a0dcebd04e3b685bb8fe6ad4"
+}
