@@ -510,11 +510,25 @@ Copy `.env.example` to `.env` and fill in:
   (`vscode-daemon/daemon.py`). The CLIs the daemon reports on
   `workspace.capabilities`, kept for older backends: since the console
   assistants were removed (issue #750) the backend never asks.
-- `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
+- `DELIVERY_TESTS_ENABLED` — optional, default `true` (issue #766; it was
+  `false`, and no code delivery could then be verified: a company runs with it
+  off only under an Owner's `tests_off` acknowledgement). After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
-  `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
-  sends the task back for rework. The backend waits `DELIVERY_TEST_TIMEOUT_SECONDS`
-  (default `130`; the daemon stops a command after 120 s) for the run's answer.
+  `npm test` / `pytest`, or each folder's suite in a repository whose root has
+  none) and the exit status is recorded as evidence; a failing run sends the
+  task back for rework, and the folders' suites count as the delivery's test
+  observation. The Developer's `workspace__run_tests` is offered with the same
+  commands, a `folder` parameter in such a repository, and installs a folder
+  before its first run in an isolated sandbox. `DELIVERY_TEST_RUN_SECONDS`
+  (default `600`, at most `900`, the daemon's ceiling) is how long one test
+  run, folder suite or `run_tests` call may go on; the backend waits
+  the larger of `DELIVERY_TEST_TIMEOUT_SECONDS` (default `130`) and that plus
+  30 s for the answer. In a container the daemon sets
+  `PYTEST_XDIST_AUTO_NUM_WORKERS` to the CPU limit, so `-n auto` does not start
+  a worker per host core. In container or bwrap mode, a folder (or the root)
+  never installed under the worktree is installed before its first suite,
+  whatever the delivery wrote (the company's `dependency_installs` keep a
+  `<folder>/` or `./` mark per worktree and mode).
   It executes agent-written code on the daemon's machine,
   where `DELIVERY_SANDBOX` says: `container` (the default since issue #766:
   an ephemeral container per run, worktree mounted, network off unless
@@ -560,7 +574,9 @@ Copy `.env.example` to `.env` and fill in:
   cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
   `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
   quarantine. The application check's container mounts the same cache.
-  `DELIVERY_SANDBOX_ENV` (default `false`) adds an **environment volume** in
+  `DELIVERY_SANDBOX_ENV` (default `true` since issue #766: a Poetry project's
+  virtualenv lives there, so without it the tests find nothing the install
+  installed) adds an **environment volume** in
   container mode (#315): what an install leaves outside the worktree (pip's
   user installation through `PYTHONUSERBASE`, Poetry's and Pipenv's
   virtualenvs, Go's `GOPATH`, module and build caches) kept at

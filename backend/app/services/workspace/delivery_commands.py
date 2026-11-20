@@ -121,9 +121,11 @@ async def run_tests(ctx: Context, command: str) -> str | None:
                 "sprint_id": ctx.sprint["id"],
                 # Agent-written code: run as the company's sandbox says.
                 "sandbox": box,
+                # A real suite takes minutes; the daemon's default is 120 s.
+                "timeout_seconds": sandbox.test_seconds(),
                 **run_logs.request_field(full_log),
             },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            timeout=sandbox.test_wait()
             + (FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0),
         )
     except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.

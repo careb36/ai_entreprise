@@ -279,6 +279,8 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
     assert nats.subjects == [
         "workspace.generate",
         "workspace.sandbox.image",
+        # Looked at for a first install in the container (issue #766).
+        "workspace.inspect",
         "workspace.execute",
     ]
     assert checks["tests_run"]["outcome"] == "pass"

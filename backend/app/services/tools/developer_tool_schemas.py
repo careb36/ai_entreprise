@@ -139,6 +139,43 @@ SCHEMAS: list[dict[str, Any]] = [
     },
 ]
 
+
+def run_tests_schema(
+    schema: dict[str, Any], plans: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """*schema* as offered: ``run_tests`` gains ``folder`` when the project's
+    suites live in folders (``test_runs``, issue #766); any other unchanged."""
+    if not schema["function"]["name"].endswith(RUN_TESTS):
+        return schema
+    folders = sorted(name for name in plans if name)
+    if not folders:
+        return schema
+    root = "" in plans
+    function = dict(schema["function"])
+    function["description"] = (
+        f"{function['description']} The suites live in folders: "
+        + ", ".join(f"`{name}`" for name in folders)
+        + (
+            "; without `folder` the root's suite runs."
+            if root
+            else "; name one in `folder`."
+        )
+        + " The first run of a folder installs its dependencies first."
+    )
+    parameters = dict(function["parameters"])
+    properties = dict(parameters["properties"])
+    properties["folder"] = {
+        "type": "string",
+        "enum": folders,
+        "description": "The folder whose suite to run; `command` runs inside it.",
+    }
+    parameters["properties"] = properties
+    if not root:
+        parameters["required"] = ["folder"]
+    function["parameters"] = parameters
+    return {**schema, "function": function}
+
+
 # Offered only where an edit may touch the files: the task's worktree, or a
 # project without the Git workflow (``developer_tools.toolbox_for``).
 EDIT_SCHEMA: dict[str, Any] = {

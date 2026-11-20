@@ -62,6 +62,7 @@ from services.tools import (
     mcp_tools,
     repo_map,
     research_tools,
+    test_runs,
     workspace_edits,
 )
 from services.workspace import sandbox, stack_image
@@ -89,6 +90,10 @@ RUNNERS = (
     "go test",
     "cargo test",
 )
+
+# What may run a runner inside the project's environment: a narrower command
+# keeps the same one (``poetry run python -m pytest`` stays under Poetry).
+WRAPPERS = ("poetry run ", "pipenv run ", "uv run ")
 
 Requester = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
@@ -118,6 +123,7 @@ class WorkspaceToolbox:
         workspace_root: str,
         *,
         test_command: str | None = None,
+        folder_tests: dict[str, dict[str, str | None]] | None = None,
         result_max_chars: int | None = None,
         sandbox: dict[str, Any] | None = None,
         sandbox_error: str | None = None,
@@ -127,6 +133,12 @@ class WorkspaceToolbox:
         self.requester = requester
         self.workspace_root = workspace_root
         self.test_command = test_command
+        # Each folder's (and the root's, under "") test and install commands
+        # (``test_runs.detect``); the folders installed so far in this toolbox.
+        self.folder_tests = dict(folder_tests or {})
+        if test_command and test_runs.ROOT not in self.folder_tests:
+            self.folder_tests[test_runs.ROOT] = {"test": test_command, "install": None}
+        self.installed: set[str] = set()
         # Where its test runs execute (services/sandbox.py): agent code.
         self.sandbox = sandbox
         # The company's sandbox could not be read: its test runs are refused.
@@ -155,9 +167,9 @@ class WorkspaceToolbox:
 
     def schemas(self) -> list[dict[str, Any]]:
         schemas = [
-            s
+            developer_tool_schemas.run_tests_schema(s, self.folder_tests)
             for s in developer_tool_schemas.SCHEMAS
-            if self.test_command or not s["function"]["name"].endswith(RUN_TESTS)
+            if self.folder_tests or not s["function"]["name"].endswith(RUN_TESTS)
         ]
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
@@ -263,16 +275,30 @@ class WorkspaceToolbox:
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool == RUN_TESTS:
-            command = self._test_command(arguments.get("command"))
+            folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
+            command = self._test_command(arguments.get("command"), plan.get("test"))
             extra["command"] = command
+            extra["folder"] = folder
             if self.sandbox_error:
                 raise RuntimeError(f"tests not run: {self.sandbox_error}")
-            request: dict[str, Any] = {"workspace_root": root, "command": command}
+            if folder not in self.installed:
+                # An isolated sandbox starts with nothing installed (#766).
+                installed = test_runs.install_first(
+                    self.requester, root, self.sandbox, folder, plan.get("install")
+                )
+                extra["install"] = installed
+                failed = test_runs.install_failed(installed)
+                if failed:
+                    return failed
+                self.installed.add(folder)
+            request: dict[str, Any] = {
+                "workspace_root": root,
+                "command": test_runs.in_folder(command, folder),
+                "timeout_seconds": sandbox.test_seconds(),
+            }
             if self.sandbox is not None:
                 request["sandbox"] = self.sandbox
-            reply = self.requester(
-                "workspace.execute", request, settings.DELIVERY_TEST_TIMEOUT_SECONDS
-            )
+            reply = self.requester("workspace.execute", request, sandbox.test_wait())
             exit_code = reply.get("exit_code")
             extra["exit_code"] = exit_code
             if isinstance(reply.get("sandbox"), dict):
@@ -288,16 +314,19 @@ class WorkspaceToolbox:
             )
         raise RuntimeError("unknown tool")
 
-    def _test_command(self, requested: Any) -> str:
-        """The project's test command, or a narrower one on the same runner."""
-        base = str(self.test_command or "")
+    def _test_command(self, requested: Any, base: str | None = None) -> str:
+        """The folder's test command, or a narrower one on the same runner."""
+        base = str(base if base is not None else self.test_command or "")
         wanted = str(requested or "").strip()
         if not wanted:
             return base
-        runner = next((r for r in RUNNERS if _runs_with(base, r)), None)
+        wrapper = next((w for w in WRAPPERS if base.startswith(w)), "")
+        inner = base[len(wrapper) :]
+        runner = next((r for r in RUNNERS if _runs_with(inner, r)), None)
         if (
             runner
-            and _runs_with(wanted, runner)
+            and wanted.startswith(wrapper)
+            and _runs_with(wanted[len(wrapper) :], runner)
             and all(ch not in wanted for ch in ";&|`$><\n")
         ):
             return wanted
@@ -432,25 +461,18 @@ class DaemonReplyError(RuntimeError):
     """The daemon could not serve a tool call; the message is what the model sees."""
 
 
-def _detect_test_command(workspace_root: str) -> str | None:
-    """The project's test command, when the loop would run it after the delivery."""
-    if not settings.DELIVERY_TESTS_ENABLED:
-        return None
-    from services.workspace import workspace_daemon
-
-    loop = _bridge.get("loop")
-    if loop is None:
-        return None
+def _detect_tests(
+    company_id: int, workspace_root: str, engine: Any = None
+) -> tuple[str | None, dict[str, dict[str, str | None]]]:
+    """The root's test command and each folder's, when the loop would run
+    them after the delivery (``test_runs.detect``)."""
     try:
-        return asyncio.run_coroutine_threadsafe(
-            workspace_daemon.detect_project_test_command(
-                _bridge.get("nats"), workspace_root
-            ),
-            loop,
-        ).result(40)
+        return test_runs.detect(
+            _bridge.get("loop"), _bridge.get("nats"), company_id, workspace_root, engine
+        )
     except Exception as exc:  # noqa: BLE001 - Without a command the tool is not offered.
-        logger.warning("Could not detect the test command for the tools: %s", exc)
-        return None
+        logger.warning("Could not detect the test commands for the tools: %s", exc)
+        return None, {}
 
 
 def tool_root(
@@ -504,10 +526,12 @@ def toolbox_for(
             # The project's sandbox image before the first test run, which
             # would otherwise wait for its build (issue #766).
             stack_image.prepare_from_thread(_request_from_thread, root, box)
+            root_test, folder_tests = _detect_tests(company_id, root, engine)
             workspace = WorkspaceToolbox(
                 _request_from_thread,
                 root,
-                test_command=_detect_test_command(root),
+                test_command=root_test,
+                folder_tests=folder_tests,
                 sandbox=box,
                 sandbox_error=box_error,
                 can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),

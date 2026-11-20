@@ -64,6 +64,28 @@ def request_for(company: Any) -> dict[str, Any]:
     }
 
 
+# The daemon's own ceiling for one command (``vscode-daemon/shell_exec.py``).
+DAEMON_MAX_SECONDS = 900
+REPLY_MARGIN_SECONDS = 30.0
+
+
+def test_seconds() -> int:
+    """How long the daemon lets one test run go on (issue #766)."""
+    try:
+        seconds = int(settings.DELIVERY_TEST_RUN_SECONDS)
+    except (TypeError, ValueError):
+        seconds = 600
+    return min(max(seconds, 1), DAEMON_MAX_SECONDS)
+
+
+def test_wait() -> float:
+    """How long the backend waits for a test run's answer."""
+    return max(
+        float(settings.DELIVERY_TEST_TIMEOUT_SECONDS),
+        test_seconds() + REPLY_MARGIN_SECONDS,
+    )
+
+
 def scope_for(company_id: Any) -> str:
     """What keeps one company's environment volume apart from another's on
     the same folder; empty for the deployment's default."""

@@ -41,6 +41,7 @@ resets the cache. A ``workspace.execute`` without ``sandbox`` is normalized as
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -199,7 +200,13 @@ def container_command(
             args += ["--userns", "keep-id"]
         else:
             args += ["--user", f"{os.getuid()}:{os.getgid()}"]
-    for key, value in sandbox_env(box["env"]).items():
+    env = sandbox_env(box["env"])
+    # Tools that size themselves by the core count see the host's cores, not
+    # --cpus: pytest-xdist's ``-n auto`` started a worker per host core in a
+    # 2-CPU, 2 GB container and lost them (issue #766). Its own variable says
+    # how many the limit allows; a project's env may still set it.
+    env.setdefault("PYTEST_XDIST_AUTO_NUM_WORKERS", str(max(1, math.ceil(box["cpus"]))))
+    for key, value in env.items():
         args += ["-e", f"{key}={value}"]
     return [*args, *(extra or []), box["image"], "/bin/sh", "-c", command]
 

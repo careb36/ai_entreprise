@@ -1395,6 +1395,10 @@
       "test_stack_image.py": [
         "workspace"
       ],
+      "test_tests_on.py": [
+        "evidence",
+        "tools"
+      ],
       "test_stack_roots.py": [
         "evidence",
         "release"

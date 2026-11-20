@@ -1041,7 +1041,7 @@ def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
     monkeypatch.setattr(
         dependency_install,
         "_record_installed",
-        lambda _e, _c, _r, m: recorded.append(m),
+        lambda _e, _c, _r, m, *_marks: recorded.append(m),
     )
     profile = stack_profiles.resolve(
         {

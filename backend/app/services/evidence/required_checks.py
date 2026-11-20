@@ -16,7 +16,8 @@ the full list (the aggregation rule itself is unchanged).
 
 Policy ``v1``: a delivery that changes code (any path that is not
 documentation) requires an observation of tests: the platform's own run
-(``tests_run``) or an independent CI conclusion (``evidence["ci"]``). An
+(``tests_run``), the suites of the folders it wrote in when the root has
+none (``suites_ran``), or an independent CI conclusion (``evidence["ci"]``). An
 agent's report of its own test run is a claim and never satisfies it.
 
 Pure: no database, no I/O. ``policy`` returns what was required, so the
@@ -57,6 +58,22 @@ def _ci_observed(evidence: dict[str, Any]) -> bool:
     return isinstance(ci, dict) and bool(ci.get("conclusion"))
 
 
+def suites_ran(evidence: dict[str, Any] | None) -> bool:
+    """Whether the daemon ran a folder's suite for this delivery: in a
+    repository whose root has no suite of its own, the folders' suites are
+    its tests (``command_runs``, kind ``suite``; judged by
+    ``required_commands``). A suite that could not run has no exit status
+    and does not count."""
+    for record in (evidence or {}).get("command_runs") or []:
+        if (
+            isinstance(record, dict)
+            and record.get("kind") == "suite"
+            and (isinstance(record.get("exit_code"), int) or record.get("timed_out"))
+        ):
+            return True
+    return False
+
+
 def required(paths: list[str]) -> list[str]:
     """The checks a delivery that changes *paths* requires."""
     return [TESTS_RUN] if code_paths(paths) else []
@@ -73,6 +90,7 @@ def missing(
         TESTS_RUN in required(paths)
         and TESTS_RUN not in present
         and not _ci_observed(evidence)
+        and not suites_ran(evidence)
     ):
         code = code_paths(paths)
         shown = ", ".join(code[:SHOWN_PATHS]) + (

@@ -72,7 +72,7 @@ from config import settings
 # The tests never call models.dev: the catalogue stays on its snapshot.
 settings.MODELS_CATALOG_REFRESH_HOURS = 0
 import shared_sqlite
-from _preconditions import acknowledgements_out_of_the_way  # noqa: F401
+from _preconditions import *  # autouse fixtures (issue #766)
 from fastapi.testclient import TestClient
 from models.acknowledgement import CompanyAcknowledgement
 from models.agent_message import AgentMessage
