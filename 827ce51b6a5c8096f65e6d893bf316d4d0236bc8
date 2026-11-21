@@ -1,0 +1,134 @@
+{
+  "account": {
+    "git_user_name": "openhands",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "698d69fc3b09abb2205aa5ca731e7382c5e6d41c",
+    "name": "fix/compose-deepseek-qwen"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "827ce51b6a5c8096f65e6d893bf316d4d0236bc8",
+  "duration_seconds": 447.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-21T22:55:27Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-43-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/827ce51b6a5c8096f65e6d893bf316d4d0236bc8.20261121T224800Z.log",
+    "sha256": "9ec7a85a2814b58dfed8af3d3fe8eac84182070f0075bd76e277151ddd87214c"
+  },
+  "main_before": "fc059b62ec95ace6599f8f330ad8cec218820ad6",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": false,
+  "parents": [
+    "fc059b62ec95ace6599f8f330ad8cec218820ad6",
+    "698d69fc3b09abb2205aa5ca731e7382c5e6d41c"
+  ],
+  "protected_paths": [],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "93070dbc8936662fa1456d9d71970b615338553c",
+  "started_at": "2026-11-21T22:48:00Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 328.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 19.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 4.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 66.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 20.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "b16cff9477ea4bcbd039e01ba84e37839783eef7"
+}
