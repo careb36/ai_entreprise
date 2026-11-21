@@ -6,6 +6,8 @@
  * whether it was queued, whether its sprint was reopened, and why not when a
  * planned or paused sprint keeps it waiting. "Move to sprint…" carries a
  * blocked (or To do) task into another open sprint of the company, or a new one.
+ * "Edit task" changes a To do or blocked task's title or description, with a
+ * reason, recorded as the task's `edited` event (`services/loop/task_edit.py`).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type BacklogItem } from './api'
@@ -36,7 +38,22 @@ export interface CarryResult {
   reason: string | null
 }
 
+export interface TaskEditInput {
+  title?: string
+  description?: string
+  reason: string
+  send_back?: boolean
+}
+
+export type TaskEditResult = BoardMoveResult & { changed: string[]; event_id: number }
+
+/** The statuses in which a person may edit a task: no agent is using it. */
+export const EDITABLE_STATUSES = ['todo', 'blocked']
+export const REASON_MIN = 10
+
 export const boardMovesApi = {
+  editTask: (itemId: number, data: TaskEditInput) =>
+    api.put<TaskEditResult>(`/v1/backlog/${itemId}/content`, data),
   carryTargets: (itemId: number) =>
     api.get<{ sprints: CarryTarget[] }>(`/v1/backlog/${itemId}/carry_targets`),
   carryOver: (itemId: number, targetSprintId: number | null) =>
@@ -62,6 +79,18 @@ export function useCarryOver(sprintId: number, companyId: number | null) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(result.sprint_id) })
       queryClient.invalidateQueries({ queryKey: ['inbox'] })
       if (companyId !== null) queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprints(companyId) })
+    },
+  })
+}
+
+export function useEditTask(sprintId: number, itemId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: TaskEditInput) => boardMovesApi.editTask(itemId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
+      queryClient.invalidateQueries({ queryKey: ['task-events', itemId] })
+      queryClient.invalidateQueries({ queryKey: ['inbox'] })
     },
   })
 }

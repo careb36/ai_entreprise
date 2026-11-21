@@ -44,6 +44,7 @@ _ADVICE_KINDS = {
     "integration",
     "board_note",
     "board_note_rejected",
+    "edited",
     "relation",
     "effort_observed",
     "run_window_wait",

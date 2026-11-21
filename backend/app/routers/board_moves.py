@@ -10,6 +10,10 @@ Endpoints:
   sprint; 409 for an archived sprint, a task that is not blocked for a person,
   a task waiting on unfinished tasks, a task its sprint's acceptance tests
   check, a target that is not open, or a lock another request holds.
+- ``PUT  /v1/backlog/{id}/content``       — a person edits the task's title or
+  description, with a reason, while it is in To do or Blocked; recorded as
+  the task's ``edited`` event and audited; ``send_back`` also sends it back
+  to work (Manager; ``services/loop/task_edit.py``).
 
 Moving a card to To do (``PATCH /v1/backlog/{id}``, ``routers/sprint.py``)
 starts it; the rules are in the service.
@@ -19,9 +23,9 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from schemas import RequestModel
-from services.loop import board_moves
+from services.loop import board_moves, task_edit
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -31,6 +35,17 @@ class CarryRequest(RequestModel):
     model_config = ConfigDict(extra="forbid")
 
     target_sprint_id: int | None = None
+
+
+class EditRequest(RequestModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, max_length=task_edit.TITLE_MAX)
+    description: str | None = Field(default=None, max_length=task_edit.DESCRIPTION_MAX)
+    reason: str = Field(
+        min_length=task_edit.REASON_MIN, max_length=task_edit.REASON_MAX
+    )
+    send_back: bool = False
 
 
 def _task(
@@ -73,3 +88,38 @@ async def carry_task_over(
         session.rollback()
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     return {"original_id": item_id, **answer}
+
+
+@router.put("/backlog/{item_id}/content")
+async def edit_task_content(
+    item_id: int,
+    req: EditRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """A person's edit of the task's title or description (``task_edit``)."""
+    item, sprint = _task(session, item_id, user, "Manager")
+    try:
+        result = task_edit.edit(
+            session,
+            item,
+            sprint,
+            user,
+            title=req.title,
+            description=req.description,
+            reason=req.reason,
+            send_back=req.send_back,
+        )
+    except task_edit.EditRefused as exc:
+        session.rollback()
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    session.commit()
+    session.refresh(item)
+    return {
+        "id": item.id,
+        "title": item.title,
+        "description": item.description,
+        "status": item.status,
+        "comments": item.comments,
+        **result,
+    }

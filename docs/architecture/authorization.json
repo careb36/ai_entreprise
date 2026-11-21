@@ -1084,6 +1084,9 @@
     "PUT /v1/audit/anchors/settings": {
       "access": "Owner"
     },
+    "PUT /v1/backlog/{item_id}/content": {
+      "access": "Manager"
+    },
     "PUT /v1/companies/{company_id}/autonomy": {
       "access": "Manager"
     },

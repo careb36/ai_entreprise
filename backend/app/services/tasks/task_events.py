@@ -100,6 +100,7 @@ KINDS = frozenset(
         "run_window_wait",
         "run_window_release",
         "legacy",
+        "edited",
     }
 )
 SYSTEM = "system"

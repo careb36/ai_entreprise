@@ -548,6 +548,19 @@
     "nothingToDispatch": "No pending tasks to dispatch",
     "sprintActionFailed": "Could not complete the action: {{message}}"
   },
+  "taskEdit": {
+    "open": "Edit task",
+    "formLabel": "Edit the task",
+    "hint": "Change what the agents are asked to do. The change and your reason are recorded on the task's history.",
+    "title": "Title",
+    "description": "Description",
+    "reason": "Why (recorded)",
+    "reasonPlaceholder": "For example: narrowed to the SSO check after three failed attempts",
+    "sendBack": "Send it back to work with the new text (its rework budget starts again)",
+    "save": "Save",
+    "error": "The task was not edited: {{message}}",
+    "notEditable": "A task can be edited only in To do or Blocked."
+  },
   "taskDetails": {
     "lineageLabel": "Earlier and later attempts",
     "carriedFrom": "Another attempt at a task blocked in {{sprint}}:",
