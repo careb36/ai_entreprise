@@ -10,6 +10,7 @@ rewrote what the branch already held.
 from __future__ import annotations
 
 import pytest
+from config import settings
 from models import BacklogItem
 from services.loop.worker import qa_review, review_evidence, review_prompt
 from services.tasks import task_events, task_projection
@@ -82,12 +83,12 @@ def test_the_third_cause_s_request_ends_the_budget(db, monkeypatch):  # noqa: F8
 
 
 def test_max_reworks_is_read_and_the_old_name_still_works_for_a_release(monkeypatch):
-    monkeypatch.delenv("MAX_REWORKS", raising=False)
-    monkeypatch.delenv("AUTOPILOT_MAX_REWORK_CYCLES", raising=False)
+    monkeypatch.setattr(settings, "MAX_REWORKS", None)
+    monkeypatch.setattr(settings, "AUTOPILOT_MAX_REWORK_CYCLES", None)
     assert qa_review._max_reworks() == qa_review.DEFAULT_MAX_REWORKS == 3
-    monkeypatch.setenv("AUTOPILOT_MAX_REWORK_CYCLES", "5")
+    monkeypatch.setattr(settings, "AUTOPILOT_MAX_REWORK_CYCLES", 5)
     assert qa_review._max_reworks() == 5
-    monkeypatch.setenv("MAX_REWORKS", "2")
+    monkeypatch.setattr(settings, "MAX_REWORKS", 2)
     assert qa_review._max_reworks() == 2
 
 

@@ -511,6 +511,11 @@ class Settings(BaseSettings):
     DISPATCH_REQUEUE_COOLDOWN_SECONDS: int = 90
     # QA's "needs rework" sends the task back to the Developer on its own.
     AUTOPILOT_QA_REWORK_ENABLED: bool = True
+    # A task's one rework budget, every cause together (issue #766); a company
+    # may set its own within 0..10 (services/contracts/company_limits.py).
+    # Unset: AUTOPILOT_MAX_REWORK_CYCLES (its old name, deprecated), else 3.
+    MAX_REWORKS: int | None = None
+    AUTOPILOT_MAX_REWORK_CYCLES: int | None = None
     # A close's integration the daemon could not take is retried this often;
     # this many run at once per process (at least 1).
     INTEGRATION_RETRY_SECONDS: float = 60.0
@@ -530,6 +535,17 @@ class Settings(BaseSettings):
     WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES: int = 30
     WORKSPACE_EVIDENCE_LINES_PER_FILE: int = 80
     WORKSPACE_EVIDENCE_MAX_FILE_BYTES: int = 65536
+
+    @field_validator("MAX_REWORKS", "AUTOPILOT_MAX_REWORK_CYCLES", mode="before")
+    @classmethod
+    def _count_or_unset(cls, value: Any) -> Any:
+        """Not a whole number: unset, so the default applies (as with os.getenv)."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @field_validator(
         "LLM_UPSTREAM_TIMEOUT_SECONDS", "LLM_THINKING_RESERVE_TOKENS", mode="before"

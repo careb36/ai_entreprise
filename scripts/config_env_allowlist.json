@@ -29,10 +29,6 @@
       "reads": 1,
       "why": "PROMPT_BUDGET_<ROLE>, names built per role; becomes part of the model profile (phase B)"
     },
-    "services/loop/worker/qa_review.py": {
-      "reads": 3,
-      "why": "MAX_REWORKS and its old name AUTOPILOT_MAX_REWORK_CYCLES, which the tests set; a company setting with a ceiling (phase C)"
-    },
     "services/models/model_factory.py": {
       "reads": 6,
       "why": "AGENT_MODEL and AGENT_MODEL_<ROLE>, names built per role, and old model variables; the model profiles replace them (phase B)"

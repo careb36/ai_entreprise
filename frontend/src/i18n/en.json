@@ -3122,6 +3122,20 @@
     "urgentOn": "Urgent: the run window does not apply",
     "inboxTitle": "Waiting for the run window"
   },
+  "companyLimits": {
+    "title": "Limits on the agents' work",
+    "hint": "How much a task may spend. An empty field keeps the deployment's value, shown greyed; each value stays within the range the platform allows. Only an Owner changes these; each change is audited.",
+    "field": {
+      "tool_rounds": "Developer's tool rounds per call",
+      "result_max_chars": "Characters of a tool's result the model sees",
+      "max_output_tokens": "Cap on the Developer's answer (tokens, 0: none)",
+      "max_reworks": "Reworks per task before it goes to a person"
+    },
+    "range": "Deployment: {{deployment}} · allowed {{floor}}–{{ceiling}}",
+    "save": "Save limits",
+    "reset": "Use the deployment's values",
+    "ownerOnly": "Only an Owner can change these limits."
+  },
   "graphSkeleton": {
     "loadingTopology": "Loading graph topology (<400ms Doherty threshold)",
     "loadingVisualization": "Loading graph visualization...",

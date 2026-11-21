@@ -20,6 +20,7 @@
         "acknowledgements",
         "agent_service",
         "audit_anchors",
+        "company_limits_setting",
         "company_standards_setting",
         "egress",
         "engram_processor",
@@ -953,6 +954,9 @@
       ],
       "test_model_profile.py": [
         "models"
+      ],
+      "test_company_limits.py": [
+        "loop"
       ],
       "test_model_factory.py": [
         "models"

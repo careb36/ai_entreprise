@@ -39,6 +39,7 @@ from services.loop.worker import (
     wiki_section,
 )
 from services.models import edit_format, model_profile, model_routing
+from services.platform import company_limits_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -252,7 +253,18 @@ def _execute_task(
     # The requested model's edit format (#689), kept for the run's evidence.
     agent["edit_format"] = edit_format.format_for(model, settings.EDIT_FORMAT_BY_MODEL)
     # The model's profile and the limits it sets, with their sources (#766).
-    limits = agent["model_profile"] = model_profile.profile(model)
+    try:
+        with Session(engine) as session:
+            own: dict[str, Any] | None = company_limits_setting.stored(
+                session, company_id
+            )
+    except Exception as exc:  # noqa: BLE001 - As the routing: the deployment's limits.
+        logger.warning(
+            "Company limits unavailable for item=%s: %s", item.get("id"), exc
+        )
+        own = None
+    limits = agent["model_profile"] = model_profile.profile(model, own)
+    limits["company_limits_read"] = own is not None
     client.max_tokens = limits["max_output_tokens"] or None
 
     system_prompt = _developer_system_prompt(agent) + prompt.language_note(

@@ -314,6 +314,9 @@
     "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/limits": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/run_window": {
       "access": "Viewer"
     },
@@ -1131,6 +1134,12 @@
     },
     "PUT /v1/companies/{company_id}/research": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/limits": {
+      "access": "Owner",
+      "body": {
+        "limits": null
+      }
     },
     "PUT /v1/companies/{company_id}/run_window": {
       "access": "Owner",

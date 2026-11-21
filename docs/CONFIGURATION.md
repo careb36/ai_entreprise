@@ -516,7 +516,23 @@ Copy `.env.example` to `.env` and fill in:
   a person's send-back starts the count again. It replaces
   `AUTOPILOT_MAX_REWORK_CYCLES` (2 per cause, so up to 6 and more), which is
   still read, with a warning, when `MAX_REWORKS` is not set; it will be
-  removed in the next release.
+  removed in the next release. A value that is not a whole number keeps the
+  default. A company may set its own budget, from 0 to 10 (below).
+
+### A company's limits (issue #766)
+
+An Owner sets, on the Models page or with `PUT /v1/companies/{id}/limits`,
+the company's own values of four limits; each is optional, an empty one
+keeps the deployment's value, and each stays within a range the code holds
+(`services/contracts/company_limits.py`): the Developer's `tool_rounds`
+(1–50, the deployment's `DEVELOPER_TOOL_ROUNDS`), `result_max_chars`
+(500–100000, `MCP_RESULT_MAX_CHARS`), `max_output_tokens` (0–1048576 and
+never above the model's own output limit, `DEVELOPER_MAX_OUTPUT_TOKENS`) and
+the task's `max_reworks` (0–10, `MAX_REWORKS`). The company's value wins over
+`MODEL_PROFILES`; the run's evidence names `company` as its source. Each
+change is audited (`company_limits_changed`); a Manager, the Manager agent
+and an agent cannot change them. Stored in `companies.limits` (migration
+`0061`).
 - `DELIVERY_TESTS_ENABLED` — optional, default `true` (issue #766; it was
   `false`, and no code delivery could then be verified: a company runs with it
   off only under an Owner's `tests_off` acknowledgement). After an agent's files are
