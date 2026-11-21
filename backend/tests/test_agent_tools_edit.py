@@ -161,6 +161,24 @@ def test_an_edit_outside_the_project_into_vcs_data_or_a_secret_is_refused(
     assert out_of_range.value.status == 400 and "2 lines" in out_of_range.value.message
 
 
+def test_a_new_file_is_refused_with_how_to_create_it(project, daemon):
+    # Phase D's bench (issue #766): half the edits tried to create a file and
+    # the model retried; the refusal now says where a new file goes.
+    with pytest.raises(workspace_read.ReadError) as missing:
+        _edit(
+            daemon,
+            project,
+            path="tests/test_new.py",
+            start_line=1,
+            end_line=0,
+            new_text="X = 1",
+        )
+    assert missing.value.status == 404
+    assert "write a new file whole in your answer" in missing.value.message
+    assert "path=tests/test_new.py" in missing.value.message
+    assert not (project / "tests" / "test_new.py").exists()
+
+
 def test_finish_hands_back_the_final_texts_and_puts_the_originals_back(
     project, daemon, monkeypatch
 ):
