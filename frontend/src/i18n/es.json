@@ -548,6 +548,19 @@
     "nothingToDispatch": "No hay tareas pendientes para despachar",
     "sprintActionFailed": "No se pudo completar la acción: {{message}}"
   },
+  "taskEdit": {
+    "open": "Editar tarea",
+    "formLabel": "Editar la tarea",
+    "hint": "Cambia lo que se pide a los agentes. El cambio y tu motivo quedan registrados en la historia de la tarea.",
+    "title": "Título",
+    "description": "Descripción",
+    "reason": "Motivo (queda registrado)",
+    "reasonPlaceholder": "Por ejemplo: acotada al chequeo de SSO tras tres intentos fallidos",
+    "sendBack": "Devolverla al trabajo con el texto nuevo (su presupuesto de retrabajos empieza de nuevo)",
+    "save": "Guardar",
+    "error": "No se editó la tarea: {{message}}",
+    "notEditable": "Una tarea solo se puede editar en Por hacer o Bloqueada."
+  },
   "taskDetails": {
     "lineageLabel": "Intentos anterior y posterior",
     "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
@@ -3108,6 +3121,20 @@
     "urgentHint": "Un sprint urgente ignora la ventana de ejecución y empieza de inmediato. Queda auditado.",
     "urgentOn": "Urgente: la ventana de ejecución no se aplica",
     "inboxTitle": "Esperando la ventana de ejecución"
+  },
+  "companyLimits": {
+    "title": "Límites del trabajo de los agentes",
+    "hint": "Cuánto puede gastar una tarea. Un campo vacío mantiene el valor de la instalación, que se ve en gris; cada valor queda dentro del rango que permite la plataforma. Solo un Owner los cambia y cada cambio queda auditado.",
+    "field": {
+      "tool_rounds": "Rondas de herramientas del Developer por llamada",
+      "result_max_chars": "Caracteres del resultado de una herramienta que ve el modelo",
+      "max_output_tokens": "Tope de la respuesta del Developer (tokens, 0: sin tope)",
+      "max_reworks": "Retrabajos por tarea antes de pasar a una persona"
+    },
+    "range": "Instalación: {{deployment}} · permitido {{floor}}–{{ceiling}}",
+    "save": "Guardar límites",
+    "reset": "Usar los valores de la instalación",
+    "ownerOnly": "Solo un Owner puede cambiar estos límites."
   },
   "graphSkeleton": {
     "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",

@@ -93,9 +93,8 @@ from services.loop.worker.prompt import (  # noqa: F401 - re-exported
     _load_sprint_completed_tasks,
 )
 from services.loop.worker.qa_review import (  # noqa: F401 - re-exported
-    AUTOPILOT_MAX_REWORK_CYCLES,
     AUTOPILOT_QA_REWORK_ENABLED,
-    MAX_QA_REWORK_CYCLES,
+    MAX_REWORKS,
     _call_llm_for_review,
 )
 from services.loop.worker.quality_gate import (  # noqa: F401 - re-exported

@@ -56,6 +56,7 @@
     "backend/tests/test_mcp_tools.py",
     "backend/tests/test_protected_paths_guard.py",
     "backend/tests/test_protected_paths_review.py",
+    "backend/tests/test_required_checks.py",
     "backend/tests/test_review_changes.py",
     "backend/tests/test_risk_tier.py",
     "backend/tests/test_roles.py",
@@ -79,6 +80,7 @@
     "backend/tests/test_standards.py",
     "backend/tests/test_task_delivery.py",
     "backend/tests/test_task_view_filter.py",
+    "backend/tests/test_tests_on.py",
     "backend/tests/test_verification_checks.py",
     "backend/tests/test_wstg_plan.py"
   ]

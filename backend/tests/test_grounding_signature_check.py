@@ -9,6 +9,7 @@ a mismatch is a finding that leaves the verdict verified.
 
 from __future__ import annotations
 
+from _verdicts import assert_verified_but_for_tests
 from models.company import Company
 from services.evidence import grounding
 from services.evidence import signatures as symbol_check
@@ -230,7 +231,7 @@ def test_a_mismatch_is_a_finding_and_the_verdict_stays_verified(
         "takes at most 1 positional, 3 given"
     )
     assert "contradict a signature" in grounded["observation"]
-    assert response["verdict"] == "verified"
+    assert_verified_but_for_tests(response)
 
 
 def test_without_an_observation_the_check_says_so():

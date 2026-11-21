@@ -389,6 +389,11 @@ def test_the_run_evidence_carries_difficulty_and_routing_beside_the_served_model
     assert evidence["routing"]["chosen"] == "cheap-model"
     assert evidence["routing"]["source"] == "deployment"
     assert "served" not in json.dumps(evidence["routing"])
+    # The limits the backend applied, with their sources (#766).
+    profile = evidence["model_profile"]
+    assert profile["model"] == "cheap-model"
+    assert profile["sources"]["tool_rounds"] in {"setting", "override", "company"}
+    assert profile["company_limits_read"] is True
 
 
 # ---------------------------------------------------------------------------

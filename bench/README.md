@@ -132,7 +132,10 @@ answers are refused.
 fails unless every specification completes and every criterion passes: that
 is the circuit check. With a real proxy it exits 0 once the scorecard is
 written, and `compare.py` judges the numbers (`--rate`, `--rework`,
-`--tokens` set the thresholds).
+`--tokens` set the thresholds). When the two runs ran different
+specifications (one added or no longer run), the totals measure different
+work: they are shown, not judged, and the reported tokens are judged over
+the specifications both ran.
 
 Wall-clock is shown and not judged unless `--time` is passed: alone it
 judges a growth of more than 25% (0.25, the owner's wall-clock threshold
@@ -415,6 +418,21 @@ citations), so a fake run only checks that the counts flow; the real
 measure is the nightly real-model run (`BENCH_LLM_URL`) made twice, with the
 flag off and on, compared as above: lower `tokens_mean` with the same or
 lower `rework_per_task` is the result the issue asks for.
+
+## Where the agents' code runs
+
+`BENCH_SANDBOX` says where the agents' code and each delivery's tests run
+(the backend's `DELIVERY_SANDBOX`). With the fake it is `host` by default: its
+answers are the bench's own files, and the run records the company's
+`host_sandbox` acknowledgement, which starting a sprint on the host requires
+(issue #766). With a real proxy (`BENCH_LLM_URL`) it is `container` by
+default, so a real model's code never runs on this machine unisolated:
+`BENCH_SANDBOX_IMAGE` (`fabrique-e2e-sandbox:1`, Python and pytest as the
+e2e's, built when missing) with no network at run time. For real models,
+`BENCH_TIMEOUT=0` drops the wall-clock limit per sprint: a sprint ends when it
+closes or when the run passes `BENCH_TOKEN_BUDGET` (required then), so a slow
+model is measured rather than cut. The bench waits for
+`/health` to say `healthy`, or `degraded` only because the fake chose the host.
 
 ## The nightly real-model run
 

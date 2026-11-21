@@ -9,16 +9,16 @@ rework budget (``_rework_budget``), the verdict's events, messages and
 escalation (``_record_verdict``) and what it leads to on Glassroom and at the
 sprint's close (``_announce_verdict``). A review that fails is recorded for a
 retry, or pauses the sprint when the provider has no credit (``_review_failed``).
-The rework budget the delivery gate and the quality gate share
-(``AUTOPILOT_MAX_REWORK_CYCLES``) is defined here. Moved out of
+The task's one rework budget (``MAX_REWORKS``), which the delivery gate and
+the quality gate read here too, is defined here. Moved out of
 ``task_worker``, which still re-exports these names.
 """
 
 import asyncio
 import functools
-import os
 from typing import Any
 
+from config import settings
 from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
@@ -26,6 +26,7 @@ from models import AgentMessage, BacklogItem, Company, Sprint
 from nats_client import NATSClient
 from sqlmodel import Session
 
+from services.contracts import company_limits
 from services.contracts.manifest import parse_file_manifest
 from services.evidence import risk
 from services.loop import sprint_control
@@ -34,7 +35,7 @@ from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.worker import close, execute, messages, record, review_prompt
 from services.models import model_routing
-from services.platform import protected_paths_setting
+from services.platform import company_limits_setting, protected_paths_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW,
@@ -51,12 +52,47 @@ from services.tasks.board import (
 
 logger = setup_logger("fabrique-task-worker")
 
-MAX_QA_REWORK_CYCLES = 2
-AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
-    "AUTOPILOT_QA_REWORK_ENABLED", "true"
-).lower() in {"1", "true", "yes", "on"}
-AUTOPILOT_MAX_REWORK_CYCLES = int(
-    os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(MAX_QA_REWORK_CYCLES))
+AUTOPILOT_QA_REWORK_ENABLED = settings.AUTOPILOT_QA_REWORK_ENABLED
+DEFAULT_MAX_REWORKS = company_limits.DEFAULT_MAX_REWORKS
+
+
+def _max_reworks() -> int:
+    """One budget per task across every cause (issue #766): the quality
+    gate, the delivery gate and QA each counted their own two, and sprint 3's
+    task 18 was sent back nine times. The deployment's ``MAX_REWORKS``."""
+    if (
+        settings.MAX_REWORKS is None
+        and settings.AUTOPILOT_MAX_REWORK_CYCLES is not None
+    ):
+        logger.warning("AUTOPILOT_MAX_REWORK_CYCLES is deprecated; set MAX_REWORKS.")
+    return company_limits.deployment_rework_limit(
+        settings.MAX_REWORKS, settings.AUTOPILOT_MAX_REWORK_CYCLES
+    )
+
+
+MAX_REWORKS = _max_reworks()
+
+
+def rework_limit(session: Session, company_id: int | None) -> int:
+    """A task's rework budget: the company's ``max_reworks`` when it set one
+    (``services/platform/company_limits_setting.py``), else the deployment's."""
+    own = company_limits_setting.stored(session, company_id).get("max_reworks")
+    return MAX_REWORKS if own is None else own
+
+
+def rework_limit_of(company_id: int | None) -> int:
+    """``rework_limit`` in a session of its own (for a thread)."""
+    with Session(engine) as session:
+        return rework_limit(session, company_id)
+
+
+# What a rework asks for (issue #766): the earlier attempts are on the task
+# branch, so the agent changes what the problem needs instead of writing every
+# file again, which lost earlier work and grew each attempt.
+EDIT_INSTRUCTION = (
+    "Your earlier attempts are on the task branch: read what is there, change "
+    "only what this problem needs (with workspace__edit where it is offered), "
+    "and deliver only the files you change, each as a path= block."
 )
 
 
@@ -73,8 +109,10 @@ async def _qa_review(
 ) -> None:
     """QA reviews one delivery; a task QA leaves blocked joins ``quality_gate_blocked_ids``."""
     # Build review prompt
+    # The task branch as the daemon reads it: every attempt, not only this one.
+    branch = await review_prompt.task_branch(session, nats_client, item, sprint)
     prompt_text = review_prompt.build(
-        session, item, sprint, reviewer_dict, deliverable, qa_review_failures
+        session, item, sprint, reviewer_dict, deliverable, qa_review_failures, branch
     )
 
     try:
@@ -121,8 +159,9 @@ async def _qa_review(
         risk_hold, risk_check = await _person_hold(
             session, item, sprint, deliverable, needs_work
         )
+        limit = rework_limit(session, sprint.company_id)
         previous_reworks, autopilot_rework_allowed, review_status = _rework_budget(
-            task_record, reviewer_dict, needs_work, risk_hold
+            task_record, reviewer_dict, needs_work, risk_hold, limit
         )
         escalation = _record_verdict(
             session,
@@ -137,6 +176,7 @@ async def _qa_review(
             risk_hold=risk_hold,
             risk_check=risk_check,
             quality_gate_blocked_ids=quality_gate_blocked_ids,
+            limit=limit,
         )
         if escalation is not None:
             await asyncio.to_thread(
@@ -160,6 +200,7 @@ async def _qa_review(
             previous_reworks=previous_reworks,
             risk_hold=risk_hold,
             risk_check=risk_check,
+            limit=limit,
         )
 
     except Exception as e:  # noqa: BLE001 - Isolate review failures to the affected item.
@@ -210,14 +251,18 @@ async def _person_hold(
 
 
 def _rework_budget(
-    task_record: Any, reviewer_dict: dict[str, Any], needs_work: bool, risk_hold: bool
+    task_record: Any,
+    reviewer_dict: dict[str, Any],
+    needs_work: bool,
+    risk_hold: bool,
+    limit: int | None = None,
 ) -> tuple[int, Any, str]:
     """QA's earlier rework requests, whether another is allowed, and the status it leads to."""
-    previous_reworks = task_record.rework_requests_by(reviewer_dict["name"])
+    previous_reworks = task_record.reworks()
     autopilot_rework_allowed = (
         needs_work
         and AUTOPILOT_QA_REWORK_ENABLED
-        and previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+        and previous_reworks < (MAX_REWORKS if limit is None else limit)
     )
     if needs_work:
         review_status = "todo" if autopilot_rework_allowed else "blocked"
@@ -240,6 +285,7 @@ def _record_verdict(
     risk_hold: bool,
     risk_check: dict[str, Any] | None,
     quality_gate_blocked_ids: set[int],
+    limit: int | None = None,
 ) -> AgentMessage | None:
     """The verdict's events and messages, committed; the escalation to triage, if any."""
     # The verdict, then what it leads to: each an event and its comment.
@@ -259,7 +305,7 @@ def _record_verdict(
             item,
             "sent_back",
             "system",
-            text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
+            text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{MAX_REWORKS if limit is None else limit}).",
         )
     elif needs_work:
         task_events.record(
@@ -338,8 +384,10 @@ async def _announce_verdict(
     previous_reworks: int,
     risk_hold: bool,
     risk_check: dict[str, Any] | None,
+    limit: int | None = None,
 ) -> None:
     """The verdict on Glassroom; an approval, held or not, may close the sprint."""
+    cap = MAX_REWORKS if limit is None else limit
     if needs_work:
         if autopilot_rework_allowed:
             await publish_glassroom(
@@ -355,14 +403,14 @@ async def _announce_verdict(
                     "task_status": "todo",
                     "phase": "rework",
                     "rework_count": previous_reworks + 1,
-                    "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                    "rework_limit": cap,
                     "task": f"Reviewed: {item.title}",
-                    "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
+                    "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{cap}.",
                     "message_key": "glassroom.events.rework_scheduled",
                     "message_params": {
                         "task": item.title,
                         "attempt": previous_reworks + 1,
-                        "limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                        "limit": cap,
                     },
                     "preview": normalized_review[:200],
                 },
@@ -372,7 +420,7 @@ async def _announce_verdict(
                 item.id,
                 reviewer_dict["name"],
                 previous_reworks + 1,
-                AUTOPILOT_MAX_REWORK_CYCLES,
+                cap,
             )
         else:
             await publish_glassroom(
@@ -388,7 +436,7 @@ async def _announce_verdict(
                     "task_status": "blocked",
                     "phase": "qa_gate",
                     "rework_count": previous_reworks + 1,
-                    "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
+                    "rework_limit": cap,
                     "task": f"Reviewed: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
                     "message_key": "glassroom.events.rework_blocked",
@@ -404,7 +452,7 @@ async def _announce_verdict(
                 item.id,
                 reviewer_dict["name"],
                 previous_reworks + 1,
-                AUTOPILOT_MAX_REWORK_CYCLES,
+                cap,
             )
     elif risk_hold:
         await publish_glassroom(
@@ -518,7 +566,7 @@ def _call_llm_for_review(
     ``role=QA`` and ``result_type`` (APPROVED / NEEDS_WORK) so the QA rate KPI
     reads from the audit trail instead of its comment-scan fallback.
     """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
     # The verdict word is parsed: thinking off (services/models/thinking.py).
     client.structured = True

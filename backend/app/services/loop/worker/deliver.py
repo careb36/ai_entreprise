@@ -178,6 +178,27 @@ async def _observe_signatures(
         logger.warning("Signature lookups failed for a delivery: %s", e)
 
 
+TESTS_DISABLED = (
+    "tests are disabled for this deployment (DELIVERY_TESTS_ENABLED is off)"
+)
+FILES_UNCONFIRMED = "the files were not confirmed written, so the tests were not run"
+
+
+def _record_tests_not_run(evidence: dict[str, Any], written: str) -> None:
+    """Say why the tests did not run, instead of leaving nothing (issue #766).
+
+    Without a ``test_run`` the Verifier used to have nothing to check and the
+    missing run read as a pass; with this, ``tests_run`` is unverifiable with
+    the reason (``services/evidence/required_checks.py``).
+    """
+    if "test_run" in evidence:
+        return
+    reason = (
+        TESTS_DISABLED if not settings.DELIVERY_TESTS_ENABLED else FILES_UNCONFIRMED
+    )
+    evidence["test_run"] = {"command": None, "reason": reason}
+
+
 def _heartbeat_note() -> str:
     """What the backend observed of the daemon's heartbeat, when it explains a missing reply."""
     beat = daemon_liveness.liveness()
@@ -312,6 +333,8 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
             nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
         )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
+    else:
+        _record_tests_not_run(evidence, written)
 
     recorded = await asyncio.to_thread(record._reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
@@ -429,6 +452,8 @@ async def _deliver_artifacts(
                 nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
             await _run_delivery_tests(nats_client, sprint, evidence, engine)
+        else:
+            _record_tests_not_run(evidence, written)
 
     await _observe_dependencies(evidence, targets)
     await _observe_signatures(nats_client, evidence, targets)

@@ -275,7 +275,14 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
     )
 
     verification, checks = _verification(session, sprint["company_id"], item["id"])
-    assert nats.subjects == ["workspace.generate", "workspace.execute"]
+    # The project's sandbox image is asked for first (issue #766).
+    assert nats.subjects == [
+        "workspace.generate",
+        "workspace.sandbox.image",
+        # Looked at for a first install in the container (issue #766).
+        "workspace.inspect",
+        "workspace.execute",
+    ]
     assert checks["tests_run"]["outcome"] == "pass"
     assert checks["claimed_tests_evidenced"]["outcome"] == "pass"
     assert verification.verdict == "verified"
@@ -317,4 +324,7 @@ def test_disabled_by_default(project, monkeypatch):
 
     _verification_row, checks = _verification(session, sprint["company_id"], item["id"])
     assert nats.subjects == ["workspace.generate"]
-    assert "tests_run" not in checks
+    # Off by default, and said so: the run is unverifiable with the reason,
+    # never left out so that it reads as a pass (issue #766).
+    assert checks["tests_run"]["outcome"] == "unverifiable"
+    assert "tests are disabled" in checks["tests_run"]["observation"]

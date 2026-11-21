@@ -38,6 +38,7 @@ folder, as before.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any
 
@@ -52,6 +53,32 @@ logger = logging.getLogger(__name__)
 OUTPUT_TAIL_CHARS = 2000
 # What the backend adds to the daemon's own bounds before it stops waiting.
 REPLY_MARGIN_SECONDS = 30.0
+
+
+# The mark a successful install leaves for a folder (``<folder>/``) or the
+# root (``./``) beside its manifests' sha256: it was installed here once, in
+# this mode, by this command (its digest, ``command_digest``). A worktree a
+# task starts from has none, so its first delivery installs whatever its
+# manifests (issue #766: the tests otherwise found nothing installed); a
+# company that changes a folder's install command gets it run again, where
+# a bare "installed" mark kept the old install (self-hosting, llm-proxy's
+# requirements-dev.txt). A mark from before reads as another command.
+ROOT_MARK = "./"
+
+
+def command_digest(command: str | None) -> str:
+    """The first 16 hex of the install command's sha256."""
+    return "sha256:" + hashlib.sha256(str(command or "").encode()).hexdigest()[:16]
+
+
+def folder_mark(folder: str) -> str:
+    return f"{folder}/"
+
+
+def never_installed(installs: Any, key: str, mark: str, command: str | None) -> bool:
+    """Whether no install by *command* left *mark* under *key*."""
+    seen = ((installs or {}).get(key) or {}) if isinstance(installs, dict) else {}
+    return seen.get(mark) != command_digest(command)
 
 
 def install_key(root: str, mode: str | None) -> str:
@@ -107,7 +134,11 @@ def _command_record(command: str, reply: Any) -> dict[str, Any]:
 
 
 def _record_installed(
-    engine: Any, company_id: Any, key: str, manifests: list[dict[str, Any]]
+    engine: Any,
+    company_id: Any,
+    key: str,
+    manifests: list[dict[str, Any]],
+    marks: dict[str, str] | None = None,
 ) -> None:
     from database import engine as default_engine
     from models.company import Company
@@ -120,6 +151,7 @@ def _record_installed(
         installs = dict(company.dependency_installs or {})
         seen = dict(installs.get(key) or {})
         seen.update({m["path"]: m["sha256"] for m in manifests})
+        seen.update(marks or {})
         installs[key] = seen
         company.dependency_installs = installs
         session.add(company)
@@ -141,26 +173,51 @@ async def install_if_needed(ctx: Context) -> None:
     except sandbox.PolicyUnavailable as e:
         box, unavailable = None, str(e)
     mode = (box or {}).get("mode") or "host"
-    changed = changed_manifests(evidence, ctx.company().get("installs"), mode)
-    if not changed:
+    installs = ctx.company().get("installs")
+    key = install_key(evidence.get("workspace_root") or "", mode)
+    changed = changed_manifests(evidence, installs, mode)
+    # Only an isolated run starts from nothing; on the host the person's own
+    # environment is there, and installs follow the manifests as before.
+    isolated = mode != "host"
+    if not changed and not isolated:
         return
     folders = await ctx.folders()
     if folders:
-        # A folder's manifests are its own install's (``stack_roots``).
+        # A folder's manifests are its own install's (``stack_roots``); a
+        # folder whose suite runs and that was never installed here installs
+        # too, whatever the delivery wrote.
         own = [m for m in changed if stack_roots.folder_of(m["path"], folders)]
-        if own:
-            await _install_folders(ctx, folders, own, box, unavailable, mode)
-            changed = [m for m in changed if m not in own]
-            if not changed:
-                return
+        root_test, _reason = await ctx.test_command()
+        running, _why = stack_roots.selected(
+            folders, stack_roots.changed_paths(evidence), bool(root_test)
+        )
+        first = {
+            f["folder"]
+            for f in running
+            if isolated
+            and f.get("install")
+            and never_installed(installs, key, folder_mark(f["folder"]), f["install"])
+        }
+        if own or first:
+            await _install_folders(ctx, folders, own, box, unavailable, mode, first)
+        changed = [m for m in changed if m not in own]
     profile = await ctx.profile()
     command = profile.get("install")
+    root_first = (
+        isolated
+        and bool(command and profile.get("stack"))
+        and never_installed(installs, key, ROOT_MARK, command)
+    )
+    if not changed and not root_first:
+        return
     covered = [m for m in changed if stack_profiles.installed_by(profile, m["path"])]
     base: dict[str, Any] = {
         "manifests": covered if command else changed,
         "stack": profile.get("stack"),
         "source": (profile.get("source") or {}).get("install"),
     }
+    if root_first:
+        base["first_install"] = True
     if command and len(covered) < len(changed):
         # Changed, but not what this install installs: never recorded as installed.
         base["not_covered"] = [m for m in changed if m not in covered]
@@ -171,7 +228,7 @@ async def install_if_needed(ctx: Context) -> None:
             "reason": "no install command for this project's stack",
         }
         return
-    if not covered:
+    if not covered and not root_first:
         paths = ", ".join(m["path"] for m in changed)
         evidence["dependency_install"] = {
             **base,
@@ -231,6 +288,7 @@ async def install_if_needed(ctx: Context) -> None:
                     company_id,
                     install_key(evidence["workspace_root"], mode),
                     covered,
+                    {ROOT_MARK: command_digest(command)} if mode != "host" else {},
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install: %s", e)
@@ -243,8 +301,10 @@ async def _install_folders(
     box: dict[str, Any] | None,
     unavailable: str | None,
     mode: str,
+    first: set[str] | frozenset[str] = frozenset(),
 ) -> None:
-    """Each folder's install for the manifests the delivery changed in it."""
+    """Each folder's install for the manifests the delivery changed in it,
+    and for each folder in *first* (never installed here) whatever it wrote."""
     evidence = ctx.evidence
     if box is not None:
         box = {
@@ -256,12 +316,13 @@ async def _install_folders(
     for folder in folders:
         name = folder["folder"]
         mine = [m for m in changed if stack_roots.folder_of(m["path"], folders) == name]
-        if not mine:
+        initial = name in first
+        if not mine and not initial:
             continue
         command = folder.get("install")
         covered = [m for m in mine if stack_roots.installed_by(folder, m["path"])]
         base = {"kind": "install", "folder": name, "required": True}
-        if not command or not covered:
+        if not command or (not covered and not initial):
             paths = ", ".join(m["path"] for m in mine)
             reason = (
                 f"`{command}` in {name}/ does not install {paths}"
@@ -284,6 +345,8 @@ async def _install_folders(
             timeout_seconds=timeout,
         )
         record["manifests"] = covered
+        if initial:
+            record["first_install"] = True
         record["source"] = (folder.get("source") or {}).get("install")
         if box is not None:
             record["sandbox_mode"] = mode
@@ -297,6 +360,9 @@ async def _install_folders(
                     company_id,
                     install_key(evidence["workspace_root"], mode),
                     covered,
+                    {folder_mark(name): command_digest(command)}
+                    if mode != "host"
+                    else {},
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install in %s/: %s", name, e)

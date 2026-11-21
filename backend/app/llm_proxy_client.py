@@ -13,12 +13,12 @@ without catching exceptions for common failure paths.
 
 import asyncio
 import logging
-import os
 import time
 from typing import Any
 
 import httpx
 import requests
+from config import Settings, settings
 from opentelemetry import propagate
 
 logger = logging.getLogger("fabrique-backend")
@@ -40,7 +40,9 @@ def _json_body(response: Any) -> dict[str, Any] | None:
 # The proxy's upstream budget when ``LLM_UPSTREAM_TIMEOUT_SECONDS`` is unset
 # (``llm-proxy/timeouts.py`` holds the same default): long enough for a
 # DeepSeek call that reasons before it answers.
-DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 300.0
+DEFAULT_UPSTREAM_TIMEOUT_SECONDS: float = Settings.model_fields[
+    "LLM_UPSTREAM_TIMEOUT_SECONDS"
+].default
 # What the client waits beyond the proxy's budget: the proxy's own work and
 # the time to send its answer, timeout or not, back. A shorter wait gives up
 # on an answer the provider is still writing and has billed.
@@ -57,11 +59,11 @@ PROXY_UNREACHABLE = "proxy_unreachable"
 
 def upstream_timeout_seconds() -> float:
     """``LLM_UPSTREAM_TIMEOUT_SECONDS``, or the default when unset or not a positive number."""
+    value = settings.LLM_UPSTREAM_TIMEOUT_SECONDS
     try:
-        value = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", ""))
-    except ValueError:
+        return float(value) if float(value) > 0 else DEFAULT_UPSTREAM_TIMEOUT_SECONDS
+    except (TypeError, ValueError):
         return DEFAULT_UPSTREAM_TIMEOUT_SECONDS
-    return value if value > 0 else DEFAULT_UPSTREAM_TIMEOUT_SECONDS
 
 
 def read_timeout_seconds() -> float:
@@ -130,11 +132,11 @@ class LLMProxyClient:
 
     Args:
         base_url: Base URL of the LLM proxy service (default: ``http://localhost:5100``).
-                  Override via the ``LLM_PROXY_URL`` environment variable in production.
+                  Defaults to ``settings.LLM_PROXY_URL``.
     """
 
     def __init__(self, base_url: str | None = None):
-        self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+        self.base_url = base_url or settings.LLM_PROXY_URL
         self.timeout = read_timeout_seconds()
         # A cap on the answer for the calls whose form is fixed (a review, a
         # brief, a plan); ``None`` leaves the provider's own limit.
@@ -142,10 +144,10 @@ class LLMProxyClient:
         # Whether the answer is parsed (JSON, a verdict, a probe): such a call
         # runs with thinking off (``services/models/thinking.py``).
         self.structured = False
-        self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
+        self.max_retries = settings.LLM_PROXY_MAX_RETRIES
         # The company whose provider connections a ``conn:<id>:<model>`` may use.
         self.company_id: int | None = None
-        self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
+        self.retry_backoff_sec = settings.LLM_PROXY_RETRY_BACKOFF_SEC
 
     def _get_headers(
         self, role: str = "Developer", bu_id: int | None = None

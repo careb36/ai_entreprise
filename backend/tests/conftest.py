@@ -59,6 +59,10 @@ def pytest_configure(config):
     # xdist registers the mark itself; this keeps a run without it
     # (``-p no:xdist``) free of "unknown mark" warnings.
     config.addinivalue_line(
+        "markers",
+        "preconditions: run the real acknowledgement check before a sprint starts",
+    )
+    config.addinivalue_line(
         "markers", "xdist_group(name): run on the same xdist worker as the group"
     )
 
@@ -68,7 +72,9 @@ from config import settings
 # The tests never call models.dev: the catalogue stays on its snapshot.
 settings.MODELS_CATALOG_REFRESH_HOURS = 0
 import shared_sqlite
+from _preconditions import *  # autouse fixtures (issue #766)
 from fastapi.testclient import TestClient
+from models.acknowledgement import CompanyAcknowledgement
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.api_token import ApiToken
@@ -481,6 +487,7 @@ SQLModel.metadata.create_all(
         WstgReview.__table__,
         PersonStatement.__table__,
         CompanyStandardSet.__table__,
+        CompanyAcknowledgement.__table__,
         CompanyStandardException.__table__,
         PersonalNotification.__table__,
         NotificationPreference.__table__,

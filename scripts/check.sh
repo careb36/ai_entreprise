@@ -189,6 +189,7 @@ rule_checks() {
   run_step "backend dependency rule" python3 -I scripts/check_architecture.py
   run_step "frontend layer rule" python3 -I scripts/check_frontend_architecture.py
   run_step "file sizes" python3 -I scripts/check_file_sizes.py
+  run_step "configuration in one place" python3 -I scripts/check_config.py
   run_step "changelog fragments" python3 -I scripts/check_changelog.py
 }
 

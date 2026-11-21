@@ -235,6 +235,9 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
     if isinstance(reply.get("sandbox"), dict):
         # Where the daemon ran it (services/sandbox.py): its own report.
         test_run["sandbox"] = reply["sandbox"]
+    if isinstance(reply.get("duration_ms"), int):
+        # The daemon's clock around the command (issue #766).
+        test_run["duration_ms"] = reply["duration_ms"]
     if timed_out:
         test_run["timeout_seconds"] = reply.get("timeout_seconds")
         conclusion = "timed_out"

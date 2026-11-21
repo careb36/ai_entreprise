@@ -1,0 +1,65 @@
+{
+  "$comment": "Files under backend/app that still read the environment instead of a setting in config.py (scripts/check_config.py, issue #766). An entry may only shrink: lower it with --update.",
+  "files": {
+    "migrations.py": {
+      "reads": 2,
+      "why": "ALEMBIC_DATABASE_URL, the hand-off to Alembic's env.py, which runs outside the app"
+    },
+    "nats_auth.py": {
+      "reads": 6,
+      "why": "takes the environment as a parameter so the credentials checks can be tested; NATS credentials files"
+    },
+    "nats_client.py": {
+      "reads": 1,
+      "why": "NATS_NAMESPACE, which the tests set per run"
+    },
+    "routers/support.py": {
+      "reads": 1,
+      "why": "AUDIT_LOG_PATH, to become a setting with agent_service.py's"
+    },
+    "services/integrations/webhooks.py": {
+      "reads": 1,
+      "why": "WEBHOOK_ALLOW_PRIVATE_HOSTS, a security switch the tests set"
+    },
+    "services/loop/worker/deliver.py": {
+      "reads": 1,
+      "why": "AGENT_WORKSPACE_ROOT, to become one setting with collect_code.py's and integration.py's"
+    },
+    "services/loop/worker/prompt_budget.py": {
+      "reads": 1,
+      "why": "PROMPT_BUDGET_<ROLE>, names built per role; becomes part of the model profile (phase B)"
+    },
+    "services/models/model_factory.py": {
+      "reads": 6,
+      "why": "AGENT_MODEL and AGENT_MODEL_<ROLE>, names built per role, and old model variables; the model profiles replace them (phase B)"
+    },
+    "services/planning/project_docs/collect_code.py": {
+      "reads": 1,
+      "why": "AGENT_WORKSPACE_ROOT, to become one setting with deliver.py's and integration.py's"
+    },
+    "services/planning/project_docs/export_pdf.py": {
+      "reads": 4,
+      "why": "sets SOURCE_DATE_EPOCH for the PDF renderer and restores it: a write for a library, not a setting"
+    },
+    "services/platform/agent_service.py": {
+      "reads": 1,
+      "why": "AUDIT_LOG_PATH, which the tests set; to become a setting with support.py's"
+    },
+    "services/platform/service_accounts.py": {
+      "reads": 1,
+      "why": "takes the environment as a parameter so the service-account checks can be tested"
+    },
+    "services/producers/github_adapter.py": {
+      "reads": 1,
+      "why": "GITHUB_TOKEN read at call time before settings.GITHUB_TOKEN, so a token set after start-up is seen"
+    },
+    "services/release/integration.py": {
+      "reads": 1,
+      "why": "AGENT_WORKSPACE_ROOT, to become one setting with deliver.py's and collect_code.py's"
+    },
+    "services/workspace/sandbox_manager.py": {
+      "reads": 3,
+      "why": "SANDBOX_TIMEOUT_SECONDS, KUBERNETES_NAMESPACE and SANDBOX_IMAGE of the Kubernetes sandbox"
+    }
+  }
+}

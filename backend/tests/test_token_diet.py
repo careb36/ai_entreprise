@@ -8,11 +8,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
+from config import settings
 from services.learning import scrum_master
 from services.loop import answers
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import qa_review, task_run
 from services.management import reviewer_agent, support_agent
+from services.models import model_profile
 from services.planning import sprint_planner
 
 
@@ -46,7 +48,9 @@ def test_a_formless_review_is_asked_again_with_the_format_named():
 
 def test_the_short_answers_are_capped_and_the_deliverable_is_not():
     """A review is two or three sentences and a brief a few paragraphs; the
-    Developer's deliverable carries every file in full, so it has no cap."""
+    Developer's deliverable carries every file in full, so it has no cap
+    unless the operator sets one in the model's profile (issue #766), and by
+    default there is none."""
     assert 0 < answers.REVIEW_MAX_TOKENS <= 1024
     assert 0 < answers.BRIEF_MAX_TOKENS <= 2048
     assert 0 < scrum_master.ANSWER_MAX_TOKENS <= 2048
@@ -60,7 +64,10 @@ def test_the_short_answers_are_capped_and_the_deliverable_is_not():
         )
     ]
     assert "def _execute_task(" in execute
-    assert "max_tokens" not in execute
+    caps = [line.strip() for line in execute.splitlines() if "max_tokens" in line]
+    assert caps == ['client.max_tokens = limits["max_output_tokens"] or None']
+    assert settings.DEVELOPER_MAX_OUTPUT_TOKENS == 0
+    assert model_profile.profile("deepseek-v4-pro")["max_output_tokens"] == 0
 
 
 def test_every_wait_follows_the_proxy_s_budget():

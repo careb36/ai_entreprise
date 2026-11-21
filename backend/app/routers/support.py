@@ -32,6 +32,7 @@ from auth_policy import (
     require_company_role,
     require_support_admin,
 )
+from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -392,7 +393,7 @@ async def support_chat(req: SupportChatRequest):
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
-                f"{os.getenv('LLM_PROXY_URL', 'http://llm-proxy:5100')}/v1/chat/completions",
+                f"{settings.LLM_PROXY_URL}/v1/chat/completions",
                 json={
                     "model": default_model_for_role(SUPPORT_ROLE),
                     "messages": formatted_messages,

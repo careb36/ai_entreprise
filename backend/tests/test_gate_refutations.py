@@ -149,7 +149,7 @@ def test_the_block_at_the_rework_limit_is_counted_with_its_problem(db, monkeypat
     item_id = _item_refuted_by(db, "grounded")
     item = db.get(BacklogItem, item_id)
     history = []
-    for attempt in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES):
+    for attempt in range(qa_review.MAX_REWORKS):
         history.append(
             {
                 "author": "Verifier",

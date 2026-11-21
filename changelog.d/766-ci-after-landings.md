@@ -1,0 +1,3 @@
+Fixed
+
+* **CI caught up with what landed (issue #766).** The e2e on the host acknowledges the host sandbox in each company's record before its work runs, as the bench does, accepts the `degraded` that `/health` now reports for that reason alone, and checks both; the self-hosting harness acknowledges it too on the host. The e2e's fake model reads QA's prompt as it is now, the task branch then the attempt's message: the message must be the last delivery and the branch must hold its files. `compare.py` no longer judges the totals of two runs that ran different specifications (the nightly bench failed after `06-repo-shopcart` was added); it judges the reported tokens over the specifications both ran.

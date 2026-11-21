@@ -116,9 +116,11 @@
 /backend/tests/test_grounding_signatures.py      @careb36
 /backend/tests/test_kickoff_failure.py           @careb36
 /backend/tests/test_mcp_tools.py                 @careb36
+/backend/tests/test_required_checks.py           @careb36
 /backend/tests/test_review_changes.py            @careb36
 /backend/tests/test_risk_tier.py                 @careb36
 /backend/tests/test_roles.py                     @careb36
+/backend/tests/test_tests_on.py                  @careb36
 /backend/tests/test_sandbox.py                   @careb36
 /backend/tests/test_sandbox_cache.py             @careb36
 /backend/tests/test_security_probe.py            @careb36

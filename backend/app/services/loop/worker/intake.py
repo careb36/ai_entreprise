@@ -25,11 +25,11 @@ Moved out of ``task_worker``, which still re-exports these names.
 
 import asyncio
 import json
-import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from config import settings
 from database import engine
 from logging_config import setup_logger
 from models import BacklogItem, Sprint
@@ -37,7 +37,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import replicas, run_window_gate, sprint_control
+from services.loop import preconditions, replicas, run_window_gate, sprint_control
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
 from services.tasks import dependencies, task_events, task_projection
@@ -55,9 +55,7 @@ def normalize_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
-DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
-    os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")
-)
+DISPATCH_REQUEUE_COOLDOWN_SECONDS = settings.DISPATCH_REQUEUE_COOLDOWN_SECONDS
 LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
 
 DELIVERY_QUEUED = delivery_gate.DELIVERY_QUEUED
@@ -197,6 +195,12 @@ async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
     # Outside the company's run window the next model turn waits (issue #736).
     if item.get("status") == "todo" and await asyncio.to_thread(
         run_window_gate.hold_task, engine, item["id"]
+    ):
+        return None
+    # A company that runs with tests off or agent code on the host needs an
+    # Owner's acknowledgement; without one the sprint pauses (issue #766).
+    if item.get("status") == "todo" and await asyncio.to_thread(
+        preconditions.hold_task, engine, item["id"]
     ):
         return None
     # Guard against duplicate task.assign events for the same item: one
@@ -370,7 +374,9 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            existing_deliverable = record.deliverable()
+            # Only a delivery since a person's send-back goes to review: the
+            # one before it is what the person sent back (issue #766).
+            existing_deliverable = record.deliverable(since_send_back=True)
             if existing_deliverable:
                 task_events.record(
                     session, item, "recovered", "system", status="in_review"

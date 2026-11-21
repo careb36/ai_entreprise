@@ -10,6 +10,12 @@ database migrations, dependency manifests or container and infrastructure
 files; anything else is ``low``. The tier is the highest any path reaches, so
 adding files never lowers it, and size plays no part.
 
+The words (``sso``, ``auth``, ``payment``…) mark only a file that can run or
+configure something: prose (``.md``, ``.mdx``, ``.rst``, ``.txt``) changes no
+behaviour, and a changelog fragment named after the SSO work it describes was
+held for a person as an authentication change (issue #766). A secret's file
+name and a CI path are still high whatever the suffix.
+
 The paths come from the workspace daemon's report of what it wrote (an
 observation) and from what the producer declared (a claim). Declared paths
 can only raise the tier, never lower it, so taking both is safe. A producer
@@ -107,6 +113,8 @@ _DEPENDENCY_FILES = {
     "gemfile.lock",
 }
 _INFRA_SUFFIXES = (".tf", ".tfvars")
+# Prose: no behaviour, so the area words do not mark it.
+_PROSE_SUFFIXES = (".md", ".mdx", ".rst", ".txt")
 
 
 def _words(path: str) -> set[str]:
@@ -131,8 +139,9 @@ def _classify_path(path: str) -> tuple[str, str] | None:
         return RISK_HIGH, "secrets"
     if normalized.startswith(_CI_PREFIXES) or name in _CI_FILES:
         return RISK_HIGH, "CI pipeline"
+    prose = name.endswith(_PROSE_SUFFIXES) and not name.startswith("requirements")
     for area, marks in _HIGH_WORDS.items():
-        if words & marks:
+        if words & marks and not prose:
             return RISK_HIGH, area
 
     if name.endswith(_SHELL_SUFFIXES):

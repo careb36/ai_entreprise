@@ -23,7 +23,6 @@ recorded in the summary and never raised: the sprint closes without it.
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Callable
 from typing import Any
@@ -92,9 +91,7 @@ def ask_model(
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.timeout = DEFAULT_TIMEOUT_SECONDS
     client.company_id = company_id
     client.max_tokens = ANSWER_MAX_TOKENS

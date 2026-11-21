@@ -7,11 +7,11 @@ maintenance tasks every 24 hours:
 1. **Retention** (``retention.py``, issue #328) — delivered outbox events
    older than ``RETENTION_OUTBOX_DAYS`` (7), and, when their settings are
    above 0, superseded run versions (``RETENTION_AGENT_RUNS_DAYS``), KPI
-   turn rows outside the audit hash chain (``RETENTION_KPI_TURNS_DAYS``) and
-   stored task events of closed sprints (``RETENTION_GLASSROOM_DAYS``), and
+   turn rows outside the audit hash chain (``RETENTION_KPI_TURNS_DAYS``), and
    personal notifications past ``RETENTION_NOTIFICATIONS_DAYS`` (90, never
    unbounded) or of a person who left the company. A row of a company's
-   audit chain is never deleted.
+   audit chain and a task event are never deleted: both are links of hash
+   chains.
 
 2. **Vector index rebuild** — runs ``REINDEX INDEX CONCURRENTLY`` on the
    ``vector_memory_idx`` HNSW/IVFFlat index so that ANN search stays fast
@@ -111,6 +111,12 @@ def run_janitor_tasks():
         # 1. Retention. Cutoffs are naive UTC, so the session must be in UTC.
         cursor.execute("SET TIME ZONE 'UTC'")
         conn.commit()
+        for name in retention.ignored_settings():
+            logger.warning(
+                "Janitor: %s is set but no longer applied: it deleted task "
+                "events, which are links of hash chains (issue #766)",
+                name,
+            )
         days = retention.settings_from_env()
         report = retention.apply(conn, days)
         logger.info("Janitor: retention %s deleted %s", days, report)

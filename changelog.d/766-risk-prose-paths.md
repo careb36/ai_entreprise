@@ -1,0 +1,3 @@
+Fixed
+
+* **A document about a sensitive area no longer holds a delivery for a person (issue #766).** The risk tier marked any path whose words named an area (`sso`, `auth`, `payment`, `secret`…), so a delivery of two changelog fragments, one named after the SSO work it describes, was held as an authentication change after its tests passed and QA approved it. The words now mark only a file that can run or configure something: prose (`.md`, `.mdx`, `.rst`, `.txt`, except a `requirements*.txt`) is left to the other rules. A secret's file name or suffix and a CI path stay high whatever the suffix, and the tier is still the highest of all paths, so prose beside `sso.py` changes nothing.

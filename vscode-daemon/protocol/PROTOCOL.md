@@ -211,6 +211,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.graph` | request | `code_graph.py` | `workspace_root`, `known` (path to sha256), `max_files`? | `files` (`path`, `sha256`, `status`, `defs`, `refs`, `truncated`) for the files whose sha256 the backend does not hold, `unchanged`, `removed`, `more`, `partial` |
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git` | `ok`, `worktree`, `branch`, `head`, `guard`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
+| `workspace.sandbox.image` | request | `stack_image.py` | `workspace_root` | `image` (the tag, or `null` with `error`), `toolchains`, `dockerfile_sha256`, `built`, `build_ms` (§5.1.3) |
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`?, `forge_policy`? (§5.3) | `ok`, the branch, commit and request URL, `forge_policy`, `remote_contacted` |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`?, `forge_policy`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
@@ -320,6 +321,25 @@ the same `scope` and replies `environment_reset` (`volumes`, each with what
 its removal did, `quarantine_cleared`, `quarantined` while one is left);
 `workspace.status` replies `sandbox_environment` (`enabled`, `quarantined`).
 A daemon from before it ignores the fields and replies without them.
+
+### 5.1.3 The stack image (additive, issue #766)
+
+A `sandbox` with `stack_image: true` and no `image` asks for the project's
+own image (`stack_image.py`): the daemon reads the toolchains from the marker
+files at the folder's root and in its direct folders (`python`, `node`,
+`go`), writes the Dockerfile from fixed templates (nothing from the project
+but those names), and runs from `fabrique-stack:<16 hex of the Dockerfile's
+sha256>`, built first when the machine does not have it (no build context;
+one build per tag at a time; at most `FABRIQUE_STACK_BUILD_SECONDS`, 1800).
+The run's `sandbox` then carries `stack_image` (`image`, `toolchains`,
+`dockerfile_sha256`, `built`, `build_ms`); an image that cannot be had makes
+the run fail with the reason, never the old default in its place. A request
+with `image` keeps that image; one with neither, from a backend before this,
+keeps `python:3.12-slim`. `workspace.sandbox.image` builds it ahead (the
+backend asks before a delivery's commands, so their own timeouts do not
+include the build) and replies the same fields, or `error` with the reason.
+Every `workspace.execute` reply carries `duration_ms`, the daemon's clock
+around the command.
 
 ### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
 

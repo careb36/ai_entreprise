@@ -54,6 +54,7 @@ from services.tasks.board import (
 from sqlalchemy import case, func
 from sqlmodel import Session, select
 
+from routers.sprint_control import require_preconditions
 from routers.sprint_planning import _refused, _specification
 from routers.sprint_planning import router as planning_router
 
@@ -86,6 +87,7 @@ async def start_sprint(
     transaction between Postgres and NATS.
     """
     require_company_role(session, user, req.company_id, "Manager")
+    require_preconditions(session, req.company_id)
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
         raise HTTPException(

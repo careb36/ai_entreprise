@@ -75,6 +75,30 @@ def test_words_that_only_look_alike_are_low(path):
     assert risk.classify([path])["tier"] == "low"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "changelog.d/766-sso-fake-dns-clock-tests.md",  # task 18, held as "authentication"
+        "docs/operations/sso-login.md",
+        "docs/payments.rst",
+        "notes/secrets-rotation.txt",
+    ],
+)
+def test_prose_about_a_sensitive_area_is_not_high(path):
+    """Prose changes no behaviour (issue #766)."""
+    assert risk.classify([path])["tier"] == "low"
+
+
+def test_prose_never_lowers_a_sensitive_file_beside_it():
+    paths = ["changelog.d/766-sso.md", "backend/app/routers/sso.py"]
+    result = risk.classify(paths)
+    assert result["tier"] == "high"
+    assert result["reasons"] == ["authentication: backend/app/routers/sso.py"]
+    assert risk.classify(["deploy/sso.pem"])["tier"] == "high"  # a secret's suffix
+    assert risk.classify([".env.md"])["tier"] == "high"  # a secret's name
+    assert risk.classify([".github/workflows/notes.md"])["tier"] == "high"  # CI path
+
+
 def test_the_highest_path_decides_and_more_files_never_lower_it():
     result = risk.classify(
         ["src/a.py", "scripts/run.sh", "backend/app/auth.py", "README.md"] * 3

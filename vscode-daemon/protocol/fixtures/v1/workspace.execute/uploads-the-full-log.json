@@ -14,6 +14,7 @@
     "stdout": "hello\n",
     "stderr": "",
     "exit_code": 0,
+    "duration_ms": 0,
     "full_log": {
       "bucket": "FABRIQUE_RUN_LOGS",
       "max_bytes": 52428800,
@@ -34,5 +35,8 @@
         }
       ]
     }
-  }
+  },
+  "volatile": [
+    "/duration_ms"
+  ]
 }

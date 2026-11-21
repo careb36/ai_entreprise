@@ -25,6 +25,7 @@ RULE_STEPS = [
     "backend dependency rule",
     "frontend layer rule",
     "file sizes",
+    "configuration in one place",
     "changelog fragments",
 ]
 

@@ -30,12 +30,13 @@ class PolicyUnavailable(RuntimeError):
 
 
 def mode_for(company: Any) -> str:
-    """The company's mode, else the deployment's; ``host`` when unknown."""
+    """The company's mode, else the deployment's; ``container`` when the
+    setting names none (issue #766: never the host by accident)."""
     own = str(getattr(company, "delivery_sandbox", None) or "").strip().lower()
     if own in MODES:
         return own
-    default = str(settings.DELIVERY_SANDBOX or "host").strip().lower()
-    return default if default in MODES else "host"
+    default = str(settings.DELIVERY_SANDBOX or "container").strip().lower()
+    return default if default in MODES else "container"
 
 
 def request_for(company: Any) -> dict[str, Any]:
@@ -43,7 +44,10 @@ def request_for(company: Any) -> dict[str, Any]:
     names = getattr(company, "sandbox_env", None) or []
     return {
         "mode": mode_for(company),
-        "image": settings.DELIVERY_SANDBOX_IMAGE,
+        # No image: the project's own, built by the daemon from its stacks
+        # (``stack_image``, issue #766); a configured one wins, as before.
+        "image": (settings.DELIVERY_SANDBOX_IMAGE or "").strip() or None,
+        "stack_image": not (settings.DELIVERY_SANDBOX_IMAGE or "").strip(),
         "network": settings.DELIVERY_SANDBOX_NETWORK,
         "cpus": settings.DELIVERY_SANDBOX_CPUS,
         "memory_mb": settings.DELIVERY_SANDBOX_MEMORY_MB,
@@ -58,6 +62,28 @@ def request_for(company: Any) -> dict[str, Any]:
         "environment": bool(settings.DELIVERY_SANDBOX_ENV),
         "scope": scope_for(getattr(company, "id", None)),
     }
+
+
+# The daemon's own ceiling for one command (``vscode-daemon/shell_exec.py``).
+DAEMON_MAX_SECONDS = 900
+REPLY_MARGIN_SECONDS = 30.0
+
+
+def test_seconds() -> int:
+    """How long the daemon lets one test run go on (issue #766)."""
+    try:
+        seconds = int(settings.DELIVERY_TEST_RUN_SECONDS)
+    except (TypeError, ValueError):
+        seconds = 600
+    return min(max(seconds, 1), DAEMON_MAX_SECONDS)
+
+
+def test_wait() -> float:
+    """How long the backend waits for a test run's answer."""
+    return max(
+        float(settings.DELIVERY_TEST_TIMEOUT_SECONDS),
+        test_seconds() + REPLY_MARGIN_SECONDS,
+    )
 
 
 def scope_for(company_id: Any) -> str:

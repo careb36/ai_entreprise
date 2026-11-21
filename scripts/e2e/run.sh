@@ -166,7 +166,22 @@ check() {  # check <description> <shell test...>
 # every /v1 call returned 404. Assert our payload, and name the collision
 # explicitly instead of blaming the backend.
 port_busy() { (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
-healthy() { curl -sf -m 2 "$API/health" | "$PY" -c 'import sys, json; sys.exit(json.load(sys.stdin).get("status") != "healthy")' 2>/dev/null; }
+# Up means healthy, or, on the host, degraded for that reason alone: the host
+# sandbox runs agent code without isolation, and /health says so (issue #766).
+healthy() { curl -sf -m 2 "$API/health" | "$PY" -c '
+import sys, json
+d = json.load(sys.stdin)
+v = d.get("verification") or {}
+host = sys.argv[1] == "host" and d.get("status") == "degraded" and v.get("tests") == "on" and v.get("sandbox_default") == "host" and len(v.get("reasons") or []) == 1
+sys.exit(not (d.get("status") == "healthy" or host))' "$SANDBOX" 2>/dev/null; }
+# A host run needs an Owner's acknowledgement before any of its work runs
+# (issue #766, services/loop/preconditions.py): said in each company's
+# record, as the bench does. Prints True once recorded; nothing on a container run.
+acknowledge_host() {
+  api -X POST "$API/v1/companies/$1/acknowledgements" -H 'Content-Type: application/json' \
+    -d '{"kind": "host_sandbox", "days": 1, "reason": "The e2e run with the fake LLM: its answers are the run'"'"'s own files, run on the host."}' \
+    | json "'host_sandbox' not in (d.get('missing') or ['?'])"
+}
 
 if port_busy "$BACKEND_PORT"; then
   echo "port $BACKEND_PORT is already in use by another process."
@@ -224,6 +239,9 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
 for _ in $(seq 1 60); do healthy && break; sleep 1; done
 healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
 echo "stack up: $API (logs in $WORK)"
+if [ "$SANDBOX" = host ]; then
+  check "/health says degraded on the host, with the host sandbox as its reason" test "$(curl -s "$API/health" | "$PY" -c 'import sys, json; d = json.load(sys.stdin); print(d["status"], d["verification"]["sandbox_default"], "without isolation" in " ".join(d["verification"]["reasons"]))')" = "degraded host True"
+fi
 if [ -n "${E2E_NATS_SERVER:-}" ]; then
   check "the backend is authenticated on its own broker" test "$(curl -s "$API/health" | "$PY" -c 'import sys, json; n = json.load(sys.stdin)["nats"]; print(n["authenticated"] and n["connected"])')" = True
 fi
@@ -259,12 +277,19 @@ prompt_seen() { if [ "$(grep -c "$1" "$PROMPTS")" -ge 1 ]; then echo yes; else e
 brief_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['advised']['rework']) for s in d if s['id'] == $1 for a in [s['architect_advice']])"; }
 
 echo "1. init_company → foundation sprint"
+# On the host the foundation sprint waits, planned, for the acknowledgement.
+START_NOW=true; [ "$SANDBOX" = host ] && START_NOW=false
 COMPANY=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d "{
-  \"company_name\": \"E2E Co\", \"project_path\": \"$WORK/project\", \"autonomy_level\": 3,
+  \"company_name\": \"E2E Co\", \"project_path\": \"$WORK/project\", \"autonomy_level\": 3, \"start_now\": $START_NOW,
   \"agents\": [{\"role\": \"Developer\", \"name\": \"Dev Ana\"}, {\"role\": \"QA\", \"name\": \"QA Quinn\"}, {\"role\": \"ScrumMaster\", \"name\": \"Sam\"}]}")
 CID=$(echo "$COMPANY" | json "d.get('company_id', '')")
 S0=$(echo "$COMPANY" | json "d.get('sprint_id', '')")
 [ -n "$CID" ] && [ -n "$S0" ] || { echo "init_company failed: $COMPANY"; exit 2; }
+if [ "$SANDBOX" = host ]; then
+  check "without the acknowledgement the host run's sprint does not start (409)" test "$(api -o /dev/null -w '%{http_code}' -X POST "$API/v1/sprints/$S0/start")" = 409
+  check "an Owner acknowledges the host sandbox in the company's record" test "$(acknowledge_host "$CID")" = True
+  check "the foundation sprint starts once acknowledged" test "$(api -X POST "$API/v1/sprints/$S0/start" | json "d.get('status', '')")" = active
+fi
 check "the foundation sprint closes" wait_sprint "$S0"
 echo "     board: $(board "$S0")"
 check "its task is blocked for a person" test "$(board "$S0")" = "Create testing strategy document=blocked"
@@ -515,6 +540,7 @@ WEB=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d 
   \"company_name\": \"Web Co\", \"project_path\": \"$WORK/web\", \"autonomy_level\": 2, \"start_now\": false,
   \"agents\": [{\"role\": \"Developer\", \"name\": \"Dev Wen\"}, {\"role\": \"QA\", \"name\": \"QA Wes\"}, {\"role\": \"PO\", \"name\": \"Po Wu\"}]}")
 WCID=$(echo "$WEB" | json "d.get('company_id', '')")
+[ "$SANDBOX" = host ] && check "the web company's host run is acknowledged" test "$(acknowledge_host "$WCID")" = True
 # Said here, so a port something else holds is not read later as a missing hold.
 port_free() { "$PY" -c "import socket, sys; s = socket.socket(); s.settimeout(0.5); sys.exit(s.connect_ex(('127.0.0.1', $WEB_PORT)) == 0)"; }
 check "nothing else listens on the web project's port ($WEB_PORT)" port_free

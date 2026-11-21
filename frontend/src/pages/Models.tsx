@@ -10,6 +10,7 @@ import ModelChoices from '../components/ModelChoices'
 import ModelConnections from '../components/ModelConnections'
 import RoutingPolicy from '../components/RoutingPolicy'
 import RunWindowPanel from '../components/RunWindowPanel'
+import CompanyLimitsPanel from '../components/CompanyLimitsPanel'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { modelsApi } from '../services/models'
@@ -60,6 +61,7 @@ export default function Models() {
           <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ForgePolicyPanel companyId={companyId} isOwner={role === 'Owner'} />
           <RunWindowPanel companyId={companyId} isOwner={role === 'Owner'} />
+          <CompanyLimitsPanel companyId={companyId} isOwner={role === 'Owner'} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
           <CapabilitiesPanel />
         </>

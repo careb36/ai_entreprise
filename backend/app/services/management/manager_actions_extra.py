@@ -40,7 +40,7 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision
 from sqlmodel import Session
 
-from services.loop import sprint_control
+from services.loop import preconditions, sprint_control
 from services.loop.carry_over import (
     CARRY_MARK_PREFIX,
     CARRY_UNMARK_PREFIX,
@@ -269,6 +269,10 @@ def _resume(session: Session, row: ManagerDecision) -> tuple[str, dict]:
         raise Stale("the sprint is gone")
     if sprint.status != sprint_control.PAUSED:
         raise Stale(f"the sprint is {sprint.status}")
+    missing = preconditions.unmet(session, sprint.company_id)
+    if missing:
+        # The Manager agent never stands in for the Owner's acknowledgement.
+        raise Stale(preconditions.pause_reason(missing))
     reason = sprint.pause_reason
     sprint.status = sprint_control.ACTIVE
     sprint.pause_reason = None

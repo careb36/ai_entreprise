@@ -510,17 +510,63 @@ Copy `.env.example` to `.env` and fill in:
   (`vscode-daemon/daemon.py`). The CLIs the daemon reports on
   `workspace.capabilities`, kept for older backends: since the console
   assistants were removed (issue #750) the backend never asks.
-- `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
+- `MAX_REWORKS` — optional, default `3` (issue #766). How many times a task
+  is sent back for rework, whatever sent it back (the quality gate, the
+  delivery gate, QA), before it is blocked and escalated to the ScrumMaster;
+  a person's send-back starts the count again. It replaces
+  `AUTOPILOT_MAX_REWORK_CYCLES` (2 per cause, so up to 6 and more), which is
+  still read, with a warning, when `MAX_REWORKS` is not set; it will be
+  removed in the next release. A value that is not a whole number keeps the
+  default. A company may set its own budget, from 0 to 10 (below).
+
+### A company's limits (issue #766)
+
+An Owner sets, on the Models page or with `PUT /v1/companies/{id}/limits`,
+the company's own values of four limits; each is optional, an empty one
+keeps the deployment's value, and each stays within a range the code holds
+(`services/contracts/company_limits.py`): the Developer's `tool_rounds`
+(1–50, the deployment's `DEVELOPER_TOOL_ROUNDS`), `result_max_chars`
+(500–100000, `MCP_RESULT_MAX_CHARS`), `max_output_tokens` (0–1048576 and
+never above the model's own output limit, `DEVELOPER_MAX_OUTPUT_TOKENS`) and
+the task's `max_reworks` (0–10, `MAX_REWORKS`). The company's value wins over
+`MODEL_PROFILES`; the run's evidence names `company` as its source. Each
+change is audited (`company_limits_changed`); a Manager, the Manager agent
+and an agent cannot change them. Stored in `companies.limits` (migration
+`0061`).
+- `DELIVERY_TESTS_ENABLED` — optional, default `true` (issue #766; it was
+  `false`, and no code delivery could then be verified: a company runs with it
+  off only under an Owner's `tests_off` acknowledgement). After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
-  `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
-  sends the task back for rework. The backend waits `DELIVERY_TEST_TIMEOUT_SECONDS`
-  (default `130`; the daemon stops a command after 120 s) for the run's answer.
+  `npm test` / `pytest`, or each folder's suite in a repository whose root has
+  none) and the exit status is recorded as evidence; a failing run sends the
+  task back for rework, and the folders' suites count as the delivery's test
+  observation. The Developer's `workspace__run_tests` is offered with the same
+  commands, a `folder` parameter in such a repository, and installs a folder
+  before its first run in an isolated sandbox. `DELIVERY_TEST_RUN_SECONDS`
+  (default `600`, at most `900`, the daemon's ceiling) is how long one test
+  run, folder suite or `run_tests` call may go on; the backend waits
+  the larger of `DELIVERY_TEST_TIMEOUT_SECONDS` (default `130`) and that plus
+  30 s for the answer. In a container the daemon sets
+  `PYTEST_XDIST_AUTO_NUM_WORKERS` to the CPU limit, so `-n auto` does not start
+  a worker per host core. In container or bwrap mode, a folder (or the root)
+  never installed under the worktree is installed before its first suite,
+  whatever the delivery wrote (the company's `dependency_installs` keep a
+  `<folder>/` or `./` mark per worktree and mode, holding the install command's digest, so a changed command installs again).
   It executes agent-written code on the daemon's machine,
-  where `DELIVERY_SANDBOX` says: `host` (default, as before), `container` (an
-  ephemeral container per run: worktree mounted, network off unless
+  where `DELIVERY_SANDBOX` says: `container` (the default since issue #766:
+  an ephemeral container per run, worktree mounted, network off unless
   `DELIVERY_SANDBOX_NETWORK`, limits `DELIVERY_SANDBOX_CPUS` (2),
   `DELIVERY_SANDBOX_MEMORY_MB` (2048) and `DELIVERY_SANDBOX_PIDS` (512),
-  image `DELIVERY_SANDBOX_IMAGE`, every capability dropped) or `bwrap`.
+  every capability dropped), `host` (needs an Owner's `host_sandbox`
+  acknowledgement per company) or `bwrap`. The container's image is the
+  project's own when `DELIVERY_SANDBOX_IMAGE` is empty (the default): the
+  daemon builds it from the project's stacks, read from marker files, with
+  fixed templates (Python with Poetry and pytest, Node with npm, Go, git;
+  `vscode-daemon/stack_image.py`), tags it `fabrique-stack:<sha256 prefix>`,
+  and reuses it; the backend asks for it before a delivery's commands and
+  waits `STACK_IMAGE_BUILD_TIMEOUT_SECONDS` (`1900`; the daemon's own limit is
+  `FABRIQUE_STACK_BUILD_SECONDS`, `1800`). A value in
+  `DELIVERY_SANDBOX_IMAGE` runs every project in that one image, as before.
   A company sets its own (`Company.delivery_sandbox`, and `sandbox_env`: the
   variable names a sandboxed run may see) with `GET`/`PUT
   /v1/companies/{id}/sandbox` (Viewer / Manager). The daemon reports what it
@@ -551,7 +597,9 @@ Copy `.env.example` to `.env` and fill in:
   cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
   `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
   quarantine. The application check's container mounts the same cache.
-  `DELIVERY_SANDBOX_ENV` (default `false`) adds an **environment volume** in
+  `DELIVERY_SANDBOX_ENV` (default `true` since issue #766: a Poetry project's
+  virtualenv lives there, so without it the tests find nothing the install
+  installed) adds an **environment volume** in
   container mode (#315): what an install leaves outside the worktree (pip's
   user installation through `PYTHONUSERBASE`, Poetry's and Pipenv's
   virtualenvs, Go's `GOPATH`, module and build caches) kept at
@@ -798,12 +846,15 @@ Copy `.env.example` to `.env` and fill in:
   and the backend refuses to start on a database behind head
   (`app/migrations.py`, `CONTRIBUTING.md` §5).
 - `RETENTION_OUTBOX_DAYS` (7), `RETENTION_AGENT_RUNS_DAYS`,
-  `RETENTION_KPI_TURNS_DAYS`, `RETENTION_GLASSROOM_DAYS` (0, keep all) — what
+  `RETENTION_KPI_TURNS_DAYS` (0, keep all) — what
   the janitor deletes (`backend/janitor/retention.py`): delivered outbox
   events; superseded run versions with their verifications (never the latest
   version, nor one a person reviewed, approved, commented on or published);
   KPI turn rows of `audit_log` outside a company's hash chain (a chained row
-  is never deleted, and counted as kept); task events of closed sprints.
+  is never deleted, and counted as kept). Task events are never deleted:
+  each is a link of its task's hash chain. `RETENTION_GLASSROOM_DAYS`, which
+  deleted those of closed sprints, was removed (issue #766); the janitor
+  warns when it is still set.
   There is no audit retention: `docs/OPERATIONS.md` says how to archive a
   chain with its rows. `BACKUP_DIR`, `BACKUP_KEEP_DAYS` (14) and
   `PG_CONTAINER` steer `scripts/backup.sh`.
@@ -818,7 +869,26 @@ Copy `.env.example` to `.env` and fill in:
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
   run its tests with `DELIVERY_TESTS_ENABLED`, for that many rounds before
-  delivering; every read is evidence.
+  delivering; every read is evidence. The rounds, like `MCP_RESULT_MAX_CHARS`
+  and `DEVELOPER_MAX_OUTPUT_TOKENS`, are the default of the model's profile,
+  which `MODEL_PROFILES` overrides per model.
+- `DEVELOPER_MAX_OUTPUT_TOKENS` (0) — the cap on the Developer's answer in
+  tokens (issue #766); `0` sends none and the provider's own default applies
+  (with thinking, the reasoning reserve is added to a cap, as for every
+  role). Never above the model's output limit.
+- `MODEL_PROFILES` (`{}`) — per-model overrides of the profile
+  (`services/models/model_profile.py`, [models](contexts/models.md#a-models-profile)),
+  a JSON object by model name. Each entry may set the capabilities
+  (`context`, `output`, `tool_call`, `reasoning`), which otherwise come from
+  the catalogue, and the Developer's limits (`tool_rounds`,
+  `result_max_chars`, `max_output_tokens`), which otherwise are the three
+  settings above. For example
+  `MODEL_PROFILES='{"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}'`.
+  A value that is not JSON stops the backend at startup with the setting's
+  name (nothing runs on a configuration it could not read); inside valid
+  JSON, a malformed entry is ignored with a warning. The limits stay within
+  fixed ceilings (50 rounds, 100000 characters). The run's evidence keeps the
+  profile it ran under, with the source of each field.
 - `REPO_MAP_MAX_CHARS` (3000) — the repository map (`services/tools/repo_map.py`,
   daemon `vscode-daemon/repo_map.py`): how many characters of the project's
   definitions, ranked by use, go into the Developer's, QA's and the
@@ -1066,6 +1136,48 @@ Copy `.env.example` to `.env` and fill in:
   stay declared in `config.py` (`REMOVED_SETTINGS`) so a `.env` that still
   sets one loads, and the backend logs once at startup that each one set no
   longer does anything; remove them from `.env`.
+
+### Operational values moved into `config.py` (issue #766)
+
+These were read with `os.getenv` where they are used, undocumented and out
+of `.env`'s reach; they are settings now, with the same names and defaults,
+and a value in `.env` reaches them like any other setting. The modules keep
+the floors they had.
+
+- `DISPATCH_REQUEUE_COOLDOWN_SECONDS` (default `90`): the task worker
+  dispatches a To do item again no sooner than this.
+- `AUTOPILOT_QA_REWORK_ENABLED` (default `true`): QA's "needs rework" sends
+  the task back to the Developer on its own.
+- `INTEGRATION_RETRY_SECONDS` (default `60`): how often a close's integration
+  the daemon could not take is tried again; `INTEGRATION_MAX_CONCURRENT`
+  (default `2`, at least `1`): integrations running at once per process.
+- `LLM_PROXY_MAX_RETRIES` (default `2`) and `LLM_PROXY_RETRY_BACKOFF_SEC`
+  (default `1.0`): the backend's retries when the LLM proxy cannot be
+  reached (not the proxy's own retries with a provider).
+- `ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES` (default `30`): how long a coding
+  CLI missing from the sandbox is not offered again.
+- The workspace snapshot in the Developer's prompt
+  (`services/workspace/workspace_snapshot.py`): `WORKSPACE_SNAPSHOT_ENABLED`
+  (default `true`), `WORKSPACE_SNAPSHOT_CACHE_TTL` (seconds, default `60`, at
+  least `10`), `WORKSPACE_SNAPSHOT_MAX_FILES` (default `4000`, at least `20`),
+  `WORKSPACE_SNAPSHOT_TOP_RELEVANT` (default `5`, at least `3`),
+  `WORKSPACE_SNAPSHOT_LINES_PER_FILE` (default `60`, at least `20`),
+  `WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES` (default `30`, at least `15`),
+  `WORKSPACE_EVIDENCE_LINES_PER_FILE` (default `80`, at least `20`) and
+  `WORKSPACE_EVIDENCE_MAX_FILE_BYTES` (default `65536`, at least `2048`).
+
+Every module now reads `LLM_PROXY_URL`, `POSTGRES_*`, `NEO4J_*` and
+`NATS_URL` from `settings`; before, about twenty call sites read them again,
+and the proxy URL had two different defaults (`http://localhost:5100` and
+`http://llm-proxy:5100`). Its default is `settings`' (`http://localhost:5100`);
+`docker-compose.yml` sets it for the containers.
+
+`scripts/check_config.py` keeps it that way, after AixleHQ/flow's
+`NoEnvInApp` rule: under `backend/app` only `config.py` reads the
+environment, and the files that still do are in
+`scripts/config_env_allowlist.json`, with their count of reads and why; an
+entry may shrink but never grow. It also fails when a field of `Settings` is
+not named in this document.
 
 ## The LLM proxy
 

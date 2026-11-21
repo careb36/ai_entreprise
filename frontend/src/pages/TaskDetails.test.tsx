@@ -21,6 +21,8 @@ vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),
   useCapabilities: vi.fn(),
+  // A Viewer unless a test says otherwise: no "Edit task".
+  useCurrentRole: vi.fn(() => 'Viewer'),
   useAgentMessages: vi.fn(() => ({ data: { messages: [] }, isLoading: false, isError: false })),
 }))
 const boardQuery = vi.mocked(useSprintBoard)

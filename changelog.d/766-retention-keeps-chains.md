@@ -1,0 +1,3 @@
+Fixed
+
+* **Retention never breaks an evidence chain (issue #766).** `RETENTION_GLASSROOM_DAYS` deleted the task events of closed sprints without looking at the chains, although each task event is a link of its task's hash chain, and `docs/OPERATIONS.md` recommended setting it to 90 days. It is removed: the janitor ignores it and logs a warning when it is still set. `RETENTION_AGENT_RUNS_DAYS` also deleted superseded run versions and their verifications while task events still pointed at them; a version a task event names, directly or through its verification, is now kept as evidence of record. A test fails if any backend code deletes task events, except a whole-chain delete listed with its reason (deleting a sprint that holds no evidence).

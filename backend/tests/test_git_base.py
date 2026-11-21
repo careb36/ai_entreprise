@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 import pytest
+from _verdicts import assert_verified_but_for_tests
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.integration import SprintIntegration
@@ -369,7 +370,7 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
             select(Verification).where(Verification.agent_run_id == run.id)
         ).one()
         comments = session.get(BacklogItem, item.id).comments
-    assert verification.verdict == "verified"
+    assert_verified_but_for_tests(verification)
     assert verification.evidence["git_workflow_skipped"] == "not a repository"
     assert verification.evidence["snapshot"]
     assert (plain / "src" / "auth" / "login.py").exists()

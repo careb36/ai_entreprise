@@ -66,3 +66,9 @@ pytest-xdist = "^3.8"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+# Where the code is, so a plain `pytest` (the sandboxed delivery run, issue
+# #766) needs no PYTHONPATH: the tests import `config`, `models`, `services`
+# from app/ and `alembic` helpers from here.
+pythonpath = [".", "app"]

@@ -8,7 +8,7 @@ import {
 import { Verdict } from '../components/Verdict'
 import { Conversation } from '../components/Conversation'
 import { useAppStore } from '../store/useAppStore'
-import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueries'
+import { useAgentRuns, useCapabilities, useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
@@ -17,6 +17,7 @@ import { TaskCostCard } from '../components/CostSummary'
 import { TaskRelations } from '../components/TaskRelations'
 import { RunSecretsPanel } from '../components/RunSecretsPanel'
 import { TaskEventLog } from '../components/TaskEventLog'
+import { TaskEditForm } from '../components/TaskEditForm'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { CountPill, EmptyState, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
 import { lineagePath } from './Lineage'
@@ -156,6 +157,8 @@ export default function TaskDetails() {
   const { t } = useTranslation()
   const { taskId, sprintId: paramSprintId } = useParams<{ taskId: string; sprintId: string }>()
   const { activeSprintId, companyId } = useAppStore()
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
   // Keep the lookup context visible if a 404 clears the persisted selection.
   const [lookup] = useState({ sprintId: activeSprintId, companyId })
 
@@ -293,6 +296,11 @@ export default function TaskDetails() {
           <div className="border-b border-surface-700 px-3 py-3">
             <p className="text-meta mb-1.5 font-semibold uppercase tracking-wide">{t('generate.story')}</p>
             <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-gray-200">{task.description}</p>
+          </div>
+        )}
+        {canManage && resolvedSprintId !== null && (
+          <div className="border-b border-surface-700 px-3 py-3">
+            <TaskEditForm key={`${task.id}:${task.title}:${task.description ?? ''}`} task={task} sprintId={resolvedSprintId} />
           </div>
         )}
         <dl className="grid grid-cols-2 divide-x divide-surface-700">

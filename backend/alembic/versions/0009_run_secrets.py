@@ -22,10 +22,16 @@ def upgrade() -> None:
     op.create_table(
         "run_secrets",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
-        sa.Column("company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False),
-        sa.Column("task_id", sa.Integer(), sa.ForeignKey("backlog_items.id"), nullable=False),
+        sa.Column(
+            "company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False
+        ),
+        sa.Column(
+            "task_id", sa.Integer(), sa.ForeignKey("backlog_items.id"), nullable=False
+        ),
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("encrypted_value", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column(
+            "encrypted_value", sqlmodel.sql.sqltypes.AutoString(), nullable=False
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
     op.create_index("ix_run_secrets_company_id", "run_secrets", ["company_id"])

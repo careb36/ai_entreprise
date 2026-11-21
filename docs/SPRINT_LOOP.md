@@ -139,15 +139,21 @@ the LangGraph graph is only an optional kickoff conversation.
    (`services/evidence/risk.py`: high for authentication, secrets, payments or the CI
    pipeline, medium for shell scripts, migrations, dependency manifests or
    container files, from the paths the daemon wrote and the producer declared;
+   an area's words never mark prose, `.md`, `.mdx`, `.rst` or `.txt`;
    a producer may raise it with a reason, never lower it). An approved task
    whose tier is high waits for a person at every autonomy level, level 3
    included: the inbox lists it with `risk_hold`, a Manager accepts it (marks
    it done) or sends it back, and it counts neither as blocked in the
    procedures' numbers nor as a task to carry over on the company's own. Before any of that, the text checks on the
    deliverable (length, sections, balanced fences — `_validate_minimum_deliverable`)
-   send it back with the reason as `Quality gate`, up to
-   `AUTOPILOT_MAX_REWORK_CYCLES`, then block the task and escalate to the
-   ScrumMaster. A sprint closes when every task is settled: done, or blocked
+   send it back with the reason as `Quality gate`. Every send-back, the
+   quality gate's, the delivery gate's and QA's, counts against one budget per
+   task, `MAX_REWORKS` (default 3, issue #766; a person's send-back resets
+   it); when it is spent the task is blocked and escalated to the
+   ScrumMaster. A rework asks the agent to change only what the problem
+   needs on the task branch, never every file in full. QA is shown the
+   Verifier's checks and the end of the test output beside the branch
+   (`worker/review_evidence`). A sprint closes when every task is settled: done, or blocked
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the

@@ -8,16 +8,12 @@ is blocked, whether it waits for a person) are answered from the events, by
 their kind, actor, verdict and flags, never by reading comment text.
 
 The events answer only for a task whose thread they cover: every comment
-carries the id of one of the task's events, and the migration found nothing it
-could not read back (no ``legacy`` event). Any other task (a thread written
-before events existed, or by a writer not routed yet) is read from its
-comments as before, so a task never gets a half-informed answer.
+carries one of its events' ids, and no ``legacy`` event. Any other task is
+read from its comments, so a task never gets a half-informed answer.
 
 ``TaskRecord`` is what a decision reads: the task's comments and events, the
-source picked once, every question answered from it. The worker, the
-dependencies, the carry-over, the ScrumMaster's triage and the procedures'
-numbers decide through it; a loop over many tasks loads their events in one
-query (``records_for``). An event may be a ``TaskEvent`` row or its
+source picked once, every question answered from it; a loop over many tasks
+loads their events in one query (``records_for``). An event may be a ``TaskEvent`` row or its
 ``task_events.as_dict`` form (the worker carries the latter in its task dict).
 The ``*_from_events`` functions are the projections themselves.
 """
@@ -33,17 +29,16 @@ from sqlmodel import Session
 from services.tasks import board, task_events
 
 # Events that never say anything about the task's own state: lineage, advice,
-# the System's integration note (it moves branches, not the task) and the
-# sprint board's notes (claims left for the other tasks, issue #439) and the
-# relations between tasks (issue #533) and the
-# effort observed at sprint close (issue #534) and the run window's holds and
-# releases (issue #736: when work may start, never what the task is).
+# the System's integration note (it moves branches, not the task), the sprint
+# board's notes (#439), relations (#533), the effort observed at sprint close
+# (#534), the run window's holds (#736) and a person's edit of the text.
 _ADVICE_KINDS = {
     "carried_over",
     "advised",
     "integration",
     "board_note",
     "board_note_rejected",
+    "edited",
     "relation",
     "effort_observed",
     "run_window_wait",
@@ -246,7 +241,9 @@ def next_step_from_events(
     if (
         events
         and not any(f.get("explicit_block") for f in flags)
-        and latest_deliverable_from_events(events, assignee)
+        # A delivery from before a person's send-back is not reviewed again
+        # (issue #766: it spent a rework of the new attempt's budget).
+        and latest_deliverable_from_events(_since_send_back(events), assignee)
     ):
         return "review"
     if any(f.get("needs_person") for f in flags):
@@ -293,38 +290,45 @@ class TaskRecord:
             return board.has_manual_freeze_marker(self.comments)
         return frozen_from_events(self.events)
 
-    def deliverable(self) -> str:
+    def deliverable(self, since_send_back: bool = False) -> str:
+        """With *since_send_back*, only one after a person's send-back (#766)."""
         if self.events is None:
-            return board.extract_latest_reviewable_comment(self.comments, self.assignee)
-        return latest_deliverable_from_events(self.events, self.assignee)
+            thread = board.since_send_back(self.comments) if since_send_back else None
+            return board.extract_latest_reviewable_comment(
+                self.comments if thread is None else thread, self.assignee
+            )
+        events = _since_send_back(self.events) if since_send_back else self.events
+        return latest_deliverable_from_events(events, self.assignee)
 
     def pending_rework_feedback(self) -> list[str]:
         if self.events is None:
             return board.pending_rework_feedback(self.comments)
         return pending_rework_from_events(self.events)
 
-    def rework_requests_by(self, author: str) -> int:
+    def reworks(self) -> int:
+        """Every cause's rework requests since a person's send-back (#766)."""
         if self.events is None:
-            return board.rework_requests_by(self.comments, author)
-        return rework_requests_by_from_events(self.events, author)
+            return board.reworks_since_send_back(self.comments)
+        since = _verdict_events(_since_send_back(self.events))
+        return sum(1 for e in since if _needs_work(e) and _text(e))
 
     def rework_request_count(self) -> int:
         """Every rework request on the task, whoever made it."""
         if self.events is None:
             return board.rework_request_count(self.comments)
-        return sum(
-            1 for e in _verdict_events(self.events) if _needs_work(e) and _text(e)
-        )
+        verdicts = _verdict_events(self.events)
+        return sum(1 for e in verdicts if _needs_work(e) and _text(e))
 
     def review_failures(self) -> int:
         """How many QA reviews failed (the model call, not the verdict)."""
         if self.events is None:
-            return sum(
-                1
+            failed = "qa review failed"
+            texts = [
+                str(c.get("text", "")).lower()
                 for c in self.comments
                 if c.get("author") == "System"
-                and "qa review failed" in str(c.get("text", "")).lower()
-            )
+            ]
+            return sum(1 for text in texts if failed in text)
         return sum(1 for e in self.events if _kind(e) == "review_failed")
 
     def next_step(self) -> str | None:

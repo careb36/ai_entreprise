@@ -5,8 +5,8 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/models/`
 - **Responsibility:** Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `edit_format` (the edit format per model and the format a delivery was observed in; `loop/worker` reads it), `effort`, `model_factory`, `model_routing`, `run_cost` (the reported tokens and cost of a task, a run or a sprint; `management/rsi_cycle` reads a cycle sprint's tokens through it). Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
-- **Modules:** `bench_schema`, `bench_schema_blocks`, `bench_schema_edit_format`, `bench_schema_swebench`, `bench_scorecards`, `calibration`, `company_models`, `difficulty`, `edit_format`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `thinking`, `usage_csv`, `usage_report`.
+- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `company_models`, `edit_format` (the edit format per model and the format a delivery was observed in; `loop/worker` reads it), `effort`, `model_factory`, `model_profile` (a model's profile; `loop/worker/execute` reads the Developer's limits from it), `model_routing`, `run_cost` (the reported tokens and cost of a task, a run or a sprint; `management/rsi_cycle` reads a cycle sprint's tokens through it). Another context imports only these modules and the package; the rest are internal. Nothing is allowlisted: `loop/task_routing` gets a task's estimate from its plan and board (`model_routing.estimate_task`, the architecture passed in) and the company's policy (`model_routing.effective_policy`) through `model_routing`, so `difficulty` and `routing_policy` stay internal.
+- **Modules:** `bench_schema`, `bench_schema_blocks`, `bench_schema_edit_format`, `bench_schema_swebench`, `bench_scorecards`, `calibration`, `company_models`, `difficulty`, `edit_format`, `effort`, `model_catalog`, `model_factory`, `model_prices`, `model_profile`, `model_record`, `model_routing`, `model_suggestions`, `prompt_weight`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`, `thinking`, `usage_csv`, `usage_report`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `model_catalog` (the models.dev fetch) and `provider_client` (`list_models`, raising `ProviderUnreachable`; `provider_connections.validate` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
@@ -273,6 +273,41 @@ company's **Models** page (`/company/models`, `pages/Models.tsx`,
 `components/ModelConnections.tsx`, `components/ModelChoices.tsx`) is where a
 Manager connects, validates and removes providers and picks the default and
 per-role models with the suggestions beside them; a Viewer reads it.
+
+### A model's profile
+
+`model_profile.py` (issue #766) says what a model can take and return and
+the Developer's limits for it. Before it the catalogue knew each model's
+context, output limit and tool calling, but only the suggestions read them;
+the tool rounds, the size of a tool's result and the answer's cap were one
+value for every model. After the OpenHands SDK (capabilities from a
+registry, a caller's overrides first, the source of each recorded) and its
+named `[llm.<name>]` profiles, `profile(model)` takes each field from the
+first source that has it:
+
+1. `MODEL_PROFILES`, the operator's overrides by model name (a JSON object;
+   `docs/CONFIGURATION.md`);
+2. the catalogue (`model_catalog`), for `context`, `output`, `tool_call` and
+   `reasoning`; the provider of the name's prefix first (`deepseek-*` in
+   `deepseek`, `qwen*` in `alibaba`), then the others;
+3. the settings for the limits (`DEVELOPER_TOOL_ROUNDS`,
+   `MCP_RESULT_MAX_CHARS`, `DEVELOPER_MAX_OUTPUT_TOKENS`) and
+   `DEFAULT_CAPABILITIES` (131072 of context, 8192 of output) for a model
+   nobody describes.
+
+`sources` names the one that decided each field (`override`,
+`catalog:<provider>`, `setting`, `default`), and the Developer's run keeps
+the whole profile as `model_profile` beside its routing. The limits stay
+under `CEILINGS` (50 rounds, 100000 characters, the model's own output
+limit for the answer's cap): an operator chooses within a range the code
+holds, and a malformed override is ignored with a warning rather than
+lifting a limit (a `MODEL_PROFILES` that is not JSON stops the backend at
+startup). When the company's limits cannot be read (the database
+unreachable), the run goes on with the deployment's, as the difficulty
+routing does: logged, and recorded as `company_limits_read: false` in the
+profile the run's evidence keeps. Only the deployment's settings set a profile; nothing an
+agent can reach does. With no override the limits are the settings', as
+before.
 
 ### The edit format per model
 

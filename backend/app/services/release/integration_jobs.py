@@ -18,9 +18,9 @@ finished meanwhile is not repeated.
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
+from config import settings
 from logging_config import logger
 from models import Company, Sprint
 from models.integration import SprintIntegration
@@ -39,7 +39,7 @@ from services.release.integration import (
 from services.workspace import workspace_daemon
 
 # How often an integration the daemon could not take at close is tried again.
-RETRY_SECONDS = float(os.getenv("INTEGRATION_RETRY_SECONDS", "60"))
+RETRY_SECONDS = float(settings.INTEGRATION_RETRY_SECONDS)
 # Latest statuses that mean the sprint still has to be integrated on its own.
 OPEN = ("pending", "running")
 # The background integrations started when a sprint closed, kept until done.

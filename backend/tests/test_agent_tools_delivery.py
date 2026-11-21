@@ -203,7 +203,16 @@ def test_the_worker_delivers_the_tool_edits_and_the_daemon_sees_a_modified_file(
     assert writes["src/greet.py"]["status"] == "written"
     assert writes["src/greet.py"]["change"] == "modified"
     assert writes["src/greet.py"]["sha256"] == edit["sha256_after"]
-    assert verification.verdict == "verified"
+    # Tests are off in this test: the code change is not shown to work, so
+    # the verdict says so instead of passing by omission (issue #766).
+    assert verification.verdict == "unverifiable"
+    tests_run = next(c for c in verification.checks if c["name"] == "tests_run")
+    assert tests_run["outcome"] == "unverifiable"
+    assert "tests are disabled" in tests_run["observation"]
+    assert verification.evidence["verdict_policy"] == {
+        "version": "v1",
+        "required": ["tests_run"],
+    }
 
 
 def test_the_history_check_refuses_an_edit_recorded_without_its_hashes():

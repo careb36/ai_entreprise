@@ -42,6 +42,9 @@
       "access": "authenticated",
       "why": "The caller unlinks their own identity; another person's is a 404."
     },
+    "DELETE /v1/companies/{company_id}/acknowledgements/{acknowledgement_id}": {
+      "access": "Owner"
+    },
     "DELETE /v1/companies/{company_id}/chat/links/{provider}": {
       "access": "Viewer"
     },
@@ -221,6 +224,9 @@
     "GET /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },
+    "GET /v1/companies/{company_id}/acknowledgements": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/architecture": {
       "access": "Viewer"
     },
@@ -306,6 +312,9 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/rsi/cycles/{rsi_cycle_id}": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/limits": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/run_window": {
@@ -723,6 +732,13 @@
     "POST /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },
+    "POST /v1/companies/{company_id}/acknowledgements": {
+      "access": "Owner",
+      "body": {
+        "kind": "tests_off",
+        "reason": "a trial sprint on our own repository"
+      }
+    },
     "POST /v1/companies/{company_id}/architecture/revisions": {
       "access": "Manager"
     },
@@ -1071,6 +1087,9 @@
     "PUT /v1/audit/anchors/settings": {
       "access": "Owner"
     },
+    "PUT /v1/backlog/{item_id}/content": {
+      "access": "Manager"
+    },
     "PUT /v1/companies/{company_id}/autonomy": {
       "access": "Manager"
     },
@@ -1115,6 +1134,12 @@
     },
     "PUT /v1/companies/{company_id}/research": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/limits": {
+      "access": "Owner",
+      "body": {
+        "limits": null
+      }
     },
     "PUT /v1/companies/{company_id}/run_window": {
       "access": "Owner",

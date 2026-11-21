@@ -14,9 +14,9 @@ No usable answer leaves the specification as it was.
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
+from config import settings
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from models import Agent
@@ -100,9 +100,7 @@ def ask(
 def _client(
     timeout: float, max_tokens: int, company_id: int | None = None
 ) -> LLMProxyClient:
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
     client.company_id = company_id
     # The draft is parsed as JSON: thinking off (services/models/thinking.py).

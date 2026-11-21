@@ -28,7 +28,7 @@ from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import Field
 from schemas import RequestModel
-from services.loop import run_window_gate, sprint_control
+from services.loop import preconditions, run_window_gate, sprint_control
 from services.release import git_setup
 from services.tools import research_tools
 from services.workspace import sandbox, stack_profiles, stack_roots
@@ -57,6 +57,7 @@ async def dispatch_sprint_tasks(
     require_company_role(session, user, sprint.company_id, "Manager")
     if sprint_control.is_halted(sprint.status):
         raise HTTPException(status_code=409, detail=f"Sprint is {sprint.status}")
+    require_preconditions(session, sprint.company_id)
     # Outside the company's run window the tasks wait for it (issue #736).
     outcome = run_window_gate.dispatch_or_defer(session, sprint)
     session.commit()
@@ -77,6 +78,14 @@ def _managed_sprint(session: Session, sprint_id: int, user: User | None) -> Spri
     return sprint
 
 
+def require_preconditions(session: Session, company_id: int) -> None:
+    """409 before anything changes when the company lacks an acknowledgement
+    its configuration needs (tests off, host sandbox; issue #766)."""
+    missing = preconditions.unmet(session, company_id)
+    if missing:
+        raise HTTPException(status_code=409, detail=preconditions.refusal(missing))
+
+
 @router.post("/sprints/{sprint_id}/start")
 async def start_planned_sprint(
     sprint_id: int,
@@ -90,6 +99,7 @@ async def start_planned_sprint(
             status_code=409,
             detail=f"Only a planned sprint can start; this one is {sprint.status}",
         )
+    require_preconditions(session, sprint.company_id)
     sprint.status = sprint_control.ACTIVE
     session.add(sprint)
     outcome = run_window_gate.dispatch_or_defer(session, sprint)
@@ -140,6 +150,7 @@ async def resume_sprint(
     sprint = _managed_sprint(session, sprint_id, user)
     if sprint.status != sprint_control.PAUSED:
         return {"status": sprint.status}
+    require_preconditions(session, sprint.company_id)
     sprint.status = sprint_control.ACTIVE
     sprint.pause_reason = None
     session.add(sprint)

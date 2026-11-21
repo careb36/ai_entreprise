@@ -119,6 +119,11 @@ REVIEWS: dict[str, int] = {}
 LAST_PATHS: dict[str, list[str]] = {}
 
 
+# What separates the task branch from the attempt's message in QA's prompt
+# (services/loop/worker/review_prompt.py).
+BRANCH_MESSAGE = "--- THIS ATTEMPT'S MESSAGE (the agent's claim) ---"
+
+
 def _violation(text: str) -> None:
     with open(VIOLATIONS_LOG, "a") as log:
         log.write(text + "\n")
@@ -133,9 +138,24 @@ def _check_review(title: str, prompt: str) -> None:
             "QA was asked to review work that was not delivered"
         )
         return
-    shown = re.findall(r"# Artifact: (\S+)", prompt)
-    if shown != LAST_PATHS.get(title, []):
-        _violation(f"QA saw {shown} for {title!r}, but the delivery wrote {LAST_PATHS.get(title)}")
+    # With the Git workflow QA reads the task branch first, as the daemon
+    # read it (services/workspace/branch_view.py, "# Artifact: <path>
+    # (<change>)"), then this attempt's message (the agent's claim). The
+    # message must be the last delivery, and the branch must hold every
+    # file that delivery wrote; the branch may hold earlier attempts' too.
+    branch, marker, message = prompt.partition(BRANCH_MESSAGE)
+    if not marker:
+        branch, message = "", prompt
+    shown = re.findall(r"# Artifact: (\S+)", message)
+    wrote = LAST_PATHS.get(title, [])
+    if shown != wrote:
+        _violation(f"QA saw {shown} for {title!r}, but the delivery wrote {wrote}")
+    held = set(re.findall(r"# Artifact: (\S+) \(", branch))
+    if marker and not set(wrote) <= held:
+        _violation(
+            f"the task branch QA read for {title!r} lacks {sorted(set(wrote) - held)}, "
+            "which the delivery wrote"
+        )
 
 
 def _slug(text: str) -> str:

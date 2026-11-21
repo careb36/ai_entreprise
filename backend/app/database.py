@@ -11,10 +11,10 @@ Connection parameters are read from environment variables with safe defaults
 for local development.
 """
 
-import os
 from collections.abc import Generator
 
 import neo4j
+from config import settings
 from logging_config import logger
 from sqlmodel import Session, create_engine
 
@@ -24,13 +24,12 @@ from sqlmodel import Session, create_engine
 
 
 def _build_database_url() -> str:
-    """Construct the PostgreSQL DSN from individual environment variables."""
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    user = os.getenv("POSTGRES_USER", "factory")
-    password = os.getenv("POSTGRES_PASSWORD", "")
-    db = os.getenv("POSTGRES_DB", "factory")
-    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
+    """Construct the PostgreSQL DSN from the POSTGRES_* settings."""
+    s = settings
+    return (
+        f"postgresql+psycopg2://{s.POSTGRES_USER}:{s.POSTGRES_PASSWORD}"
+        f"@{s.POSTGRES_HOST}:{s.POSTGRES_PORT}/{s.POSTGRES_DB}"
+    )
 
 
 # Connection pool sized for moderate multi-tenant load:
@@ -119,13 +118,13 @@ def get_neo4j_driver() -> neo4j.Driver:
     """
     Return a new Neo4j bolt driver instance.
 
-    Credentials are read from environment variables.  This function creates a
+    Credentials come from the NEO4J_* settings.  This function creates a
     new driver object each time it is called; callers are responsible for
     closing the driver when they are done.
     """
     return neo4j.GraphDatabase.driver(
-        os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "")),
+        settings.NEO4J_URI,
+        auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
     )
 
 

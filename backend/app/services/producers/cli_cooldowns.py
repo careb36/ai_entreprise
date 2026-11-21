@@ -15,7 +15,6 @@ The quota messages and the reset time are read from the Claude CLI's output
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -29,9 +28,7 @@ CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES = max(
     1, int(settings.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES)
 )
 # How long a CLI missing from the sandbox cools down.
-ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES = int(
-    os.getenv("ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES", "30")
-)
+ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES = settings.ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES
 CLAUDE_QUOTA_PATTERNS = (
     "usage limit",
     "rate limit",

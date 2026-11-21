@@ -85,6 +85,12 @@ jobs:
         # module in no context fails; the allowlist may only shrink.
         run: python3 -I scripts/check_architecture.py
 
+      - name: Check the configuration is in one place
+        # scripts/check_config.py (issue #766): under backend/app only config.py
+        # reads the environment, the allowlist only shrinks, and every setting
+        # is named in docs/CONFIGURATION.md.
+        run: python3 -I scripts/check_config.py
+
       - name: Type check with mypy
         working-directory: ./backend
         run: |

@@ -30,8 +30,9 @@ company's own connection never see it.
 
 from __future__ import annotations
 
-import os
 from typing import Any
+
+from config import Settings, settings
 
 ENABLED = "enabled"
 DISABLED = "disabled"
@@ -58,7 +59,9 @@ STRUCTURED_ROLES = frozenset({"engramprocessor"})
 # role's answer budget stays its own. DeepSeek's own default leaves 56K of the
 # 64K for it; 16K keeps a call within the 300 s upstream budget at the speeds
 # observed, and an exhausted one comes back as a named error, never empty.
-DEFAULT_REASONING_RESERVE_TOKENS = 16384
+DEFAULT_REASONING_RESERVE_TOKENS: int = Settings.model_fields[
+    "LLM_THINKING_RESERVE_TOKENS"
+].default
 
 _ON = {"on", "true", "1", "yes", ENABLED}
 _OFF = {"off", "false", "0", "no", DISABLED}
@@ -70,7 +73,7 @@ def _key(role: str | None) -> str:
 
 def override() -> str | None:
     """``ENABLED`` or ``DISABLED`` when ``LLM_THINKING`` forces one, else ``None``."""
-    value = os.getenv("LLM_THINKING", "auto").strip().lower()
+    value = str(settings.LLM_THINKING or "auto").strip().lower()
     if value in _ON:
         return ENABLED
     if value in _OFF:
@@ -80,11 +83,10 @@ def override() -> str | None:
 
 def reasoning_reserve() -> int:
     """``LLM_THINKING_RESERVE_TOKENS``, or the default when unset or not a positive count."""
-    try:
-        value = int(os.getenv("LLM_THINKING_RESERVE_TOKENS", ""))
-    except ValueError:
-        return DEFAULT_REASONING_RESERVE_TOKENS
-    return value if value > 0 else DEFAULT_REASONING_RESERVE_TOKENS
+    value = settings.LLM_THINKING_RESERVE_TOKENS
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return DEFAULT_REASONING_RESERVE_TOKENS
 
 
 def mode_for(role: str | None, *, structured: bool) -> str:

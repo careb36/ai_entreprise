@@ -11,6 +11,9 @@ Usage::
     db_url = settings.POSTGRES_HOST
 """
 
+from typing import Any
+
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -51,18 +54,32 @@ class Settings(BaseSettings):
     # default team) and to Gemini / Qwen / Nebius when their keys are set
     # ---------------------------------------------------------------------------
     LLM_PROXY_URL: str = "http://localhost:5100"
+    # One chat request's budget at the proxy (llm-proxy/timeouts.py reads the
+    # same variable); the backend waits it plus a margin (llm_proxy_client.py).
+    LLM_UPSTREAM_TIMEOUT_SECONDS: float = 300.0
+    # Thinking: auto (each role's policy), on or off for every call; the tokens
+    # a thinking call's cap gets for its reasoning (services/models/thinking.py).
+    LLM_THINKING: str = "auto"
+    LLM_THINKING_RESERVE_TOKENS: int = 16384
     # How long the task worker waits for the workspace daemon to confirm file writes.
     WORKSPACE_WRITE_TIMEOUT_SECONDS: float = 30.0
-    # After a verified delivery, run the project's tests through the daemon and
-    # record the exit status as evidence.  Off by default: it executes
-    # agent-written code on the machine running the daemon.
     # Run the Alembic migrations to head at startup (a local database); the
     # container's entrypoint and the e2e run `alembic upgrade head` instead.
     DB_AUTO_UPGRADE: bool = False
-    DELIVERY_TESTS_ENABLED: bool = False
+    # After a delivery, run the project's tests through the daemon, in the
+    # company's sandbox (a container by default), and record the exit status
+    # as evidence. On by default (issue #766): without it no code delivery can
+    # be verified, and a company runs only with an Owner's ``tests_off``
+    # acknowledgement (services/platform/acknowledgements.py).
+    DELIVERY_TESTS_ENABLED: bool = True
     # Test command to run; empty means detect it (npm test / pytest).
     DELIVERY_TEST_COMMAND: str = ""
-    # The daemon itself stops a command after 120 s; wait slightly longer.
+    # How long the daemon lets one test run (the root's tests, a folder's
+    # suite, the Developer's run_tests) go on before it stops it; the daemon
+    # caps it at 900 (issue #766: a real suite takes minutes).
+    DELIVERY_TEST_RUN_SECONDS: int = 600
+    # How long the backend waits for a test run's answer, at least the run's
+    # own limit plus 30 s (``sandbox.test_wait``).
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
     # The daemon's heartbeat (workspace.heartbeat, every <=25 s): with none
     # observed for this long, on the backend's clock, the daemon is ``stale``,
@@ -76,7 +93,10 @@ class Settings(BaseSettings):
     # capability dropped) or ``bwrap`` (bubblewrap namespaces). A company
     # may set its own (``Company.delivery_sandbox``). The daemon reports what
     # it applied, and the Verifier records it (``sandbox``).
-    DELIVERY_SANDBOX: str = "host"
+    # Container by default (issue #766): agent-written code never runs on
+    # the daemon's computer unless a company chose ``host`` and an Owner
+    # acknowledged it (services/platform/acknowledgements.py).
+    DELIVERY_SANDBOX: str = "container"
     # The highest forge policy any company may have (services/contracts/
     # forge_policy.py): ``none``, ``fetch`` or ``publish``; an air-gapped
     # install sets ``none``. An unknown value reads as ``none``.
@@ -86,7 +106,13 @@ class Settings(BaseSettings):
     # wakes at the next window boundary when that comes sooner, and never
     # looks more often than once a minute.
     RUN_WINDOW_RECHECK_SECONDS: int = 300
-    DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
+    # Empty: the daemon builds the project's own image from its stacks
+    # (services/workspace/stack_image.py, issue #766). A value names one image
+    # for every project instead, as before.
+    DELIVERY_SANDBOX_IMAGE: str = ""
+    # How long the backend waits for the daemon to build that image (the
+    # daemon's own limit is FABRIQUE_STACK_BUILD_SECONDS, 1800).
+    STACK_IMAGE_BUILD_TIMEOUT_SECONDS: float = 1900.0
     DELIVERY_SANDBOX_NETWORK: bool = False
     DELIVERY_SANDBOX_CPUS: float = 2.0
     DELIVERY_SANDBOX_MEMORY_MB: int = 2048
@@ -98,8 +124,10 @@ class Settings(BaseSettings):
     # Container mode: a volume per project, company, manifests and image for
     # what an install leaves outside the worktree (Python's user site, Poetry
     # and Pipenv virtualenvs, Go's GOPATH and caches), writable only by an
-    # install, with the cache's reset and quarantine (issue #315).
-    DELIVERY_SANDBOX_ENV: bool = False
+    # install, with the cache's reset and quarantine (issue #315). On by
+    # default (issue #766): a Poetry project's virtualenv lives there, so
+    # without it the tests find none of what the install installed.
+    DELIVERY_SANDBOX_ENV: bool = True
     # Container mode: the image the application check runs in when its e2e
     # command is a browser test (QA's smoke tests, or a ``web`` profile's
     # e2e), e.g. one built from vscode-daemon/images/browser. Empty keeps
@@ -203,6 +231,15 @@ class Settings(BaseSettings):
     # only with ``DELIVERY_TESTS_ENABLED``.
     DEVELOPER_TOOLS_ENABLED: bool = True
     DEVELOPER_TOOL_ROUNDS: int = 8
+    # The cap on the Developer's answer in tokens; 0 sends none, and the
+    # provider's own default applies (issue #766). Never above the model's
+    # output limit (services/models/model_profile.py).
+    DEVELOPER_MAX_OUTPUT_TOKENS: int = 0
+    # Per-model overrides of the profile (services/models/model_profile.py), a
+    # JSON object by model name: context, output, tool_call, reasoning and the
+    # Developer's tool_rounds, result_max_chars and max_output_tokens, e.g.
+    # {"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}.
+    MODEL_PROFILES: dict[str, dict[str, Any]] = {}
     # The repository map in the Developer's, QA's and the Architect's prompts
     # (``services/repo_map.py``): at most this many characters of ranked
     # definitions beside the tree; 0 leaves them out.
@@ -464,6 +501,64 @@ class Settings(BaseSettings):
     SMTP_STARTTLS: bool = True
     SMTP_SSL: bool = False
     SMTP_TIMEOUT_SECONDS: float = 20.0
+
+    # ---------------------------------------------------------------------------
+    # Operational values that were read with os.getenv where they are used
+    # (issue #766, phase A of the configuration work): the same names and
+    # defaults, now in one place; the modules keep their floors.
+    # ---------------------------------------------------------------------------
+    # The task worker re-dispatches a To do item no sooner than this.
+    DISPATCH_REQUEUE_COOLDOWN_SECONDS: int = 90
+    # QA's "needs rework" sends the task back to the Developer on its own.
+    AUTOPILOT_QA_REWORK_ENABLED: bool = True
+    # A task's one rework budget, every cause together (issue #766); a company
+    # may set its own within 0..10 (services/contracts/company_limits.py).
+    # Unset: AUTOPILOT_MAX_REWORK_CYCLES (its old name, deprecated), else 3.
+    MAX_REWORKS: int | None = None
+    AUTOPILOT_MAX_REWORK_CYCLES: int | None = None
+    # A close's integration the daemon could not take is retried this often;
+    # this many run at once per process (at least 1).
+    INTEGRATION_RETRY_SECONDS: float = 60.0
+    INTEGRATION_MAX_CONCURRENT: int = 2
+    # The backend's retries when the LLM proxy cannot be reached.
+    LLM_PROXY_MAX_RETRIES: int = 2
+    LLM_PROXY_RETRY_BACKOFF_SEC: float = 1.0
+    # How long a coding CLI missing from the sandbox is not offered again.
+    ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES: int = 30
+    # The workspace snapshot in the Developer's prompt
+    # (services/workspace/workspace_snapshot.py); each has a floor there.
+    WORKSPACE_SNAPSHOT_ENABLED: bool = True
+    WORKSPACE_SNAPSHOT_CACHE_TTL: int = 60
+    WORKSPACE_SNAPSHOT_MAX_FILES: int = 4000
+    WORKSPACE_SNAPSHOT_TOP_RELEVANT: int = 5
+    WORKSPACE_SNAPSHOT_LINES_PER_FILE: int = 60
+    WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES: int = 30
+    WORKSPACE_EVIDENCE_LINES_PER_FILE: int = 80
+    WORKSPACE_EVIDENCE_MAX_FILE_BYTES: int = 65536
+
+    @field_validator("MAX_REWORKS", "AUTOPILOT_MAX_REWORK_CYCLES", mode="before")
+    @classmethod
+    def _count_or_unset(cls, value: Any) -> Any:
+        """Not a whole number: unset, so the default applies (as with os.getenv)."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @field_validator(
+        "LLM_UPSTREAM_TIMEOUT_SECONDS", "LLM_THINKING_RESERVE_TOKENS", mode="before"
+    )
+    @classmethod
+    def _positive_or_default(cls, value: Any, info: ValidationInfo) -> Any:
+        """A value that is not a positive number keeps the default, as these
+        did when read with os.getenv: a typo never lifts or zeroes a budget."""
+        default = cls.model_fields[info.field_name or ""].default
+        try:
+            return value if float(value) > 0 else default
+        except (TypeError, ValueError):
+            return default
 
     class Config:
         env_file = ".env"

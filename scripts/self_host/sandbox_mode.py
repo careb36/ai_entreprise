@@ -213,3 +213,24 @@ def exit_status(report: dict[str, Any], container_mode: bool) -> int:
         if container_mode and seen is not None and not seen["container_mode"]
         else 0
     )
+
+
+HOST_ACKNOWLEDGEMENT = (
+    "Self-hosting on the host sandbox: La Fabrique's own checkout, run by the "
+    "person who started the harness."
+)
+
+
+def acknowledge_host(api: Any, company_id: int, mode: str) -> bool | None:
+    """On the host, record the Owner's acknowledgement its work needs (#766).
+
+    A host run starts no work without it (``services/loop/preconditions.py``);
+    the harness says so in the company's own record, as the bench and the e2e
+    do. ``True`` once recorded, ``None`` for any other mode."""
+    if mode != "host":
+        return None
+    state = api.post(
+        f"/v1/companies/{company_id}/acknowledgements",
+        {"kind": "host_sandbox", "days": 1, "reason": HOST_ACKNOWLEDGEMENT},
+    )
+    return "host_sandbox" not in (state.get("missing") or ["?"])

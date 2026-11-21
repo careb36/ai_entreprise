@@ -287,14 +287,14 @@ async def _send_back_from_delivery_gate(
 ) -> None:
     """Rework for a delivery the daemon refuted or never confirmed; block after the limit."""
     problem, observation = gate
-    previous_gate_reworks = task_record.rework_requests_by(DELIVERY_GATE_AUTHOR)
-    rework = previous_gate_reworks < qa_review.AUTOPILOT_MAX_REWORK_CYCLES
+    previous_gate_reworks = task_record.reworks()
+    limit = qa_review.rework_limit(session, sprint.company_id)
+    rework = previous_gate_reworks < limit
     instruction = (
-        "Fix the code so the project's checks pass and deliver every "
-        "changed file in full as a path= block."
+        "Fix the code so the project's checks pass. "
         if problem in delivery_gate.CODE_PROBLEMS
-        else "Re-run the task and give every file in full as a path= block."
-    )
+        else ""
+    ) + qa_review.EDIT_INSTRUCTION
     gate_event = task_events.record(
         session,
         item,
@@ -373,6 +373,13 @@ async def _retry_blocked(
         item_sprint = session.get(Sprint, item.sprint_id)
         if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
             continue
+        # The list and the histories were read before this loop: a person who
+        # sent the task back meanwhile left it in todo, and acting on the old
+        # read moved it to review and spent a rework (issue #766).
+        session.refresh(item)
+        if item.status != "blocked":
+            continue
+        histories.pop(item.id, None)
         if item.id in quality_gate_blocked_ids:
             settled_sprint_ids.add(item.sprint_id)
             continue

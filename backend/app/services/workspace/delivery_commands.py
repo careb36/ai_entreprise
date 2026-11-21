@@ -38,6 +38,7 @@ from services.workspace import (
     folder_commands,
     run_logs,
     sandbox,
+    stack_image,
     stack_roots,
     workspace_daemon,
 )
@@ -75,6 +76,21 @@ _APP_FIELDS = (
 )
 
 
+async def prepare_stack_image(ctx: Context) -> None:
+    """Have the daemon build the project's sandbox image before the install
+    and the tests, when the company's sandbox runs in it; the reply goes on
+    the evidence as ``stack_image`` (``stack_image.prepare``)."""
+    try:
+        box = await asyncio.to_thread(
+            sandbox.request_for_sprint, ctx.sprint, ctx.engine
+        )
+    except sandbox.PolicyUnavailable:
+        return  # Each command records the reason itself.
+    built = await stack_image.prepare(ctx.nats, ctx.evidence["workspace_root"], box)
+    if built is not None:
+        ctx.evidence["stack_image"] = built
+
+
 async def install_dependencies(ctx: Context) -> None:
     """Install the dependencies when a manifest the delivery wrote changed;
     the reply goes on the evidence (``dependency_install.install_if_needed``)."""
@@ -105,9 +121,11 @@ async def run_tests(ctx: Context, command: str) -> str | None:
                 "sprint_id": ctx.sprint["id"],
                 # Agent-written code: run as the company's sandbox says.
                 "sandbox": box,
+                # A real suite takes minutes; the daemon's default is 120 s.
+                "timeout_seconds": sandbox.test_seconds(),
                 **run_logs.request_field(full_log),
             },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            timeout=sandbox.test_wait()
             + (FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0),
         )
     except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.

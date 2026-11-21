@@ -18,10 +18,10 @@ the actual blast radius so GlassRoom and the runbook can react.
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 import httpx
+from config import settings
 from database import engine, get_neo4j_driver
 from logging_config import logger
 from sqlmodel import Session, text
@@ -132,7 +132,7 @@ def _provider_observations(raw: Any) -> dict[str, dict[str, Any]] | None:
 
 
 async def probe_llm_proxy() -> dict[str, Any]:
-    base_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100").rstrip("/")
+    base_url = settings.LLM_PROXY_URL.rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
             response = await client.get(f"{base_url}/health")
@@ -158,10 +158,47 @@ async def probe_llm_proxy() -> dict[str, Any]:
         return _down(f"{type(exc).__name__}: {exc}")
 
 
+SEVERITY_ORDER = ("healthy", "degraded", "down")
+
+
+def worst(*severities: str) -> str:
+    """The most severe of *severities*."""
+    return max(severities, key=SEVERITY_ORDER.index)
+
+
+def verification(tests_enabled: bool, sandbox_default: str) -> dict[str, Any]:
+    """Whether the deployment can verify what agents deliver (issue #766).
+
+    With tests off no code delivery can be ``verified``; with the host
+    sandbox agent-written code runs without isolation. Either is
+    ``degraded`` with the reason, whatever a company acknowledged: the
+    acknowledgement lets its sprints run, it does not make the guarantee
+    whole (``services/platform/acknowledgements.py``).
+    """
+    mode = str(sandbox_default or "host").strip().lower()
+    reasons = []
+    if not tests_enabled:
+        reasons.append(
+            "tests are off (DELIVERY_TESTS_ENABLED): no code delivery can be verified"
+        )
+    if mode == "host":
+        reasons.append(
+            "the default sandbox is host (DELIVERY_SANDBOX): agent code runs "
+            "without isolation"
+        )
+    return {
+        "status": "degraded" if reasons else "healthy",
+        "tests": "on" if tests_enabled else "off",
+        "sandbox_default": mode,
+        "reasons": reasons,
+    }
+
+
 async def aggregate(
     nats_client: Any,
     nats_state: str | None = None,
     backend_capabilities: dict[str, dict[str, Any]] | None = None,
+    verification_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run all probes concurrently and return a structured health document.
 
@@ -201,12 +238,17 @@ async def aggregate(
                 break
             severity = "degraded"
 
+    if verification_state is not None:
+        severity = worst(severity, verification_state["status"])
+
     logger.info(
         "deep healthcheck: severity=%s components=%s",
         severity,
         {k: v.get("status") for k, v in components.items()},
     )
     document: dict[str, Any] = {"status": severity, "components": components}
+    if verification_state is not None:
+        document["verification"] = verification_state
     if nats_state is not None:
         document["nats"] = nats_state
     if backend_capabilities is not None:
