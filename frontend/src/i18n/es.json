@@ -548,6 +548,19 @@
     "nothingToDispatch": "No hay tareas pendientes para despachar",
     "sprintActionFailed": "No se pudo completar la acción: {{message}}"
   },
+  "taskEdit": {
+    "open": "Editar tarea",
+    "formLabel": "Editar la tarea",
+    "hint": "Cambia lo que se pide a los agentes. El cambio y tu motivo quedan registrados en la historia de la tarea.",
+    "title": "Título",
+    "description": "Descripción",
+    "reason": "Motivo (queda registrado)",
+    "reasonPlaceholder": "Por ejemplo: acotada al chequeo de SSO tras tres intentos fallidos",
+    "sendBack": "Devolverla al trabajo con el texto nuevo (su presupuesto de retrabajos empieza de nuevo)",
+    "save": "Guardar",
+    "error": "No se editó la tarea: {{message}}",
+    "notEditable": "Una tarea solo se puede editar en Por hacer o Bloqueada."
+  },
   "taskDetails": {
     "lineageLabel": "Intentos anterior y posterior",
     "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
