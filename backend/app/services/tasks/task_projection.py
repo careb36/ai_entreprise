@@ -247,7 +247,9 @@ def next_step_from_events(
     if (
         events
         and not any(f.get("explicit_block") for f in flags)
-        and latest_deliverable_from_events(events, assignee)
+        # A delivery from before a person's send-back is not reviewed again
+        # (issue #766: it spent a rework of the new attempt's budget).
+        and latest_deliverable_from_events(_since_send_back(events), assignee)
     ):
         return "review"
     if any(f.get("needs_person") for f in flags):

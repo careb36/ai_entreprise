@@ -372,6 +372,13 @@ async def _retry_blocked(
         item_sprint = session.get(Sprint, item.sprint_id)
         if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
             continue
+        # The list and the histories were read before this loop: a person who
+        # sent the task back meanwhile left it in todo, and acting on the old
+        # read moved it to review and spent a rework (issue #766).
+        session.refresh(item)
+        if item.status != "blocked":
+            continue
+        histories.pop(item.id, None)
         if item.id in quality_gate_blocked_ids:
             settled_sprint_ids.add(item.sprint_id)
             continue
