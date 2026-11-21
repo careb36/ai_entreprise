@@ -108,14 +108,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-factory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-factory}
-      # The default team runs on DeepSeek alone (Pro and Flash): only
-      # DEEPSEEK_API_KEY is needed. Gemini, Qwen and Nebius are optional, for
-      # a role, an agent or a policy that names one of their models.
+      # The providers are DeepSeek and Qwen (issue #751): DEEPSEEK_API_KEY
+      # runs the default team; QWEN_API_KEY serves a role that names a Qwen model.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
-      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
-      NEBIUS_PROXY_URL: ${NEBIUS_PROXY_URL:-https://api.tokenfactory.nebius.com/v1}
       # One budget for a chat call's provider calls; gunicorn's worker timeout
       # (gunicorn.conf.py) and the backend's wait derive from it.
       LLM_UPSTREAM_TIMEOUT_SECONDS: ${LLM_UPSTREAM_TIMEOUT_SECONDS:-300}
@@ -125,7 +121,7 @@ services:
       LLM_THINKING: ${LLM_THINKING:-auto}
       # Empty: a failed request stays with its provider (DeepSeek Pro <-> Flash).
       LLM_FALLBACK_PROVIDERS: ${LLM_FALLBACK_PROVIDERS:-}
-      # local: the semantic model baked into the image (issue #755); local-hash or gemini.
+      # local: the semantic model baked into the image (issue #755), or local-hash.
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
@@ -259,10 +255,6 @@ services:
       AGENT_MODEL_DESIGNER: ${AGENT_MODEL_DESIGNER:-}
       AGENT_MODEL_DATA_ENGINEER: ${AGENT_MODEL_DATA_ENGINEER:-}
       AGENT_MODEL_ENGRAM_PROCESSOR: ${AGENT_MODEL_ENGRAM_PROCESSOR:-}
-      NEMOTRON_ROLES: ${NEMOTRON_ROLES:-}
-      NEMOTRON_MODEL: ${NEMOTRON_MODEL:-}
-      NEMOTRON_MODEL_STRATEGIC: ${NEMOTRON_MODEL_STRATEGIC:-}
-      NEMOTRON_MODEL_FAST: ${NEMOTRON_MODEL_FAST:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8000:8000"
