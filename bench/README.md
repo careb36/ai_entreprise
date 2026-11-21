@@ -132,7 +132,10 @@ answers are refused.
 fails unless every specification completes and every criterion passes: that
 is the circuit check. With a real proxy it exits 0 once the scorecard is
 written, and `compare.py` judges the numbers (`--rate`, `--rework`,
-`--tokens` set the thresholds).
+`--tokens` set the thresholds). When the two runs ran different
+specifications (one added or no longer run), the totals measure different
+work: they are shown, not judged, and the reported tokens are judged over
+the specifications both ran.
 
 Wall-clock is shown and not judged unless `--time` is passed: alone it
 judges a growth of more than 25% (0.25, the owner's wall-clock threshold

@@ -74,6 +74,33 @@ def test_a_new_specification_is_listed_not_judged():
     assert all("02-b" not in r for r in result["regressions"])
 
 
+def test_runs_of_different_specifications_judge_the_tokens_both_ran():
+    # The nightly bench after 06-repo-shopcart was added: the totals grew
+    # with the new specification's tokens, not with any regression.
+    added = compare.compare(
+        _card(_entry("01-a", tokens=100)),
+        _card(_entry("01-a", tokens=120), _entry("02-b", tokens=500)),
+    )
+    assert added["regressions"] == []
+    assert added["totals_judged"] is False
+    text = compare.render(
+        _card(_entry("01-a")), _card(_entry("01-a"), _entry("02-b")), added
+    )
+    assert "the totals are shown, not judged" in text
+    # The tokens of the specifications both ran are still judged.
+    grew = compare.compare(
+        _card(_entry("01-a", tokens=100)),
+        _card(_entry("01-a", tokens=200), _entry("02-b", tokens=100)),
+    )
+    assert grew["regressions"] == [
+        "the 1 specification(s) both ran: reported tokens grew from 100 to 200"
+    ]
+    # The same specifications on both sides: the totals are judged as before.
+    same = compare.compare(_card(_entry(tokens=100)), _card(_entry(tokens=200)))
+    assert same["totals_judged"] is True
+    assert any(r.startswith("total: reported tokens") for r in same["regressions"])
+
+
 def _write(directory: Path, card: dict) -> Path:
     path = directory / f"{card['stamp']}.json"
     path.write_text(json.dumps(card))

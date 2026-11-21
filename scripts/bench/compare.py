@@ -29,6 +29,11 @@ A regression, in the totals or in any specification both cards hold:
   threshold of ``docs/design/rsi-loop.md`` §10 decision 4), wall-clock grew by
   more than that (relative, 0.25 = +25%), in the totals or a specification.
 
+Two runs that ran different specifications (one added or no longer run)
+are not judged in the totals either, which measure different work: the
+reported tokens are judged over the specifications both ran, and each of
+those is judged as usual.
+
 A run the token budget cut (``run.status: budget_exceeded``, ``budget.py``)
 on either side is not judged in the totals, which cover fewer
 specifications, nor in the specification the budget stopped: the diff says
@@ -168,17 +173,34 @@ def _judge_totals(
         current["totals"].get("prompt"),
         limits["prompt_tokens"],
     )
-    before_tokens = previous["totals"]["tokens_reported"]
-    after_tokens = current["totals"]["tokens_reported"]
-    if (
-        before_tokens
-        and after_tokens
-        and (after_tokens - before_tokens) / before_tokens > limits["tokens"] + 1e-9
-    ):
-        found.append(
-            f"total: reported tokens grew from {before_tokens} to {after_tokens}"
-        )
+    found += _judge_tokens(
+        "total",
+        previous["totals"]["tokens_reported"],
+        current["totals"]["tokens_reported"],
+        limits["tokens"],
+    )
     return found
+
+
+def _judge_tokens(where: str, before: float, after: float, limit: float) -> list[str]:
+    """Reported tokens, when both sides reported some: relative growth beyond *limit*."""
+    if before and after and (after - before) / before > limit + 1e-9:
+        return [f"{where}: reported tokens grew from {before:.0f} to {after:.0f}"]
+    return []
+
+
+def _shared_tokens(
+    previous: dict[str, Any], current: dict[str, Any], names: set[str]
+) -> tuple[float, float]:
+    """The reported tokens of the specifications in *names*, on each side."""
+    return tuple(
+        sum(
+            _numbers(s, is_spec=True)["tokens_reported"]
+            for s in card["specs"]
+            if s["name"] in names
+        )
+        for card in (previous, current)
+    )
 
 
 def compare(
@@ -189,8 +211,24 @@ def compare(
     """The regressions of *current* against *previous* and the rows of the diff."""
     limits = {**DEFAULTS, **(limits or {})}
     cut = budget.is_cut(previous) or budget.is_cut(current)
+    names = [{s["name"] for s in card["specs"]} for card in (previous, current)]
+    shared = names[0] & names[1]
     # A cut run covers fewer specifications: its totals are shown, not judged.
-    regressions = [] if cut else _judge_totals(previous, current, limits)
+    # Nor are the totals of two runs that ran different specifications, which
+    # measure different work; their reported tokens are judged over the
+    # specifications both ran (the specifications' own rates are judged below).
+    if cut:
+        regressions = []
+    elif names[0] != names[1]:
+        before, after = _shared_tokens(previous, current, shared)
+        regressions = _judge_tokens(
+            f"the {len(shared)} specification(s) both ran",
+            before,
+            after,
+            limits["tokens"],
+        )
+    else:
+        regressions = _judge_totals(previous, current, limits)
     rows = [
         (
             "total",
@@ -223,6 +261,7 @@ def compare(
         "regressions": regressions,
         "rows": rows,
         "cut": cut,
+        "totals_judged": not cut and names[0] == names[1],
         "unjudged_specs": unjudged,
         "skipped_specs": sorted(skipped),
         "new_specs": sorted({s["name"] for s in current["specs"]} - set(before_specs)),
@@ -376,6 +415,14 @@ def render(
         lines += [
             "",
             f"Specifications no longer run: {', '.join(result['dropped_specs'])}",
+        ]
+    if not result["cut"] and not result.get("totals_judged", True):
+        lines += [
+            "",
+            (
+                "The runs ran different specifications: the totals are shown, not "
+                "judged; the reported tokens are judged over the specifications both ran."
+            ),
         ]
     lines += [
         "",

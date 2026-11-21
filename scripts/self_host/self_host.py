@@ -260,6 +260,7 @@ def step_company(api, args, state, report):
         "folders": {name: f.get("test") for name, f in (overrides.get("folders") or {}).items()},
         "every_delivery": [c["command"] for c in profile.get("every_delivery") or []],
         "sandbox": sandbox.get("mode"),
+        "host_acknowledged": sandbox_mode.acknowledge_host(api, cid, args.sandbox),
     }
 
 
