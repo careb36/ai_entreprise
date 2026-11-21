@@ -195,7 +195,11 @@ def _edit_file(workspace_path: str, data: Dict[str, Any], resolve) -> Dict[str, 
     path = data.get("path")
     target = workspace_read._target(root, path, resolve)
     if not target.is_file():
-        raise ReadError(404, f"No such file: {path} (the edit tool changes existing files only).")
+        raise ReadError(
+            404,
+            f"No such file: {path}. The edit tool changes existing files only: write a new "
+            f"file whole in your answer, as a fenced block whose opening line carries path={path}.",
+        )
     if workspace_read.is_sensitive(root, target):
         raise ReadError(403, f"A file that may hold secrets is never edited: {path}")
     relative = target.relative_to(root).as_posix()

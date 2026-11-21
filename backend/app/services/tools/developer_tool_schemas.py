@@ -190,7 +190,9 @@ EDIT_SCHEMA: dict[str, Any] = {
             "JavaScript), else refused with the error and the file unchanged. "
             "Later reads and test runs see the edit, and every edited file is "
             "delivered as it is on disk when you finish: do not repeat it in "
-            "your answer. Read the lines before you edit them."
+            "your answer. Read the lines before you edit them. It cannot create "
+            "a file: write a new file whole in your answer, as a fenced block "
+            "whose opening line carries `path=`."
         ),
         "parameters": {
             "type": "object",
