@@ -139,6 +139,7 @@ the LangGraph graph is only an optional kickoff conversation.
    (`services/evidence/risk.py`: high for authentication, secrets, payments or the CI
    pipeline, medium for shell scripts, migrations, dependency manifests or
    container files, from the paths the daemon wrote and the producer declared;
+   an area's words never mark prose, `.md`, `.mdx`, `.rst` or `.txt`;
    a producer may raise it with a reason, never lower it). An approved task
    whose tier is high waits for a person at every autonomy level, level 3
    included: the inbox lists it with `risk_hold`, a Manager accepts it (marks
