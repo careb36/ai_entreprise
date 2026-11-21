@@ -19,6 +19,7 @@ import functools
 import os
 from typing import Any
 
+from config import settings
 from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
@@ -51,9 +52,7 @@ from services.tasks.board import (
 
 logger = setup_logger("fabrique-task-worker")
 
-AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
-    "AUTOPILOT_QA_REWORK_ENABLED", "true"
-).lower() in {"1", "true", "yes", "on"}
+AUTOPILOT_QA_REWORK_ENABLED = settings.AUTOPILOT_QA_REWORK_ENABLED
 DEFAULT_MAX_REWORKS = 3
 
 
@@ -544,7 +543,7 @@ def _call_llm_for_review(
     ``role=QA`` and ``result_type`` (APPROVED / NEEDS_WORK) so the QA rate KPI
     reads from the audit trail instead of its comment-scan fallback.
     """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
     # The verdict word is parsed: thinking off (services/models/thinking.py).
     client.structured = True

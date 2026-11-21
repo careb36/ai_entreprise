@@ -11,7 +11,6 @@ Architect's role default model unless the company chose one; issue #750), and
 """
 
 import asyncio
-import os
 from typing import Any
 
 from config import settings
@@ -234,7 +233,7 @@ def _execute_task(
     on a failed or empty call. With ``company_id`` the turn goes to
     ``audit_log`` (role, company, token cost) for the KPIs.
     """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.company_id = company_id
 
     # The model by difficulty (#319): the estimate and the routing are stored
@@ -400,7 +399,7 @@ def _consult_architect(
         sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
 
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
     try:
         result = client.chat(

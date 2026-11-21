@@ -127,7 +127,7 @@ TRIGGERS = ("sprint_closed", "manual")
 # In this process an asyncio lock; across replicas a Postgres advisory lock.
 _LOCKS: dict[int, asyncio.Lock] = {}
 # Integrations running at once in this process, each holding a lock connection.
-MAX_CONCURRENT = max(1, int(os.getenv("INTEGRATION_MAX_CONCURRENT", "2")))
+MAX_CONCURRENT = max(1, settings.INTEGRATION_MAX_CONCURRENT)
 _SLOTS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 # Postgres engines for lock connections only, by database URL.
 _LOCK_ENGINES: dict[str, Any] = {}

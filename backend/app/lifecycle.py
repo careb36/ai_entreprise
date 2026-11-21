@@ -3,7 +3,6 @@ Application lifecycle handlers for startup and shutdown events.
 """
 
 import asyncio
-import os
 
 from audit_signing import is_signing_enabled
 from auth_tokens import is_auth_configured
@@ -280,7 +279,7 @@ async def startup(app):
 
     for warning in removed_settings_in_use(settings):
         logger.warning(warning)
-    client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+    client = NATSClient(settings.NATS_URL)
     connect_task = asyncio.create_task(
         _connect_nats_and_start_workers(app, client), name="nats_connector"
     )
@@ -355,9 +354,7 @@ async def startup(app):
 
     _start_memory(app, has_vector_memory)
 
-    app.state.llm_client = LLMProxyClient(
-        os.getenv("LLM_PROXY_URL", "http://localhost:5100")
-    )
+    app.state.llm_client = LLMProxyClient(settings.LLM_PROXY_URL)
 
     # Credential encryption degrades gracefully like the services above: without
     # a key the backend still runs, but stored credentials are not encrypted.

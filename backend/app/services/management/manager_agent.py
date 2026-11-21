@@ -39,7 +39,6 @@ about, or decide, the same inbox item. The unique constraint on the situation
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from collections.abc import Callable
 from typing import Any
@@ -179,9 +178,7 @@ def ask_llm(
 
     Raises when no answer came.
     """
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = ANSWER_MAX_TOKENS, company_id
     model = model or default_model_for_role(MODEL_ROLE)
     result = client.chat(

@@ -483,6 +483,35 @@ class Settings(BaseSettings):
     SMTP_SSL: bool = False
     SMTP_TIMEOUT_SECONDS: float = 20.0
 
+    # ---------------------------------------------------------------------------
+    # Operational values that were read with os.getenv where they are used
+    # (issue #766, phase A of the configuration work): the same names and
+    # defaults, now in one place; the modules keep their floors.
+    # ---------------------------------------------------------------------------
+    # The task worker re-dispatches a To do item no sooner than this.
+    DISPATCH_REQUEUE_COOLDOWN_SECONDS: int = 90
+    # QA's "needs rework" sends the task back to the Developer on its own.
+    AUTOPILOT_QA_REWORK_ENABLED: bool = True
+    # A close's integration the daemon could not take is retried this often;
+    # this many run at once per process (at least 1).
+    INTEGRATION_RETRY_SECONDS: float = 60.0
+    INTEGRATION_MAX_CONCURRENT: int = 2
+    # The backend's retries when the LLM proxy cannot be reached.
+    LLM_PROXY_MAX_RETRIES: int = 2
+    LLM_PROXY_RETRY_BACKOFF_SEC: float = 1.0
+    # How long a coding CLI missing from the sandbox is not offered again.
+    ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES: int = 30
+    # The workspace snapshot in the Developer's prompt
+    # (services/workspace/workspace_snapshot.py); each has a floor there.
+    WORKSPACE_SNAPSHOT_ENABLED: bool = True
+    WORKSPACE_SNAPSHOT_CACHE_TTL: int = 60
+    WORKSPACE_SNAPSHOT_MAX_FILES: int = 4000
+    WORKSPACE_SNAPSHOT_TOP_RELEVANT: int = 5
+    WORKSPACE_SNAPSHOT_LINES_PER_FILE: int = 60
+    WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES: int = 30
+    WORKSPACE_EVIDENCE_LINES_PER_FILE: int = 80
+    WORKSPACE_EVIDENCE_MAX_FILE_BYTES: int = 65536
+
     class Config:
         env_file = ".env"
         case_sensitive = True

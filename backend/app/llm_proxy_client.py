@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 import requests
+from config import settings
 from opentelemetry import propagate
 
 logger = logging.getLogger("fabrique-backend")
@@ -130,11 +131,11 @@ class LLMProxyClient:
 
     Args:
         base_url: Base URL of the LLM proxy service (default: ``http://localhost:5100``).
-                  Override via the ``LLM_PROXY_URL`` environment variable in production.
+                  Defaults to ``settings.LLM_PROXY_URL``.
     """
 
     def __init__(self, base_url: str | None = None):
-        self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+        self.base_url = base_url or settings.LLM_PROXY_URL
         self.timeout = read_timeout_seconds()
         # A cap on the answer for the calls whose form is fixed (a review, a
         # brief, a plan); ``None`` leaves the provider's own limit.
@@ -142,10 +143,10 @@ class LLMProxyClient:
         # Whether the answer is parsed (JSON, a verdict, a probe): such a call
         # runs with thinking off (``services/models/thinking.py``).
         self.structured = False
-        self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
+        self.max_retries = settings.LLM_PROXY_MAX_RETRIES
         # The company whose provider connections a ``conn:<id>:<model>`` may use.
         self.company_id: int | None = None
-        self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
+        self.retry_backoff_sec = settings.LLM_PROXY_RETRY_BACKOFF_SEC
 
     def _get_headers(
         self, role: str = "Developer", bu_id: int | None = None

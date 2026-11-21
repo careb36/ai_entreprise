@@ -129,6 +129,8 @@ jobs:
               - 'docs/architecture/**'
               - 'docs/ARCHITECTURE.md'
               - 'docs/adr/**'
+              # scripts/check_config.py checks every setting is named there.
+              - 'docs/CONFIGURATION.md'
               - 'docs/OPERATIONS.md'
               - 'docs/STANDARDS.md'
               - 'CHANGELOG.md'

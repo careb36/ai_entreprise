@@ -23,7 +23,6 @@ Enabled with ``REVIEWER_AGENT_ENABLED``.
 import asyncio
 import functools
 import json
-import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -248,9 +247,7 @@ def ask_llm(
     without one, the deployment's default for the role. *company_id* lets a
     model of the company's own provider connections route with its key.
     """
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = ANSWER_MAX_TOKENS, company_id
     # The decision line is parsed: thinking off (services/models/thinking.py).
     client.structured = True

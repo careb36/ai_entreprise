@@ -26,6 +26,7 @@ import threading
 import time
 from collections.abc import Iterable
 
+from config import settings
 from logging_config import setup_logger
 
 logger = setup_logger("fabrique-workspace-snapshot")
@@ -35,23 +36,13 @@ logger = setup_logger("fabrique-workspace-snapshot")
 # Tunables — overridable via env without redeploy.
 # ---------------------------------------------------------------------------
 
-WORKSPACE_SNAPSHOT_ENABLED = os.getenv(
-    "WORKSPACE_SNAPSHOT_ENABLED", "true"
-).lower() in {"1", "true", "yes", "on"}
-SNAPSHOT_CACHE_TTL_SECONDS = max(
-    10, int(os.getenv("WORKSPACE_SNAPSHOT_CACHE_TTL", "60"))
-)
-SNAPSHOT_MAX_FILES = max(20, int(os.getenv("WORKSPACE_SNAPSHOT_MAX_FILES", "4000")))
-SNAPSHOT_TOP_RELEVANT = max(3, int(os.getenv("WORKSPACE_SNAPSHOT_TOP_RELEVANT", "5")))
-SNAPSHOT_LINES_PER_FILE = max(
-    20, int(os.getenv("WORKSPACE_SNAPSHOT_LINES_PER_FILE", "60"))
-)
-EVIDENCE_LINES_PER_FILE = max(
-    20, int(os.getenv("WORKSPACE_EVIDENCE_LINES_PER_FILE", "80"))
-)
-EVIDENCE_MAX_FILE_BYTES = max(
-    2048, int(os.getenv("WORKSPACE_EVIDENCE_MAX_FILE_BYTES", "65536"))
-)
+WORKSPACE_SNAPSHOT_ENABLED = settings.WORKSPACE_SNAPSHOT_ENABLED
+SNAPSHOT_CACHE_TTL_SECONDS = max(10, settings.WORKSPACE_SNAPSHOT_CACHE_TTL)
+SNAPSHOT_MAX_FILES = max(20, settings.WORKSPACE_SNAPSHOT_MAX_FILES)
+SNAPSHOT_TOP_RELEVANT = max(3, settings.WORKSPACE_SNAPSHOT_TOP_RELEVANT)
+SNAPSHOT_LINES_PER_FILE = max(20, settings.WORKSPACE_SNAPSHOT_LINES_PER_FILE)
+EVIDENCE_LINES_PER_FILE = max(20, settings.WORKSPACE_EVIDENCE_LINES_PER_FILE)
+EVIDENCE_MAX_FILE_BYTES = max(2048, settings.WORKSPACE_EVIDENCE_MAX_FILE_BYTES)
 
 
 _IGNORED_DIRS = frozenset(
@@ -429,7 +420,7 @@ def build_task_snapshot(
         parts.append("(No files in the workspace matched the task keywords.)")
 
     # Layout sample last — useful overview but loses first if budget is tight.
-    layout_max = max(15, int(os.getenv("WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES", "30")))
+    layout_max = max(15, settings.WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES)
     layout_sample = sorted(set(files[:300]))[:layout_max]
     parts.append("")
     parts.append(f"### Layout sample ({len(layout_sample)} of {len(files)} files)")

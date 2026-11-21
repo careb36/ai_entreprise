@@ -594,6 +594,9 @@
       "test_check_changelog.py": [
         "repo"
       ],
+      "test_check_config.py": [
+        "repo"
+      ],
       "test_check_context_docs.py": [
         "repo"
       ],

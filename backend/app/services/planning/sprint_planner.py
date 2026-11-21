@@ -15,9 +15,9 @@ module re-exports their names, so callers and tests keep importing them here.
 """
 
 import json
-import os
 from typing import Any
 
+from config import settings
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 
@@ -50,7 +50,7 @@ PLAN_MAX_TOKENS = 4096
 
 def _client(po: dict[str, Any]) -> LLMProxyClient:
     """The proxy client for the PO's call; its company routes a connection model."""
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
     client.company_id = po.get("company_id")
     # The plan is parsed as JSON: thinking off (services/models/thinking.py).

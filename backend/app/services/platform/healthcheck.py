@@ -18,10 +18,10 @@ the actual blast radius so GlassRoom and the runbook can react.
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 import httpx
+from config import settings
 from database import engine, get_neo4j_driver
 from logging_config import logger
 from sqlmodel import Session, text
@@ -132,7 +132,7 @@ def _provider_observations(raw: Any) -> dict[str, dict[str, Any]] | None:
 
 
 async def probe_llm_proxy() -> dict[str, Any]:
-    base_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100").rstrip("/")
+    base_url = settings.LLM_PROXY_URL.rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
             response = await client.get(f"{base_url}/health")

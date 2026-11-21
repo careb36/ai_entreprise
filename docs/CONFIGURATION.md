@@ -1102,6 +1102,48 @@ Copy `.env.example` to `.env` and fill in:
   sets one loads, and the backend logs once at startup that each one set no
   longer does anything; remove them from `.env`.
 
+### Operational values moved into `config.py` (issue #766)
+
+These were read with `os.getenv` where they are used, undocumented and out
+of `.env`'s reach; they are settings now, with the same names and defaults,
+and a value in `.env` reaches them like any other setting. The modules keep
+the floors they had.
+
+- `DISPATCH_REQUEUE_COOLDOWN_SECONDS` (default `90`): the task worker
+  dispatches a To do item again no sooner than this.
+- `AUTOPILOT_QA_REWORK_ENABLED` (default `true`): QA's "needs rework" sends
+  the task back to the Developer on its own.
+- `INTEGRATION_RETRY_SECONDS` (default `60`): how often a close's integration
+  the daemon could not take is tried again; `INTEGRATION_MAX_CONCURRENT`
+  (default `2`, at least `1`): integrations running at once per process.
+- `LLM_PROXY_MAX_RETRIES` (default `2`) and `LLM_PROXY_RETRY_BACKOFF_SEC`
+  (default `1.0`): the backend's retries when the LLM proxy cannot be
+  reached (not the proxy's own retries with a provider).
+- `ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES` (default `30`): how long a coding
+  CLI missing from the sandbox is not offered again.
+- The workspace snapshot in the Developer's prompt
+  (`services/workspace/workspace_snapshot.py`): `WORKSPACE_SNAPSHOT_ENABLED`
+  (default `true`), `WORKSPACE_SNAPSHOT_CACHE_TTL` (seconds, default `60`, at
+  least `10`), `WORKSPACE_SNAPSHOT_MAX_FILES` (default `4000`, at least `20`),
+  `WORKSPACE_SNAPSHOT_TOP_RELEVANT` (default `5`, at least `3`),
+  `WORKSPACE_SNAPSHOT_LINES_PER_FILE` (default `60`, at least `20`),
+  `WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES` (default `30`, at least `15`),
+  `WORKSPACE_EVIDENCE_LINES_PER_FILE` (default `80`, at least `20`) and
+  `WORKSPACE_EVIDENCE_MAX_FILE_BYTES` (default `65536`, at least `2048`).
+
+Every module now reads `LLM_PROXY_URL`, `POSTGRES_*`, `NEO4J_*` and
+`NATS_URL` from `settings`; before, about twenty call sites read them again,
+and the proxy URL had two different defaults (`http://localhost:5100` and
+`http://llm-proxy:5100`). Its default is `settings`' (`http://localhost:5100`);
+`docker-compose.yml` sets it for the containers.
+
+`scripts/check_config.py` keeps it that way, after AixleHQ/flow's
+`NoEnvInApp` rule: under `backend/app` only `config.py` reads the
+environment, and the files that still do are in
+`scripts/config_env_allowlist.json`, with their count of reads and why; an
+entry may shrink but never grow. It also fails when a field of `Settings` is
+not named in this document.
+
 ## The LLM proxy
 
 Read by `llm-proxy/` (the provider keys are in the list at the top), and by

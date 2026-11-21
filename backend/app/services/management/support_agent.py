@@ -17,7 +17,6 @@ Enabled with ``SUPPORT_AGENT_ENABLED``.
 """
 
 import asyncio
-import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -176,9 +175,7 @@ def parse_triage(text: str) -> dict[str, str] | None:
 
 def ask_llm(prompt: str) -> str:
     """One call through the LLM proxy as the Support role; raises on no answer."""
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.max_tokens = ANSWER_MAX_TOKENS
     model = default_model_for_role(SUPPORT_ROLE)
     result = client.chat(
