@@ -1395,9 +1395,6 @@
       "test_stack_image.py": [
         "workspace"
       ],
-      "test_task_edit.py": [
-        "loop"
-      ],
       "test_one_rework_budget.py": [
         "loop"
       ],
@@ -1434,6 +1431,9 @@
       ],
       "test_task_event_decisions.py": [
         "management"
+      ],
+      "test_task_edit.py": [
+        "loop"
       ],
       "test_task_events.py": [
         "management"
