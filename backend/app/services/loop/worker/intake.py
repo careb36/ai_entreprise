@@ -376,7 +376,9 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            existing_deliverable = record.deliverable()
+            # Only a delivery since a person's send-back goes to review: the
+            # one before it is what the person sent back (issue #766).
+            existing_deliverable = record.deliverable(since_send_back=True)
             if existing_deliverable:
                 task_events.record(
                     session, item, "recovered", "system", status="in_review"
