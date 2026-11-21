@@ -316,7 +316,10 @@ def blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | No
     comments = verdict_comments(comments)
     if has_manual_freeze_marker(comments):
         return "frozen"
-    if can_resume_blocked_item_from_deliverable(comments, assignee_role=assignee_role):
+    # Only a deliverable since a person's send-back goes back to review.
+    if can_resume_blocked_item_from_deliverable(
+        since_send_back(comments), assignee_role=assignee_role
+    ):
         return "review"
 
     # A verdict that needs a person: a gate or the system said "manual triage",

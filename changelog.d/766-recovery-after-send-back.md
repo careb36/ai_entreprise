@@ -1,0 +1,3 @@
+Fixed
+
+* **A person's send-back is no longer undone by the blocked-task recovery (issue #766).** After phase 0 the owner sent two blocked tasks back to work; seconds later the review cycle moved them to review and the delivery gate judged their old delivery again, spending one rework of the new attempt's budget. The cycle listed the blocked tasks and read their histories before going through them; it now reads each task again before acting and skips one that is no longer blocked. And a delivery from before a person's send-back is never one to review again (`next_step`, from the events and from the board's thread).
