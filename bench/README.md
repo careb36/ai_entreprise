@@ -425,7 +425,10 @@ answers are the bench's own files, and the run records the company's
 (issue #766). With a real proxy (`BENCH_LLM_URL`) it is `container` by
 default, so a real model's code never runs on this machine unisolated:
 `BENCH_SANDBOX_IMAGE` (`fabrique-e2e-sandbox:1`, Python and pytest as the
-e2e's, built when missing) with no network at run time. The bench waits for
+e2e's, built when missing) with no network at run time. For real models,
+`BENCH_TIMEOUT=0` drops the wall-clock limit per sprint: a sprint ends when it
+closes or when the run passes `BENCH_TOKEN_BUDGET` (required then), so a slow
+model is measured rather than cut. The bench waits for
 `/health` to say `healthy`, or `degraded` only because the fake chose the host.
 
 ## The nightly real-model run

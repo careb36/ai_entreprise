@@ -85,7 +85,11 @@
 #   BENCH_BACKEND_PORT [18100]       BENCH_LLM_PORT [15200]
 #   BENCH_PYTHON [python]            the backend's interpreter (poetry env)
 #   BENCH_WORKDIR [mktemp]           logs and the produced projects
-#   BENCH_TIMEOUT [600]              seconds to wait for each sprint to close
+#   BENCH_TIMEOUT [600]              seconds to wait for each sprint to close;
+#                                    0: no wall-clock limit, the sprint ends when
+#                                    it closes or the run passes its token budget
+#                                    (BENCH_TOKEN_BUDGET is then required): a slow
+#                                    model is measured, never cut (issue #766)
 #   BENCH_TOKEN_BUDGET [empty]       the run's budget in reported tokens, summed
 #                                    over every spec (scripts/bench/budget.py).
 #                                    Past it, the running sprint is stopped, the
@@ -229,6 +233,9 @@ if [ -n "$EDIT_FORMAT" ]; then
 fi
 BUDGET=${BENCH_TOKEN_BUDGET:-}
 case "$BUDGET" in ''|*[!0-9]*|0) [ -z "$BUDGET" ] || { echo "BENCH_TOKEN_BUDGET must be a positive integer of tokens, or empty"; exit 2; } ;; esac
+case "$TIMEOUT" in ''|*[!0-9]*) echo "BENCH_TIMEOUT must be a whole number of seconds (0: no wall-clock limit)"; exit 2 ;; esac
+# Without a wall-clock limit the token budget is the only stop.
+[ "$TIMEOUT" != 0 ] || [ -n "$BUDGET" ] || { echo "BENCH_TIMEOUT=0 needs BENCH_TOKEN_BUDGET: the run must have a stop"; exit 2; }
 WORK=${BENCH_WORKDIR:-$(mktemp -d -t fabrique-bench-XXXXXX)}
 mkdir -p "$WORK/projects" "$WORK/audit" "$WORK/entries"
 rm -f "$WORK"/entries/*.json
@@ -462,7 +469,7 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
     # between the grade and the numbers.
     local outcome
     outcome=$("$PY" "$REPO/scripts/bench/budget.py" wait --api "$API" --company "$cid" --sprint "$sid" \
-      --timeout "$(( TIMEOUT - (SECONDS - started) ))" --budget "$BUDGET" \
+      --timeout "$([ "$TIMEOUT" = 0 ] && echo inf || echo $(( TIMEOUT - (SECONDS - started) )))" --budget "$BUDGET" \
       --pg "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" | tail -1)
     status=$(echo "$outcome" | json "d.get('status') or 'error'")
     error=$(echo "$outcome" | json "d.get('error') or ('the wait for the sprint failed' if not d else '')")
