@@ -535,7 +535,7 @@ Copy `.env.example` to `.env` and fill in:
   a worker per host core. In container or bwrap mode, a folder (or the root)
   never installed under the worktree is installed before its first suite,
   whatever the delivery wrote (the company's `dependency_installs` keep a
-  `<folder>/` or `./` mark per worktree and mode).
+  `<folder>/` or `./` mark per worktree and mode, holding the install command's digest, so a changed command installs again).
   It executes agent-written code on the daemon's machine,
   where `DELIVERY_SANDBOX` says: `container` (the default since issue #766:
   an ephemeral container per run, worktree mounted, network off unless
