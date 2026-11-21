@@ -107,3 +107,58 @@ def test_a_send_back_during_the_cycle_is_not_undone(db, monkeypatch):  # noqa: F
     assert db.get(BacklogItem, item.id).status == "todo"
     kinds = [e.event_type for e in task_events.for_task(db, item.id)]
     assert "recovered" not in kinds
+
+
+def test_the_dispatcher_does_not_send_an_old_delivery_back_to_review(db):  # noqa: F811
+    """Task 18 after its edit: in To do with the delivery the person sent
+    back, the dispatcher moved it to review instead of queuing it."""
+    from services.loop.worker import intake
+
+    item = _blocked_with_a_delivery(db)
+    task_events.record(
+        db,
+        item,
+        "sent_back",
+        task_events.PERSON,
+        text="Sent back to work by a person: narrowed",
+        status="todo",
+    )
+    db.commit()
+
+    asyncio.run(intake._dispatch_todo_items(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(BacklogItem, item.id).status != "in_review"
+    kinds = [e.event_type for e in task_events.for_task(db, item.id)]
+    assert "recovered" not in kinds
+
+
+def test_a_delivery_after_the_send_back_still_goes_to_review(db):  # noqa: F811
+    """A worker that stopped after delivering the new attempt: its delivery
+    is reviewed, as before."""
+    from services.loop.worker import intake
+
+    item = _blocked_with_a_delivery(db)
+    task_events.record(
+        db,
+        item,
+        "sent_back",
+        task_events.PERSON,
+        text="Sent back to work by a person: narrowed",
+        status="todo",
+    )
+    task_events.record(
+        db,
+        item,
+        "delivered",
+        "Developer",
+        author="Dev",
+        text=DELIVERABLE,
+        status="todo",
+    )
+    db.commit()
+
+    asyncio.run(intake._dispatch_todo_items(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(BacklogItem, item.id).status == "in_review"
