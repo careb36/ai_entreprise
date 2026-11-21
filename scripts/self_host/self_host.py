@@ -85,7 +85,8 @@ AGENTS = [
 ]
 IDENTITY = ["-c", "user.name=La Fabrique self-hosting", "-c", "user.email=self-host@localhost"]
 # La Fabrique's suites per folder, as CI runs them (.github/workflows/). The
-# daemon's tests live in the backend's suite, so a change to the daemon runs it.
+# daemon runs its own suite, not the backend's a second time (#766: twice per
+# delivery touching both, past 600 s); CI runs the backend's daemon tests.
 _BACKEND_TESTS = "PYTHONPATH=.:app poetry run python -m pytest tests -q -p no:cacheprovider"
 LA_FABRIQUE_FOLDERS = {
     "backend": {"stack": "python", "install": "poetry install --no-interaction", "test": _BACKEND_TESTS},
@@ -96,10 +97,12 @@ LA_FABRIQUE_FOLDERS = {
     },
     "llm-proxy": {
         "stack": "python",
-        "install": "poetry install --no-interaction --no-root",
+        # pytest comes from requirements-dev.txt, as in CI, not from Poetry:
+        # without it the sandboxed suite found no pytest (issue #766).
+        "install": "poetry install --no-interaction --no-root && poetry run pip install -q -r requirements-dev.txt",
         "test": "poetry run python -m pytest -q -p no:cacheprovider",
     },
-    "vscode-daemon": {"stack": "python", "install": "", "test": f"cd ../backend && {_BACKEND_TESTS}"},
+    "vscode-daemon": {"stack": "python", "install": "", "test": "python -m pytest tests -q -p no:cacheprovider"},
 }
 # What CI checks on every change, whatever it touched.
 EVERY_DELIVERY = (
