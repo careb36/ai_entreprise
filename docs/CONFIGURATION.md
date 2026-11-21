@@ -516,7 +516,23 @@ Copy `.env.example` to `.env` and fill in:
   a person's send-back starts the count again. It replaces
   `AUTOPILOT_MAX_REWORK_CYCLES` (2 per cause, so up to 6 and more), which is
   still read, with a warning, when `MAX_REWORKS` is not set; it will be
-  removed in the next release.
+  removed in the next release. A value that is not a whole number keeps the
+  default. A company may set its own budget, from 0 to 10 (below).
+
+### A company's limits (issue #766)
+
+An Owner sets, on the Models page or with `PUT /v1/companies/{id}/limits`,
+the company's own values of four limits; each is optional, an empty one
+keeps the deployment's value, and each stays within a range the code holds
+(`services/contracts/company_limits.py`): the Developer's `tool_rounds`
+(1–50, the deployment's `DEVELOPER_TOOL_ROUNDS`), `result_max_chars`
+(500–100000, `MCP_RESULT_MAX_CHARS`), `max_output_tokens` (0–1048576 and
+never above the model's own output limit, `DEVELOPER_MAX_OUTPUT_TOKENS`) and
+the task's `max_reworks` (0–10, `MAX_REWORKS`). The company's value wins over
+`MODEL_PROFILES`; the run's evidence names `company` as its source. Each
+change is audited (`company_limits_changed`); a Manager, the Manager agent
+and an agent cannot change them. Stored in `companies.limits` (migration
+`0061`).
 - `DELIVERY_TESTS_ENABLED` — optional, default `true` (issue #766; it was
   `false`, and no code delivery could then be verified: a company runs with it
   off only under an Owner's `tests_off` acknowledgement). After an agent's files are
@@ -853,7 +869,26 @@ Copy `.env.example` to `.env` and fill in:
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
   run its tests with `DELIVERY_TESTS_ENABLED`, for that many rounds before
-  delivering; every read is evidence.
+  delivering; every read is evidence. The rounds, like `MCP_RESULT_MAX_CHARS`
+  and `DEVELOPER_MAX_OUTPUT_TOKENS`, are the default of the model's profile,
+  which `MODEL_PROFILES` overrides per model.
+- `DEVELOPER_MAX_OUTPUT_TOKENS` (0) — the cap on the Developer's answer in
+  tokens (issue #766); `0` sends none and the provider's own default applies
+  (with thinking, the reasoning reserve is added to a cap, as for every
+  role). Never above the model's output limit.
+- `MODEL_PROFILES` (`{}`) — per-model overrides of the profile
+  (`services/models/model_profile.py`, [models](contexts/models.md#a-models-profile)),
+  a JSON object by model name. Each entry may set the capabilities
+  (`context`, `output`, `tool_call`, `reasoning`), which otherwise come from
+  the catalogue, and the Developer's limits (`tool_rounds`,
+  `result_max_chars`, `max_output_tokens`), which otherwise are the three
+  settings above. For example
+  `MODEL_PROFILES='{"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}'`.
+  A value that is not JSON stops the backend at startup with the setting's
+  name (nothing runs on a configuration it could not read); inside valid
+  JSON, a malformed entry is ignored with a warning. The limits stay within
+  fixed ceilings (50 rounds, 100000 characters). The run's evidence keeps the
+  profile it ran under, with the source of each field.
 - `REPO_MAP_MAX_CHARS` (3000) — the repository map (`services/tools/repo_map.py`,
   daemon `vscode-daemon/repo_map.py`): how many characters of the project's
   definitions, ranked by use, go into the Developer's, QA's and the
@@ -1101,6 +1136,48 @@ Copy `.env.example` to `.env` and fill in:
   stay declared in `config.py` (`REMOVED_SETTINGS`) so a `.env` that still
   sets one loads, and the backend logs once at startup that each one set no
   longer does anything; remove them from `.env`.
+
+### Operational values moved into `config.py` (issue #766)
+
+These were read with `os.getenv` where they are used, undocumented and out
+of `.env`'s reach; they are settings now, with the same names and defaults,
+and a value in `.env` reaches them like any other setting. The modules keep
+the floors they had.
+
+- `DISPATCH_REQUEUE_COOLDOWN_SECONDS` (default `90`): the task worker
+  dispatches a To do item again no sooner than this.
+- `AUTOPILOT_QA_REWORK_ENABLED` (default `true`): QA's "needs rework" sends
+  the task back to the Developer on its own.
+- `INTEGRATION_RETRY_SECONDS` (default `60`): how often a close's integration
+  the daemon could not take is tried again; `INTEGRATION_MAX_CONCURRENT`
+  (default `2`, at least `1`): integrations running at once per process.
+- `LLM_PROXY_MAX_RETRIES` (default `2`) and `LLM_PROXY_RETRY_BACKOFF_SEC`
+  (default `1.0`): the backend's retries when the LLM proxy cannot be
+  reached (not the proxy's own retries with a provider).
+- `ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES` (default `30`): how long a coding
+  CLI missing from the sandbox is not offered again.
+- The workspace snapshot in the Developer's prompt
+  (`services/workspace/workspace_snapshot.py`): `WORKSPACE_SNAPSHOT_ENABLED`
+  (default `true`), `WORKSPACE_SNAPSHOT_CACHE_TTL` (seconds, default `60`, at
+  least `10`), `WORKSPACE_SNAPSHOT_MAX_FILES` (default `4000`, at least `20`),
+  `WORKSPACE_SNAPSHOT_TOP_RELEVANT` (default `5`, at least `3`),
+  `WORKSPACE_SNAPSHOT_LINES_PER_FILE` (default `60`, at least `20`),
+  `WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES` (default `30`, at least `15`),
+  `WORKSPACE_EVIDENCE_LINES_PER_FILE` (default `80`, at least `20`) and
+  `WORKSPACE_EVIDENCE_MAX_FILE_BYTES` (default `65536`, at least `2048`).
+
+Every module now reads `LLM_PROXY_URL`, `POSTGRES_*`, `NEO4J_*` and
+`NATS_URL` from `settings`; before, about twenty call sites read them again,
+and the proxy URL had two different defaults (`http://localhost:5100` and
+`http://llm-proxy:5100`). Its default is `settings`' (`http://localhost:5100`);
+`docker-compose.yml` sets it for the containers.
+
+`scripts/check_config.py` keeps it that way, after AixleHQ/flow's
+`NoEnvInApp` rule: under `backend/app` only `config.py` reads the
+environment, and the files that still do are in
+`scripts/config_env_allowlist.json`, with their count of reads and why; an
+entry may shrink but never grow. It also fails when a field of `Settings` is
+not named in this document.
 
 ## The LLM proxy
 

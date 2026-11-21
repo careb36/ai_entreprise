@@ -96,11 +96,13 @@ async def _send_back_from_quality_gate(
     The checks look at the text's form (length, sections, fences): a
     deterministic opinion, not evidence. It may send work back with the
     reason, like a reviewer, but holding a task for good on it would leave the
-    sprint open forever. After ``qa_review.MAX_REWORKS``
+    sprint open forever. After the task's rework budget
+    (``qa_review.rework_limit``: the company's, else ``MAX_REWORKS``)
     attempts the task is blocked for a person and escalated to the ScrumMaster.
     """
     previous_reworks = task_projection.record_from_dict(item).reworks()
-    rework = previous_reworks < qa_review.MAX_REWORKS
+    limit = await asyncio.to_thread(qa_review.rework_limit_of, sprint["company_id"])
+    rework = previous_reworks < limit
     text = (
         f"NEEDS WORK: {reason}. {qa_review.EDIT_INSTRUCTION}"
         if rework

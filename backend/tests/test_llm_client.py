@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import requests
+from config import settings
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
@@ -44,17 +45,17 @@ def _posting(monkeypatch, answers):
 def test_the_default_wait_covers_the_proxy_s_upstream_budget(monkeypatch):
     """A client that gives up before the proxy does discards an answer the
     provider has already billed; the default follows the proxy's budget."""
-    monkeypatch.delenv("LLM_UPSTREAM_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setattr(settings, "LLM_UPSTREAM_TIMEOUT_SECONDS", 300.0)
     assert llm_proxy_client.read_timeout_seconds() == 315.0
     assert LLMProxyClient("http://p").timeout == 315.0
-    monkeypatch.setenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "200")
+    monkeypatch.setattr(settings, "LLM_UPSTREAM_TIMEOUT_SECONDS", 200.0)
     assert LLMProxyClient("http://p").timeout == 215.0
-    monkeypatch.setenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "not a number")
+    monkeypatch.setattr(settings, "LLM_UPSTREAM_TIMEOUT_SECONDS", "not a number")
     assert LLMProxyClient("http://p").timeout == 315.0
 
 
 def test_max_tokens_travels_only_when_set(monkeypatch):
-    monkeypatch.delenv("LLM_THINKING", raising=False)
+    monkeypatch.setattr(settings, "LLM_THINKING", "auto")
     ok = {"choices": [{"message": {"content": "hi"}}]}
     calls = _posting(
         monkeypatch, [_Response(200, ok), _Response(200, ok), _Response(200, ok)]
@@ -78,8 +79,8 @@ def test_max_tokens_travels_only_when_set(monkeypatch):
 
 def test_every_call_names_its_thinking_mode(monkeypatch):
     """DeepSeek thinks when the field is absent: no call leaves it absent."""
-    monkeypatch.delenv("LLM_THINKING", raising=False)
-    monkeypatch.delenv("LLM_THINKING_RESERVE_TOKENS", raising=False)
+    monkeypatch.setattr(settings, "LLM_THINKING", "auto")
+    monkeypatch.setattr(settings, "LLM_THINKING_RESERVE_TOKENS", 16384)
     ok = {"choices": [{"message": {"content": "hi"}}]}
     calls = _posting(monkeypatch, [_Response(200, ok) for _ in range(3)])
     client = LLMProxyClient("http://p")

@@ -11,7 +11,6 @@ Architect's role default model unless the company chose one; issue #750), and
 """
 
 import asyncio
-import os
 from typing import Any
 
 from config import settings
@@ -39,7 +38,8 @@ from services.loop.worker import (
     sprint_notes,
     wiki_section,
 )
-from services.models import edit_format, model_routing
+from services.models import edit_format, model_profile, model_routing
+from services.platform import company_limits_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -234,7 +234,7 @@ def _execute_task(
     on a failed or empty call. With ``company_id`` the turn goes to
     ``audit_log`` (role, company, token cost) for the KPIs.
     """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.company_id = company_id
 
     # The model by difficulty (#319): the estimate and the routing are stored
@@ -252,6 +252,20 @@ def _execute_task(
     role = agent.get("role", "Dev")
     # The requested model's edit format (#689), kept for the run's evidence.
     agent["edit_format"] = edit_format.format_for(model, settings.EDIT_FORMAT_BY_MODEL)
+    # The model's profile and the limits it sets, with their sources (#766).
+    try:
+        with Session(engine) as session:
+            own: dict[str, Any] | None = company_limits_setting.stored(
+                session, company_id
+            )
+    except Exception as exc:  # noqa: BLE001 - As the routing: the deployment's limits.
+        logger.warning(
+            "Company limits unavailable for item=%s: %s", item.get("id"), exc
+        )
+        own = None
+    limits = agent["model_profile"] = model_profile.profile(model, own)
+    limits["company_limits_read"] = own is not None
+    client.max_tokens = limits["max_output_tokens"] or None
 
     system_prompt = _developer_system_prompt(agent) + prompt.language_note(
         company_id, engine
@@ -304,6 +318,11 @@ def _execute_task(
     # The workspace and MCP tools for this role: each call an observation.
     toolbox = developer_tools.toolbox_for(
         company_id, role, engine=engine, item_id=item.get("id")
+    )
+    developer_tools.apply_limits(
+        toolbox,
+        rounds=limits["tool_rounds"],
+        result_max_chars=limits["result_max_chars"],
     )
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
@@ -400,7 +419,7 @@ def _consult_architect(
         sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
 
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
     try:
         result = client.chat(

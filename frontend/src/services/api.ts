@@ -22,6 +22,7 @@ import { ssoGroupEndpoints } from './api/ssoGroups'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
 import { dutiesEndpoints } from './api/duties'
+import { companyLimitsEndpoints } from './api/companyLimits'
 import { runWindowEndpoints } from './api/runWindow'
 import { taskViewEndpoints } from './api/taskViews'
 import { taskRelationEndpoints } from './api/taskRelations'
@@ -54,6 +55,7 @@ export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
 export * from './api/duties'
+export * from './api/companyLimits'
 export * from './api/runWindow'
 export * from './api/taskViews'
 export * from './api/taskRelations'
@@ -94,6 +96,7 @@ const endpoints = {
   ...usageEndpoints(http),
   ...dutiesEndpoints(http),
   ...runWindowEndpoints(http),
+  ...companyLimitsEndpoints(http),
   ...findingEndpoints(http),
   ...benchEndpoints(http),
   ...notificationEndpoints(http),

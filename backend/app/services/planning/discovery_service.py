@@ -18,11 +18,11 @@ prompt in ``discovery_team``; this module re-exports their names.
 """
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 
+from config import settings
 from models import ProjectDiscovery
 from sqlmodel import Session
 
@@ -195,14 +195,12 @@ class DiscoveryService:
 
     Args:
         session:       Active SQLModel session used for persisting the discovery result.
-        llm_proxy_url: Base URL of the internal LLM proxy (default: env var LLM_PROXY_URL).
+        llm_proxy_url: Base URL of the internal LLM proxy (default: ``settings.LLM_PROXY_URL``).
     """
 
     def __init__(self, session: Session, llm_proxy_url: str | None = None):
         self.session = session
-        self.llm_proxy_url = llm_proxy_url or os.getenv(
-            "LLM_PROXY_URL", "http://localhost:5100"
-        )
+        self.llm_proxy_url = llm_proxy_url or settings.LLM_PROXY_URL
 
     def discover_project_team(
         self,

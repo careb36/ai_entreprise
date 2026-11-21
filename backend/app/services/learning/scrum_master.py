@@ -17,11 +17,11 @@ Without a decision (the call failed, the answer was unusable) the company
 keeps the deterministic default: one more attempt, then a person.
 """
 
-import os
 import re
 from datetime import UTC, datetime
 from typing import Any
 
+from config import settings
 from llm_proxy_client import DEFAULT_TIMEOUT_SECONDS, LLMProxyClient
 from logging_config import setup_logger
 from models import Agent, AgentMessage, BacklogItem, Sprint
@@ -220,9 +220,7 @@ def ask_model(
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.timeout = timeout
     client.company_id = company_id
     client.max_tokens = ANSWER_MAX_TOKENS

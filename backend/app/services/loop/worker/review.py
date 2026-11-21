@@ -288,7 +288,8 @@ async def _send_back_from_delivery_gate(
     """Rework for a delivery the daemon refuted or never confirmed; block after the limit."""
     problem, observation = gate
     previous_gate_reworks = task_record.reworks()
-    rework = previous_gate_reworks < qa_review.MAX_REWORKS
+    limit = qa_review.rework_limit(session, sprint.company_id)
+    rework = previous_gate_reworks < limit
     instruction = (
         "Fix the code so the project's checks pass. "
         if problem in delivery_gate.CODE_PROBLEMS

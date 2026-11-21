@@ -3122,6 +3122,20 @@
     "urgentOn": "Urgente: la ventana de ejecución no se aplica",
     "inboxTitle": "Esperando la ventana de ejecución"
   },
+  "companyLimits": {
+    "title": "Límites del trabajo de los agentes",
+    "hint": "Cuánto puede gastar una tarea. Un campo vacío mantiene el valor de la instalación, que se ve en gris; cada valor queda dentro del rango que permite la plataforma. Solo un Owner los cambia y cada cambio queda auditado.",
+    "field": {
+      "tool_rounds": "Rondas de herramientas del Developer por llamada",
+      "result_max_chars": "Caracteres del resultado de una herramienta que ve el modelo",
+      "max_output_tokens": "Tope de la respuesta del Developer (tokens, 0: sin tope)",
+      "max_reworks": "Retrabajos por tarea antes de pasar a una persona"
+    },
+    "range": "Instalación: {{deployment}} · permitido {{floor}}–{{ceiling}}",
+    "save": "Guardar límites",
+    "reset": "Usar los valores de la instalación",
+    "ownerOnly": "Solo un Owner puede cambiar estos límites."
+  },
   "graphSkeleton": {
     "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",
     "loadingVisualization": "Cargando la visualización del grafo...",

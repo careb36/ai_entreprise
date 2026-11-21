@@ -37,6 +37,7 @@ from typing import Any
 
 import nats
 import nats_auth
+from config import settings
 from logging_config import setup_logger
 from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js import api as js_api
@@ -162,7 +163,7 @@ class NATSClient:
     """
 
     def __init__(self, nats_url: str | None = None):
-        self.nats_url = nats_url or os.getenv("NATS_URL", "nats://localhost:4222")
+        self.nats_url = nats_url or settings.NATS_URL
         self.nc: nats.NATS | None = None
         # Tracks running listener tasks so they can be cancelled on shutdown.
         self.subscriptions: dict[str, asyncio.Task] = {}

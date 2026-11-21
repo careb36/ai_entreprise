@@ -503,6 +503,21 @@ def tool_root(
     return worktree if isinstance(worktree, str) and worktree else root
 
 
+def apply_limits(toolbox: Any, *, rounds: int, result_max_chars: int) -> None:
+    """The model's limits (``services/models/model_profile.py``, issue #766)
+    on *toolbox*: the workspace's rounds and every box's result budget."""
+    if toolbox is None:
+        return
+    workspace = getattr(toolbox, "workspace", toolbox)
+    for box in (toolbox, workspace, getattr(toolbox, "mcp", None)):
+        if box is not None and hasattr(box, "result_max_chars"):
+            box.result_max_chars = result_max_chars
+    if isinstance(workspace, WorkspaceToolbox):
+        workspace.max_rounds = rounds
+    if hasattr(toolbox, "builtin"):
+        toolbox.max_rounds = max(box.max_rounds for box in toolbox.builtin)
+
+
 def toolbox_for(
     company_id: int | None,
     role: str | None,

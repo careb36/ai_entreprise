@@ -106,6 +106,12 @@ class Company(SQLModel, table=True):
     # window in a named IANA zone. An Owner writes it, audited
     # (services/platform/run_window_setting.py).
     run_window: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The company's limits on its agents' work (issue #766,
+    # services/contracts/company_limits.py): null (the deployment's values) or
+    # tool rounds, tool-result size, answer cap and rework budget, each within
+    # the code's ceilings. An Owner writes it, audited
+    # (services/platform/company_limits_setting.py).
+    limits: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

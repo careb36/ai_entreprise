@@ -20,6 +20,7 @@
         "acknowledgements",
         "agent_service",
         "audit_anchors",
+        "company_limits_setting",
         "company_standards_setting",
         "egress",
         "engram_processor",
@@ -73,6 +74,7 @@
         "edit_format",
         "effort",
         "model_factory",
+        "model_profile",
         "model_routing",
         "run_cost"
       ],
@@ -594,6 +596,9 @@
       "test_check_changelog.py": [
         "repo"
       ],
+      "test_check_config.py": [
+        "repo"
+      ],
       "test_check_context_docs.py": [
         "repo"
       ],
@@ -946,6 +951,12 @@
       ],
       "test_model_catalog.py": [
         "models"
+      ],
+      "test_model_profile.py": [
+        "models"
+      ],
+      "test_company_limits.py": [
+        "loop"
       ],
       "test_model_factory.py": [
         "models"

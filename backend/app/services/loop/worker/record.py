@@ -109,8 +109,9 @@ def _record_task_run(
         evidence = evidence if isinstance(evidence, dict) else {}
         evidence["prompt_sections"] = agent["prompt_sections"]
     # The difficulty estimate and the routing it led to (#319): the plan and
-    # the request, beside the served model above (the observation).
-    for key in ("difficulty", "routing"):
+    # the request, beside the served model above (the observation); and the
+    # model's profile the backend applied, with each field's source (#766).
+    for key in ("difficulty", "routing", "model_profile"):
         if agent.get(key):
             evidence = evidence if isinstance(evidence, dict) else {}
             evidence[key] = agent[key]

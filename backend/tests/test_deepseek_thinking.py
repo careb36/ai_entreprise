@@ -13,6 +13,7 @@ import json
 
 import llm_proxy_client
 import pytest
+from config import Settings, settings
 from services.loop.worker import execute, qa_review
 from services.models import thinking
 from services.models.model_factory import AgentRole, ModelFactory
@@ -21,8 +22,8 @@ from services.planning import sprint_planner
 
 @pytest.fixture(autouse=True)
 def _policy_defaults(monkeypatch):
-    monkeypatch.delenv("LLM_THINKING", raising=False)
-    monkeypatch.delenv("LLM_THINKING_RESERVE_TOKENS", raising=False)
+    monkeypatch.setattr(settings, "LLM_THINKING", "auto")
+    monkeypatch.setattr(settings, "LLM_THINKING_RESERVE_TOKENS", 16384)
 
 
 @pytest.mark.parametrize(
@@ -46,14 +47,14 @@ def test_the_mode_of_a_call(role, structured, mode):
 
 @pytest.mark.parametrize(("value", "mode"), [("on", "enabled"), ("off", "disabled")])
 def test_an_operator_may_force_every_call(monkeypatch, value, mode):
-    monkeypatch.setenv("LLM_THINKING", value)
+    monkeypatch.setattr(settings, "LLM_THINKING", value)
     assert thinking.mode_for("QA", structured=True) == mode
     assert thinking.mode_for("Architect", structured=False) == mode
 
 
 def test_auto_and_unknown_values_follow_the_policy(monkeypatch):
     for value in ("auto", "", "sometimes"):
-        monkeypatch.setenv("LLM_THINKING", value)
+        monkeypatch.setattr(settings, "LLM_THINKING", value)
         assert thinking.mode_for("PO", structured=True) == "disabled"
         assert thinking.mode_for("PO", structured=False) == "enabled"
 
@@ -64,9 +65,9 @@ def test_a_thinking_call_gets_room_for_its_reasoning(monkeypatch):
     assert thinking.max_tokens_for("enabled", None) is None, (
         "the provider's own default"
     )
-    monkeypatch.setenv("LLM_THINKING_RESERVE_TOKENS", "2000")
+    monkeypatch.setattr(settings, "LLM_THINKING_RESERVE_TOKENS", 2000)
     assert thinking.max_tokens_for("enabled", 600) == 2600
-    monkeypatch.setenv("LLM_THINKING_RESERVE_TOKENS", "-5")
+    monkeypatch.setattr(settings, "LLM_THINKING_RESERVE_TOKENS", -5)
     assert thinking.reasoning_reserve() == thinking.DEFAULT_REASONING_RESERVE_TOKENS
 
 
@@ -196,3 +197,22 @@ def test_the_qa_review_fails_with_the_named_reason(proxy_posts):
 
     assert "empty_content_reasoning_exhausted" in str(raised.value)
     assert proxy_posts[0]["json"]["thinking"] == {"type": "disabled"}
+
+
+def test_a_malformed_value_in_the_environment_keeps_the_default():
+    """A typo never lifts or zeroes a budget: the setting falls back, as the
+    variables did when read with os.getenv."""
+    for given in ("-5", "0", "lots", ""):
+        assert Settings(
+            LLM_THINKING_RESERVE_TOKENS=given
+        ).LLM_THINKING_RESERVE_TOKENS == (16384)
+        assert Settings(
+            LLM_UPSTREAM_TIMEOUT_SECONDS=given
+        ).LLM_UPSTREAM_TIMEOUT_SECONDS == (300.0)
+    assert (
+        Settings(LLM_THINKING_RESERVE_TOKENS="2000").LLM_THINKING_RESERVE_TOKENS == 2000
+    )
+    assert (
+        Settings(LLM_UPSTREAM_TIMEOUT_SECONDS="200").LLM_UPSTREAM_TIMEOUT_SECONDS
+        == 200.0
+    )

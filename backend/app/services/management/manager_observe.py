@@ -19,11 +19,11 @@ made on that loop, as the routes make them. Tests replace the requester.
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from collections.abc import Callable
 from typing import Any
 
+from config import settings
 from logging_config import logger
 from models import Agent, BacklogItem, Company
 from models.manager import ManagerDecision
@@ -97,9 +97,7 @@ def probe_call(model: str, role: str, company_id: int, bu_id: int | None) -> dic
     """The smallest call through the proxy: one token, billed to the company."""
     from llm_proxy_client import LLMProxyClient
 
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = 1, company_id
     # One token cannot hold reasoning and an answer: thinking off.
     client.structured = True

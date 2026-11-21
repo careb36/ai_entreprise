@@ -38,6 +38,7 @@ import os
 from enum import Enum
 from typing import Any, ClassVar
 
+from config import settings
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -214,7 +215,7 @@ class ModelFactory:
             return cls._model_cache[role]
 
         config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name=FLASH_MODEL))
-        proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+        proxy_url = settings.LLM_PROXY_URL
 
         # Thinking is always explicit (``services/models/thinking.py``): the
         # EngramProcessor's JSON extraction runs without it, a reasoning role

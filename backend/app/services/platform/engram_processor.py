@@ -17,13 +17,13 @@ comes from pgvector alone. Memory is prompt context, never evidence.
 
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
 import neo4j
+from config import settings
 from memory_client import GraphNotRecorded, MemoryClient
 
 logger = logging.getLogger(__name__)
@@ -78,9 +78,9 @@ class DeepSeekEngramProcessor:
         neo4j_user: str | None = None,
         neo4j_password: str | None = None,
     ):
-        self.neo4j_uri = neo4j_uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        self.neo4j_user = neo4j_user or os.getenv("NEO4J_USER", "neo4j")
-        self.neo4j_password = neo4j_password or os.getenv("NEO4J_PASSWORD")
+        self.neo4j_uri = neo4j_uri or settings.NEO4J_URI
+        self.neo4j_user = neo4j_user or settings.NEO4J_USER
+        self.neo4j_password = neo4j_password or settings.NEO4J_PASSWORD or None
 
         self._driver: neo4j.Driver | None = None
 
