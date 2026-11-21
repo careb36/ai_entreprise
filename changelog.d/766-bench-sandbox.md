@@ -1,0 +1,3 @@
+Fixed
+
+* **The bench runs again, and a real model's code runs in a container (issue #766).** Phase 0 made `/health` degraded on the host sandbox and made starting a sprint there require the Owner's `host_sandbox` acknowledgement; the bench, which ran every delivery on the host, stopped before its first sprint. `BENCH_SANDBOX` now chooses where the agents' code runs: `host` with the fake LLM (the run records the acknowledgement for its company, and the bench accepts a `/health` degraded only for that reason), `container` by default with a real proxy (`BENCH_LLM_URL`), in `BENCH_SANDBOX_IMAGE` (`fabrique-e2e-sandbox:1`, built when missing), so comparing real models never runs their code on the machine unisolated.

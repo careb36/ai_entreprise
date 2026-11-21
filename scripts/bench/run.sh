@@ -98,6 +98,13 @@
 #                                    the fake; it spends tokens, so CI sets it
 #                                    only behind a flag. Empty: the fake.
 #   BENCH_RESEARCH_TOOLS [false with the fake, true otherwise]
+#   BENCH_SANDBOX [host with the fake, container with BENCH_LLM_URL]  where the
+#                                    agents' code and the delivery's tests run
+#                                    (DELIVERY_SANDBOX): a real model's code never
+#                                    runs on this machine unisolated (issue #766)
+#   BENCH_SANDBOX_IMAGE [fabrique-e2e-sandbox:1]  the container sandbox's image,
+#                                    built here when missing (Python and pytest,
+#                                    as the e2e's)
 #   AGENT_MODEL_POLICY [empty]       the routing policy the backend runs under
 #                                    (services/models/model_routing.py), passed through
 #   BENCH_POLICY [default, or the policy itself]  the policy's label on the
@@ -302,14 +309,36 @@ else
   echo "grading in the sandbox: image ${GRADING_IMAGE:-none named (every grade will be unmeasured)}"
 fi
 API=http://127.0.0.1:$BACKEND_PORT
-TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
+# Where the agents' code runs: the fake's answers are the bench's own files, a
+# real model's are not (issue #766), so a real proxy defaults to the container.
+SANDBOX=${BENCH_SANDBOX:-$([ -n "${BENCH_LLM_URL:-}" ] && echo container || echo host)}
+SANDBOX_IMAGE=${BENCH_SANDBOX_IMAGE:-fabrique-e2e-sandbox:1}
+case "$SANDBOX" in
+  host) TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider" ;;
+  container)
+    docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 \
+      || printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n' \
+        | docker build -q -t "$SANDBOX_IMAGE" - >/dev/null \
+      || { echo "could not build the sandbox image $SANDBOX_IMAGE"; exit 2; }
+    TEST_COMMAND="python -m pytest -q -p no:cacheprovider" ;;
+  *) echo "BENCH_SANDBOX is host or container, not $SANDBOX"; exit 2 ;;
+esac
+echo "the agents' code runs in the $SANDBOX sandbox"
 cleanup() { kill ${BPID:-} ${DPID:-} ${LPID:-} ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
 trap cleanup EXIT
 fail() { echo "BENCH FAILED: $*"; exit 1; }
 free_port() { "$PY" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
 
 port_busy() { (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
-healthy() { curl -sf -m 2 "$API/health" | "$PY" -c 'import sys, json; sys.exit(json.load(sys.stdin).get("status") != "healthy")' 2>/dev/null; }
+# Healthy, or degraded only because the fake's run chose the host sandbox
+# (``/health`` says so, issue #766); anything else degraded stops the bench.
+healthy() { curl -sf -m 2 "$API/health" | SANDBOX="$SANDBOX" "$PY" -c '
+import json, os, sys
+h = json.load(sys.stdin)
+v = h.get("verification") or {}
+others = [k for k, s in h.items() if isinstance(s, dict) and s.get("status") == "degraded" and k != "verification"]
+host_only = os.environ["SANDBOX"] == "host" and v.get("sandbox_default") == "host" and len(v.get("reasons") or []) == 1
+sys.exit(0 if h.get("status") == "healthy" or (h.get("status") == "degraded" and host_only and not others) else 1)' 2>/dev/null; }
 if port_busy "$BACKEND_PORT"; then
   echo "port $BACKEND_PORT is already in use: set BENCH_BACKEND_PORT to a free port."; exit 2
 fi
@@ -360,7 +389,7 @@ PGENV=(POSTGRES_HOST="$PG_HOST" POSTGRES_PORT="$PG_PORT" POSTGRES_USER="$PG_USER
     NATS_URL="$NATS_URL" NATS_NAMESPACE="$NATS_NAMESPACE" LLM_PROXY_URL="$LLM_URL" NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=bench-secret-bench-secret-bench-secret-bench \
     SUPPORT_AGENT_ENABLED=false REVIEWER_AGENT_ENABLED=false \
-    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_SANDBOX=host \
+    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_SANDBOX="$SANDBOX" DELIVERY_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
     RESEARCH_TOOLS_ENABLED="$RESEARCH" AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false \
     AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" PROMPT_SECTIONS_OFF="$SECTIONS_OFF" EDIT_FORMAT_BY_MODEL="$EDIT_FORMAT_MAP" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
@@ -399,6 +428,12 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
                  {\"role\": \"QA\", \"name\": \"Quinn\"}, {\"role\": \"ScrumMaster\", \"name\": \"Sam\"}]}")
   cid=$(echo "$company" | json "d.get('company_id') or 0")
   [ "$cid" != 0 ] || error="init_company failed: ${company:0:300}"
+  if [ -z "$error" ] && [ "$SANDBOX" = host ]; then
+    # The fake's host run, said in the company's own record (issue #766).
+    ack=$(post "/v1/companies/$cid/acknowledgements" '{"kind": "host_sandbox", "days": 1,
+      "reason": "The bench with the fake LLM: its answers are the bench'"'"'s own files, run on the host."}')
+    [ "$(echo "$ack" | json "'host_sandbox' not in (d.get('missing') or ['?'])")" = True ] || error="the host_sandbox acknowledgement was refused: ${ack:0:300}"
+  fi
   if [ -z "$error" ]; then
     body=$("$PY" -c 'import json, sys; d = json.load(open(sys.argv[1])); d["company_id"] = int(sys.argv[2]); print(json.dumps(d))' "$dir/spec.json" "$cid")
     spec=$(post /v1/specifications "$body")

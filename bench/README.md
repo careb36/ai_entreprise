@@ -416,6 +416,18 @@ measure is the nightly real-model run (`BENCH_LLM_URL`) made twice, with the
 flag off and on, compared as above: lower `tokens_mean` with the same or
 lower `rework_per_task` is the result the issue asks for.
 
+## Where the agents' code runs
+
+`BENCH_SANDBOX` says where the agents' code and each delivery's tests run
+(the backend's `DELIVERY_SANDBOX`). With the fake it is `host` by default: its
+answers are the bench's own files, and the run records the company's
+`host_sandbox` acknowledgement, which starting a sprint on the host requires
+(issue #766). With a real proxy (`BENCH_LLM_URL`) it is `container` by
+default, so a real model's code never runs on this machine unisolated:
+`BENCH_SANDBOX_IMAGE` (`fabrique-e2e-sandbox:1`, Python and pytest as the
+e2e's, built when missing) with no network at run time. The bench waits for
+`/health` to say `healthy`, or `degraded` only because the fake chose the host.
+
 ## The nightly real-model run
 
 `.github/workflows/bench.yml` has a second job, `bench-real`, apart from the
