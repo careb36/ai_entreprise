@@ -166,6 +166,8 @@ check() {  # check <description> <shell test...>
 # every /v1 call returned 404. Assert our payload, and name the collision
 # explicitly instead of blaming the backend.
 port_busy() { (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+# The task's rework budget is 2 here (MAX_REWORKS; the deployment's default
+# is 3 since issue #766): the foundation sprint's checks count two requests.
 # Up means healthy, or, on the host, degraded for that reason alone: the host
 # sandbox runs agent code without isolation, and /health says so (issue #766).
 healthy() { curl -sf -m 2 "$API/health" | "$PY" -c '
@@ -226,7 +228,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
     NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
-    SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
+    SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 MAX_REWORKS=2 \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_APP_CHECK_ENABLED=true \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 REVIEWER_VERIFY_GRACE_SECONDS=5 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
@@ -317,7 +319,9 @@ check "the new task is done and the retried one blocked again" test "$(board "$S
 # The console assistants were removed (issue #750): no prompt carries a CLI's notes.
 check "no external CLI's notes reached a prompt" test "$(grep -c 'External Console Assistant Notes' "$PROMPTS")" = 0
 check "the factory's standards bind the Developer before the task, and QA's review" test "$(prompt_seen "## Quality standards.*STD-SEC-1 No secret in the repository, ever \[checked\].*## Task: Add parser")" = yes -a "$(prompt_seen "reviewing the following deliverable for the task: 'Add parser'.*## Quality standards.*STD-QA-2 Review against the criteria")" = yes
-check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
+# Since issue #750 QA consults the Architect too: its retried, high-priority
+# document is briefed beside the new task, and draws the gate's two requests.
+check "the Architect briefed the new task and QA's retried document; the task got done, the document drew two requests after its brief" test "$(brief_counts "$S1")" = "(2, 1, 2)"
 check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes
 check "the sprint list counts it as a briefed second attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S1)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the retried task's prompts carry the previous attempt" test "$(grep -c '## Previous attempt' "$PROMPTS")" -ge 1
@@ -345,7 +349,7 @@ check "its triage was told how earlier second attempts went" test "$(grep -c 'Ho
 check "with the numbers counted from the boards" test "$(grep -c '0 of 1 tasks carried into another sprint got done. With a brief from you: 0 of 1; without one: 0 of 0.' "$PROMPTS")" -ge 1
 check "the procedure adopted after the foundation sprint was measured and kept" wait_value 60 kept procedure_result "Cover edge cases"
 check "the proposal prompt listed what earlier procedures did" wait_value 60 yes prompt_seen '"Cover edge cases" (Developer, v1): kept, rework per task'
-check "the Architect, asked again, was told how its earlier brief went" test "$(prompt_seen "Task: Add formatter.*earlier briefs.*Tasks you briefed: 1 of 1 got done, 0.00 rework requests per task")" = yes
+check "the Architect, asked again, was told how its earlier brief went" test "$(prompt_seen "Task: Add formatter.*earlier briefs.*Tasks you briefed: 1 of 2 got done, 1.00 rework requests per task")" = yes
 check "the sprint list counts the briefed third attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S2)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the inbox lists only the latest attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['sprint_id'] for t in d['blocked_tasks']]")" = "[$S2]"
 
