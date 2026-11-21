@@ -884,8 +884,10 @@ and an agent cannot change them. Stored in `companies.limits` (migration
   `result_max_chars`, `max_output_tokens`), which otherwise are the three
   settings above. For example
   `MODEL_PROFILES='{"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}'`.
-  A malformed value is ignored with a warning; the limits stay within fixed
-  ceilings (50 rounds, 100000 characters). The run's evidence keeps the
+  A value that is not JSON stops the backend at startup with the setting's
+  name (nothing runs on a configuration it could not read); inside valid
+  JSON, a malformed entry is ignored with a warning. The limits stay within
+  fixed ceilings (50 rounds, 100000 characters). The run's evidence keeps the
   profile it ran under, with the source of each field.
 - `REPO_MAP_MAX_CHARS` (3000) — the repository map (`services/tools/repo_map.py`,
   daemon `vscode-daemon/repo_map.py`): how many characters of the project's

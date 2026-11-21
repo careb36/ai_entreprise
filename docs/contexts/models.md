@@ -301,7 +301,11 @@ the whole profile as `model_profile` beside its routing. The limits stay
 under `CEILINGS` (50 rounds, 100000 characters, the model's own output
 limit for the answer's cap): an operator chooses within a range the code
 holds, and a malformed override is ignored with a warning rather than
-lifting a limit. Only the deployment's settings set a profile; nothing an
+lifting a limit (a `MODEL_PROFILES` that is not JSON stops the backend at
+startup). When the company's limits cannot be read (the database
+unreachable), the run goes on with the deployment's, as the difficulty
+routing does: logged, and recorded as `company_limits_read: false` in the
+profile the run's evidence keeps. Only the deployment's settings set a profile; nothing an
 agent can reach does. With no override the limits are the settings', as
 before.
 
