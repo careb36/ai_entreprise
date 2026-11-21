@@ -13,13 +13,12 @@ without catching exceptions for common failure paths.
 
 import asyncio
 import logging
-import os
 import time
 from typing import Any
 
 import httpx
 import requests
-from config import settings
+from config import Settings, settings
 from opentelemetry import propagate
 
 logger = logging.getLogger("fabrique-backend")
@@ -41,7 +40,9 @@ def _json_body(response: Any) -> dict[str, Any] | None:
 # The proxy's upstream budget when ``LLM_UPSTREAM_TIMEOUT_SECONDS`` is unset
 # (``llm-proxy/timeouts.py`` holds the same default): long enough for a
 # DeepSeek call that reasons before it answers.
-DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 300.0
+DEFAULT_UPSTREAM_TIMEOUT_SECONDS: float = Settings.model_fields[
+    "LLM_UPSTREAM_TIMEOUT_SECONDS"
+].default
 # What the client waits beyond the proxy's budget: the proxy's own work and
 # the time to send its answer, timeout or not, back. A shorter wait gives up
 # on an answer the provider is still writing and has billed.
@@ -58,11 +59,11 @@ PROXY_UNREACHABLE = "proxy_unreachable"
 
 def upstream_timeout_seconds() -> float:
     """``LLM_UPSTREAM_TIMEOUT_SECONDS``, or the default when unset or not a positive number."""
+    value = settings.LLM_UPSTREAM_TIMEOUT_SECONDS
     try:
-        value = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", ""))
-    except ValueError:
+        return float(value) if float(value) > 0 else DEFAULT_UPSTREAM_TIMEOUT_SECONDS
+    except (TypeError, ValueError):
         return DEFAULT_UPSTREAM_TIMEOUT_SECONDS
-    return value if value > 0 else DEFAULT_UPSTREAM_TIMEOUT_SECONDS
 
 
 def read_timeout_seconds() -> float:

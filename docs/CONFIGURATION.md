@@ -853,7 +853,24 @@ Copy `.env.example` to `.env` and fill in:
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
   run its tests with `DELIVERY_TESTS_ENABLED`, for that many rounds before
-  delivering; every read is evidence.
+  delivering; every read is evidence. The rounds, like `MCP_RESULT_MAX_CHARS`
+  and `DEVELOPER_MAX_OUTPUT_TOKENS`, are the default of the model's profile,
+  which `MODEL_PROFILES` overrides per model.
+- `DEVELOPER_MAX_OUTPUT_TOKENS` (0) — the cap on the Developer's answer in
+  tokens (issue #766); `0` sends none and the provider's own default applies
+  (with thinking, the reasoning reserve is added to a cap, as for every
+  role). Never above the model's output limit.
+- `MODEL_PROFILES` (`{}`) — per-model overrides of the profile
+  (`services/models/model_profile.py`, [models](contexts/models.md#a-models-profile)),
+  a JSON object by model name. Each entry may set the capabilities
+  (`context`, `output`, `tool_call`, `reasoning`), which otherwise come from
+  the catalogue, and the Developer's limits (`tool_rounds`,
+  `result_max_chars`, `max_output_tokens`), which otherwise are the three
+  settings above. For example
+  `MODEL_PROFILES='{"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}'`.
+  A malformed value is ignored with a warning; the limits stay within fixed
+  ceilings (50 rounds, 100000 characters). The run's evidence keeps the
+  profile it ran under, with the source of each field.
 - `REPO_MAP_MAX_CHARS` (3000) — the repository map (`services/tools/repo_map.py`,
   daemon `vscode-daemon/repo_map.py`): how many characters of the project's
   definitions, ranked by use, go into the Developer's, QA's and the

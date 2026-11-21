@@ -1,10 +1,6 @@
 {
   "$comment": "Files under backend/app that still read the environment instead of a setting in config.py (scripts/check_config.py, issue #766). An entry may only shrink: lower it with --update.",
   "files": {
-    "llm_proxy_client.py": {
-      "reads": 1,
-      "why": "LLM_UPSTREAM_TIMEOUT_SECONDS, shared with the LLM proxy; becomes part of the model profile (phase B)"
-    },
     "migrations.py": {
       "reads": 2,
       "why": "ALEMBIC_DATABASE_URL, the hand-off to Alembic's env.py, which runs outside the app"
@@ -40,10 +36,6 @@
     "services/models/model_factory.py": {
       "reads": 6,
       "why": "AGENT_MODEL and AGENT_MODEL_<ROLE>, names built per role, and old model variables; the model profiles replace them (phase B)"
-    },
-    "services/models/thinking.py": {
-      "reads": 2,
-      "why": "LLM_THINKING and LLM_THINKING_RESERVE_TOKENS, which the tests set; part of the model profile (phase B)"
     },
     "services/planning/project_docs/collect_code.py": {
       "reads": 1,

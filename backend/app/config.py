@@ -11,6 +11,9 @@ Usage::
     db_url = settings.POSTGRES_HOST
 """
 
+from typing import Any
+
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -51,6 +54,13 @@ class Settings(BaseSettings):
     # default team) and to Gemini / Qwen / Nebius when their keys are set
     # ---------------------------------------------------------------------------
     LLM_PROXY_URL: str = "http://localhost:5100"
+    # One chat request's budget at the proxy (llm-proxy/timeouts.py reads the
+    # same variable); the backend waits it plus a margin (llm_proxy_client.py).
+    LLM_UPSTREAM_TIMEOUT_SECONDS: float = 300.0
+    # Thinking: auto (each role's policy), on or off for every call; the tokens
+    # a thinking call's cap gets for its reasoning (services/models/thinking.py).
+    LLM_THINKING: str = "auto"
+    LLM_THINKING_RESERVE_TOKENS: int = 16384
     # How long the task worker waits for the workspace daemon to confirm file writes.
     WORKSPACE_WRITE_TIMEOUT_SECONDS: float = 30.0
     # Run the Alembic migrations to head at startup (a local database); the
@@ -221,6 +231,15 @@ class Settings(BaseSettings):
     # only with ``DELIVERY_TESTS_ENABLED``.
     DEVELOPER_TOOLS_ENABLED: bool = True
     DEVELOPER_TOOL_ROUNDS: int = 8
+    # The cap on the Developer's answer in tokens; 0 sends none, and the
+    # provider's own default applies (issue #766). Never above the model's
+    # output limit (services/models/model_profile.py).
+    DEVELOPER_MAX_OUTPUT_TOKENS: int = 0
+    # Per-model overrides of the profile (services/models/model_profile.py), a
+    # JSON object by model name: context, output, tool_call, reasoning and the
+    # Developer's tool_rounds, result_max_chars and max_output_tokens, e.g.
+    # {"qwen4-max": {"context": 262144, "output": 65536, "tool_rounds": 12}}.
+    MODEL_PROFILES: dict[str, dict[str, Any]] = {}
     # The repository map in the Developer's, QA's and the Architect's prompts
     # (``services/repo_map.py``): at most this many characters of ranked
     # definitions beside the tree; 0 leaves them out.
@@ -511,6 +530,19 @@ class Settings(BaseSettings):
     WORKSPACE_SNAPSHOT_LAYOUT_ENTRIES: int = 30
     WORKSPACE_EVIDENCE_LINES_PER_FILE: int = 80
     WORKSPACE_EVIDENCE_MAX_FILE_BYTES: int = 65536
+
+    @field_validator(
+        "LLM_UPSTREAM_TIMEOUT_SECONDS", "LLM_THINKING_RESERVE_TOKENS", mode="before"
+    )
+    @classmethod
+    def _positive_or_default(cls, value: Any, info: ValidationInfo) -> Any:
+        """A value that is not a positive number keeps the default, as these
+        did when read with os.getenv: a typo never lifts or zeroes a budget."""
+        default = cls.model_fields[info.field_name or ""].default
+        try:
+            return value if float(value) > 0 else default
+        except (TypeError, ValueError):
+            return default
 
     class Config:
         env_file = ".env"

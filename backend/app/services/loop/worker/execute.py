@@ -38,7 +38,7 @@ from services.loop.worker import (
     sprint_notes,
     wiki_section,
 )
-from services.models import edit_format, model_routing
+from services.models import edit_format, model_profile, model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -251,6 +251,9 @@ def _execute_task(
     role = agent.get("role", "Dev")
     # The requested model's edit format (#689), kept for the run's evidence.
     agent["edit_format"] = edit_format.format_for(model, settings.EDIT_FORMAT_BY_MODEL)
+    # The model's profile and the limits it sets, with their sources (#766).
+    limits = agent["model_profile"] = model_profile.profile(model)
+    client.max_tokens = limits["max_output_tokens"] or None
 
     system_prompt = _developer_system_prompt(agent) + prompt.language_note(
         company_id, engine
@@ -303,6 +306,11 @@ def _execute_task(
     # The workspace and MCP tools for this role: each call an observation.
     toolbox = developer_tools.toolbox_for(
         company_id, role, engine=engine, item_id=item.get("id")
+    )
+    developer_tools.apply_limits(
+        toolbox,
+        rounds=limits["tool_rounds"],
+        result_max_chars=limits["result_max_chars"],
     )
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
