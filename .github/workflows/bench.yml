@@ -196,7 +196,7 @@ jobs:
       POETRY_NO_INTERACTION: "1"
       PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
       # Conservative defaults; the owner sets the repository variables to change them.
-      BENCH_TOKEN_BUDGET: ${{ vars.BENCH_TOKEN_BUDGET || '300000' }}
+      BENCH_TOKEN_BUDGET: ${{ vars.BENCH_TOKEN_BUDGET || '5000000' }}
       BENCH_TIMEOUT: ${{ vars.BENCH_TIMEOUT || '1200' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

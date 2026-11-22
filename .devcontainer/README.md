@@ -7,7 +7,7 @@ Jaeger) are started from inside with `docker compose up -d`.
 
 ## Pushing from inside the container
 
-The repo's remote is SSH (`git@github.com:careb36/la-fabrique-private.git`), so
+The repo's remote is SSH (`git@github.com:careb36/ai_entreprise.git`), so
 the container needs access to your GitHub credentials. Two options:
 
 ### 1. SSH keys from the host (configured by default)
@@ -45,7 +45,7 @@ credentials. Inside the container:
 ```bash
 gh auth login                 # browser/device-code flow, once
 gh auth setup-git             # configures git's credential helper
-git remote set-url origin https://github.com/careb36/la-fabrique-private.git
+git remote set-url origin https://github.com/careb36/ai_entreprise.git
 ```
 
 After that, `git push` authenticates with the `gh` token. The remote change is
