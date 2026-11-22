@@ -1,0 +1,147 @@
+{
+  "account": {
+    "git_user_name": "Carolina Pereira",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "b0376f00ae732e08677b4af59d0cf89243458670",
+    "name": "fix/bench-repeated-pairing"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "71cadbfaff1452fd9b2ecd841465b7143444d9f5",
+  "duration_seconds": 490.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-22T23:51:05Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-44-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/71cadbfaff1452fd9b2ecd841465b7143444d9f5.20261122T234255Z.log",
+    "sha256": "ace6d93baaa1bdbbbd2130bc031618837fc8017bf1f69156ffc210a454a04c0c"
+  },
+  "main_before": "a42a21f06922cd87f9791f3852f6d4f3ff9fd66d",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "a42a21f06922cd87f9791f3852f6d4f3ff9fd66d",
+    "b0376f00ae732e08677b4af59d0cf89243458670"
+  ],
+  "protected_paths": [
+    {
+      "path": "backend/tests/test_bench_repeated.py",
+      "pattern": "backend/tests/test_bench_*.py"
+    },
+    {
+      "path": "scripts/bench/paired.py",
+      "pattern": "scripts/bench/**"
+    },
+    {
+      "path": "scripts/bench/repeated.py",
+      "pattern": "scripts/bench/**"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "6d008938b8feed1fca74aad30ec28bb227d8e0ef",
+  "started_at": "2026-11-22T23:42:55Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 359.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 21.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 75.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 22.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "1cb46223b9c8afb3588a7e921d56c29af531b77d"
+}
