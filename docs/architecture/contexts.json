@@ -964,6 +964,9 @@
       "test_model_profile.py": [
         "models"
       ],
+      "test_company_export.py": [
+        "management"
+      ],
       "test_company_limits.py": [
         "loop"
       ],

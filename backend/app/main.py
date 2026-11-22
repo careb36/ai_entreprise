@@ -34,6 +34,7 @@ from routers.board_notes import router as board_notes_router
 from routers.chat_approvals import router as chat_approvals_router
 from routers.chat_interactions import router as chat_interactions_router
 from routers.company_architecture import router as company_architecture_router
+from routers.company_export import router as company_export_router
 from routers.company_limits import router as company_limits_router
 from routers.company_standards import router as company_standards_router
 from routers.company_sync import router as company_sync_router
@@ -191,6 +192,7 @@ app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)
 app.include_router(enterprise_agents_router)
 app.include_router(routines_router)
+app.include_router(company_export_router)
 app.include_router(events_router)
 app.include_router(findings_router)
 app.include_router(sprint_router)

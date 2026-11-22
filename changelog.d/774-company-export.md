@@ -1,0 +1,3 @@
+Added
+
+* **A company's configuration exports as one file, without its secrets (issue #774).** `GET /v1/companies/{id}/export` (Owner only) returns the company's settings, agents with their prompts, business units, routines and model provider connections. Provider keys and headers and project credentials are never in it; they are listed in `required_secrets` so whoever uses the file knows what to supply. Every text is checked with the Verifier's secret detectors, and a line that looks like a key or token is replaced and its place listed; a URL's user and password are dropped. No members, emails or history. The file carries the backend's sha256 of its content, recorded in the audit row of the export. From Paperclip's company portability export (MIT).

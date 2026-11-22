@@ -272,6 +272,9 @@
     "GET /v1/companies/{company_id}/documentation/person-sections/{section}/history": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/export": {
+      "access": "Owner"
+    },
     "GET /v1/companies/{company_id}/forge_policy": {
       "access": "Viewer"
     },
