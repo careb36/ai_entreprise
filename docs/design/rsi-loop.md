@@ -306,6 +306,7 @@ and O8 is then "that metric's median better than B's by more than
 | `scripts/check_architecture.py`, `scripts/check_frontend_architecture.py`, `scripts/check_file_sizes.py`, `scripts/file_size_baseline.json`, `docs/architecture/contexts.json`, `docs/architecture/frontend.json` | Ratchets CI enforces. Loosening one is grading oneself |
 | `backend/app/history_check.py`, `backend/app/services/tasks/board.py` | The history's legality and the rework count O2 reads (`board.py` is already a policy file in CODEOWNERS) |
 | `backend/app/services/learning/procedures.py`, `backend/app/services/management/manager_policy.py`, `backend/app/services/platform/sod.py` | Keep/revert tolerances, `ALWAYS_ESCALATE`, segregation of duties |
+| `.claude/skills/`, `CLAUDE.md`, `AGENTS.md` | The security review skills a change is reviewed with, and the coding agents' instructions that point to them and to the rules (added 2026-11-21: the factory's agents never read them, but a factory sprint could edit them) |
 
 Most of these are already in `.github/CODEOWNERS`. The new ones (`bench/`,
 `scripts/bench/`, `scripts/self_host/`, `services/evidence/` beyond

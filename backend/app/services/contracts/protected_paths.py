@@ -97,6 +97,18 @@ PROTECTED: tuple[tuple[str, str], ...] = (
         "what the Manager agent must always escalate",
     ),
     ("backend/app/services/platform/sod.py", "segregation of duties"),
+    (
+        ".claude/skills/**",
+        "the security review skills (sdl-review, threat-model, sdl-program, ciberseguridad) a change is reviewed with",
+    ),
+    (
+        "CLAUDE.md",
+        "the coding agents' instructions, which point to the rules and the skills",
+    ),
+    (
+        "AGENTS.md",
+        "the coding agents' instructions, which point to the rules and the skills",
+    ),
 )
 
 PATTERNS: tuple[str, ...] = tuple(pattern for pattern, _ in PROTECTED)
