@@ -6,6 +6,8 @@ export interface CompanyLimits {
   result_max_chars?: number
   max_output_tokens?: number
   max_reworks?: number
+  sprint_budget_cents?: number
+  budget_warn_percent?: number
 }
 
 export type CompanyLimitKey = keyof CompanyLimits

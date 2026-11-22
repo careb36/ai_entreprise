@@ -8,9 +8,9 @@ import { api, type CompanyLimitsState } from '../services/api'
 const UNSET: CompanyLimitsState = {
   company_id: 4,
   limits: null,
-  defaults: { tool_rounds: 8, result_max_chars: 4000, max_output_tokens: 0, max_reworks: 3 },
-  floors: { tool_rounds: 1, result_max_chars: 500, max_output_tokens: 0, max_reworks: 0 },
-  ceilings: { tool_rounds: 50, result_max_chars: 100000, max_output_tokens: 1048576, max_reworks: 10 },
+  defaults: { tool_rounds: 8, result_max_chars: 4000, max_output_tokens: 0, max_reworks: 3, sprint_budget_cents: 0, budget_warn_percent: 80 },
+  floors: { tool_rounds: 1, result_max_chars: 500, max_output_tokens: 0, max_reworks: 0, sprint_budget_cents: 0, budget_warn_percent: 1 },
+  ceilings: { tool_rounds: 50, result_max_chars: 100000, max_output_tokens: 1048576, max_reworks: 10, sprint_budget_cents: 10000000, budget_warn_percent: 100 },
 }
 
 function wrap(node: React.ReactNode) {

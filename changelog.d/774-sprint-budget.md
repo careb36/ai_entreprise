@@ -1,0 +1,3 @@
+Added
+
+* **A sprint stops spending at the company's budget in money (issue #774).** An Owner can set what one sprint may spend (`sprint_budget_cents` in the company's limits, on the Models page) and the share at which it warns (`budget_warn_percent`, default 80). Before each task's model turn the worker reads the sprint's cost as the platform priced it from the LLM proxy's usage, never a figure an agent reported. At the budget the sprint pauses with the reason and an audited incident, and the task waits to run again when the sprint resumes; a cost that cannot be priced pauses it too. Past the warning share it says so once, and work goes on. From Paperclip's budget policies (MIT).

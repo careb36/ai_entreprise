@@ -6,7 +6,11 @@ migration 0061) or an object with some of ``LIMITS``:
 - ``tool_rounds``: the Developer's tool rounds per call;
 - ``result_max_chars``: the most of one tool's result the model sees;
 - ``max_output_tokens``: the cap on the Developer's answer (``0``: none);
-- ``max_reworks``: a task's one rework budget, every cause together.
+- ``max_reworks``: a task's one rework budget, every cause together;
+- ``sprint_budget_cents``: what one sprint may spend, in US cents, priced by
+  the platform from the proxy's usage (``0``: no budget;
+  ``services/loop/sprint_budget.py``);
+- ``budget_warn_percent``: the share of that budget at which it warns.
 
 Each stays within ``[FLOORS, CEILINGS]``, fixed here: a company chooses
 inside a range the code holds (AixleHQ/flow's ``MAX_RETRIES = 10``), and a
@@ -25,16 +29,22 @@ FLOORS: Final[dict[str, int]] = {
     "result_max_chars": 500,
     "max_output_tokens": 0,
     "max_reworks": 0,
+    "sprint_budget_cents": 0,
+    "budget_warn_percent": 1,
 }
 CEILINGS: Final[dict[str, int]] = {
     "tool_rounds": 50,
     "result_max_chars": 100_000,
     "max_output_tokens": 1_048_576,
     "max_reworks": 10,
+    "sprint_budget_cents": 10_000_000,
+    "budget_warn_percent": 100,
 }
 LIMITS: Final = tuple(FLOORS)
 # A task's rework budget when neither the deployment nor the company sets one.
 DEFAULT_MAX_REWORKS: Final = 3
+# A sprint budget's warning, as a share of it, when the company sets none.
+DEFAULT_BUDGET_WARN_PERCENT: Final = 80
 
 
 class InvalidLimits(ValueError):

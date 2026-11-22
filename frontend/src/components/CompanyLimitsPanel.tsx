@@ -4,7 +4,7 @@ import { useCompanyLimits, useSetCompanyLimits } from '../hooks/useCompanyLimits
 import { errorDetail, type CompanyLimitKey, type CompanyLimits } from '../services/api'
 import { Panel } from './ui'
 
-const KEYS: CompanyLimitKey[] = ['tool_rounds', 'result_max_chars', 'max_output_tokens', 'max_reworks']
+const KEYS: CompanyLimitKey[] = ['tool_rounds', 'result_max_chars', 'max_output_tokens', 'max_reworks', 'sprint_budget_cents', 'budget_warn_percent']
 
 /** The fields as the form holds them: '' is "the deployment's value". */
 type Draft = Record<CompanyLimitKey, string>
@@ -21,7 +21,7 @@ function limitsOf(draft: Draft): CompanyLimits | null {
 /**
  * The company's limits on its agents' work (issue #766): the Developer's tool
  * rounds, how much of a tool's result it sees, the cap on its answer, and a
- * task's rework budget. An empty field keeps the deployment's value, shown
+ * task's rework budget, and what a sprint may spend in money (issue #774). An empty field keeps the deployment's value, shown
  * beside it; each stays within the range the backend holds. Any member reads
  * them; only an Owner saves them, each change audited.
  */

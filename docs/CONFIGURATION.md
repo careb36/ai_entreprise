@@ -214,7 +214,7 @@ Model choice, most specific first: an agent's own model, the company's model for
 | `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES` | `10` | How long a console producer skips the Claude CLI after a quota stop with no reset time. |
 | `ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES` | `30` | How long a coding CLI missing from the sandbox is not offered again. |
 
-A company's own limits (`tool_rounds`, `result_max_chars`, `max_output_tokens`, `max_reworks`) are set by an Owner on the Models page and win over the deployment's values; ranges in `services/contracts/company_limits.py`.
+A company's own limits (`tool_rounds`, `result_max_chars`, `max_output_tokens`, `max_reworks`, `sprint_budget_cents`, `budget_warn_percent`) are set by an Owner on the Models page and win over the deployment's values; ranges in `services/contracts/company_limits.py`.
 
 ### Management agents
 

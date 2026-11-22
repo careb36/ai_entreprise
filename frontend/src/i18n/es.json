@@ -3133,7 +3133,9 @@
       "tool_rounds": "Rondas de herramientas del Developer por llamada",
       "result_max_chars": "Caracteres del resultado de una herramienta que ve el modelo",
       "max_output_tokens": "Tope de la respuesta del Developer (tokens, 0: sin tope)",
-      "max_reworks": "Retrabajos por tarea antes de pasar a una persona"
+      "max_reworks": "Retrabajos por tarea antes de pasar a una persona",
+      "sprint_budget_cents": "Lo que puede gastar un sprint, en centavos de dólar, valuado con el uso del proxy (0: sin presupuesto)",
+      "budget_warn_percent": "Avisar al llegar a este porcentaje del presupuesto del sprint (%)"
     },
     "range": "Instalación: {{deployment}} · permitido {{floor}}–{{ceiling}}",
     "save": "Guardar límites",
