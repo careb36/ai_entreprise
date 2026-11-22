@@ -865,13 +865,21 @@ and an agent cannot change them. Stored in `companies.limits` (migration
   over 365 is cut to 365. The email copy of a notification uses the `SMTP_*`
   settings above and is sent only when `SMTP_HOST` is set; without it the
   notification is still shown in the app and nothing waits on mail.
-- `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (8) — the
+- `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (5, measured: see below) — the
   Developer's workspace tools (`services/tools/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
   run its tests with `DELIVERY_TESTS_ENABLED`, for that many rounds before
   delivering; every read is evidence. The rounds, like `MCP_RESULT_MAX_CHARS`
   and `DEVELOPER_MAX_OUTPUT_TOKENS`, are the default of the model's profile,
   which `MODEL_PROFILES` overrides per model.
+  Why 5 (phase D of issue #766, one bench run per arm on specs 01 and 02, a
+  budget of a million tokens each): with 8 rounds a third of the tool runs
+  used every round and were verified no more often than the rest, and
+  neither DeepSeek (every role) nor Qwen (the Developer) fit both specs in
+  the budget; with 5 both did, every criterion passed, no task was blocked,
+  and spec 01 took 464 000 tokens instead of 694 000 (DeepSeek) and 367 000
+  instead of 891 000 (Qwen). A round re-sends the conversation, so the cost
+  grows with the rounds, not with the prompt.
 - `DEVELOPER_MAX_OUTPUT_TOKENS` (0) — the cap on the Developer's answer in
   tokens (issue #766); `0` sends none and the provider's own default applies
   (with thinking, the reasoning reserve is added to a cap, as for every
