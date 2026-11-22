@@ -158,7 +158,16 @@ def undone(session: Session, company_id: int, item_id: int) -> bool:
         .where(Verification.agent_run_id == run.id)
         .order_by(Verification.id.desc())
     ).first()
-    snapshot = ((verification.evidence or {}) if verification else {}).get("snapshot")
+    evidence = (verification.evidence or {}) if verification else {}
+    return undone_snapshot(session, company_id, evidence)
+
+
+def undone_snapshot(
+    session: Session, company_id: int, evidence: dict[str, Any] | None
+) -> bool:
+    """Whether the delivery this evidence records was undone (by the worker or
+    a Manager): an audited undo names its snapshot."""
+    snapshot = (evidence or {}).get("snapshot")
     if not isinstance(snapshot, dict) or not snapshot.get("id"):
         return False
     return any(
@@ -166,7 +175,6 @@ def undone(session: Session, company_id: int, item_id: int) -> bool:
         for row in session.exec(
             select(AuditLog).where(
                 AuditLog.company_id == company_id,
-                AuditLog.interaction_id == _interaction(item_id),
                 AuditLog.action == UNDO_ACTION,
             )
         ).all()

@@ -1104,6 +1104,10 @@
       "test_refuted_undo.py": [
         "loop"
       ],
+      "test_folder_baseline.py": [
+        "evidence",
+        "loop"
+      ],
       "test_release_notes.py": [
         "repo"
       ],

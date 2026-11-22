@@ -34,7 +34,7 @@ from services.contracts.manifest import (
 )
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
-from services.loop import delivery_checks, refuted_undo, review_digest
+from services.loop import delivery_checks, folder_baseline, refuted_undo, review_digest
 from services.loop.worker import board_writes, record, sprint_notes
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
@@ -332,6 +332,9 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         await delivery_checks.guard_test_files(
             nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
         )
+        await asyncio.to_thread(
+            folder_baseline.observe, engine, company_id, item_id, evidence
+        )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
     else:
         _record_tests_not_run(evidence, written)
@@ -461,6 +464,13 @@ async def _deliver_artifacts(
             )
             await delivery_checks.guard_test_files(
                 nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            )
+            await asyncio.to_thread(
+                folder_baseline.observe,
+                engine,
+                sprint["company_id"],
+                item["id"],
+                evidence,
             )
             await _run_delivery_tests(nats_client, sprint, evidence, engine)
         else:

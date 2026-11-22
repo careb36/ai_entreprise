@@ -25,6 +25,7 @@ from services.evidence import (
     security_probe,
     sources,
     standards,
+    test_baseline,
     wstg_tests,
 )
 from services.evidence.claimed_paths import claim_strings, extract_claimed_paths
@@ -286,6 +287,17 @@ def check_tests_run(evidence: dict) -> dict:
                     f"criteria not implemented yet failed ({', '.join(excused)})"
                     f"{truncated}"
                 ),
+            }
+        explained, excused, earlier = test_baseline.explain(evidence)
+        if explained:
+            # Without Git the folder is shared: a test that already failed in
+            # it, in a file this delivery did not write, is not its failure.
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": f"{target} exited {exit_code}: "
+                + test_baseline.observation(evidence, excused, earlier)
+                + truncated,
             }
         tail = (run.get("output_tail") or "").strip()[-400:]
         detail = criteria_tests.failure_summary(run) or tail
