@@ -92,7 +92,10 @@ follow-ups and procedures also run on their own.
 
 - `board_moves.py`: a Manager moving a card to To do starts it, recorded as a
   send-back so the rework budget restarts; a `completed` or `cancelled` sprint
-  is reopened, an archived one is a 409.
+  is reopened, an archived one is a 409. A move to Discarded needs the
+  person's reason as the comment (422) and a task in To do or Blocked (409);
+  the task is settled, never dispatched or carried over, and a task waiting
+  on it is held for a person. Moving it to To do reopens it.
 - `sprint_close.py`: a second close after a reopening answers
   `reclosed_after_reopen` and skips what happens once.
 - `carry_over.py`: moves a task blocked for a person into another open sprint

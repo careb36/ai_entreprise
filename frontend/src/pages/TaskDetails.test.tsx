@@ -18,6 +18,7 @@ vi.mock('../components/RunSecretsPanel', () => ({ RunSecretsPanel: () => null })
 // So does the event log (components/TaskEventLog.test.tsx).
 vi.mock('../components/TaskEventLog', () => ({ TaskEventLog: () => null }))
 vi.mock('../hooks/useQueries', () => ({
+  useUpdateBacklogItem: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),
   useCapabilities: vi.fn(),

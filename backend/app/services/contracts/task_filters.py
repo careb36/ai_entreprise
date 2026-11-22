@@ -29,7 +29,7 @@ from typing import Any
 
 # The status names of the board's columns; any other stored status is shown,
 # and filtered, as ``todo`` (``routers/sprint.py``).
-STATUSES = ("todo", "in_progress", "in_review", "done", "blocked")
+STATUSES = ("todo", "in_progress", "in_review", "done", "blocked", "discarded")
 # The verdict names a verification records (``contracts/verdicts``); ``None``
 # stands for a task with no verified delivery.
 VERDICTS = ("verified", "refuted", "unverifiable")

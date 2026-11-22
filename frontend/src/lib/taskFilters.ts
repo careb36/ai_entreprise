@@ -41,7 +41,7 @@ export const NONE = 'none'
 
 /** The values a field may take, for the fields with a closed list. */
 export const FIELD_CHOICES: Partial<Record<FilterField, string[]>> = {
-  status: ['todo', 'in_progress', 'in_review', 'done', 'blocked'],
+  status: ['todo', 'in_progress', 'in_review', 'done', 'blocked', 'discarded'],
   verdict: ['verified', 'refuted', 'unverifiable', NONE],
   risk_tier: ['low', 'medium', 'high', NONE],
   waits_for_person: ['true', 'false'],

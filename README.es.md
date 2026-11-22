@@ -47,7 +47,7 @@ verifica su trabajo:
 - **Planificar**: el PO convierte un pedido en una especificación con
   criterios verificables; el Architect propone la arquitectura; el PO la
   divide en tareas de sprint.
-- **Correr sprints**: un tablero de cinco columnas, la revisión del diff de
+- **Correr sprints**: un tablero con una columna por estado, la revisión del diff de
   cada ejecución como en un pull request, y una retrospectiva al cerrar cada
   sprint.
 - **Trabajar sobre tu código**: el daemon escribe archivos, corre tests en un

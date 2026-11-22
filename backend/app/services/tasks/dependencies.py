@@ -209,7 +209,7 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
     stuck = {
         i
         for i, item in items.items()
-        if item.status == "blocked"
+        if (item.status == "blocked" or item.status == "discarded")
         and record(item).is_settled(item.status)
         and i not in held
     }

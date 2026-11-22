@@ -90,6 +90,7 @@ KINDS = frozenset(
         "recovered",
         "paused",
         "moved",
+        "discarded",
         "note",
         "integration",
         "estimated",
@@ -488,6 +489,8 @@ def person_kind(status: str | None, comment: str | None) -> str:
     """The kind of a person's change on the board (``PATCH /v1/backlog``)."""
     if status == "done":
         return "approved_by_person"
+    if status == "discarded":
+        return "discarded"
     if comment and comment.strip().startswith(board.SEND_BACK_MARKER):
         return "sent_back"
     if comment and comment.strip().upper().startswith("NEEDS WORK:"):

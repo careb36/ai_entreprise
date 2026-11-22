@@ -748,7 +748,8 @@
       "in_progress": "In Progress",
       "in_review": "In Review",
       "done": "Done",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "discarded": "Discarded"
     },
     "deliveryVerdict": "Delivery: {{verdict}}",
     "qaReworksTitle": "QA reworks: {{count}}/{{limit}}",
@@ -779,7 +780,9 @@
       "planned": "planned",
       "paused": "paused",
       "needs_split": "needs split"
-    }
+    },
+    "discarded": "Discarded",
+    "discardFromTask": "Discard a task from its page, with the reason: open the task and use Discard."
   },
   "glassroom": {
     "title": "Glassroom",
@@ -905,7 +908,8 @@
       "in_progress": "In progress",
       "in_review": "In review",
       "done": "Done",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "discarded": "Discarded"
     },
     "taskPriorityValue": {
       "low": "Low",
@@ -4320,7 +4324,8 @@
       "medium": "Medium",
       "high": "High",
       "true": "Yes",
-      "false": "No"
+      "false": "No",
+      "discarded": "Discarded"
     },
     "listPlaceholder": "Values separated by commas",
     "placeholder": {
@@ -4951,5 +4956,21 @@
       "already_read": "This notice is already read.",
       "notification_not_found": "This notice no longer exists."
     }
+  },
+  "taskComments": {
+    "title": "Comments",
+    "count_one": "{{count}} comment",
+    "count_other": "{{count}} comments",
+    "empty": "No comments from a person yet.",
+    "listLabel": "Comments from people",
+    "formLabel": "Add a comment",
+    "label": "Comment",
+    "placeholder": "A note for the team, or why the task is discarded",
+    "add": "Add comment",
+    "discard": "Discard task",
+    "discardNeedsReason": "Write the reason first",
+    "discardHelp": "Discarding needs the reason above. A discarded task is never run or carried over; reopen it to start it again.",
+    "discardedNote": "Discarded by a person: it is not run or carried over. The reason is in the comments.",
+    "reopen": "Reopen (move to To do)"
   }
 }

@@ -1,6 +1,6 @@
 /**
  * The sprint board's pure helpers (components/KanbanBoard.tsx and
- * components/board/): the five columns, what a move did in the person's
+ * components/board/): the six columns, what a move did in the person's
  * language, the QA signals read from a task's messages, and the board's
  * client-side filters and presets.
  */
@@ -11,16 +11,23 @@ import type { BoardMoveResult, CarryResult } from '../services/boardMoves'
 export type BoardStatus = BacklogItem['status']
 type Translate = ReturnType<typeof useTranslation>['t']
 
-/** The board's columns, left to right: the five statuses a task can have. */
+/** The board's columns, left to right: the six statuses a task can have. */
 export const BOARD_COLUMNS: readonly { id: BoardStatus; titleKey: string }[] = [
   { id: 'todo', titleKey: 'kanban.todo' },
   { id: 'in_progress', titleKey: 'kanban.inProgress' },
   { id: 'in_review', titleKey: 'kanban.review' },
   { id: 'done', titleKey: 'kanban.done' },
   { id: 'blocked', titleKey: 'kanban.blocked' },
+  { id: 'discarded', titleKey: 'kanban.discarded' },
 ]
 
 export const VALID_STATUSES: BoardStatus[] = BOARD_COLUMNS.map(column => column.id)
+
+/**
+ * Where a card can be moved from the board. Discarded is not one: a person
+ * discards a task from its page, with the reason (pages/TaskDetails.tsx).
+ */
+export const MOVE_TARGETS: BoardStatus[] = VALID_STATUSES.filter(status => status !== 'discarded')
 
 /** The cards a Manager may move to another sprint. */
 export const MOVABLE_STATUSES: BoardStatus[] = ['blocked', 'todo']
@@ -53,8 +60,9 @@ export function findColumnIdByItemId(columns: Record<string, BacklogItem[]>, ite
 
 /** The column beside *status* in direction *step* (-1 left, +1 right), or null at an edge. */
 export function adjacentStatus(status: BoardStatus, step: -1 | 1): BoardStatus | null {
-  const index = VALID_STATUSES.indexOf(status)
-  return VALID_STATUSES[index + step] ?? null
+  const index = MOVE_TARGETS.indexOf(status)
+  if (index < 0) return null
+  return MOVE_TARGETS[index + step] ?? null
 }
 
 /**

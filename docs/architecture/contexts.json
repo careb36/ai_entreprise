@@ -538,6 +538,9 @@
       "test_branch_view.py": [
         "loop"
       ],
+      "test_board_moves_discard.py": [
+        "loop"
+      ],
       "test_board_moves_carry.py": [
         "evidence",
         "loop"

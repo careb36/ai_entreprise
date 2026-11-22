@@ -18,6 +18,9 @@ describe('the board helpers', () => {
   it('moves one column at a time and stops at the edges', () => {
     expect(adjacentStatus('todo', 1)).toBe('in_progress')
     expect(adjacentStatus('in_review', -1)).toBe('in_progress')
+    // Discarded is a column, never a move: a task is discarded from its page.
+    expect(adjacentStatus('blocked', 1)).toBeNull()
+    expect(adjacentStatus('discarded', -1)).toBeNull()
     expect(adjacentStatus('todo', -1)).toBeNull()
     expect(adjacentStatus('blocked', 1)).toBeNull()
   })

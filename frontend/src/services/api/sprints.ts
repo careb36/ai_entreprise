@@ -6,7 +6,7 @@ export interface BacklogItem {
   sprint_id: number
   title: string
   description?: string
-  status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked'
+  status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked' | 'discarded'
   priority: 'low' | 'medium' | 'high' | 'critical'
   assignee?: string
   comments: { author: string; text: string; created_at: string }[]

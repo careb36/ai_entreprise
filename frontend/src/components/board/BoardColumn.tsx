@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, ChevronsLeft, ChevronsRight, Circle, GitPullRequest, Inbox, UserRoundCheck,
+  AlertTriangle, ArrowRight, CheckCircle2, ChevronsLeft, ChevronsRight, Circle, GitPullRequest, Inbox, UserRoundCheck, XCircle,
 } from 'lucide-react'
 import type { AgentRunListItem, BacklogItem } from '../../services/api'
 import { needsPerson, type BoardStatus } from '../../lib/kanban'
@@ -19,6 +19,7 @@ const COLUMN_LOOK: Record<BoardStatus, { Icon: typeof Circle; tone: string }> = 
   in_review: { Icon: GitPullRequest, tone: 'text-yellow-400' },
   done: { Icon: CheckCircle2, tone: 'text-status-success' },
   blocked: { Icon: AlertTriangle, tone: 'text-status-error' },
+  discarded: { Icon: XCircle, tone: 'text-gray-500' },
 }
 
 export interface BoardColumnProps {

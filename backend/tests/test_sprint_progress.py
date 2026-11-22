@@ -147,6 +147,7 @@ def test_the_claimed_and_verified_lines_stay_apart():
         "in_review": 2,
         "blocked": 0,
         "done": 1,
+        "discarded": 0,
     }
     assert series["tasks"] == 4 and series["sprint_id"] == 9
 

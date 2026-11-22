@@ -12,7 +12,7 @@ export function useSprintTasks(board: SprintBoard | undefined) {
   return useMemo<SprintTaskEntry[]>(() => {
     if (!board?.columns) return []
 
-    const order: Array<BacklogItem['status']> = ['in_progress', 'in_review', 'blocked', 'todo', 'done']
+    const order: Array<BacklogItem['status']> = ['in_progress', 'in_review', 'blocked', 'todo', 'done', 'discarded']
     const entries = Object.values(board.columns)
       .flat()
       .map((task) => ({
@@ -144,7 +144,7 @@ export function useAutonomyTree(messages: AgentMessage[], sprintTasks: SprintTas
       }
     }).sort((left, right) => {
       if (left.status === right.status) return left.id - right.id
-      const order = ['in_progress', 'in_review', 'blocked', 'todo', 'done']
+      const order = ['in_progress', 'in_review', 'blocked', 'todo', 'done', 'discarded']
       return order.indexOf(left.status) - order.indexOf(right.status)
     })
   }, [messages, sprintTasks, t])

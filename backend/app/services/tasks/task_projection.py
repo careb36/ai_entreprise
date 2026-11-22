@@ -355,8 +355,9 @@ class TaskRecord:
         return _text(hold) if hold is not None else ""
 
     def is_settled(self, status: str | None) -> bool:
-        """Done, or blocked until a person acts (``board.item_is_settled``)."""
-        if status == "done":
+        """Done, discarded by a person, or blocked until a person acts
+        (``board.item_is_settled``)."""
+        if status in ("done", "discarded"):
             return True
         return status == "blocked" and self.next_step() is None
 

@@ -62,7 +62,7 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 router.include_router(planning_router)
 
 # Allowed values for validation; rejected values return HTTP 422.
-VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
+VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked", "discarded"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
@@ -484,7 +484,10 @@ async def get_sprint_board(
     ]
 
     # Pre-populate all columns so the frontend always receives a complete dict.
-    columns = {s: [] for s in ["todo", "in_progress", "in_review", "done", "blocked"]}
+    columns = {
+        s: []
+        for s in ["todo", "in_progress", "in_review", "done", "blocked", "discarded"]
+    }
     for item in items:
         col = item["status"] if item["status"] in columns else "todo"
         columns[col].append(item)
