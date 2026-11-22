@@ -31,8 +31,11 @@ rows.
   charged to the quota, and never shown as usage or priced. An unknown cost is
   `null` with a reason, never 0. A known provider that does not price a model
   is `price_unknown`, never another provider's price.
-- Prices are the providers' peak rates, so a cost report never under-states;
-  it never guesses the hour's rate.
+- A call is charged the rate in force when it was recorded: off-peak (half,
+  by the provider's published hours and holiday calendar, the same as the run
+  window's preset) or peak. A call without a time is charged the peak rate,
+  so a report never under-states. `off_peak_turns` counts the ones charged
+  half.
 - An empty answer is a named error, never a success; the reasoning is never
   returned as the answer.
 - The proxy sends a model only when the provider's live list has it; an

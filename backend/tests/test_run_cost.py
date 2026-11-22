@@ -177,8 +177,14 @@ def test_record_agent_turn_writes_the_split_beside_the_total(sqlite_session):
 # --- summing turns --------------------------------------------------------
 
 
+# A Monday in DeepSeek's peak hours, so the full rate whatever day the test runs.
+PEAK = datetime(2026, 11, 2, 7, 0)
+
+
 def _turn(details, tokens=0):
-    return AuditLog(action="execute_task", details=details, cost_tokens=tokens)
+    return AuditLog(
+        action="execute_task", details=details, cost_tokens=tokens, created_at=PEAK
+    )
 
 
 def test_reported_turns_are_priced_and_estimates_left_out_of_the_cents():
@@ -333,7 +339,8 @@ def costed(sqlite_session):
     two = BacklogItem(sprint_id=sprint.id, title="Two")
     s.add_all([one, two])
     s.commit()
-    t0 = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
+    # A Monday in DeepSeek's peak hours (06:00-10:00 UTC): the full rate.
+    t0 = datetime(2026, 11, 2, 7, 0, tzinfo=UTC)
     _audit(s, company.id, one.id, t0, 1000, 500)  # v1's delivery: 0.3 cents
     first = _run(
         s, company.id, one.id, 1, (t0 + timedelta(minutes=1)).replace(tzinfo=None)
@@ -489,3 +496,44 @@ def test_a_company_connection_row_prices_the_sprint(sqlite_session):
     sqlite_session.commit()
     totals = run_cost.sprint_costs(sqlite_session, company.id, [sprint.id])
     assert totals[sprint.id]["cost_cents"] == pytest.approx(0.1)
+
+
+# --- the rate in force when the call was made ---------------------------------
+
+
+def _deepseek_turn(at):
+    return AuditLog(
+        action="execute_task",
+        details={
+            "tokens": "reported",
+            "model": "deepseek-flash",
+            "provider": "deepseek",
+            "input_tokens": 1_000_000,
+            "output_tokens": 1_000_000,
+        },
+        cost_tokens=2_000_000,
+        created_at=at,
+    )
+
+
+def test_a_deepseek_call_off_peak_costs_half():
+    # Published: 0.30 in + 1.20 out per million at peak, half off-peak.
+    peak = run_cost.turn_cost(_deepseek_turn(datetime(2026, 11, 2, 7, 0)), {}, {})
+    assert peak["cents"] == pytest.approx(150.0) and "off_peak" not in peak
+    # 15:00 UTC on a weekday, a Saturday, and a Chinese holiday at peak time.
+    for at in (
+        datetime(2026, 11, 2, 15, 0),
+        datetime(2026, 11, 7, 7, 0),
+        datetime(2026, 10, 1, 7, 0, tzinfo=UTC),
+    ):
+        turn = run_cost.turn_cost(_deepseek_turn(at), {}, {})
+        assert turn["cents"] == pytest.approx(75.0) and turn["off_peak"], at
+    assert run_cost.summarize([peak, turn])["off_peak_turns"] == 1
+
+
+def test_a_call_without_a_time_or_another_provider_is_charged_in_full():
+    no_time = run_cost.turn_cost(_deepseek_turn(None), {}, {})
+    assert no_time["cents"] == pytest.approx(150.0) and "off_peak" not in no_time
+    price = {"input": 1.0, "output": 1.0, "provider": "alibaba", "model": "qwen"}
+    charged, off_peak = model_prices.at_time(price, datetime(2026, 11, 7, 7, 0), {})
+    assert charged == price and off_peak is False

@@ -67,6 +67,7 @@ model (`services/models/usage_report.py`, `services/models/usage_csv.py`).
 | `input_tokens`, `output_tokens`, `reported_tokens` | only `reported` turns | the proxy's figures |
 | `estimated_tokens` | `estimated` turns | counted apart, never priced |
 | `cost_cents` (`cost_usd` in the CSV) | `run_cost.turn_cost` of the priced turns | `None`/empty, never 0, when none was priced |
+| `off_peak_turns` | priced turns charged the provider's off-peak rate | summed |
 | `cost_unknown_turns` | estimated, unavailable, unpriced or split-unknown turns | counted apart |
 
 A **person** is the account that started the task's sprint

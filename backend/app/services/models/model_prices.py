@@ -21,17 +21,26 @@ A free model is priced 0 only when the catalogue says 0; a model the
 catalogue does not price is never taken for free.
 
 The default team's two DeepSeek models are priced from DeepSeek's own pricing
-page instead (``PUBLISHED_PRICES``), which models.dev lags: the peak price, so
-a cost report never under-states; off-peak hours cost half (see
-``docs/contexts/models.md``). ``deepseek-v4-flash`` is a retired name DeepSeek
-still accepts and serves with ``deepseek-flash``, so it is priced as that.
+page instead (``PUBLISHED_PRICES``), which models.dev lags: the peak price.
+``deepseek-v4-flash`` is a retired name DeepSeek still accepts and serves with
+``deepseek-flash``, so it is priced as that.
+
+The time of the call decides the rate (``at_time``): a provider whose page
+halves its prices outside its peak hours (``OFF_PEAK_PRESETS``) is charged
+half for a call made off-peak, by the same published hours and holiday
+calendar as the run window's preset (``services/contracts/run_window.py``).
+A call without a time is charged the peak price, so a report never
+under-states.
 """
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
+from services.contracts import run_window
 from services.models import model_catalog
+from services.platform import run_window_setting
 
 # The proxy's provider names (``llm-proxy/app.py``) → models.dev provider ids.
 PROXY_PROVIDERS: dict[str, str] = {
@@ -52,6 +61,11 @@ PUBLISHED_PRICES: dict[tuple[str, str], dict[str, float]] = {
 PRICE_ALIASES: dict[tuple[str, str], str] = {
     ("deepseek", "deepseek-v4-flash"): "deepseek-flash",
 }
+
+# Catalogue provider id → the run window preset holding its published peak
+# hours; off them the provider charges half (``PRESETS[...]["off_peak_price"]``).
+OFF_PEAK_PRESETS: dict[str, str] = {"deepseek": run_window.DEEPSEEK}
+OFF_PEAK_FACTOR = 0.5
 
 PRICE_UNKNOWN = "price_unknown"
 PRICE_AMBIGUOUS = "price_ambiguous"
@@ -125,3 +139,40 @@ def cents(input_tokens: int, output_tokens: int, price: dict[str, Any]) -> float
     """US cents for the tokens at *price* (dollars per million), unrounded."""
     dollars = (input_tokens * price["input"] + output_tokens * price["output"]) / 1e6
     return dollars * 100
+
+
+def off_peak_calendars() -> dict[str, frozenset[date]]:
+    """Per provider in ``OFF_PEAK_PRESETS``, the holiday dates on which every
+    hour is off-peak (its preset's calendar). Read once per report."""
+    return {
+        pid: run_window_setting.holidays_for({"preset": preset})
+        for pid, preset in OFF_PEAK_PRESETS.items()
+    }
+
+
+def is_off_peak(
+    provider_id: str, at: datetime | None, calendars: dict[str, frozenset[date]]
+) -> bool:
+    """Whether a call to *provider_id* at *at* is charged the off-peak rate.
+    No time, or a provider without published off-peak hours: never."""
+    preset = OFF_PEAK_PRESETS.get(provider_id)
+    if preset is None or at is None:
+        return False
+    return run_window.is_open(
+        {"preset": preset}, at, calendars.get(provider_id, frozenset())
+    )
+
+
+def at_time(
+    price: dict[str, Any],
+    at: datetime | None,
+    calendars: dict[str, frozenset[date]],
+) -> tuple[dict[str, Any], bool]:
+    """*price* as charged for a call at *at*, and whether it was off-peak."""
+    if not is_off_peak(str(price.get("provider") or ""), at, calendars):
+        return price, False
+    return {
+        **price,
+        "input": price["input"] * OFF_PEAK_FACTOR,
+        "output": price["output"] * OFF_PEAK_FACTOR,
+    }, True

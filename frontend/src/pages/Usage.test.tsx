@@ -13,7 +13,7 @@ function response(status: number, body: unknown = {}) {
 const zero = {
   tasks: 0, rework: 0, runs: 0, verified: 0, refuted: 0, unverified: 0, approvals: 0, changes_requested: 0,
   turns: 0, reported_turns: 0, estimated_turns: 0, unavailable_turns: 0, input_tokens: 0, output_tokens: 0,
-  reported_tokens: 0, estimated_tokens: 0, cost_cents: null, cost_unknown_turns: 0,
+  reported_tokens: 0, estimated_tokens: 0, cost_cents: null, off_peak_turns: 0, cost_unknown_turns: 0,
 }
 
 const report = {
