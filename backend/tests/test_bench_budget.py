@@ -414,7 +414,7 @@ def test_the_real_job_reads_keys_only_from_secrets_and_never_prints_them():
             if "secrets." in str(value):
                 assert value == f"${{{{ secrets.{name} }}}}", name
                 secret_names.add(name)
-    assert {"GEMINI_API_KEY", "DEEPSEEK_API_KEY"} <= secret_names
+    assert {"DEEPSEEK_API_KEY", "QWEN_API_KEY"} == secret_names
     proxy = (REPO / "llm-proxy" / "app.py").read_text(encoding="utf-8")
     for name in secret_names:  # names the proxy already reads, none invented
         assert f'os.getenv("{name}"' in proxy
@@ -435,7 +435,7 @@ def test_a_missing_key_fails_with_the_secret_name():
         if "LLM proxy" in s.get("name", "")
     )
     run = proxy_step["run"]
-    assert "for name in GEMINI_API_KEY DEEPSEEK_API_KEY" in run
+    assert "for name in DEEPSEEK_API_KEY; do" in run
     assert '"${!name}"' in run
     assert (
         "::error::the real-model bench needs the repository secret(s):$missing" in run
