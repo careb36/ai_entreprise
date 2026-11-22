@@ -31,7 +31,7 @@ from models import Agent, BacklogItem, Sprint
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
-from services.evidence import delivery_gate
+from services.evidence import acceptance, delivery_gate
 from services.loop import refuted_undo, replicas, run_window_gate, sprint_control
 from services.loop.worker import close, messages, qa_review, record
 from services.models import model_routing
@@ -276,6 +276,26 @@ async def _block_missing_deliverable(
     )
 
 
+# QA's acceptance tests fail before the code by design: telling QA to "fix the
+# code" contradicted its task, and in the bench of 2026-11-22 (spec 05, issue
+# #774) QA argued with the instruction instead of fixing its tests.
+TESTS_FIRST_INSTRUCTION = (
+    "Your tests may fail only because the code they test is not written yet "
+    "(its import fails): fix each test that fails for any other reason, name "
+    "each test after its criterion, and do not write the implementation. "
+)
+
+
+def _code_instruction(item: Any, problem: str) -> str:
+    """What a send-back for a code problem asks: QA's acceptance-test task fixes
+    its tests, never the code; any other task fixes the code."""
+    if problem not in delivery_gate.CODE_PROBLEMS:
+        return ""
+    if acceptance.is_acceptance_task(item):
+        return TESTS_FIRST_INSTRUCTION
+    return "Fix the code so the project's checks pass. "
+
+
 async def _send_back_from_delivery_gate(
     session: Session,
     nats_client: NATSClient,
@@ -290,11 +310,7 @@ async def _send_back_from_delivery_gate(
     previous_gate_reworks = task_record.reworks()
     limit = qa_review.rework_limit(session, sprint.company_id)
     rework = previous_gate_reworks < limit
-    instruction = (
-        "Fix the code so the project's checks pass. "
-        if problem in delivery_gate.CODE_PROBLEMS
-        else ""
-    ) + (
+    instruction = _code_instruction(item, problem) + (
         refuted_undo.UNDONE_INSTRUCTION
         if refuted_undo.undone(session, sprint.company_id, item.id)
         else qa_review.EDIT_INSTRUCTION

@@ -21,6 +21,7 @@ from config import settings
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 
+from services.contracts.task_text import clip_description
 from services.planning.objective_text import display_name
 from services.planning.sprint_context import (  # noqa: F401 - re-exported
     _DEFAULT_EXECUTION_TEAM,
@@ -189,7 +190,7 @@ def plan_foundation_sprint(
             validated.append(
                 {
                     "title": str(t["title"])[:80],
-                    "description": str(t.get("description", ""))[:500],
+                    "description": clip_description(t.get("description")),
                     "priority": t.get("priority", "medium")
                     if t.get("priority") in ("critical", "high", "medium", "low")
                     else "medium",
@@ -317,7 +318,7 @@ def _plan_with_po(
             validated.append(
                 {
                     "title": str(task.get("title", ""))[:80],
-                    "description": str(task.get("description", ""))[:500],
+                    "description": clip_description(task.get("description")),
                     "priority": task.get("priority", "medium")
                     if task.get("priority") in ("critical", "high", "medium", "low")
                     else "medium",

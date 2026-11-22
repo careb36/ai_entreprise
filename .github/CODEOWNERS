@@ -131,6 +131,7 @@
 /backend/tests/test_stack_roots.py               @careb36
 /backend/tests/test_standards.py                 @careb36
 /backend/tests/test_task_delivery.py             @careb36
+/backend/tests/test_task_text.py                 @careb36
 /backend/tests/test_task_view_filter.py          @careb36
 /backend/tests/test_unwritten_code.py            @careb36
 /backend/tests/test_verification_checks.py       @careb36

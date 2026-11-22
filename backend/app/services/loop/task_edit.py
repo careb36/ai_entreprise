@@ -30,6 +30,7 @@ from typing import Any
 from models import BacklogItem, Sprint
 from sqlmodel import Session
 
+from services.contracts import task_text
 from services.loop import board_moves
 from services.platform.agent_service import AgentService
 from services.tasks import task_events
@@ -37,7 +38,8 @@ from services.tasks.board import SEND_BACK_MARKER
 
 EDITABLE = frozenset({"todo", "blocked"})
 TITLE_MAX = 200
-DESCRIPTION_MAX = 10_000
+# One limit for every path that writes a description (``contracts/task_text``).
+DESCRIPTION_MAX = task_text.DESCRIPTION_MAX
 REASON_MIN = 10
 REASON_MAX = 500
 EVENT_KIND = "edited"

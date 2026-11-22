@@ -33,6 +33,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.contracts.task_text import DESCRIPTION_MAX
 from services.platform import wstg_catalogue
 
 AUTO, MANUAL = "auto", "manual"
@@ -478,7 +479,7 @@ def security_test_tasks(plan_: dict[str, Any], limit: int) -> list[dict[str, Any
                     "project's test framework. It passes when the application resists "
                     "the test and fails when it does not; it never weakens or skips the "
                     f"check. Why it applies: {row['reason']}"
-                )[:500],
+                )[:DESCRIPTION_MAX],
                 "priority": "medium",
                 "assignee": QA_ROLE,
                 "covers": [],
