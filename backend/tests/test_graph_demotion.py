@@ -1,3 +1,8 @@
+"""The LangGraph path demoted behind a flag: off by default and documented, the
+worker and `/generate` refusing it while off, and its knowledge-graph ingestion
+fail-soft when on.
+"""
+
 import logging
 from pathlib import Path
 from types import SimpleNamespace

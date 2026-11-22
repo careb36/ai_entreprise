@@ -23,7 +23,7 @@ quickstart; the files below go deeper, each with a single job.
 | --- | --- |
 | [`../USER_GUIDE.md`](../USER_GUIDE.md) | The manager's guide: what the factory does and how to run a company through it. |
 | [`CONFIGURATION.md`](CONFIGURATION.md) | Every environment variable of the backend, the proxy, the broker and the daemon. |
-| [`TESTING.md`](TESTING.md) | The test suites and what each file covers, the end-to-end run, the bench and what CI runs. |
+| [`TESTING.md`](TESTING.md) | How to run the test suites, the end-to-end run, the bench and what CI runs. |
 
 ## Security and quality
 

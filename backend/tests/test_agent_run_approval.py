@@ -1,3 +1,8 @@
+"""A person's approval or rejection of an agent run: named approver, server time,
+append-only decisions with a signed audit row each, tenant isolation, and the
+retired task queue and approval endpoint staying gone.
+"""
+
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, call

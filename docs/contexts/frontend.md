@@ -170,7 +170,7 @@ A label is tied to its control with `htmlFor` and an `id` from `useId()` when th
 ## Described elsewhere
 
 - The i18n rule (every string in `en.json` and `es.json`): [`CLAUDE.md`](../../CLAUDE.md), Frontend i18n.
-- The frontend's checks (`npm run lint`, Vitest) and the table of its test files: [testing](../TESTING.md).
+- The frontend's checks (`npm run lint`, Vitest): [testing](../TESTING.md).
 - A page or component is described with the backend service it shows: the Models page in [models](models.md), the Review page and the Manager policy in [management](management.md), Files changed, reviews and the sprint's controls in [evidence](evidence.md), [loop](loop.md), [release](release.md) and [workspace](workspace.md).
 - Running the dev server and the production build: [`CLAUDE.md`](../../CLAUDE.md), Running the System.
 - The Chat approvals page (`pages/ChatApprovals.tsx`, `components/ChatConnectionForm.tsx`, `hooks/useChat.ts`, `services/api/chat.ts`): [integrations](integrations.md#approvals-in-slack-and-teams).

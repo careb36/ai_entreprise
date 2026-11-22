@@ -1,3 +1,8 @@
+"""Glassroom's SSE fan-out and stream ordering: the replayed history carries the
+same event ids on every connection, so a reconnecting client can tell it from
+new events.
+"""
+
 import asyncio
 import json
 
