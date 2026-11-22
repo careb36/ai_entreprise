@@ -51,7 +51,7 @@ from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from services.models import run_cost
+from services.models import model_prices, run_cost
 from services.tasks.board import rework_request_count
 
 PERIODS = ("day", "week", "month")
@@ -77,6 +77,7 @@ COLUMNS = (
     "reported_tokens",
     "estimated_tokens",
     "cost_cents",
+    "off_peak_turns",
     "cost_unknown_turns",
 )
 
@@ -148,6 +149,7 @@ def turn_numbers(turn: dict[str, Any]) -> dict[str, Any]:
     out["output_tokens"] = int(turn.get("output_tokens") or 0)
     if "cents" in turn:
         out["cost_cents"] = float(turn["cents"])
+        out["off_peak_turns"] = int(bool(turn.get("off_peak")))
     else:
         out["cost_unknown_turns"] = 1
     return out
@@ -453,9 +455,10 @@ def report(
             }
         )
     connections = run_cost._connections(session, company_id)
+    calendars = model_prices.off_peak_calendars()
     for row in turn_rows:
         details = row.details if isinstance(row.details, dict) else {}
-        turn = run_cost.turn_cost(row, connections)
+        turn = run_cost.turn_cost(row, connections, calendars=calendars)
         facts.append(
             {
                 "at": row.created_at,

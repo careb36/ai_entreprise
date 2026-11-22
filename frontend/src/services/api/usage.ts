@@ -26,6 +26,7 @@ export interface UsageNumbers {
   /** The priced turns only; null when none was priced (never shown as 0). */
   cost_cents: number | null
   /** Turns whose cost is unknown, counted apart. */
+  off_peak_turns: number
   cost_unknown_turns: number
 }
 

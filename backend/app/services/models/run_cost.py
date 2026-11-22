@@ -64,9 +64,15 @@ def _int(value: Any) -> int | None:
 
 
 def turn_cost(
-    row: AuditLog, connections: dict[str, str], catalog: dict[str, Any] | None = None
+    row: AuditLog,
+    connections: dict[str, str],
+    catalog: dict[str, Any] | None = None,
+    calendars: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """One turn: how its usage is known, its tokens and its cents (or why not)."""
+    """One turn: how its usage is known, its tokens and its cents (or why not).
+    The rate is the one in force when the turn was recorded
+    (``model_prices.at_time``); *calendars* is ``model_prices.off_peak_calendars()``,
+    read once by a caller pricing many turns."""
     details = row.details if isinstance(row.details, dict) else {}
     status = details.get("tokens")
     if status is None:  # Rows from before the key: a total above 0 was reported.
@@ -94,8 +100,13 @@ def turn_cost(
     price, reason = model_prices.price_for(model, provider, connection, catalog)
     if price is None:
         turn["reason"] = reason
-    else:
-        turn["cents"] = model_prices.cents(tokens_in, tokens_out, price)
+        return turn
+    if calendars is None:
+        calendars = model_prices.off_peak_calendars()
+    charged, off_peak = model_prices.at_time(price, row.created_at, calendars)
+    turn["cents"] = model_prices.cents(tokens_in, tokens_out, charged)
+    if off_peak:
+        turn["off_peak"] = True
     return turn
 
 
@@ -111,6 +122,7 @@ def summarize(turns: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "output_tokens": 0,
         "estimated_tokens": 0,
         "cost_cents": None,
+        "off_peak_turns": 0,
         "reason": None,
         "unpriced_models": [],
         "models": [],
@@ -134,6 +146,7 @@ def summarize(turns: Iterable[dict[str, Any]]) -> dict[str, Any]:
         out["output_tokens"] += turn.get("output_tokens", 0)
         if "cents" in turn:
             cents += turn["cents"]
+            out["off_peak_turns"] += int(bool(turn.get("off_peak")))
             continue
         reasons.append(turn["reason"])
         if turn["reason"] != SPLIT_UNKNOWN:
@@ -175,8 +188,9 @@ def _turn_rows(session: Session, company_id: int, refs: list[str]) -> list[Audit
 
 def _priced(session: Session, company_id: int, refs: list[str]):
     connections = _connections(session, company_id)
+    calendars = model_prices.off_peak_calendars()
     return [
-        (row, turn_cost(row, connections))
+        (row, turn_cost(row, connections, calendars=calendars))
         for row in _turn_rows(session, company_id, refs)
     ]
 
