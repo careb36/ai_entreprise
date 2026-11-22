@@ -750,6 +750,9 @@
     "POST /v1/board_notes/{note_id}/mark_wrong": {
       "access": "Manager"
     },
+    "POST /v1/companies/import": {
+      "access": "authenticated"
+    },
     "POST /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },

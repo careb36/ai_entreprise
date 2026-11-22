@@ -81,7 +81,14 @@ AGENT_FIELDS = (
     "system_prompt",
     "token_budget",
 )
-ROUTINE_FIELDS = ("title", "description", "assignee", "schedule", "enabled")
+ROUTINE_FIELDS = (
+    "title",
+    "description",
+    "assignee",
+    "schedule",
+    "enabled",
+    "variables",
+)
 
 
 def _without_userinfo(url: str) -> str:
