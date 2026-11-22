@@ -7,7 +7,7 @@ docstring has the detail.
 - **Folder:** `backend/app/services/contracts/`
 - **May import:** no other context.
 - **Interface:** every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Rules
 
@@ -63,6 +63,14 @@ daemon's command policy and sandbox still apply at run time. Design:
 - `language.py`: the line asking agents to write a person's prose in the
   company's language while code and parsed markers stay in English.
 - `emails.py`: the one rule for comparing addresses (strip, lower-case).
+
+### A routine's schedule
+
+`routine_schedule.py`: when a routine runs, `{"every": "day" | "week", "at":
+"HH:MM", "timezone", "weekday"}`: a time on the company's clock, never an
+interval from the last run. `next_after` is the first occurrence strictly
+after a moment, so occurrences missed while the backend was down collapse
+into one.
 
 ### The self-improvement records
 

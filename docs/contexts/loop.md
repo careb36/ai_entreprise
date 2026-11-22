@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
 
 ## How it works
 
@@ -92,6 +92,18 @@ waits as `todo`, and a `sprint_budget_reached` audit row records the
 incident; a cost that cannot be priced pauses it too. Past the warning share,
 once per sprint, a `sprint_budget_warning` row and a Glassroom event say so.
 From Paperclip's budget policies (MIT).
+
+### Routines
+
+`routines.py`: a Manager writes a routine (a title, a description, the hired
+role that does it and a `routine_schedule`) with
+`/v1/companies/{id}/routines` and `/v1/routines/{id}`. The `routine_scheduler`
+worker checks every minute; a due routine opens a sprint `Routine: <title> —
+<date>` with its one task, queued like any other, so the run window, the
+sprint budget, the Verifier and QA apply. While the sprint it opened last is
+still open, the occurrence is skipped. Replicas claim an occurrence with a
+conditional update, so it runs once. Every change, run and skip is an audit
+row (`routine_*`). From Paperclip's routines (MIT).
 
 ### Sprint control and autonomy
 

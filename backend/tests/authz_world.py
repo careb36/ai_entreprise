@@ -29,6 +29,7 @@ from models import (
     BusinessUnit,
     Company,
     CompanyMember,
+    Routine,
     SavedView,
     Sprint,
     TaskRelation,
@@ -118,6 +119,15 @@ def build_world(session) -> World:
     )
     item = _add(session, BacklogItem(sprint_id=sprint.id, title="Authz task"))
     other = _add(session, BacklogItem(sprint_id=sprint.id, title="Authz other task"))
+    routine = _add(
+        session,
+        Routine(
+            company_id=cid,
+            title="Authz routine",
+            assignee="Developer",
+            schedule={"every": "day", "at": "09:00", "timezone": "UTC"},
+        ),
+    )
     relation = _add(
         session,
         TaskRelation(
@@ -316,6 +326,7 @@ def build_world(session) -> World:
         "bu_id": unit.id,
         "business_unit_id": unit.id,
         "agent_id": agent.id,
+        "routine_id": routine.id,
         "sprint_id": sprint.id,
         "task_id": item.id,
         "relation_id": relation.id,

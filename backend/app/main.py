@@ -64,6 +64,7 @@ from routers.procedures import router as procedures_router
 from routers.protected_paths import router as protected_paths_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
+from routers.routines import router as routines_router
 from routers.rsi_cycles import router as rsi_cycles_router
 from routers.run_logs import router as run_logs_router
 from routers.run_secrets import router as run_secrets_router
@@ -189,6 +190,7 @@ app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)
 app.include_router(enterprise_agents_router)
+app.include_router(routines_router)
 app.include_router(events_router)
 app.include_router(findings_router)
 app.include_router(sprint_router)

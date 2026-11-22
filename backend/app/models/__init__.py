@@ -55,6 +55,7 @@ from .procedure import Procedure
 from .progress import SprintProgressSnapshot
 from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
+from .routine import Routine
 from .rsi_cycle import RsiCycle
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
@@ -135,6 +136,7 @@ __all__ = [
     "ProviderConnection",
     "RefreshToken",
     "ReviewComment",
+    "Routine",
     "RsiCycle",
     "RunPublication",
     "RunReview",
