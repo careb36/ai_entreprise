@@ -28,6 +28,9 @@
 /scripts/file_size_baseline.json    @careb36
 /scripts/licence_scan.py            @careb36
 /scripts/hooks/                     @careb36
+/.claude/skills/                    @careb36
+/CLAUDE.md                          @careb36
+/AGENTS.md                          @careb36
 /scripts/e2e/                       @careb36
 /backend/poetry.lock                @careb36
 /llm-proxy/poetry.lock              @careb36

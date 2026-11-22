@@ -98,6 +98,19 @@ def test_the_list_protects_itself_and_its_guards():
         assert pp.matches([path]) == [pp.Match(path, path)], path
 
 
+def test_the_review_skills_and_the_agents_instructions_are_protected():
+    # A factory sprint must not weaken the skills a change is reviewed with,
+    # nor the instructions that point coding agents to the rules.
+    for path, pattern in (
+        (".claude/skills/sdl-review/SKILL.md", ".claude/skills/**"),
+        (".claude/skills/ciberseguridad/SKILL.md", ".claude/skills/**"),
+        (".claude/skills/sdl-review/reference.md", ".claude/skills/**"),
+        ("CLAUDE.md", "CLAUDE.md"),
+        ("AGENTS.md", "AGENTS.md"),
+    ):
+        assert pp.matches([path]) == [pp.Match(path, pattern)], path
+
+
 def test_paths_are_normalised_before_matching():
     found = pp.matches(
         [
