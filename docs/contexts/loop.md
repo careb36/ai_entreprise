@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `replicas`, `review_digest`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `replicas`, `review_digest`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
 
 ## How it works
 
@@ -66,6 +66,20 @@ company, its agents and credentials, and plans "Sprint 0 — Foundations" unless
 it is declined, or the daemon observed the folder to be a repository with
 source code. The decision rests on the daemon's observation, never on a claim
 in the request; an unobserved folder gets the sprint.
+
+### An agent's configuration and its revisions
+
+`agent_config_history.py`: every change to an agent's name, role, persona,
+seniority, specialty, model, system prompt or budget (`PATCH /v1/agents/{id}`,
+Manager) is a revision: an `agent_config_changed` audit row, in the company's
+hash chain, with the fields changed, their values before and after, who
+changed them, the reason when given, and its source (`edit` or `rollback`).
+`GET /v1/agents/{id}/config-revisions` (Viewer) lists them, newest first.
+`POST /v1/agents/{id}/config-revisions/{revision_id}/rollback` (Manager) puts
+back what a revision replaced, as a revision of its own with
+`rolled_back_from`, and says which of those fields changed again since. A
+rollback whose values the agent already has is refused (409). From
+Paperclip's agent configuration revisions (MIT).
 
 ### Sprint control and autonomy
 
