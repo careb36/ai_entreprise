@@ -37,7 +37,13 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import preconditions, replicas, run_window_gate, sprint_control
+from services.loop import (
+    preconditions,
+    replicas,
+    run_window_gate,
+    sprint_budget,
+    sprint_control,
+)
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
 from services.tasks import dependencies, task_events, task_projection
@@ -158,7 +164,7 @@ async def _on_task_assign(
     data: dict[str, Any] = {}
     try:
         data = data_from_nats or json.loads(msg.data.decode())
-        ctx = await _claim(data)
+        ctx = await _claim(data, nats_client)
         if not ctx:
             return
         await task_run._run_claimed_task(nats_client, data.get("backlog_item_id"), ctx)
@@ -166,7 +172,9 @@ async def _on_task_assign(
         await _record_failure(nats_client, data, e)
 
 
-async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
+async def _claim(
+    data: dict[str, Any], nats_client: NATSClient | None = None
+) -> dict[str, Any] | None:
     """The task's context once this replica claimed it, else nothing."""
     backlog_item_id = data.get("backlog_item_id")
     sprint_id = data.get("sprint_id")
@@ -203,6 +211,14 @@ async def _claim(data: dict[str, Any]) -> dict[str, Any] | None:
         preconditions.hold_task, engine, item["id"]
     ):
         return None
+    # A sprint at its budget in money pauses before the next model turn.
+    if item.get("status") == "todo":
+        budget = await asyncio.to_thread(sprint_budget.hold, engine, item["id"])
+        if budget:
+            if nats_client is not None:
+                await sprint_budget.publish(nats_client, budget)
+            if "pause" in budget:
+                return None
     # Guard against duplicate task.assign events for the same item: one
     # replica claims it, with a conditional update from todo (issue #328),
     # recorded as its ``claimed`` event (issue #324).

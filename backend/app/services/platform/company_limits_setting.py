@@ -45,6 +45,8 @@ def deployment_defaults() -> dict[str, int]:
         "max_reworks": company_limits.deployment_rework_limit(
             settings.MAX_REWORKS, settings.AUTOPILOT_MAX_REWORK_CYCLES
         ),
+        "sprint_budget_cents": 0,
+        "budget_warn_percent": company_limits.DEFAULT_BUDGET_WARN_PERCENT,
     }
 
 

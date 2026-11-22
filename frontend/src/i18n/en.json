@@ -3133,7 +3133,9 @@
       "tool_rounds": "Developer's tool rounds per call",
       "result_max_chars": "Characters of a tool's result the model sees",
       "max_output_tokens": "Cap on the Developer's answer (tokens, 0: none)",
-      "max_reworks": "Reworks per task before it goes to a person"
+      "max_reworks": "Reworks per task before it goes to a person",
+      "sprint_budget_cents": "What a sprint may spend, in US cents, priced from the proxy's usage (0: no budget)",
+      "budget_warn_percent": "Warn at this share of the sprint budget (%)"
     },
     "range": "Deployment: {{deployment}} · allowed {{floor}}–{{ceiling}}",
     "save": "Save limits",
