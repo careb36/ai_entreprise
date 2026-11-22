@@ -1,4 +1,4 @@
-"""OpenID Connect, judged by us (single sign-on, ``docs/design/SSO.md``).
+"""OpenID Connect, judged by us (single sign-on, ``docs/archive/design/SSO.md``).
 
 Discovery (``/.well-known/openid-configuration``) and the JWKS are fetched
 through ``oidc_client`` and cached; the ID token is validated here, never

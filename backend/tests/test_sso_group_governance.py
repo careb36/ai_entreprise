@@ -1,5 +1,5 @@
 """Four-eyes on a Manager pair and the break-glass exclusion (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R23–R25, R27–R29, G17, G19–G21): a
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R23–R25, R27–R29, G17, G19–G21): a
 Manager pair stays pending, self-approval is refused with a ``sod_refused``
 row, an approver id in the body is ignored, an API token is refused, a
 changed or expired proposal is refused, the single-Owner confirmation is

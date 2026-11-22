@@ -78,7 +78,7 @@ KINDS: dict[str, Kind] = {
     ),
     # A verified SSO domain stopped being verified without an Owner asking
     # (a re-check's definite negative, or the 14-day unconfirmed lapse of
-    # docs/design/SSO.md decision 5): the Owners.
+    # docs/archive/design/SSO.md decision 5): the Owners.
     "sso_domain_lapsed": Kind(True, "sso_domain", (), True),
     # A delivery approved by QA waits for a person to accept it (a
     # ``risk_hold`` task event): the members who may accept it (Manager+).

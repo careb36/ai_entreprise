@@ -50,7 +50,7 @@ an owner in `.github/CODEOWNERS` (`tests/test_protected_paths.py`). Design:
 a standard's refusals keep the others. The five kinds are closed.
 `command_refusal` refuses at import what a standard may never run; the
 daemon's command policy and sandbox still apply at run time. Design:
-[`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
+[`COMPANY_STANDARDS.md`](../archive/design/COMPANY_STANDARDS.md).
 
 ### Company settings as data
 
@@ -85,12 +85,12 @@ daemon's command policy and sandbox still apply at run time. Design:
 ### Feature syntaxes
 
 - `wiki.py`, `wiki_lint.py`, `wiki_templates.py`: the project wiki's
-  syntax, lint rules and templates ([`PROJECT_WIKI.md`](../design/PROJECT_WIKI.md)).
-- `board_notes.py`: the sprint board's note format ([`SPRINT_BOARD.md`](../design/SPRINT_BOARD.md)).
+  syntax, lint rules and templates ([`PROJECT_WIKI.md`](../archive/design/PROJECT_WIKI.md)).
+- `board_notes.py`: the sprint board's note format ([`SPRINT_BOARD.md`](../archive/design/SPRINT_BOARD.md)).
 - `intake_rules.py`: the intake queue's statuses and transitions
   ([planning](planning.md#the-intake-queue)).
 - `task_filters.py`: the task filter's allowlist and bounds
-  ([`SAVED_VIEWS.md`](../design/SAVED_VIEWS.md)).
+  ([`SAVED_VIEWS.md`](../archive/design/SAVED_VIEWS.md)).
 
 ## See also
 

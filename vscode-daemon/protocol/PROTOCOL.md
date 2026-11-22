@@ -435,7 +435,7 @@ observation; the backend records it on the company (`base_sync_observed`).
 `workspace.git.read_at` reads files as a commit has them, never as the
 checkout has them: a company's standards file (`.fabrique/standards.toml`)
 and the files its `command` standards depend on are imported from the
-**default branch's** head (`docs/design/COMPANY_STANDARDS.md` §4), so a
+**default branch's** head (`docs/archive/design/COMPANY_STANDARDS.md` §4), so a
 delivery that edits them cannot change the rule it is judged by. The commit
 is the request's `commit`, else the head of `base`, else of the branch
 `origin/HEAD` names, else `main`, else `master`; never the checked-out

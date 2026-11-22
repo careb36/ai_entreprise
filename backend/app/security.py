@@ -216,7 +216,7 @@ def cors_allows_credentials(origins: list[str]) -> bool:
 
     With ``*`` and credentials Starlette echoes whatever origin asks, so any
     site could read authenticated answers; ``*`` therefore turns them off
-    (issue #524, docs/design/SESSIONS.md, S6).
+    (issue #524, docs/archive/design/SESSIONS.md, S6).
     """
     if "*" in origins:
         logger.warning(

@@ -1,5 +1,5 @@
 """Time-boxed exceptions to a standard (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §12 decision 1).
+``docs/archive/design/COMPANY_STANDARDS.md`` §12 decision 1).
 
 A company never relaxes or waives a catalogue standard, and its file can
 only add standards. A real need goes through an exception instead, a risk

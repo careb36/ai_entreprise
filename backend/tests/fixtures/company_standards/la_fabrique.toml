@@ -1,4 +1,4 @@
-# The worked example of docs/design/COMPANY_STANDARDS.md section 9.1, copied
+# The worked example of docs/archive/design/COMPANY_STANDARDS.md section 9.1, copied
 # verbatim: test_company_standards_file.py requires it to parse with no refusal.
 # Change both together.
 # .fabrique/standards.toml: La Fabrique's company standards.

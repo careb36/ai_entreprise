@@ -1,4 +1,4 @@
-"""DNS verification of a company's SSO domains (``docs/design/SSO.md``, T16–T22).
+"""DNS verification of a company's SSO domains (``docs/archive/design/SSO.md``, T16–T22).
 
 Listing a domain in ``allowed_domains`` is the Owner's claim; it proves
 nothing, since any Owner can type any domain. For each listed domain the
@@ -23,7 +23,7 @@ counted for ``/metrics`` (``sso_metrics``).
 A verified domain that stops being verified without an Owner asking (a
 re-check or a conflict's definite negative) is a lapse: every Owner of the
 company gets a personal security notice (``notify_lapsed``, issue #683).
-The 14-day ``lapsed_unconfirmed`` rule of docs/design/SSO.md decision 5 is
+The 14-day ``lapsed_unconfirmed`` rule of docs/archive/design/SSO.md decision 5 is
 not built yet (#684); when it is, it calls ``notify_lapsed`` with that
 reason in the same transaction as the status change.
 """

@@ -1,4 +1,4 @@
-"""Teams inside a company (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``).
+"""Teams inside a company (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 - ``Team``        — a named group of a company's members with a role scope:
   ``Viewer`` or ``Manager``, never ``Owner``. Written only by an Owner.

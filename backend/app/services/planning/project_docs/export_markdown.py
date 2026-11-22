@@ -1,6 +1,6 @@
 """The pack's own Markdown subset, parsed for export (issue #694, phase 4).
 
-``docs/design/PROJECT_DOCUMENTATION.md``, "Export to DOCX and PDF". The
+``docs/archive/design/PROJECT_DOCUMENTATION.md``, "Export to DOCX and PDF". The
 builders write a known subset: ATX headings, paragraphs, bullet and numbered
 lists (nested by indentation), pipe tables, block quotes (the claim marks, the
 person sections and the person's statements) and fenced code (the Mermaid

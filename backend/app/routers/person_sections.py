@@ -1,6 +1,6 @@
 """Person sections router — what only a person can write in a project's documentation pack.
 
-Endpoints (issue #530, phase 2, ``docs/design/PROJECT_DOCUMENTATION.md``):
+Endpoints (issue #530, phase 2, ``docs/archive/design/PROJECT_DOCUMENTATION.md``):
 - ``GET    /v1/companies/{id}/documentation/person-sections``                   — every person section and its current statement (Viewer).
 - ``GET    /v1/companies/{id}/documentation/person-sections/{section}/history`` — every revision of one section, newest first (Viewer).
 - ``PUT    /v1/companies/{id}/documentation/person-sections/{section}``         — write the section's statement (Manager; audited).

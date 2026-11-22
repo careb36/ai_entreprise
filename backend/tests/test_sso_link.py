@@ -1,5 +1,5 @@
 """Linking an SSO identity from inside a signed-in session (issue #512;
-``docs/design/SSO.md``, T25–T31): a signed-in person starts an authorisation
+``docs/archive/design/SSO.md``, T25–T31): a signed-in person starts an authorisation
 at one of their companies' connections with a ``state`` bound to their
 browser and their live session (PKCE and a nonce, as the sign-in); the
 callback links the provider's subject to that person only when the

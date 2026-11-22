@@ -1,5 +1,5 @@
 """SSO re-checks counted in ``/metrics`` (issue #684, the metric half;
-``docs/design/SSO.md``, T20–T21; ``docs/OPERATIONS.md``, ``/metrics``).
+``docs/archive/design/SSO.md``, T20–T21; ``docs/OPERATIONS.md``, ``/metrics``).
 
 The backend re-checks one thing about SSO on its own: each allowed domain's
 DNS record, on the schedule (``trigger="recheck"``) and when a newer proof

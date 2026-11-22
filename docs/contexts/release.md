@@ -30,7 +30,7 @@ the daemon observed.
 - A local merge into the base branch is a release: `sod.enforce` runs before
   the daemon is asked, so the person who started the sprint does not merge or
   approve its work (403, audited `sod_refused`). Design:
-  [`SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md).
+  [`SEGREGATION_OF_DUTIES.md`](../archive/design/SEGREGATION_OF_DUTIES.md).
 - A diff is never the client's: the backend asks the daemon and computes
   `diff_sha256` from the per-file hashes. Review words are claims; commit,
   merge base and hashes are observations.

@@ -1,5 +1,5 @@
 """Segregation of duties: the company's policy, its single-person exception and
-the report (issue #543; ``docs/design/SEGREGATION_OF_DUTIES.md``).
+the report (issue #543; ``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 The rule itself is applied at each approval point (``services/platform/sod.py``).
 The policy is written only by a signed-in human Owner (an API token is refused,

@@ -26,7 +26,7 @@ Unlinking: oneself only while another way to sign in remains (a password no
 SSO requirement refuses, or another identity through an enabled
 connection); an Owner for the identities of their own company's connection,
 which also ends the person's SSO-started sessions. Each is an
-``sso_identity_unlink`` audit row. Design: ``docs/design/SSO.md``.
+``sso_identity_unlink`` audit row. Design: ``docs/archive/design/SSO.md``.
 """
 
 from __future__ import annotations

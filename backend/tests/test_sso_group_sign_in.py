@@ -1,5 +1,5 @@
 """The group mapping at an SSO sign-in, end to end against the fake provider
-(issue #703; ``docs/design/SSO_GROUP_MAPPING.md``, R1–R4, R7–R14, R22): a
+(issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``, R1–R4, R7–R14, R22): a
 sign-in adds and removes, the periods carry ``sso-mapping:<id>`` and the
 observation id, the audit row holds the matched values and never an unmatched
 one, a failed audit write rolls back the memberships and periods with the

@@ -1,6 +1,6 @@
 """The RFC 3161 timestamping authority's HTTP adapter: one POST, and nothing else.
 
-Issue #542, ``docs/design/AUDIT_ANCHORS.md``. ``anchoring.deliver_tsa`` builds
+Issue #542, ``docs/archive/design/AUDIT_ANCHORS.md``. ``anchoring.deliver_tsa`` builds
 the ``TimeStampReq`` (``services/platform/rfc3161.py``), checks the URL and
 checks the token; this module only posts the request (``application/
 timestamp-query``, RFC 3161 section 3.4), without following redirects, and

@@ -56,7 +56,7 @@ On a task-worker run a review acts only where the loop waits for a person
 (`request_changes` sends the task back with a `NEEDS WORK:` comment, `approve`
 accepts a risk hold); anything else is a 409. On another producer's run it
 records an approval. `sod_requesters.py` reads who asked for the work from the
-records, for the segregation check ([design](../design/SEGREGATION_OF_DUTIES.md)).
+records, for the segregation check ([design](../archive/design/SEGREGATION_OF_DUTIES.md)).
 The integration's review is in [release](release.md#a-persons-review-of-the-integration).
 
 ### The company bootstrap and its foundation sprint
@@ -168,4 +168,4 @@ never raises).
 
 - The task worker's steps: [the sprint loop](../SPRINT_LOOP.md).
 - Settings (`PROMPT_BUDGET`, `MAX_REWORKS`, `DELIVERY_TESTS_ENABLED`, `RUN_WINDOW_RECHECK_SECONDS`): [configuration](../CONFIGURATION.md).
-- Design: [segregation of duties](../design/SEGREGATION_OF_DUTIES.md), [project wiki](../design/PROJECT_WIKI.md), [sprint board](../design/SPRINT_BOARD.md).
+- Design: [segregation of duties](../archive/design/SEGREGATION_OF_DUTIES.md), [project wiki](../archive/design/PROJECT_WIKI.md), [sprint board](../archive/design/SPRINT_BOARD.md).

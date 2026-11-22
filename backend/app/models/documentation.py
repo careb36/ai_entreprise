@@ -1,7 +1,7 @@
 """A documentation pack: a project's management documents, compiled from the records.
 
 One row per compiled version (issue #530,
-``docs/design/PROJECT_DOCUMENTATION.md``). The documents (charter, scope
+``docs/archive/design/PROJECT_DOCUMENTATION.md``). The documents (charter, scope
 statement, WBS, schedule, RACI, risk register, lessons learned, the C4
 diagrams) are Markdown built deterministically from the company's records by
 ``services/planning/project_docs``; each carries the sources it cites and the

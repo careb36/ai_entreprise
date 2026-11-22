@@ -1,6 +1,6 @@
 """Anchors of a company's audit chain outside the factory (issue #542).
 
-``docs/design/AUDIT_ANCHORS.md``. The chain (``audit_chain.py``) is keyed by
+``docs/archive/design/AUDIT_ANCHORS.md``. The chain (``audit_chain.py``) is keyed by
 ``AUDIT_SIGNING_KEY``, which the factory holds; an anchor records the chain's
 head (a sequence number and its hash) somewhere the factory cannot rewrite it,
 so a chain re-signed with the factory's own key no longer matches.

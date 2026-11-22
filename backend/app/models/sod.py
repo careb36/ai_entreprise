@@ -1,5 +1,5 @@
 """Segregation of duties and the periodic access review (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 - ``SodPolicy``     — one per company, written only by a signed-in Owner: which
   approvals the rule holds (``off``, ``high_risk`` — the default — or ``all``),

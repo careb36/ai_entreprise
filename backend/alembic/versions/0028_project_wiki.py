@@ -1,4 +1,4 @@
-"""The project wiki (issue #445; ``docs/design/PROJECT_WIKI.md``): pages,
+"""The project wiki (issue #445; ``docs/archive/design/PROJECT_WIKI.md``): pages,
 their versions, the links derived from their bodies and a company's wiki
 settings, company-scoped. New tables only: nothing existing changes.
 

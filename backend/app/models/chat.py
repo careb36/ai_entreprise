@@ -1,4 +1,4 @@
-"""Approving from Slack or Microsoft Teams (issue #512, phase 4; ``docs/design/CHAT_APPROVALS.md``).
+"""Approving from Slack or Microsoft Teams (issue #512, phase 4; ``docs/archive/design/CHAT_APPROVALS.md``).
 
 - ``ChatConnection``      — a company's Slack app or Teams webhooks, written by
   an Owner. The credential that posts (Slack bot token, Teams incoming webhook

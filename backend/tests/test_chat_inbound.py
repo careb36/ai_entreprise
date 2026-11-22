@@ -1,4 +1,4 @@
-"""Decisions from Slack and Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
+"""Decisions from Slack and Teams (issue #512, phase 4; docs/archive/design/CHAT_APPROVALS.md).
 
 A click or a command decides only when the platform's signature holds (and
 is recent), the interaction was never seen, the chat user is linked to an

@@ -2,7 +2,7 @@
 
 Every string a pack shows came from a record a model or a person wrote: a task
 title, a module name, a block reason, the TechWriter's prose. It is untrusted
-input (``docs/design/PROJECT_DOCUMENTATION.md``, threat model T1–T3), rendered
+input (``docs/archive/design/PROJECT_DOCUMENTATION.md``, threat model T1–T3), rendered
 in the browser and written into the user's repository, so nothing here lets it
 become structure:
 

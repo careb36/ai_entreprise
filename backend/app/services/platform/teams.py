@@ -1,4 +1,4 @@
-"""Teams and the effective role (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``).
+"""Teams and the effective role (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 A company's Owner groups its members in teams; a team carries a role scope,
 ``Viewer`` or ``Manager``, that applies to its members within that company.

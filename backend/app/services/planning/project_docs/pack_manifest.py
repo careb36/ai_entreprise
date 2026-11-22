@@ -1,6 +1,6 @@
 """The signed manifest of a documentation pack (issue #694, phase 4).
 
-``docs/design/PROJECT_DOCUMENTATION.md``, "Phase 4: the signed manifest". A
+``docs/archive/design/PROJECT_DOCUMENTATION.md``, "Phase 4: the signed manifest". A
 manifest lists every file a pack writes to ``docs/project/`` (``pack.files_of``)
 with the sha256 and size the backend computed over those bytes, the pack's
 inputs digest and its compile time. Nothing in it comes from the party being

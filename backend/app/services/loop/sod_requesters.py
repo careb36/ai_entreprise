@@ -1,5 +1,5 @@
 """Who asked for a piece of work, read from records (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 The segregation-of-duties rule (``services/platform/sod.py``) compares the
 person approving with these; each is an observation the backend wrote, never

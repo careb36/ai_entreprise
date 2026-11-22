@@ -1,6 +1,6 @@
 """Documentation router — a project's management documentation, compiled from its records.
 
-Endpoints (issue #530, ``docs/design/PROJECT_DOCUMENTATION.md``):
+Endpoints (issue #530, ``docs/archive/design/PROJECT_DOCUMENTATION.md``):
 - ``GET  /v1/companies/{id}/documentation``           — the pack versions, newest first (Viewer).
 - ``POST /v1/companies/{id}/documentation``           — compile a new draft pack (Manager).
 - ``GET  /v1/documentation/{pack_id}``                — one pack with its documents, diagrams and lint (Viewer).

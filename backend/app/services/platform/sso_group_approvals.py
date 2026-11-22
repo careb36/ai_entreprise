@@ -1,5 +1,5 @@
 """Four-eyes on a group pair that grants Manager (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R23–R25, G19; segregation of duties,
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R23–R25, G19; segregation of duties,
 #543).
 
 A pair to a Manager team waits as a pending ``sso_manager_approvals`` row

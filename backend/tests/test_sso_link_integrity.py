@@ -1,5 +1,5 @@
 """What keeps linking and unlinking an SSO identity whole (issue #512;
-``docs/design/SSO.md``, T31, T33): a link or an unlink and its audit row are
+``docs/archive/design/SSO.md``, T31, T33): a link or an unlink and its audit row are
 one transaction, so a failed audit write leaves neither; one account holds
 at most one identity per provider, enforced by the database (migration
 0050), so two links racing past the check end with ``identity_conflict``,

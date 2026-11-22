@@ -1,4 +1,4 @@
-"""The usage report (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``,
+"""The usage report (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``,
 T7–T10): who used what, read back from the records.
 
 On fixture data: tasks, runs, verdicts, rework, people's decisions and the

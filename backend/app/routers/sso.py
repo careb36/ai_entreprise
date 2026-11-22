@@ -13,7 +13,7 @@ Endpoints:
   browser session ``/v1/auth/login`` starts (HttpOnly cookies, issue #524).
 
 Rate-limited per client address (``SSO_RATE_LIMIT``). The design and its
-threat model: ``docs/design/SSO.md``.
+threat model: ``docs/archive/design/SSO.md``.
 """
 
 from urllib.parse import urlencode
@@ -141,5 +141,5 @@ def sso_exchange(
     except oidc.SsoError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired code") from exc
     # The browser's session, in HttpOnly cookies as after a password login;
-    # no token in the body (issue #524, docs/design/SESSIONS.md).
+    # no token in the body (issue #524, docs/archive/design/SESSIONS.md).
     return session_cookies.start(response, session, user, "sso")

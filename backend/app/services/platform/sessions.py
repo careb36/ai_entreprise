@@ -1,4 +1,4 @@
-"""Browser sessions: refresh-token families (issue #524, ``docs/design/SESSIONS.md``).
+"""Browser sessions: refresh-token families (issue #524, ``docs/archive/design/SESSIONS.md``).
 
 A sign-in (password or SSO) starts a **family**: a random public id the
 access tokens carry as ``sid``, the digest of a CSRF token, and an absolute

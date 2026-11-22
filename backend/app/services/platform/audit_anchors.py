@@ -1,6 +1,6 @@
 """Anchors of a company's audit chain, and how much of the chain they cover (issue #542).
 
-``docs/design/AUDIT_ANCHORS.md``. The chain (``audit_chain.py``) is keyed by
+``docs/archive/design/AUDIT_ANCHORS.md``. The chain (``audit_chain.py``) is keyed by
 ``AUDIT_SIGNING_KEY``, which the factory holds: whoever holds that key and can
 write the database can rewrite a row and re-sign every row after it, and the
 chain alone still verifies. ``docs/POSITIONING.md`` says hashes and signatures

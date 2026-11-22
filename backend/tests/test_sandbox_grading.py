@@ -1,5 +1,5 @@
 """Grading candidate code in the sandbox (docs/design/rsi-loop.md, PR 12;
-docs/design/SANDBOX_GRADING_THREAT_MODEL.md): the self-hosting harness's
+docs/archive/design/SANDBOX_GRADING_THREAT_MODEL.md): the self-hosting harness's
 target measure (``scripts/self_host/spec_source.run_measure``) and the bench's
 acceptance tests (``scripts/bench/bench_grade.grade``) run in the daemon's
 container sandbox (``vscode-daemon/sandbox.py``), and nothing the candidate

@@ -1,4 +1,4 @@
-"""The usage report as CSV (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``).
+"""The usage report as CSV (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 Pure: the report ``usage_report.report`` returns, written as one CSV document.
 The first lines are comment rows naming the company, the range, the period,

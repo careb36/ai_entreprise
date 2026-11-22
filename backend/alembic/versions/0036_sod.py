@@ -1,5 +1,5 @@
 """Segregation of duties and the periodic access review (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``): ``sod_policies`` (one per company:
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``): ``sod_policies`` (one per company:
 which approvals the rule holds, the single-person exception, the access
 review's interval and inactivity threshold) and ``access_reviews`` (one
 completed review: what was listed and the Owner's decision on each item).

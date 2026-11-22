@@ -10,7 +10,7 @@ the SSO settings):
 
 Only the company's own listed domains are looked up, so the route cannot be
 used to query arbitrary names. The check is rate-limited per client address
-(``SSO_RATE_LIMIT``). Design and threat model: ``docs/design/SSO.md``.
+(``SSO_RATE_LIMIT``). Design and threat model: ``docs/archive/design/SSO.md``.
 """
 
 from auth_policy import current_user_if_required

@@ -1,5 +1,5 @@
 """Shared data for the SSO group mapping tests (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``): a company with an SSO connection that
+``docs/archive/design/SSO_GROUP_MAPPING.md``): a company with an SSO connection that
 maps groups, SSO-managed teams, pairs and observations, built through the
 models as the routes would leave them. No secret is a literal: the fake
 provider's key and the signing key are generated per test (``sso_fake_idp``).

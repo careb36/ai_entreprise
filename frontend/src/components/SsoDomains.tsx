@@ -11,7 +11,7 @@ const STATUS: Record<SsoDomain['status'], { tone: StatusTone; icon: typeof Circl
 }
 
 /**
- * Each allowed domain's DNS verification (docs/design/SSO.md): the TXT record
+ * Each allowed domain's DNS verification (docs/archive/design/SSO.md): the TXT record
  * the Owner publishes, its status and a check now. Single sign-on creates or
  * links accounts only in a verified domain.
  */

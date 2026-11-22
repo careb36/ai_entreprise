@@ -3,7 +3,7 @@
  * (Viewer): the whole audit chain walked end to end (`GET /v1/audit/chain`,
  * `audit_chain.verify_chain`), a task's event log with its own chain
  * (`GET /v1/tasks/{id}/events`), the head's statement a customer signs with
- * its own key and the signature it returns (`docs/design/AUDIT_ANCHORS.md`,
+ * its own key and the signature it returns (`docs/archive/design/AUDIT_ANCHORS.md`,
  * customer_key), and an anchor's receipt to verify outside the factory.
  *
  * Every verdict here is the server's: the browser never recomputes a hash or

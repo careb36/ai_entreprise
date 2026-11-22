@@ -14,7 +14,7 @@ An unsafe request authenticated by the cookie must send ``X-Fabrique-CSRF``
 equal to the ``fabrique_csrf`` cookie and to the digest signed into the
 access token (or stored on the family, for refresh and logout): a signed
 double submit, so a cookie planted by a sibling host does not pass. The
-design and its threat model: ``docs/design/SESSIONS.md``.
+design and its threat model: ``docs/archive/design/SESSIONS.md``.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Team membership history (issue #702; ``docs/design/TEAMS_AND_USAGE.md``,
+"""Team membership history (issue #702; ``docs/archive/design/TEAMS_AND_USAGE.md``,
 Team membership history): ``team_membership_periods`` (when a member was in a
 team, opened and closed by the backend when the membership changes, never
 edited after) and ``team_history_start`` (the moment this migration ran).

@@ -1,6 +1,6 @@
 """FastAPI dependencies for resolving authenticated human users and API tokens.
 
-Two transports (``docs/design/SESSIONS.md``):
+Two transports (``docs/archive/design/SESSIONS.md``):
 
 - ``Authorization: Bearer`` — an API token or a Bearer access token. It wins
   whenever present, even beside a session cookie, and is never subject to the

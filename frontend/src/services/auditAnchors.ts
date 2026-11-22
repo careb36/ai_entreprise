@@ -1,5 +1,5 @@
 /**
- * Audit anchors (issue #542, docs/design/AUDIT_ANCHORS.md): the head of the
+ * Audit anchors (issue #542, docs/archive/design/AUDIT_ANCHORS.md): the head of the
  * company's audit chain recorded outside the factory (the company's webhook,
  * an RFC 3161 timestamping authority, a key the customer holds), and how much
  * of the chain those anchors cover. Viewers read the coverage; a Manager

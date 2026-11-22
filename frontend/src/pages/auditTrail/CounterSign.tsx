@@ -14,7 +14,7 @@ const SIGN_COMMAND = 'openssl pkeyutl -sign -inkey customer.pem -rawin -in state
 
 /**
  * Counter-signing the chain's head with the company's own key (the
- * customer_key anchor of docs/design/AUDIT_ANCHORS.md): fetch the statement,
+ * customer_key anchor of docs/archive/design/AUDIT_ANCHORS.md): fetch the statement,
  * sign it outside the factory with the Ed25519 key an Owner registered, paste
  * the signature. The private key never comes near this page; the backend
  * verifies the signature against the registered public keys and the chain.

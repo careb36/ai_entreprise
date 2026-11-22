@@ -1,4 +1,4 @@
-"""The DNS adapter of the SSO domain verification (``docs/design/SSO.md``).
+"""The DNS adapter of the SSO domain verification (``docs/archive/design/SSO.md``).
 
 ``sso_domains`` decides what an answer means; this module only asks a
 resolver for the TXT records at a name and returns their strings (each

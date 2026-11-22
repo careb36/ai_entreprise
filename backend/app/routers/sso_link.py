@@ -20,7 +20,7 @@ Endpoints:
   sessions.
 
 The changes are rate-limited per client address (``SSO_RATE_LIMIT``) and
-audited. Design and threat model: ``docs/design/SSO.md``.
+audited. Design and threat model: ``docs/archive/design/SSO.md``.
 """
 
 import secrets

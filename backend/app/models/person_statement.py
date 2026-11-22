@@ -15,7 +15,7 @@ person's statement with the author's company role and the time it was
 recorded. ``statement_sha256`` is computed by the backend over the stored
 fields, never taken from the request. The author's address stays in the
 database and the audit; the pack written to the repository shows only the
-role (rule 6 of ``docs/design/PROJECT_DOCUMENTATION.md``).
+role (rule 6 of ``docs/archive/design/PROJECT_DOCUMENTATION.md``).
 """
 
 from datetime import UTC, datetime

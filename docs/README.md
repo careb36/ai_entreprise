@@ -12,7 +12,8 @@ start. Coding agents start from [`CLAUDE.md`](../CLAUDE.md).
 - [`STANDARDS.md`](STANDARDS.md): the quality standards every project is held to.
 - [`API.md`](API.md): every HTTP route.
 - [`WORKFLOWS.md`](WORKFLOWS.md): workflows per column, task kind or sprint close (design, not built).
-- [`design/`](design/): design documents, for example [`COMPANY_STANDARDS.md`](design/COMPANY_STANDARDS.md) and [`CODE_GRAPH.md`](design/CODE_GRAPH.md).
+- [`design/`](design/): designs in progress, such as [`rsi-loop.md`](design/rsi-loop.md).
+- [`archive/`](archive/README.md): design records of built features, cited by code and tests.
 
 ## Operating
 

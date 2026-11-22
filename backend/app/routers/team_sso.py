@@ -1,5 +1,5 @@
 """SSO-managed teams: the break-glass exclusion and the conversion preview
-(issue #703; ``docs/design/SSO_GROUP_MAPPING.md``, R19, R27, R28).
+(issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``, R19, R27, R28).
 
 A signed-in human Owner only; an API token is refused whatever its role.
 

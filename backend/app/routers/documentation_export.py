@@ -1,6 +1,6 @@
 """Documentation export router — a stored pack as DOCX or PDF, and the export's manifest.
 
-Endpoints (issue #694, phase 4 of ``docs/design/PROJECT_DOCUMENTATION.md``):
+Endpoints (issue #694, phase 4 of ``docs/archive/design/PROJECT_DOCUMENTATION.md``):
 - ``GET /v1/documentation/exports``                              — which formats this deployment can produce (any signed-in caller).
 - ``GET /v1/documentation/{pack_id}/export/{fmt}``          — download the pack as ``docx`` or ``pdf`` (Viewer).
 - ``GET /v1/documentation/{pack_id}/export/{fmt}/manifest`` — the signed manifest of that export (Viewer).

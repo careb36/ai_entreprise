@@ -148,7 +148,7 @@ async def put_sso(
         raise HTTPException(status_code=409, detail="slug: already in use")
     # A domain another company verified by DNS is held by it. An unverified
     # listing holds nothing, so a squatter cannot keep the real company out
-    # (docs/design/SSO.md, T19).
+    # (docs/archive/design/SSO.md, T19).
     for domain in values["allowed_domains"]:
         if sso_domains.verified_elsewhere(session, company_id, domain) is not None:
             raise HTTPException(
@@ -184,7 +184,7 @@ async def put_sso(
     if secret_changed:
         changed.append("client_secret")
     # The requirement takes effect now: end the password-started sessions it
-    # would refuse today (issue #524; docs/design/SESSIONS.md, S5).
+    # would refuse today (issue #524; docs/archive/design/SESSIONS.md, S5).
     ended = 0
     if (row.require_sso and row.enabled) and not (
         before.get("require_sso") and before.get("enabled")

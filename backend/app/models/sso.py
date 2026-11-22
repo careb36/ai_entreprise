@@ -1,4 +1,4 @@
-"""Single sign-on over OpenID Connect (issue #512, phase 3; ``docs/design/SSO.md``).
+"""Single sign-on over OpenID Connect (issue #512, phase 3; ``docs/archive/design/SSO.md``).
 
 - ``SsoConnection``  — a company's identity provider: one per company, written
   by an Owner. The client secret is encrypted with the Fernet key
@@ -59,7 +59,7 @@ class SsoConnection(SQLModel, table=True):
     tested_at: datetime | None = None
     test_ok: bool | None = None
     test_detail: str | None = None
-    # Groups mapped to teams (issue #703; docs/design/SSO_GROUP_MAPPING.md).
+    # Groups mapped to teams (issue #703; docs/archive/design/SSO_GROUP_MAPPING.md).
     groups_enabled: bool = False
     groups_claim: str = "groups"
     group_role_cap: str = "Viewer"  # "Viewer" | "Manager"; never "Owner"

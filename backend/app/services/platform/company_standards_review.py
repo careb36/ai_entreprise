@@ -1,5 +1,5 @@
 """What a company's standards bring back to the periodic access review
-(issue #700; ``docs/design/COMPANY_STANDARDS.md`` §12 decisions 1 and 8).
+(issue #700; ``docs/archive/design/COMPANY_STANDARDS.md`` §12 decisions 1 and 8).
 
 The review lists, for an Owner to confirm or end:
 

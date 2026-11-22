@@ -1,4 +1,4 @@
-"""SSO re-checks counted for ``/metrics`` (issue #684; ``docs/design/SSO.md``).
+"""SSO re-checks counted for ``/metrics`` (issue #684; ``docs/archive/design/SSO.md``).
 
 The backend re-checks one thing about SSO on its own: each allowed domain's
 DNS record (``sso_domains``), on the schedule (``trigger="recheck"``) and

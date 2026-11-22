@@ -45,10 +45,10 @@ Trust boundaries:
 5. **Services ↔ PostgreSQL/Neo4j:** unauthorized queries, data leaks.
 6. **CI ↔ registry and cluster:** malicious images, leaked secrets.
 7. **Backend ↔ NATS ↔ daemon ↔ the user's disk:** whoever can publish a request can make the daemon write files and run commands (§8.3, §8.6).
-8. **Backend ↔ identity providers and DNS:** forged ID tokens, cross-company assertions, SSRF (`docs/design/SSO.md`).
-9. **Backend ↔ Slack and Teams:** forged or replayed interactions (`docs/design/CHAT_APPROVALS.md`).
-10. **Local software ↔ the desktop app's local server:** DNS rebinding, cross-origin calls (`docs/design/SESSIONS.md`).
-11. **Backend ↔ timestamping authority and customer anchors:** an insider re-signing the audit chain (`docs/design/AUDIT_ANCHORS.md`).
+8. **Backend ↔ identity providers and DNS:** forged ID tokens, cross-company assertions, SSRF (`docs/archive/design/SSO.md`).
+9. **Backend ↔ Slack and Teams:** forged or replayed interactions (`docs/archive/design/CHAT_APPROVALS.md`).
+10. **Local software ↔ the desktop app's local server:** DNS rebinding, cross-origin calls (`docs/archive/design/SESSIONS.md`).
+11. **Backend ↔ timestamping authority and customer anchors:** an insider re-signing the audit chain (`docs/archive/design/AUDIT_ANCHORS.md`).
 
 Frameworks: OWASP Top 10 for LLM Applications, OWASP ASVS 4.0, NIST SSDF.
 The generated threat model is `docs/threat_model.md`.
@@ -59,8 +59,8 @@ The generated threat model is `docs/threat_model.md`.
 
 ### 3.1 Identity
 
-Settings are in `docs/CONFIGURATION.md`; designs in `docs/design/SESSIONS.md`
-and `docs/design/SSO.md`.
+Settings are in `docs/CONFIGURATION.md`; designs in `docs/archive/design/SESSIONS.md`
+and `docs/archive/design/SSO.md`.
 
 - **Passwords:** bcrypt, cost 12, at least 12 characters (`backend/app/passwords.py`).
   Login is rate-limited per address and backs off per account
@@ -95,7 +95,7 @@ minutes). Login limits are per process. Registration is open and unverified.
   `backend/tests/test_authorization_matrix.py` fails on an undeclared route
   and calls each route with every role and from another company.
 - **Segregation of duties:** whoever started the work does not approve it
-  (`services/platform/sod.py`, `docs/design/SEGREGATION_OF_DUTIES.md`).
+  (`services/platform/sod.py`, `docs/archive/design/SEGREGATION_OF_DUTIES.md`).
 - **Bodies** are `schemas.RequestModel`s; an undeclared privileged field is a 422.
 - **Company scoping** comes from the caller's membership, never the payload.
 
@@ -203,7 +203,7 @@ admission (target).
 
 **Repository.** `.github/CODEOWNERS` covers the paths that decide security.
 Signed commits are a target. The self-hosted runner shares its machine with
-the daemon (`docs/design/SELF_HOSTED_RUNNER.md`).
+the daemon (`docs/archive/design/SELF_HOSTED_RUNNER.md`).
 
 ### 5.4 Open advisories and their triage
 
@@ -317,7 +317,7 @@ whether it runs and the sandbox decides where.
 The daemon reports the mode it applied and never falls back to the host.
 `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine forces every
 request into that mode or refuses it (`backend/tests/test_sandbox_floor.py`).
-Cache volumes: `docs/design/EXECUTION_ENVIRONMENT.md`.
+Cache volumes: `docs/archive/design/EXECUTION_ENVIRONMENT.md`.
 
 **The command policy is a first pass, not the boundary**
 (`vscode-daemon/command_policy.py`). It parses commands as a shell would and

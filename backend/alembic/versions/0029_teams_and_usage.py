@@ -1,5 +1,5 @@
 """Teams and the usage report (issue #512, phase 5;
-``docs/design/TEAMS_AND_USAGE.md``): ``teams`` (a named group of a company's
+``docs/archive/design/TEAMS_AND_USAGE.md``): ``teams`` (a named group of a company's
 members with a role scope, Viewer or Manager), ``team_members`` (one member in
 one team) and ``sprints.started_by_user_id`` (the signed-in account that
 started a sprint, from the session; empty for every existing sprint, which

@@ -1,4 +1,4 @@
-"""The service accounts inventory (issue #543; ``docs/design/SEGREGATION_OF_DUTIES.md``).
+"""The service accounts inventory (issue #543; ``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 Every credential that acts for the company without a person at the keyboard,
 with its owner, scope and age, for the Owner's access review: the API

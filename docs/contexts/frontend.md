@@ -58,7 +58,7 @@ in `backend/tests/test_check_frontend_architecture.py`).
 - **The session holds no credential in JavaScript.** The tokens are HttpOnly
   cookies; `useAuthStore` keeps only `user`, `memberships` and `expiresAt`.
   `services/api/client.ts` sends `X-Fabrique-CSRF` on unsafe methods and
-  refreshes once per tab on a 401 ([`SESSIONS.md`](../design/SESSIONS.md)).
+  refreshes once per tab on a 401 ([`SESSIONS.md`](../archive/design/SESSIONS.md)).
 - **Observed and claimed never mix.** What the platform observed and what an
   agent or producer reported are separate groups with their own heading:
   observed solid under a shield, claimed dashed under a speech mark. A claim is

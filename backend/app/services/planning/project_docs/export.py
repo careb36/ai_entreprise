@@ -1,6 +1,6 @@
 """Exporting a stored documentation pack to DOCX and PDF (issue #694, phase 4).
 
-``docs/design/PROJECT_DOCUMENTATION.md``, "Export to DOCX and PDF" and the
+``docs/archive/design/PROJECT_DOCUMENTATION.md``, "Export to DOCX and PDF" and the
 decision of 2026-11-19: DOCX with python-docx, PDF with WeasyPrint as PDF/A-3b
 (ISO 19005-3) declaring PDF/UA-1 (ISO 14289-1).
 
@@ -40,7 +40,7 @@ MEDIA_TYPES = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pdf": "application/pdf",
 }
-# What each format declares; ``docs/design/PROJECT_DOCUMENTATION.md`` says
+# What each format declares; ``docs/archive/design/PROJECT_DOCUMENTATION.md`` says
 # which of it the tests verify and which is only declared.
 CONFORMANCE = {"docx": [], "pdf": ["PDF/A-3b", "PDF/UA-1"]}
 

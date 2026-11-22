@@ -1,5 +1,5 @@
 """A company's standards file: its schema, parser and validator (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §3, §4, §12 decisions 3, 5 and 7).
+``docs/archive/design/COMPANY_STANDARDS.md`` §3, §4, §12 decisions 3, 5 and 7).
 
 A company standard is a check the Verifier runs without a model. Its kind
 comes from the closed list ``KINDS``; the file places and configures checks,

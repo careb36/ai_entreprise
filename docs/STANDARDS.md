@@ -168,7 +168,7 @@ Beside the requirements, a specification says what it expects of security, perfo
 
 A company adds standards of its own; it never relaxes, waives or replaces one
 of the catalogue's above (issue #700, design in
-[`docs/design/COMPANY_STANDARDS.md`](design/COMPANY_STANDARDS.md)). They live
+[`docs/archive/design/COMPANY_STANDARDS.md`](archive/design/COMPANY_STANDARDS.md)). They live
 in the company's repository, `.fabrique/standards.toml` (TOML only, read with
 `tomllib`; per-folder rules as `[folders."<path>"]` tables), and each is a
 check the factory runs without a model, of one of five kinds fixed in code:

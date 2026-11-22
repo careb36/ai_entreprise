@@ -1,7 +1,7 @@
 """A documentation pack as a PDF/A-3b file declaring PDF/UA-1, with WeasyPrint.
 
 Issue #694, phase 4; the decision of 2026-11-19 in
-``docs/design/PROJECT_DOCUMENTATION.md``. ``export.source_of`` gives the parsed
+``docs/archive/design/PROJECT_DOCUMENTATION.md``. ``export.source_of`` gives the parsed
 pack; this module writes it as HTML it builds itself (every piece of text
 escaped, no markup from a record) and lets WeasyPrint lay it out.
 

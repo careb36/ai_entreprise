@@ -1,4 +1,4 @@
-"""DNS verification of a company's SSO domains (issue #512; ``docs/design/SSO.md``):
+"""DNS verification of a company's SSO domains (issue #512; ``docs/archive/design/SSO.md``):
 ``sso_domains`` (one row per company and allowed domain: the token the
 backend issued for the company to publish as a TXT record, and the status
 the last definite DNS answer left) and ``sso_domain_checks`` (each lookup,

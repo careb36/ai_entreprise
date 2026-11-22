@@ -47,7 +47,7 @@ receiver that is down never holds up a sprint.
 - `chat_approvals.py`, `chat_messages.py`: a risk hold posted to chat and
   decided there through the same `run_review.submit_review` as the web, with
   the Manager role. A replayed interaction does nothing; only the record is
-  shown. Design: [`CHAT_APPROVALS.md`](../design/CHAT_APPROVALS.md).
+  shown. Design: [`CHAT_APPROVALS.md`](../archive/design/CHAT_APPROVALS.md).
 - `chat_regressions.py`, `chat_regression_messages.py`: information only, for
   an integration whose tests now fail or a done task whose verification went
   from verified to refuted.
@@ -63,7 +63,7 @@ nothing else. The rows themselves: [platform](platform.md).
 `anchoring.py`, `anchor_settings.py`, `tsa_client.py`: the audit chain's head
 recorded outside the factory, as a signed webhook statement (kept as a claim)
 or an RFC 3161 timestamp checked against the pinned certificate. Design:
-[`AUDIT_ANCHORS.md`](../design/AUDIT_ANCHORS.md).
+[`AUDIT_ANCHORS.md`](../archive/design/AUDIT_ANCHORS.md).
 
 ### The outbox
 

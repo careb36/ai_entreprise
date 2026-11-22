@@ -1,5 +1,5 @@
 """Grading candidate code in the daemon's sandbox (docs/design/rsi-loop.md,
-PR 12; the threat model is docs/design/SANDBOX_GRADING_THREAT_MODEL.md).
+PR 12; the threat model is docs/archive/design/SANDBOX_GRADING_THREAT_MODEL.md).
 
 The self-hosting harness's target measure (``scripts/self_host/spec_source.py``
 ``run_measure``) and the bench's acceptance tests (``bench_grade.grade``) run

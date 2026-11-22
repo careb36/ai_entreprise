@@ -71,7 +71,7 @@ and a view give the same counts for the same filter**:
 `test_REQ_2_the_board_and_a_view_give_the_same_counts` compares each column
 of `GET /v1/sprints/{id}/board` with `GET /v1/tasks` filtered on the column's
 status and the sprint. A filter over 5,000 tasks answers within the page
-budget of [`docs/ux/performance_usability_benchmark.md`](../ux/performance_usability_benchmark.md)
+budget of [`docs/ux/performance_usability_benchmark.md`](../../ux/performance_usability_benchmark.md)
 (400 ms, the Doherty threshold; the specification of #535 asks 300 ms), which
 `test_a_filter_over_five_thousand_tasks_answers_within_the_page_budget`
 measures on SQLite.
@@ -122,7 +122,7 @@ when the view says so, or columns by status).
 
 ## Custom columns (#437) as views
 
-[`docs/WORKFLOWS.md`](../WORKFLOWS.md) §3.5 designs custom columns as views
+[`docs/WORKFLOWS.md`](../../WORKFLOWS.md) §3.5 designs custom columns as views
 over the five statuses. Under this design a custom column is a saved view
 whose filter holds `status` `eq` its status (plus any refinement, such as a
 verdict or a risk tier) and whose layout is `board`: the column never stores a

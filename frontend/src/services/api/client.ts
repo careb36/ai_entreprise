@@ -61,7 +61,7 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler
 }
 
-// ── Browser session (issue #524, docs/design/SESSIONS.md) ───────────────────
+// ── Browser session (issue #524, docs/archive/design/SESSIONS.md) ───────────────────
 // The access and refresh tokens are HttpOnly cookies the backend sets: this
 // module never sees them. It sends cookies (`credentials: 'include'`), the
 // CSRF header on unsafe methods, and on a 401 tries one refresh.

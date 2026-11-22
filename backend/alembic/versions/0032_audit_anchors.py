@@ -1,4 +1,4 @@
-"""Audit anchors (issue #542; ``docs/design/AUDIT_ANCHORS.md``):
+"""Audit anchors (issue #542; ``docs/archive/design/AUDIT_ANCHORS.md``):
 ``audit_anchors``, one row per head of a company's audit chain recorded
 outside the factory (webhook, RFC 3161 token, customer-held key) with what
 came back; and ``audit_anchor_settings``, the Owner's cadence, timestamping

@@ -7,10 +7,10 @@ important concept, a glossary and the decisions in force, which the agents
 update when a sprint closes from the evidence, and which a task's prompt
 reads before any vector search. This note records the design, what this
 slice builds and leaves, the threat model and what was studied. The modules
-are described in [contracts](../contexts/contracts.md),
-[learning](../contexts/learning.md), [evidence](../contexts/evidence.md),
-[loop](../contexts/loop.md) and the [frontend](../contexts/frontend.md); the
-worker's steps in [the sprint loop](../SPRINT_LOOP.md).
+are described in [contracts](../../contexts/contracts.md),
+[learning](../../contexts/learning.md), [evidence](../../contexts/evidence.md),
+[loop](../../contexts/loop.md) and the [frontend](../../contexts/frontend.md); the
+worker's steps in [the sprint loop](../../SPRINT_LOOP.md).
 
 The wiki is **what the project knows**. The documentation packs (#530) are
 **what is handed over**; a pack may later read wiki pages, never the other way
@@ -182,7 +182,7 @@ The issue asks for prompt tokens per task and rework per task, wiki vs vector
 memory alone, on the bench (#316). `WIKI_ENABLED=false` is vector memory alone.
 The scorecard's prompt object counts `wiki_prompts` and `memory_prompts`
 (`scripts/bench/prompt_weight.py`), and `compare.py` shows them beside the
-per-section weights and rework per task. How to run it: [bench](../../bench/README.md).
+per-section weights and rework per task. How to run it: [bench](../../../bench/README.md).
 
 ## Threat model
 

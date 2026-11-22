@@ -1,5 +1,5 @@
 """Importing a company's standards from the default branch (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §4, §10 T2, T3, T4, T6, §12 decision 5).
+``docs/archive/design/COMPANY_STANDARDS.md`` §4, §10 T2, T3, T4, T6, §12 decision 5).
 
 Real git in ``tmp_path``: ``main`` holds the standards file, a guarded
 script, a guarded folder and a baseline; a task branch, checked out, edits

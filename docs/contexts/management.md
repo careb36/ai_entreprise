@@ -100,7 +100,7 @@ beside the quotas, and the refused suggestions with their `refusal_reason`.
 
 `sod_report.py`: `GET /v1/companies/{id}/sod/report` (Manager): every approval
 beside its requesters, the refusals, and the matrix of duties per member.
-Computed from records only ([design](../design/SEGREGATION_OF_DUTIES.md)).
+Computed from records only ([design](../archive/design/SEGREGATION_OF_DUTIES.md)).
 
 ### The Support agent on the intake queue
 

@@ -119,7 +119,7 @@ machine, or CI after the push, is what confirms it. A change to a protected
 path (`backend/app/services/contracts/protected_paths.py`) is landed by the
 owner (`LAND_OWNER=1`, a guard against mistakes and not a security boundary).
 The details are in `docs/OPERATIONS.md`, Landing locally. Until the owner
-applies `docs/design/LOCAL_LANDING.md`, branch protection on GitHub still
+applies `docs/archive/design/LOCAL_LANDING.md`, branch protection on GitHub still
 applies to `main`, and a landing whose push GitHub refuses goes in by pull
 request as before.
 There is no `develop` integration branch — it only ever mirrored `main`, and it

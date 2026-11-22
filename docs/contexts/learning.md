@@ -57,7 +57,7 @@ read-only; writing an outcome is a service function. Design:
 `wiki_store.py`, `wiki_sources.py`, `wiki_compile.py`: pages and versions,
 citations resolved against the company's records, and the compilation at
 sprint close, bounded per sprint and per page. Design:
-[`PROJECT_WIKI.md`](../design/PROJECT_WIKI.md).
+[`PROJECT_WIKI.md`](../archive/design/PROJECT_WIKI.md).
 
 ### The Architect's record
 

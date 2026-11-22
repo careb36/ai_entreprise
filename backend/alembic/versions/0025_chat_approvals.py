@@ -1,5 +1,5 @@
 """Approving from Slack or Microsoft Teams (issue #512, phase 4;
-``docs/design/CHAT_APPROVALS.md``): ``chat_connections`` (a company's Slack app
+``docs/archive/design/CHAT_APPROVALS.md``): ``chat_connections`` (a company's Slack app
 or Teams webhooks, credentials encrypted), ``chat_identities`` (a chat user
 linked to an account in one company), ``chat_link_codes`` (the one-time link
 codes, hashed), ``chat_approval_messages`` (what was posted for which approval

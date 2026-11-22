@@ -195,7 +195,7 @@ product.
   fallback tiers can cause this (ADR 0011, superseded; the proxy's tiers
   remain).
 - **Graded in the sandbox** (PR 12; threat model
-  [`SANDBOX_GRADING_THREAT_MODEL.md`](SANDBOX_GRADING_THREAT_MODEL.md)). The
+  [`SANDBOX_GRADING_THREAT_MODEL.md`](../archive/design/SANDBOX_GRADING_THREAT_MODEL.md)). The
   target measure and the bench's acceptance tests import C's code, so they
   run in the daemon's container sandbox (`vscode-daemon/sandbox.py`, reused
   by `scripts/bench/sandbox_grading.py`): network off, the root file system
@@ -555,7 +555,7 @@ adopted, §10).
 | G1 | B5 | T | The sprint edits a bench acceptance test, `compare.py`'s thresholds or a scorecard to pass | H | H | Critical | New: protected paths (§3, layers 1–5); graders from B (REQ-4); C's grader tree compared with B's (REQ-5) |
 | G2 | B5 | T | The sprint loosens the Verifier, the risk tier or `fitness.py` so its next deliveries pass | M | H | Critical | New: `services/evidence/` protected; the Verifier bench's cases from B (O6). Existing: CODEOWNERS on `verification.py` |
 | G3 | B5 | T | Code special-cases the bench (spec names, file names) and overfits | M | M | High | New: a held-out set kept outside the repository and the company's project, never in a prompt (§10); a finding when C's diff names a bench identifier. Residual |
-| G4 | B12 | T | Code the factory produced for a bench spec tampers with pytest while being graded | M | H | High | Existing: isolated pytest; the grade and the target measure in the daemon's container sandbox with the verdict read from outside, failing closed to `unmeasured` (PR 12, `scripts/bench/sandbox_grading.py`; threat model [`SANDBOX_GRADING_THREAT_MODEL.md`](SANDBOX_GRADING_THREAT_MODEL.md)). Residual: imported code forging pytest's result from within the process |
+| G4 | B12 | T | Code the factory produced for a bench spec tampers with pytest while being graded | M | H | High | Existing: isolated pytest; the grade and the target measure in the daemon's container sandbox with the verdict read from outside, failing closed to `unmeasured` (PR 12, `scripts/bench/sandbox_grading.py`; threat model [`SANDBOX_GRADING_THREAT_MODEL.md`](../archive/design/SANDBOX_GRADING_THREAT_MODEL.md)). Residual: imported code forging pytest's result from within the process |
 | G5 | B6 | S | A "CI is green" claim in the PR body or a bot comment | H | M | High | New: check-runs by sha only (REQ-8). Existing rule: never claim a green build |
 | G6 | B6 | T | The PR head changes after measurement (TOCTOU) | M | H | High | New: decision pinned to C's sha; merge with the expected head sha (REQ-17) |
 | G7 | B5 | T | Tests deleted or skipped so CI is green | M | H | High | New: tests collected per suite must not drop (O7); the `evidence` tests protected |

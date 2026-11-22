@@ -1,5 +1,5 @@
 """What the SSO group mapping brings back to the periodic access review
-(issue #703; ``docs/design/SSO_GROUP_MAPPING.md``, R25, R26, R29).
+(issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``, R25, R26, R29).
 
 The review lists, for an Owner to confirm or end:
 

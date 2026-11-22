@@ -8,7 +8,7 @@ import { FormActions, Panel, SavedNote } from './ui'
 
 /**
  * Identity-provider groups mapped to SSO-managed teams (issue #703,
- * docs/design/SSO_GROUP_MAPPING.md). On each SSO sign-in the claim sets the
+ * docs/archive/design/SSO_GROUP_MAPPING.md). On each SSO sign-in the claim sets the
  * person's membership in the mapped teams only. A pair to a Manager team
  * waits for a second Owner; the cap is never Owner.
  */

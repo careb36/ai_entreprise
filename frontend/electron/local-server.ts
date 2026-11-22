@@ -1,5 +1,5 @@
 /**
- * The packaged desktop app's local origin (issue #524, docs/design/SESSIONS.md,
+ * The packaged desktop app's local origin (issue #524, docs/archive/design/SESSIONS.md,
  * "Desktop app").
  *
  * The session cookies are `SameSite=Strict`, so a page loaded from `file://`

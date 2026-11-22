@@ -1,5 +1,5 @@
 """Judging a company's standards from what was observed (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §3.1, §3.2, §5).
+``docs/archive/design/COMPANY_STANDARDS.md`` §3.1, §3.2, §5).
 
 Each kind of the closed list (``services/contracts/company_standards.py``)
 is evaluated here, once, as a pure function of observations: the paths the

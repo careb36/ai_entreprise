@@ -10,7 +10,7 @@ that sets a row of the WSTG checklist to observed (``project_docs.wstg_status``)
 ``record_sha256`` is computed by the backend over the stored fields, never
 taken from the request. The reviewer's name stays in the database: the pack
 written to the repository shows the review's id, date, artifact and the
-recorder's company role (rule 6 of ``docs/design/PROJECT_DOCUMENTATION.md``).
+recorder's company role (rule 6 of ``docs/archive/design/PROJECT_DOCUMENTATION.md``).
 """
 
 from datetime import UTC, datetime

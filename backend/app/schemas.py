@@ -384,7 +384,7 @@ class LoginRequest(RequestModel):
     password: str
     # "cookie" (the browser: HttpOnly session cookies, no token in the body)
     # or "bearer" (a script: the access token in the body, no cookies, no
-    # refresh; docs/design/SESSIONS.md). Automation should prefer API tokens.
+    # refresh; docs/archive/design/SESSIONS.md). Automation should prefer API tokens.
     token_delivery: Literal["cookie", "bearer"] = "cookie"
 
     @field_validator("email")

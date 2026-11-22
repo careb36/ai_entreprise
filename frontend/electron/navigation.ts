@@ -1,5 +1,5 @@
 /**
- * Where the desktop app's windows may go (docs/design/SESSIONS.md, "Desktop
+ * Where the desktop app's windows may go (docs/archive/design/SESSIONS.md, "Desktop
  * app"). Pure decisions, so they are tested without Electron; `main.ts` acts
  * on them.
  *
