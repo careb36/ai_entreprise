@@ -491,6 +491,9 @@
     "GET /v1/procedures": {
       "access": "Viewer"
     },
+    "GET /v1/routines/{routine_id}/revisions": {
+      "access": "Viewer"
+    },
     "GET /v1/run-secrets": {
       "access": "Viewer"
     },
@@ -990,6 +993,9 @@
       "access": "Manager"
     },
     "POST /v1/procedures/{procedure_id}/retire": {
+      "access": "Manager"
+    },
+    "POST /v1/routines/{routine_id}/revisions/{number}/restore": {
       "access": "Manager"
     },
     "POST /v1/routines/{routine_id}/run": {
