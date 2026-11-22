@@ -1,0 +1,139 @@
+{
+  "account": {
+    "git_user_name": "Carolina Pereira",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "85d244be8dd72d888b5f28ce2459d28fbf37ac61",
+    "name": "feat/stop-identical-reworks"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "6232b3bbbfd1497ce2861d62c91ff022ef4dd869",
+  "duration_seconds": 403.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-22T16:10:55Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-43-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/6232b3bbbfd1497ce2861d62c91ff022ef4dd869.20261122T160412Z.log",
+    "sha256": "6a5d6b022448f01f1b00de03ae5aaa20bdf601daa21a9e9a15abb3487bcb9577"
+  },
+  "main_before": "b5e6e3bcaf797de07c3fec18c6f2343828a8f4d3",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "b5e6e3bcaf797de07c3fec18c6f2343828a8f4d3",
+    "85d244be8dd72d888b5f28ce2459d28fbf37ac61"
+  ],
+  "protected_paths": [
+    {
+      "path": "docs/architecture/contexts.json",
+      "pattern": "docs/architecture/contexts.json"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "6d008938b8feed1fca74aad30ec28bb227d8e0ef",
+  "started_at": "2026-11-22T16:04:12Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 287.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 19.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 64.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 21.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "35c54dda1c1c12c2e0fec99d777ebcee199ef82d"
+}
