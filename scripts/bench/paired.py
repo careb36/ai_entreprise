@@ -134,33 +134,11 @@ def bootstrap_ci(deltas: list[float], level: float = 0.95) -> tuple[float, float
     return round(low, 4), round(high, 4)
 
 
-def _served(card: dict[str, Any], names: set[str]) -> dict[str, list[str]]:
-    """Per role, the models served to the specifications in *names*."""
-    return repeated.served_models(
-        {"specs": [s for s in card["specs"] if s["name"] in names]}
-    )
-
-
 def pairs(
     before: list[dict[str, Any]], after: list[dict[str, Any]]
 ) -> tuple[list[tuple[dict, dict]], list[dict[str, Any]], list[str]]:
-    """``repeated.pairs``, but the models are compared over the specifications
-    both cards ran and the roles both sides served."""
-    b = sorted(before, key=lambda card: card["stamp"])
-    a = sorted(after, key=lambda card: card["stamp"])
-    counted, void = [], []
-    for old, new in zip(b, a, strict=False):
-        names = {s["name"] for s in old["specs"]} & {s["name"] for s in new["specs"]}
-        mo, mn = _served(old, names), _served(new, names)
-        # A role served on one side only (the ScrumMaster, called when a task
-        # is blocked) is an outcome, not a different configuration.
-        roles = sorted(r for r in set(mo) & set(mn) if mo[r] != mn[r])
-        if names and not roles:
-            counted.append((old, new))
-            continue
-        void.append({"before": old["stamp"], "after": new["stamp"], "roles": roles})
-    n = min(len(b), len(a))
-    return counted, void, [card["stamp"] for card in b[n:] + a[n:]]
+    """The pairs, as ``repeated.pairs`` makes them."""
+    return repeated.pairs(before, after)
 
 
 def _completed_specs(old: dict, new: dict) -> list[tuple[dict, dict]]:
