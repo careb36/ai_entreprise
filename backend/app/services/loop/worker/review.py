@@ -32,7 +32,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
-from services.loop import replicas, run_window_gate, sprint_control
+from services.loop import refuted_undo, replicas, run_window_gate, sprint_control
 from services.loop.worker import close, messages, qa_review, record
 from services.models import model_routing
 from services.platform import locks
@@ -294,7 +294,11 @@ async def _send_back_from_delivery_gate(
         "Fix the code so the project's checks pass. "
         if problem in delivery_gate.CODE_PROBLEMS
         else ""
-    ) + qa_review.EDIT_INSTRUCTION
+    ) + (
+        refuted_undo.UNDONE_INSTRUCTION
+        if refuted_undo.undone(session, sprint.company_id, item.id)
+        else qa_review.EDIT_INSTRUCTION
+    )
     gate_event = task_events.record(
         session,
         item,

@@ -1101,6 +1101,9 @@
       "test_quality_gate.py": [
         "loop"
       ],
+      "test_refuted_undo.py": [
+        "loop"
+      ],
       "test_release_notes.py": [
         "repo"
       ],
