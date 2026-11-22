@@ -146,6 +146,31 @@ median, and a regression must exceed both the threshold and B's spread
 Exit status: 0 no regression, 1 regression, 2 a card does not match the
 schema, 3 nothing regressed but a judged metric is unmeasured.
 
+**Paired comparison.** `repeated.py` only says whether a change is worse by
+more than the baseline's spread. `paired.py` compares the same items on both
+sides and tests whether the difference could be chance, so it can also say a
+change is better:
+
+```bash
+python3 scripts/bench/paired.py /tmp/rsi/C-real-{1,2,3}/*.json \
+  --previous /tmp/rsi/B-real-1/<stamp>.json --previous /tmp/rsi/B-real-2/<stamp>.json \
+  --previous /tmp/rsi/B-real-3/<stamp>.json
+```
+
+Each criterion of a spec both cards completed is a paired pass/fail, judged
+with McNemar's test (exact binomial up to 25 discordant pairs). First-attempt
+share, blocked share, rework per task and reported tokens are paired per
+spec and judged with the Wilcoxon signed-rank test (exact up to 20 non-zero
+differences), with a seeded 95% bootstrap interval of the mean change. A
+metric is `better` or `worse` only when p < `--alpha` (0.05); otherwise
+`no demonstrable difference`. One pair never reaches a verdict: five fixed
+criteria and none broken is p = 0.0625. Pairs are void only when a role both
+sides served used different models; a role one side alone called (the
+ScrumMaster, when a task was blocked) is an outcome. Exit status: 1 when a
+metric is significantly worse, 2 when a card does not match the schema. The
+method is MLflow's paired comparison of evaluation runs (Apache-2.0), written
+here with the standard library.
+
 ## Graders from a commit
 
 `run.sh --graders <sha>` grades with the tests of that commit, not the
