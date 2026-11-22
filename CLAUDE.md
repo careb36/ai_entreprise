@@ -134,7 +134,7 @@ The frontend has a rule of its own (issue #519): `frontend/src` is in layers, fr
 
 ## Tests and lint
 
-The whole section (both tables of test files, the e2e run, the bench, CI) is [`docs/TESTING.md`](docs/TESTING.md).
+The whole section (the suites, the e2e run, the bench, CI) is [`docs/TESTING.md`](docs/TESTING.md).
 
 ```bash
 scripts/check.sh quick   # while working: the checks what you changed against origin/main can break
@@ -187,7 +187,7 @@ Use the `useTranslation` hook from i18next; never hardcode English strings in JS
 ## Where things are documented
 
 - [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) — Every environment variable
-- [`docs/TESTING.md`](docs/TESTING.md) — The test suites and their tables, the e2e run, the bench, CI and the runner, manual validation
+- [`docs/TESTING.md`](docs/TESTING.md) — The test suites, the e2e run, the bench, CI and the security checks
 - [`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md) — Data flow for a sprint: the task worker's steps
 - [`docs/contexts/`](docs/contexts/) — One document per context (the table above), and [`frontend.md`](docs/contexts/frontend.md)
 - [`docs/architecture/MIGRATION.md`](docs/architecture/MIGRATION.md) — The record of the ADR 0016 migration, step by step

@@ -173,3 +173,17 @@ To change the schema:
 
 `vector_memory` is created by `db/init-db/init.sql` (it needs pgvector) and
 the migrations leave it alone.
+
+---
+
+## 6. Writing documentation
+
+Short and current beats complete. A document says what a reader needs to act:
+how to run, what the rule is, where to look next. It does not restate the code.
+
+- **One home per fact.** Link to it; do not copy it.
+- **The code describes itself.** What a test covers is its module docstring;
+  what a module does is its docstring; a document points to them.
+- **No history in reference docs.** How something came to be belongs in the
+  commit, the changelog fragment or an ADR.
+- **Prefer a command or a table to a paragraph.**

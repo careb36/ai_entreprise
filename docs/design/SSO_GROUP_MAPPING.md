@@ -394,7 +394,7 @@ body ignored, an API token refused, a changed or expired proposal refused, the
 single-Owner confirmation honoured only with one Owner and refused after a
 recent demotion, flagged in the access review; an exclusion removes at once,
 notifies the other Owners, survives sign-ins and is lifted by another Owner;
-both listed in the access review). Each needs its row in `docs/TESTING.md`
+both listed in the access review). Each needs a module docstring saying what it covers
 and its context (platform) in `docs/architecture/contexts.json`.
 
 ## Residual risks

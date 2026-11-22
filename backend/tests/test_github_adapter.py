@@ -1,3 +1,9 @@
+"""The GitHub adapter: webhook signatures over the raw body, a pull request read
+as an agent run (claims kept apart, commit order, producer login), paginated
+fetches and rate limits, and ingested pull requests refuted or unverifiable
+from their evidence.
+"""
+
 import asyncio
 import hashlib
 import hmac

@@ -1,3 +1,5 @@
+"""The role-to-model map and the business-unit header passed to the proxy."""
+
 from services.models.model_factory import AgentRole, ModelFactory, create_completion
 
 # The default team the owner chose: DeepSeek alone, Pro where a mistake is
