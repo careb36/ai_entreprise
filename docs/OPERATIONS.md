@@ -158,7 +158,7 @@ For the browser sandbox, paste the `DELIVERY_BROWSER_IMAGE` and
 ## Single sign-on
 
 An Owner connects the identity provider at `/company/sso`
-([`design/SSO.md`](design/SSO.md)). The operator:
+([`design/SSO.md`](archive/design/SSO.md)). The operator:
 
 1. Sets `SSO_CALLBACK_URL` (public URL of `/v1/auth/sso/callback`),
    `SSO_FRONTEND_URL` and `FERNET_SECRET_KEY`.
@@ -185,7 +185,7 @@ _la-fabrique-verify.acme.com.  TXT  "la-fabrique-domain-verification=<token>"
 ### Groups mapped to teams
 
 Mapped teams change only at SSO sign-in
-([`design/SSO_GROUP_MAPPING.md`](design/SSO_GROUP_MAPPING.md)). If nothing
+([`design/SSO_GROUP_MAPPING.md`](archive/design/SSO_GROUP_MAPPING.md)). If nothing
 changes, read the last observation's `state` (`absent`, `malformed`,
 `overage`, `skipped`). For Entra overage (over 200 groups), use app roles or
 *groups assigned to the application*. To remove someone at once, use the
@@ -211,7 +211,7 @@ be muted. Email copies need `SMTP_HOST`. Failed sends:
 ## Approvals in Slack and Teams
 
 Managers approve held deliveries from Slack or Teams
-([`design/CHAT_APPROVALS.md`](design/CHAT_APPROVALS.md)). Set
+([`design/CHAT_APPROVALS.md`](archive/design/CHAT_APPROVALS.md)). Set
 `FERNET_SECRET_KEY`, `PUBLIC_API_URL` (public https) and `CHAT_APP_URL`.
 Expose only `/v1/integrations/` to the internet.
 
@@ -414,7 +414,7 @@ docker compose logs backend --since 24h | grep 'error_id=<id>'
 ## Landing locally
 
 Changes reach `main` through `scripts/land.sh`; GitHub is a mirror
-([`design/LOCAL_LANDING.md`](design/LOCAL_LANDING.md)).
+([`design/LOCAL_LANDING.md`](archive/design/LOCAL_LANDING.md)).
 
 ```bash
 scripts/land.sh my-branch            # merge, check, fast-forward local main, record
@@ -564,7 +564,7 @@ Archive a company's whole chain, never part of it:
 ### Anchoring the audit chain outside
 
 An Owner turns on anchors at `/company/audit-anchors`
-([`design/AUDIT_ANCHORS.md`](design/AUDIT_ANCHORS.md)).
+([`design/AUDIT_ANCHORS.md`](archive/design/AUDIT_ANCHORS.md)).
 `GET /v1/audit/anchors` should read `covered`. `undelivered`: fix the webhook
 or authority URL, then `POST /v1/audit/anchors`. `anchor_mismatch` is an
 incident (SECURITY.md §9).

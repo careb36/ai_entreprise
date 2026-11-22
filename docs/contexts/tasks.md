@@ -73,7 +73,7 @@ that delivered before its dependencies closed.
 
 `sprint_board.py`: the short typed notes a sprint's tasks leave each other,
 checked by `contracts/board_notes`, each written with a `board_note` event. A
-person may mark one wrong. Design: [`SPRINT_BOARD.md`](../design/SPRINT_BOARD.md).
+person may mark one wrong. Design: [`SPRINT_BOARD.md`](../archive/design/SPRINT_BOARD.md).
 
 ### Filters and saved views
 
@@ -82,7 +82,7 @@ records the board reads (the Verifier's verdict, never the run's claims).
 `board_observations` keeps `observed` and `reported` apart per task.
 `saved_views.py`: a private view is its author's; a company view its author's
 or a Manager's; a locked one a Manager's. Design:
-[`SAVED_VIEWS.md`](../design/SAVED_VIEWS.md).
+[`SAVED_VIEWS.md`](../archive/design/SAVED_VIEWS.md).
 
 ### A sprint's progress
 

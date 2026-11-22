@@ -102,7 +102,7 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
   the Developer's, QA's and the Architect's prompts.
 - `code_graph.py`: `## Related code` around a task's seeds, from the stored
   graph or the daemon's `workspace.related`, with recent runs that touched
-  them. Design: [`CODE_GRAPH.md`](../design/CODE_GRAPH.md).
+  them. Design: [`CODE_GRAPH.md`](../archive/design/CODE_GRAPH.md).
 - `code_graph_store.py`, `code_graph_neo4j.py`: the stored graph (Postgres or
   Neo4j, `CODE_GRAPH_STORE`), synced in the background from `workspace.graph`
   for the project folder only. Edges from the approved architecture are

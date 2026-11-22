@@ -1,4 +1,4 @@
-"""A company's Slack app or Teams webhooks for approvals in chat (``docs/design/CHAT_APPROVALS.md``).
+"""A company's Slack app or Teams webhooks for approvals in chat (``docs/archive/design/CHAT_APPROVALS.md``).
 
 One connection per company and provider, written by an Owner
 (``routers/chat_approvals.py``). The credential that posts (Slack's bot token,

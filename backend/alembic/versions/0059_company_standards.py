@@ -1,6 +1,6 @@
 """A company's own standards, imported from its repository, and the
 time-boxed exceptions to a standard (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §11.2, §12 decisions 1 and 8).
+``docs/archive/design/COMPANY_STANDARDS.md`` §11.2, §12 decisions 1 and 8).
 
 - ``company_standard_sets``: one row per imported version (``draft``,
   ``active``, ``superseded``, ``reverted``, ``rejected``), with the bytes the

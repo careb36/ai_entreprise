@@ -35,7 +35,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   `HttpOnly; Secure; SameSite=Strict` session cookie with a signed
   double-submit CSRF header on unsafe methods; 15-minute access tokens and
   rotated refresh-token families with reuse detection
-  (`services/platform/sessions.py`, `docs/design/SESSIONS.md`); CORS
+  (`services/platform/sessions.py`, `docs/archive/design/SESSIONS.md`); CORS
   credentials only with explicit origins (`backend/app/security.py`); `AUTH_REQUIRED` on by default; roles Owner >
   Manager > Viewer and company scoping (`docs/contexts/platform.md`, Auth and
   multi-tenancy); API tokens hashed with role and expiry
@@ -161,7 +161,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   (`services/platform/sso_flow.py`); https, public addresses re-checked per
   fetch, no redirects, a size cap (`services/platform/oidc_client.py`);
   "require SSO" only after an Owner signed in through it, with break-glass;
-  audit rows; `docs/design/SSO.md`.
+  audit rows; `docs/archive/design/SSO.md`.
 - **Known gaps:** domains not verified by DNS; issued sessions not revoked.
 
 ## B9 — The backend and Slack or Microsoft Teams
@@ -191,7 +191,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   credentials Fernet-encrypted and never returned, Owner-only settings, API
   tokens refused (`routers/chat_approvals.py`); Teams URL on a Microsoft host
   with public addresses re-checked per post, Slack calls to one host
-  (`chat_client.py`); `docs/design/CHAT_APPROVALS.md`,
+  (`chat_client.py`); `docs/archive/design/CHAT_APPROVALS.md`,
   `backend/tests/test_chat_inbound.py`.
 - **Known gaps:** a stolen link code claimed within ten minutes binds the
   thief's chat account (the victim sees the link); Teams refusals are thread
@@ -211,7 +211,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   `Origin` not forwarded, `Access-Control-*` dropped; paths kept under
   `dist/`; the SSO window without preload and IPC checking the sender's origin
   (`frontend/electron/local-server.ts`, `navigation.ts`, `ipc-handlers.ts`;
-  `docs/design/SESSIONS.md`, Desktop app).
+  `docs/archive/design/SESSIONS.md`, Desktop app).
 - **Known gaps:** a process running as the user can read Electron's cookie
   store on disk.
 
@@ -230,7 +230,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   indefinite lengths, high tags, trailing bytes and short values; the URL
   passes `webhooks.check_url` at save and before each request
   (`services/integrations/tsa_client.py`, no redirects); Owner-only settings,
-  audited; `docs/design/AUDIT_ANCHORS.md`, `backend/tests/test_rfc3161.py`.
+  audited; `docs/archive/design/AUDIT_ANCHORS.md`, `backend/tests/test_rfc3161.py`.
 - **Known gaps:** the in-product coverage report trusts the certificate stored
   in the factory's database; an auditor verifies with the authority's
   published certificate instead.
@@ -255,7 +255,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   environment); the verdict read from the runtime's exit status and the
   runner's own output frame, never a file; every failure `unmeasured`;
   `isolation` on each result and `fitness.decide` refusing `in_process`;
-  `docs/design/SANDBOX_GRADING_THREAT_MODEL.md`,
+  `docs/archive/design/SANDBOX_GRADING_THREAT_MODEL.md`,
   `backend/tests/test_sandbox_grading.py`.
 - **Known gaps:** code written to forge pytest's result from inside the
   grading process is caught only by the consistency checks; a shared kernel.
@@ -281,5 +281,5 @@ Integrity of the evidence: HMAC-SHA256 per row and a per-company hash chain
   by an Owner, rate-limited; every answer recorded in `sso_domain_checks`,
   status changes audited; a transient failure changes nothing, a definite
   negative unverifies; only creating and linking accounts are gated
-  (`services/platform/sso_domains.py`, `dns_client.py`, `docs/design/SSO.md`
+  (`services/platform/sso_domains.py`, `dns_client.py`, `docs/archive/design/SSO.md`
   T16–T24). No DNSSEC validation in the backend.

@@ -16,7 +16,7 @@ Links (any signed-in member, for themselves only):
 
 Every change writes an audit row naming the fields changed, never a value.
 How a decision arrives from chat: ``routers/chat_interactions.py``; the design
-and its threat model: ``docs/design/CHAT_APPROVALS.md``.
+and its threat model: ``docs/archive/design/CHAT_APPROVALS.md``.
 """
 
 from auth_policy import current_user_if_required, require_company_role

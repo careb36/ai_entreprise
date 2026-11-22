@@ -7,11 +7,11 @@ back for contradicting the other. The sprint board is a shared working board
 for a sprint's agents: an append-only list of short, typed notes, each
 task's prompt showing the notes that concern it. This note records the
 design, what this slice builds and leaves, and what was studied. The modules
-are described in [contracts](../contexts/contracts.md),
-[tasks](../contexts/tasks.md), [evidence](../contexts/evidence.md),
-[loop](../contexts/loop.md), [learning](../contexts/learning.md) and the
-[frontend](../contexts/frontend.md); the worker's steps in
-[the sprint loop](../SPRINT_LOOP.md).
+are described in [contracts](../../contexts/contracts.md),
+[tasks](../../contexts/tasks.md), [evidence](../../contexts/evidence.md),
+[loop](../../contexts/loop.md), [learning](../../contexts/learning.md) and the
+[frontend](../../contexts/frontend.md); the worker's steps in
+[the sprint loop](../../SPRINT_LOOP.md).
 
 ## A note is a claim
 

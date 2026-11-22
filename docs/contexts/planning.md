@@ -113,7 +113,7 @@ model for a team.
 the head of the default branch (never a task branch); the backend hashes what
 it received, validates it, hashes each guard's files and dry-runs the
 standards before storing a draft. Design:
-[`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
+[`COMPANY_STANDARDS.md`](../archive/design/COMPANY_STANDARDS.md).
 
 ### The security test plan (OWASP WSTG)
 
@@ -121,13 +121,13 @@ standards before storing a draft. Design:
 the specification, architecture and stack; a model may only propose additions,
 shown as claims. `project_docs/wstg_status.py` sets each row from an
 observation (a Verifier check) or a person's recorded review. Design:
-[`PROJECT_DOCUMENTATION.md`](../design/PROJECT_DOCUMENTATION.md#security-test-plan-and-checklist-owasp-wstg-issue-539).
+[`PROJECT_DOCUMENTATION.md`](../archive/design/PROJECT_DOCUMENTATION.md#security-test-plan-and-checklist-owasp-wstg-issue-539).
 
 ### The documentation pack
 
 `project_docs/` compiles a project's management documentation, placed after
 the PMBOK Guide (8th edition). Design and threat model:
-[`PROJECT_DOCUMENTATION.md`](../design/PROJECT_DOCUMENTATION.md).
+[`PROJECT_DOCUMENTATION.md`](../archive/design/PROJECT_DOCUMENTATION.md).
 
 - **Snapshot.** `collect.py` reads the records into plain data; the
   `collect_*` modules add keys: `collect_status`, `collect_release`,

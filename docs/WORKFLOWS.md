@@ -147,7 +147,7 @@ maps to **exactly one** of the five statuses (`todo`, `in_progress`,
   event. A move to another status's column is today's status move, with its
   rules.
 - A custom column is a saved view
-  ([`design/SAVED_VIEWS.md`](design/SAVED_VIEWS.md)): a filter on its status,
+  ([`design/SAVED_VIEWS.md`](archive/design/SAVED_VIEWS.md)): a filter on its status,
   optionally refined, evaluated from the task projections.
 - A column a binding names cannot be deleted until the binding is removed.
 

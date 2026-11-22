@@ -1,4 +1,4 @@
-"""What an unverified domain may do at sign-in (issue #512; docs/design/SSO.md,
+"""What an unverified domain may do at sign-in (issue #512; docs/archive/design/SSO.md,
 T16, T21): only a domain verified by DNS lets SSO create or link an account;
 an identity already linked keeps signing in, so a lost TXT record locks
 nobody out; the domains of connections that existed before verification

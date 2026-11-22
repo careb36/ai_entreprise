@@ -1,5 +1,5 @@
 """Who puts a company's standards in force (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §7, §10 T1, T8, T12, §12 decisions 4
+``docs/archive/design/COMPANY_STANDARDS.md`` §7, §10 T1, T8, T12, §12 decisions 4
 and 8).
 
 Negative first: a Manager, an API token and the Manager agent never

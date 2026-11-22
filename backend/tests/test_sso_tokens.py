@@ -1,4 +1,4 @@
-"""The ID token is judged by us (``services/platform/oidc.py``; docs/design/SSO.md,
+"""The ID token is judged by us (``services/platform/oidc.py``; docs/archive/design/SSO.md,
 T1, T9): the signature against the issuer's JWKS with an asymmetric algorithm,
 ``iss``, ``aud``/``azp``, ``exp`` with a small skew, the nonce we issued and
 ``email_verified`` when present; discovery must name the configured issuer;

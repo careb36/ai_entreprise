@@ -1,4 +1,4 @@
-"""Identity-provider groups mapped to teams (issue #703; ``docs/design/SSO_GROUP_MAPPING.md``).
+"""Identity-provider groups mapped to teams (issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``).
 
 The Owner's configuration, the IdP's observation and a second Owner's
 decision never share a field (POSITIONING design rule 1):

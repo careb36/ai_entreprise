@@ -1,5 +1,5 @@
 """Teams inside a company and the effective role (issue #512, phase 5;
-``docs/design/TEAMS_AND_USAGE.md``, T1–T6).
+``docs/archive/design/TEAMS_AND_USAGE.md``, T1–T6).
 
 A member's effective role is the higher of their own role and their teams'
 roles (Viewer or Manager, never Owner); ``auth_policy.require_company_role``

@@ -1,5 +1,5 @@
 """A company's own standards and the time-boxed exceptions to a standard
-(issue #700; ``docs/design/COMPANY_STANDARDS.md`` §7, §11.2, §12).
+(issue #700; ``docs/archive/design/COMPANY_STANDARDS.md`` §7, §11.2, §12).
 
 - ``CompanyStandardSet``       — one version of a company's standards file, as
   imported from the default branch's head: the bytes, the sha256 the backend

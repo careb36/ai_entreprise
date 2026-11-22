@@ -334,7 +334,7 @@ def contradiction_rework(
     sprint: ``task #N`` / ``#N``, its title (``MIN_TITLE_CHARS`` or more), a
     note of another task (``note #N``), or a file a note of another task
     links. Deterministic, read from the board; the method is in
-    ``docs/design/SPRINT_BOARD.md``.
+    ``docs/archive/design/SPRINT_BOARD.md``.
     """
     items = list(items)
     tasks = {item_id: str(title or "") for item_id, title, _ in items}

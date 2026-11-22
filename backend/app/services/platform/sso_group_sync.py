@@ -1,5 +1,5 @@
 """Applying a connection's group mapping at an SSO sign-in (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R1–R14).
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R1–R14).
 
 ``apply_sign_in`` runs inside ``sso_flow.finish_login``, after the identity is
 resolved and before the ``sso_sign_in`` audit row commits the sign-in: the

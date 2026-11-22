@@ -1,5 +1,5 @@
 """Segregation of duties: who asked for a change does not approve it (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 The person who started a sprint does not accept its held delivery (web, an
 API token they made, a chat button or the board), does not merge its runs or

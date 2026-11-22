@@ -1,5 +1,5 @@
 """What the review of PR #634 found in grading candidate code in the sandbox
-(rsi-loop PR 12; docs/design/SANDBOX_GRADING_THREAT_MODEL.md), each a
+(rsi-loop PR 12; docs/archive/design/SANDBOX_GRADING_THREAT_MODEL.md), each a
 negative test first:
 
 1. The grader loads the daemon's sandbox from B's git objects, hash-checked,

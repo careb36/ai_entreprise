@@ -1,4 +1,4 @@
-"""Linking a chat account to a La Fabrique account (``docs/design/CHAT_APPROVALS.md``, C4, C5).
+"""Linking a chat account to a La Fabrique account (``docs/archive/design/CHAT_APPROVALS.md``, C4, C5).
 
 A person signed in to La Fabrique asks for a one-time code (``issue_code``)
 and types it in chat; the platform's signed request names the chat user, and

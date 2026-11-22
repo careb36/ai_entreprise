@@ -39,7 +39,7 @@ def _register_user(client, email=None):
 
 def test_a_bearer_login_issues_an_access_token(test_client, signing_key):
     """A non-browser client asks for a Bearer token explicitly; it gets no
-    cookies and no session family (docs/design/SESSIONS.md)."""
+    cookies and no session family (docs/archive/design/SESSIONS.md)."""
     registered = _register_user(test_client)
 
     response = test_client.post(

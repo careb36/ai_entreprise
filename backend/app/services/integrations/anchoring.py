@@ -1,6 +1,6 @@
 """Taking a company's audit anchors and sending them out (issue #542).
 
-``docs/design/AUDIT_ANCHORS.md``. An anchor records the chain's head outside
+``docs/archive/design/AUDIT_ANCHORS.md``. An anchor records the chain's head outside
 the factory (``services/platform/audit_anchors.py``). This module decides when
 one is taken and delivers it:
 

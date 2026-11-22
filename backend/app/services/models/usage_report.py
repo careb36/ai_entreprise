@@ -1,4 +1,4 @@
-"""Who used what (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``).
+"""Who used what (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 The usage report sums a company's records over a UTC date range, by period
 (day, week from Monday, month), by person, by team, by agent role, by producer

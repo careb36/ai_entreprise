@@ -64,7 +64,7 @@ field: login then sets the session in `HttpOnly` cookies (`fabrique_session`,
 `fabrique_refresh`, `fabrique_csrf`) and the body carries only
 `token_type: "cookie"`, the lifetimes and the CSRF value; a request
 authenticated by the cookie must send `X-Fabrique-CSRF` on `POST`, `PUT`,
-`PATCH` and `DELETE` (`docs/design/SESSIONS.md`). A request with an
+`PATCH` and `DELETE` (`docs/archive/design/SESSIONS.md`). A request with an
 `Authorization: Bearer` header is never CSRF-checked.
 
 Passwords are hashed with bcrypt directly, capped at 72 bytes, because bcrypt

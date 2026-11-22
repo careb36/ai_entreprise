@@ -1,5 +1,5 @@
 """A company's standards file: its schema, parser and validator (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §3, §4, §10 T1, T5, T7, §12 decisions
+``docs/archive/design/COMPANY_STANDARDS.md`` §3, §4, §10 T1, T5, T7, §12 decisions
 3, 5 and 7).
 
 The design's own La Fabrique file (§9.1), kept verbatim as a fixture, must
@@ -18,7 +18,7 @@ import pytest
 from services.contracts import company_regex
 from services.contracts import company_standards as cs
 
-# The design's worked example (docs/design/COMPANY_STANDARDS.md section 9.1),
+# The design's worked example (docs/archive/design/COMPANY_STANDARDS.md section 9.1),
 # copied verbatim beside the tests.
 DESIGN_FILE = (
     Path(__file__).resolve().parent

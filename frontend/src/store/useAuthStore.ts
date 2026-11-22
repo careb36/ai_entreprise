@@ -15,7 +15,7 @@ import { queryClient } from '../lib/queryClient'
 /**
  * The signed-in person, as the page may know it. The session's credentials
  * are HttpOnly cookies the backend sets and the page never reads (issue #524,
- * docs/design/SESSIONS.md): nothing here is a credential, and only `user`,
+ * docs/archive/design/SESSIONS.md): nothing here is a credential, and only `user`,
  * `memberships` and `expiresAt` (when the session ends however often it is
  * refreshed) are kept across reloads.
  */

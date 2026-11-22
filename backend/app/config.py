@@ -261,7 +261,7 @@ class Settings(BaseSettings):
     # issue #439): the notes of the sprint relevant to the task, newest first,
     # within this many characters; 0 leaves the section out.
     SPRINT_BOARD_MAX_CHARS: int = 2000
-    # The project wiki (issue #445, docs/design/PROJECT_WIKI.md). Off: no wiki
+    # The project wiki (issue #445, docs/archive/design/PROJECT_WIKI.md). Off: no wiki
     # section in prompts (vector memory alone, the bench's baseline) and no
     # compilation at sprint close; the pages stay and the API still serves them.
     WIKI_ENABLED: bool = True
@@ -387,7 +387,7 @@ class Settings(BaseSettings):
     # the client is the address the connection comes from
     # (security.TrustedProxyMiddleware; docs/OPERATIONS.md).
     TRUSTED_PROXY_IPS: str = ""
-    # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
+    # Browser sessions (issue #524; docs/archive/design/SESSIONS.md): a refresh-token
     # family lives at most this many days from sign-in, however often it is
     # rotated; a reuse within the grace (two tabs refreshing at once) is
     # answered 409 without revoking; the refresh route's rate limit.
@@ -398,7 +398,7 @@ class Settings(BaseSettings):
     # http:// (a browser treats http://localhost as secure anyway).
     SESSION_COOKIE_SECURE: bool = True
 
-    # Single sign-on over OpenID Connect (issue #512; docs/design/SSO.md).
+    # Single sign-on over OpenID Connect (issue #512; docs/archive/design/SSO.md).
     # The redirect URI registered at each company's identity provider, and
     # where the browser lands afterwards (the frontend's /login/sso).
     SSO_CALLBACK_URL: str = "http://localhost:8000/v1/auth/sso/callback"
@@ -414,7 +414,7 @@ class Settings(BaseSettings):
     SSO_ALLOW_PRIVATE_ISSUERS: bool = False
     SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
     SSO_CLOCK_SKEW_SECONDS: int = 60
-    # DNS verification of the allowed domains (docs/design/SSO.md). Domains
+    # DNS verification of the allowed domains (docs/archive/design/SSO.md). Domains
     # listed before verification existed keep creating and linking accounts
     # for SSO_LEGACY_DOMAIN_GRACE_DAYS after the upgrade while the grace is on.
     SSO_LEGACY_DOMAIN_GRACE: bool = True
@@ -425,7 +425,7 @@ class Settings(BaseSettings):
     # Resolvers to ask (comma-separated IP addresses); empty: the system's.
     SSO_DNS_NAMESERVERS: str = ""
 
-    # Approving from Slack or Teams (issue #512, phase 4; docs/design/CHAT_APPROVALS.md).
+    # Approving from Slack or Teams (issue #512, phase 4; docs/archive/design/CHAT_APPROVALS.md).
     # The frontend address the chat messages link to (the run's evidence, the
     # task), and the rate limit of the public inbound endpoints per address.
     CHAT_APP_URL: str = "http://localhost:5173"

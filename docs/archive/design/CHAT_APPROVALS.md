@@ -65,7 +65,7 @@ code names the La Fabrique user; both together create the link, which the
 person sees and can remove. Email matching was rejected: it needs the
 `users:read.email` scope, a workspace admin can set any address on a Slack
 profile, and the SSO design already found that an email asserted by a party
-the company controls is not proof across companies (`docs/design/SSO.md`,
+the company controls is not proof across companies (`docs/archive/design/SSO.md`,
 T15). The code proves possession of both accounts at once.
 
 ## Assets

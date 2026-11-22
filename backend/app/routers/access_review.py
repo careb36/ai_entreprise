@@ -1,5 +1,5 @@
 """The periodic access review and the service accounts inventory (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 Only a signed-in human Owner reads or completes them; an API token is refused.
 

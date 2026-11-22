@@ -1,5 +1,5 @@
 """The Owner's configuration of the SSO group mapping and of SSO-managed teams
-(issue #703; ``docs/design/SSO_GROUP_MAPPING.md``, R15–R22, R26): the Owner
+(issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``, R15–R22, R26): the Owner
 only (an API token refused whatever its role), Google refused without the
 Directory sync, Entra GUIDs for ``groups`` and exact ``roles``, raising a
 mapped team's role refused, the conversion preview, its confirmation and

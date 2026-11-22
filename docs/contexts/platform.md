@@ -97,7 +97,7 @@ sprint closes once.
   cookies; each refresh token rotates exactly once, and reuse revokes the
   family. A cookie-authenticated unsafe request needs `X-Fabrique-CSRF`.
   Login is rate-limited per address and per account. Design:
-  [`SESSIONS.md`](../design/SESSIONS.md).
+  [`SESSIONS.md`](../archive/design/SESSIONS.md).
 - **Email addresses** are compared by one rule, `contracts/emails`.
   Registration answers alike for a new and a taken address.
 - **Invitations** (`invitations.py`): an invite adds nobody and answers the
@@ -110,7 +110,7 @@ sprint closes once.
   nonce). An IdP is trusted only within its company: an existing account is
   linked by email only when it belongs to this company and no other.
   Requiring SSO leaves break-glass Owners (`SSO_BREAK_GLASS_EMAILS`). Design:
-  [`SSO.md`](../design/SSO.md).
+  [`SSO.md`](../archive/design/SSO.md).
 - **Domain verification** (`sso_domains.py`, `dns_client.py`,
   `sso_metrics.py`): only a domain proved by a DNS TXT record lets SSO
   create or link an account. A transient DNS failure changes nothing.
@@ -121,10 +121,10 @@ sprint closes once.
   Manager. Only a present empty claim removes; an absent, overage or
   malformed claim changes nothing. A Manager mapping needs a second Owner's approval
   (or the only Owner's reasoned confirmation).
-  Design: [`SSO_GROUP_MAPPING.md`](../design/SSO_GROUP_MAPPING.md).
+  Design: [`SSO_GROUP_MAPPING.md`](../archive/design/SSO_GROUP_MAPPING.md).
 - **Teams** (`teams.py`): `effective_role` is pure. Every membership change
   opens or closes a history period. Design:
-  [`TEAMS_AND_USAGE.md`](../design/TEAMS_AND_USAGE.md).
+  [`TEAMS_AND_USAGE.md`](../archive/design/TEAMS_AND_USAGE.md).
 - **API tokens** (`api_tokens.py`): checked against the creator on every use;
   refusals audited `api_token_refused`. Prefer them to Bearer logins for
   automation.
@@ -141,7 +141,7 @@ sprint closes once.
   wrote the work is refused (a committed `sod_refused` row and a 403). The
   single-person exception is an Owner's audited grant, honoured only while
   exactly one member can approve. Design:
-  [`SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md).
+  [`SEGREGATION_OF_DUTIES.md`](../archive/design/SEGREGATION_OF_DUTIES.md).
 - `access_review.py`: every member's own, team and effective role and every
   working API token, confirmed or removed; removals apply at once.
 - `service_accounts.py`: the company's machine credentials with owner,
@@ -173,7 +173,7 @@ the only Owner may activate alone, flagged in the access review until a
 second Owner confirms. A draft with a refusal is refused, and so is a
 `command` standard unless commands run isolated. An exception is the only
 way around a standard: reasoned, compensated, 1 to 90 days, approved by a
-second Owner. Design: [`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
+second Owner. Design: [`COMPANY_STANDARDS.md`](../archive/design/COMPANY_STANDARDS.md).
 
 ### Personal notifications
 
@@ -190,7 +190,7 @@ the app and snoozed at most 24 hours. Email is a copy, queued only while
 factory (webhook, RFC 3161 timestamp, customer Ed25519 signature).
 `coverage` re-checks every anchor against the chain as it is now; a webhook
 anchor stays a claim. Sending them: [integrations](integrations.md#audit-anchors).
-Design: [`AUDIT_ANCHORS.md`](../design/AUDIT_ANCHORS.md).
+Design: [`AUDIT_ANCHORS.md`](../archive/design/AUDIT_ANCHORS.md).
 
 ### Metrics and the rest
 

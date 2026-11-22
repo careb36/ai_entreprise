@@ -1,5 +1,5 @@
 """Saved views of a company's tasks and each person's display preferences
-(issue #535; ``docs/design/SAVED_VIEWS.md``), company-scoped. New tables
+(issue #535; ``docs/archive/design/SAVED_VIEWS.md``), company-scoped. New tables
 only: the filters are evaluated from the task projections, so nothing
 existing changes.
 

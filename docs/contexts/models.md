@@ -161,7 +161,7 @@ measures again). `usage_report.py` serves usage by period, person, team,
 role, producer and model, every number read back from the records
 (`GET /v1/companies/{id}/usage`, Manager). `usage_csv.py` writes the CSV
 export, audited, with cells guarded against CSV injection. Design:
-[`TEAMS_AND_USAGE.md`](../design/TEAMS_AND_USAGE.md).
+[`TEAMS_AND_USAGE.md`](../archive/design/TEAMS_AND_USAGE.md).
 
 ### The bench's scorecards: the /bench page
 

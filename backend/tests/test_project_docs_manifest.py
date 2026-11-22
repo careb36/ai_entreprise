@@ -1,5 +1,5 @@
 """The documentation pack's signed manifest (issue #694, phase 4 of
-``docs/design/PROJECT_DOCUMENTATION.md``).
+``docs/archive/design/PROJECT_DOCUMENTATION.md``).
 
 The manifest lists every file of a pack with the sha256 the backend computed
 over the bytes it would write, the pack's inputs digest and the compile time;

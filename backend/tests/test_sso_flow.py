@@ -1,5 +1,5 @@
 """Signing in with SSO end to end (``routers/sso.py``, ``services/platform/sso_flow.py``;
-docs/design/SSO.md): Authorization Code with PKCE, a one-time ``state`` bound
+docs/archive/design/SSO.md): Authorization Code with PKCE, a one-time ``state`` bound
 to the browser by an HttpOnly cookie, the ID token validated by us, the person
 resolved by ``(issuer, sub)``, the role from the membership (a new member gets
 the default role), a one-time handoff code exchanged for the same browser

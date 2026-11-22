@@ -215,7 +215,7 @@ not flood the chain.
   sets the person's membership in the mapped teams only (never in a team the
   Owner manages by hand), audited with the claim values as observed. Threats
   to cover first: an IdP asserting a group to grant Manager (bounded by the
-  same "within its company" trust as SSO linking, `docs/design/SSO.md`), a
+  same "within its company" trust as SSO linking, `docs/archive/design/SSO.md`), a
   missing claim removing access (treat absent as "no change", present-and-empty
   as "remove"), and group overage tokens (Entra omits the claim past 200
   groups). Threat model, data model and rules (design only, issue #703):

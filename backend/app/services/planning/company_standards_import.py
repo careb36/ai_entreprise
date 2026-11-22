@@ -1,5 +1,5 @@
 """Importing a company's standards from its repository (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §4, §12 decisions 5 and 7).
+``docs/archive/design/COMPANY_STANDARDS.md`` §4, §12 decisions 5 and 7).
 
 1. **The ref.** The daemon reads ``.fabrique/standards.toml`` at the head of
    the company's **default branch** (``workspace.git.read_at``; the base

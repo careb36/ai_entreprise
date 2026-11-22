@@ -1,5 +1,5 @@
 """Time-boxed exceptions to a standard (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §12 decision 1; ISO/IEC 27001:2022
+``docs/archive/design/COMPANY_STANDARDS.md`` §12 decision 1; ISO/IEC 27001:2022
 clause 6.1.3 and A.5.36).
 
 A company never relaxes a catalogue standard; an exception is the only way

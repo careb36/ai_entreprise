@@ -1,5 +1,5 @@
 """The periodic access review and the service accounts inventory (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 An Owner reviews every member (own, team-derived and effective role, SSO and
 chat links, last activity) and every working API token on a schedule

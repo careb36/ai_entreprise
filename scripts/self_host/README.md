@@ -121,7 +121,7 @@ python3 scripts/self_host/self_host.py --api http://localhost:8000 --checkout /t
 The target measure imports the build's code, which is the party being
 measured, so it runs in the workspace daemon's container sandbox
 (`vscode-daemon/sandbox.py`, through `scripts/bench/sandbox_grading.py`;
-threat model `docs/design/SANDBOX_GRADING_THREAT_MODEL.md`), never in the
+threat model `docs/archive/design/SANDBOX_GRADING_THREAT_MODEL.md`), never in the
 harness's Python: network off, the build read-only at `/candidate` (the
 measure runs from `/candidate/backend`), the measure's folder from this
 repository read-only at `/graders`, the root file system read-only, a fresh

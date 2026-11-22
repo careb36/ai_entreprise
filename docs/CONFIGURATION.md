@@ -15,7 +15,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-With nothing else set, every role runs on DeepSeek Pro or Flash. A request that fails moves to DeepSeek's other model, never to another provider. Memory uses a local embedding model in the proxy. The knowledge graph's absence, mail, error reports and the optional agents are off with a named reason, and nothing waits for them. What is on, off or degraded is logged at startup, served by `/health/deep` (`capabilities`) and shown on the Models page. Design: [`docs/design/DEEPSEEK_ONLY.md`](design/DEEPSEEK_ONLY.md).
+With nothing else set, every role runs on DeepSeek Pro or Flash. A request that fails moves to DeepSeek's other model, never to another provider. Memory uses a local embedding model in the proxy. The knowledge graph's absence, mail, error reports and the optional agents are off with a named reason, and nothing waits for them. What is on, off or degraded is logged at startup, served by `/health/deep` (`capabilities`) and shown on the Models page. Design: [`docs/archive/design/DEEPSEEK_ONLY.md`](archive/design/DEEPSEEK_ONLY.md).
 
 **Where the data goes.** DeepSeek's API processes requests in China. If prompts carry personal data, that is a transfer to a third country under GDPR (arts. 44–49), and a DPIA (art. 35) likely applies. The alternative is to host the open-weight models yourself and add a provider connection on the Models page.
 
@@ -48,7 +48,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-The factory holds `AUDIT_SIGNING_KEY`, so anchor the chain's head outside it: an Owner sets audit anchors per company ([`docs/design/AUDIT_ANCHORS.md`](design/AUDIT_ANCHORS.md)).
+The factory holds `AUDIT_SIGNING_KEY`, so anchor the chain's head outside it: an Owner sets audit anchors per company ([`docs/archive/design/AUDIT_ANCHORS.md`](archive/design/AUDIT_ANCHORS.md)).
 
 ## Databases and broker
 
@@ -102,11 +102,11 @@ Read by `nats/start.sh`, the backend (`app/nats_auth.py`) and the daemon (`vscod
 | `INVITATION_TTL_HOURS` | `168` | How long an invitation to a company stays valid. |
 | `SUPPORT_ADMIN_EMAILS` | `""` | Comma-separated accounts that triage every support ticket and download support logs. |
 
-Design: [`docs/design/SESSIONS.md`](design/SESSIONS.md).
+Design: [`docs/archive/design/SESSIONS.md`](archive/design/SESSIONS.md).
 
 ### Single sign-on (OIDC)
 
-Each company's connection is stored by its Owner, not in the environment. Design: [`docs/design/SSO.md`](design/SSO.md); setup: [`docs/OPERATIONS.md`](OPERATIONS.md), Single sign-on.
+Each company's connection is stored by its Owner, not in the environment. Design: [`docs/archive/design/SSO.md`](archive/design/SSO.md); setup: [`docs/OPERATIONS.md`](OPERATIONS.md), Single sign-on.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -147,7 +147,7 @@ slowapi limits, per client address unless noted, stored in `RATE_LIMIT_STORAGE_U
 | `ERROR_REPORT_URL` | `""` | https endpoint that receives one POST per unhandled error: id, class, method, route. Never a traceback or body. |
 | `ERROR_REPORT_SOURCE` | `""` | Name of this deployment in those reports. |
 | `PUBLIC_API_URL` | unset | Public address of the backend: GitHub's webhook Payload URL and the base of Slack/Teams request URLs. |
-| `CHAT_APP_URL` | `http://localhost:5173` | Frontend address chat approval messages link to. See [`docs/design/CHAT_APPROVALS.md`](design/CHAT_APPROVALS.md). |
+| `CHAT_APP_URL` | `http://localhost:5173` | Frontend address chat approval messages link to. See [`docs/archive/design/CHAT_APPROVALS.md`](archive/design/CHAT_APPROVALS.md). |
 | `WEBHOOK_ALLOW_PRIVATE_HOSTS` | `false` | Allow a company webhook or timestamping authority on a private address. |
 | `OPENPROJECT_URL` | `http://localhost:8080` | OpenProject server for the PO's backlog tool. |
 | `AUDIT_LOG_PATH` | `/app/.factory/logs` | Folder of the append-only `audit.jsonl`. The hash chain lives in Postgres. |
@@ -282,7 +282,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `CODE_GRAPH_MAX_CHARS` | `2500` | "Related code" section. `0` leaves it out. |
 | `CODE_GRAPH_STORE` | `postgres` | Where the code graph is kept: `postgres`, `neo4j` (only with `NEO4J_ENABLED`) or `off`. |
 | `SPRINT_BOARD_MAX_CHARS` | `2000` | "Sprint board" section. `0` leaves it out. |
-| `WIKI_ENABLED` | `true` | The project wiki section and its compilation at sprint close. See [`docs/design/PROJECT_WIKI.md`](design/PROJECT_WIKI.md). |
+| `WIKI_ENABLED` | `true` | The project wiki section and its compilation at sprint close. See [`docs/archive/design/PROJECT_WIKI.md`](archive/design/PROJECT_WIKI.md). |
 | `WIKI_MAX_CHARS` | `3000` | Wiki section size. `0` leaves it out. |
 | `WIKI_COMPILE_MAX_PAGES` | `5` | Pages compiled per sprint close. |
 | `WIKI_PAGE_MAX_CHARS` | `6000` | Longest accepted compiled page. |

@@ -1,5 +1,5 @@
 """Exporting a documentation pack to DOCX and PDF (issue #694, phase 4 of
-``docs/design/PROJECT_DOCUMENTATION.md``).
+``docs/archive/design/PROJECT_DOCUMENTATION.md``).
 
 The export reads the stored pack's Markdown through our parser of the pack's
 own subset (``export_markdown``), never a request field; it carries the

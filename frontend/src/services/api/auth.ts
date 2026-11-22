@@ -22,7 +22,7 @@ export interface AuthProfile extends AuthUser {
 /**
  * A browser sign-in (password or SSO). The session itself is in HttpOnly
  * cookies the page cannot read; the body carries only lifetimes and the CSRF
- * value (issue #524, docs/design/SESSIONS.md).
+ * value (issue #524, docs/archive/design/SESSIONS.md).
  */
 export interface LoginResponse {
   token_type: 'cookie'

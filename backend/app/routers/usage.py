@@ -1,4 +1,4 @@
-"""The usage report (issue #512, phase 5; ``docs/design/TEAMS_AND_USAGE.md``).
+"""The usage report (issue #512, phase 5; ``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 - ``GET /v1/companies/{id}/usage``      — the report as JSON (Manager)
 - ``GET /v1/companies/{id}/usage.csv``  — the same report as CSV (Manager), audited

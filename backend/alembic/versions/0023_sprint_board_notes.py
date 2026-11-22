@@ -1,4 +1,4 @@
-"""The sprint board (issue #439; ``docs/design/SPRINT_BOARD.md``):
+"""The sprint board (issue #439; ``docs/archive/design/SPRINT_BOARD.md``):
 ``sprint_board_notes``, the short typed notes a sprint's tasks leave each
 other, company-scoped and kept with their sprint. A new table only: nothing
 existing changes.

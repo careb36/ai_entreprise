@@ -6,7 +6,7 @@ import { errorDetail } from '../services/api'
 import { EmptyState, Panel } from './ui'
 
 /**
- * The signed-in person's single sign-on identities (docs/design/SSO.md,
+ * The signed-in person's single sign-on identities (docs/archive/design/SSO.md,
  * linking in a session): link one at a company's provider, or unlink one
  * while another way to sign in remains. The provider sends the browser back
  * here with `sso_link` or `sso_link_error`.

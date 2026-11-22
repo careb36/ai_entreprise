@@ -1,6 +1,6 @@
 """The Owner's settings for a company's audit anchors (issue #542).
 
-``docs/design/AUDIT_ANCHORS.md``. What may be changed, and the checks each
+``docs/archive/design/AUDIT_ANCHORS.md``. What may be changed, and the checks each
 value passes before it is stored:
 
 - ``enabled`` and ``cadence_minutes`` (15 to 1440): whether heads are anchored

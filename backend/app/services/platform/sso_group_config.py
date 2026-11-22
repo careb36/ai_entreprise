@@ -1,5 +1,5 @@
 """A connection's group mapping, written by an Owner (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R15–R17, R20–R23).
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R15–R17, R20–R23).
 
 ``save`` takes the whole configuration: whether the mapping is on, the claim,
 the cap and the list of ``(group value, team)`` pairs. A pair is refused on

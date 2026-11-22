@@ -55,7 +55,7 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
 - `vscode-daemon/sandbox.py`, `sandbox_image.py`, `sandbox_cache.py` and
   `run_logs.py` are protected paths: bench grading imports them
   (`scripts/bench/sandbox_grading.py`, threat model
-  [`SANDBOX_GRADING_THREAT_MODEL.md`](../design/SANDBOX_GRADING_THREAT_MODEL.md)).
+  [`SANDBOX_GRADING_THREAT_MODEL.md`](../archive/design/SANDBOX_GRADING_THREAT_MODEL.md)).
 
 ## Components
 
@@ -138,7 +138,7 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
 ## See also
 
 - The protocol, its subjects and refusal codes: [`PROTOCOL.md`](../../vscode-daemon/protocol/PROTOCOL.md).
-- The execution environment and what was taken from AixleHQ/flow: [`EXECUTION_ENVIRONMENT.md`](../design/EXECUTION_ENVIRONMENT.md).
+- The execution environment and what was taken from AixleHQ/flow: [`EXECUTION_ENVIRONMENT.md`](../archive/design/EXECUTION_ENVIRONMENT.md).
 - Sandbox, command policy, stack profiles, application check and the daemon's settings: [configuration](../CONFIGURATION.md).
 - Publishing, local merge, integration and undo: [release](release.md).
 - How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-6-workspace).

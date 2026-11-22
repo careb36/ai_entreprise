@@ -15,11 +15,11 @@ the `threat-model` skill.
 ## Summary
 
 - Today every company is held to one catalogue, `STD-ARCH-1` … `STD-PO-1`
-  ([`docs/STANDARDS.md`](../STANDARDS.md), `services/contracts/standards_catalogue.py`,
+  ([`docs/STANDARDS.md`](../../STANDARDS.md), `services/contracts/standards_catalogue.py`,
   checked by `services/evidence/standards.py`). No model, request or procedure
   edits it. That is right for the catalogue, but a company has rules of its
   own that the catalogue cannot express. The self-hosting run
-  ([`retrospectives/2026-11-self-hosting.md`](../retrospectives/2026-11-self-hosting.md))
+  ([`retrospectives/2026-11-self-hosting.md`](../../retrospectives/2026-11-self-hosting.md))
   found that "importing the standards" had nothing to import, and that La
   Fabrique's own rules (the dependency rule, HTTP adapters, the file-size
   ratchet, i18n in both languages) could not be written down as its
@@ -33,7 +33,7 @@ the `threat-model` skill.
   read by the daemon at a named commit of the default branch. The **backend**
   computes the sha256 over the bytes it received; no hash in the file, in a
   request or in the daemon's reply is ever read (rule 6 of
-  [the positioning](../POSITIONING.md)).
+  [the positioning](../../POSITIONING.md)).
 - Anything that needs judgement is **not a standard**. It stays a procedure
   (prompt text, measured by the board's numbers), and whatever an agent says
   about it is a claim.
@@ -60,7 +60,7 @@ the `threat-model` skill.
 | Every-delivery commands | `services/workspace/stack_roots.py` (`every_delivery`), `services/loop/delivery_suites.py`, `services/evidence/command_runs.py` (F5) | A company can already name commands run on every delivery. Their exit status and the sha256 of their output, computed by the backend, are observations, judged by the `required_commands` check. They are configuration without an id, a version, an owner or a hash of their source. |
 | Protected paths | `services/contracts/protected_paths.py`, `services/evidence/protected_check.py`, `services/platform/protected_paths_setting.py` | Path matching (`matches`, both readings of a path, declared paths may add a match and never remove one); a company setting only a signed-in Owner changes, audited, in `ALWAYS_ESCALATE` |
 | Procedures | `services/learning/procedures.py` (protected) | Versioned records proposed at retrospectives, adopted by autonomy or a Manager, kept or reverted after `MEASURE_AFTER_SPRINTS = 2` sprints by rework per task (tolerance 0.25), blocked share (0.10) and the claimed-not-verified share (0.10) |
-| Workflow versions | [`docs/WORKFLOWS.md`](../WORKFLOWS.md) §3.6, §4, §9 (designed) | The pattern this design follows: a closed list of types in code, a validator plus a run-time guard, Owner-only activation, versions pinned per task, measured and reverted by the procedures' rule, a draft with the sha256 of a reverted one dropped |
+| Workflow versions | [`docs/WORKFLOWS.md`](../../WORKFLOWS.md) §3.6, §4, §9 (designed) | The pattern this design follows: a closed list of types in code, a validator plus a run-time guard, Owner-only activation, versions pinned per task, measured and reverted by the procedures' rule, a draft with the sha256 of a reverted one dropped |
 | Segregation of duties | `services/platform/sod.py`, [`SEGREGATION_OF_DUTIES.md`](SEGREGATION_OF_DUTIES.md) | Who requests a change does not approve it, when the company's SoD mode holds it |
 
 What is missing: a company cannot give its every-delivery commands an id,

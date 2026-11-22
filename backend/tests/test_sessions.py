@@ -1,4 +1,4 @@
-"""Browser sessions in HttpOnly cookies (issue #524, ``docs/design/SESSIONS.md``):
+"""Browser sessions in HttpOnly cookies (issue #524, ``docs/archive/design/SESSIONS.md``):
 the cookies' flags, no token in the browser's login body, refresh rotation,
 reuse revoking the family, the two-tab grace, absolute expiry, logout, CSRF on
 unsafe cookie requests and never on Bearer, and the revocation hooks (SSO

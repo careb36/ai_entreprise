@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => ({
   // /evidence/assets/... and render a blank page.
   base: '/',
   // The desktop build calls the API on the page's own origin, which its
-  // local server forwards to the backend (docs/design/SESSIONS.md, Desktop app).
+  // local server forwards to the backend (docs/archive/design/SESSIONS.md, Desktop app).
   define: isElectronBuild(mode) ? { 'import.meta.env.VITE_API_SAME_ORIGIN': JSON.stringify('true') } : {},
   test: {
     environment: 'jsdom',

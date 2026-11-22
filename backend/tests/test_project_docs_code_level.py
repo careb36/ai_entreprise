@@ -1,5 +1,5 @@
 """The C4 code level of the documentation pack (issue #693,
-``docs/design/PROJECT_DOCUMENTATION.md``).
+``docs/archive/design/PROJECT_DOCUMENTATION.md``).
 
 For each component the architecture names, ``c4.md`` lists the files the
 stored code graph (issue #438, ``services/tools/code_graph_store.py``) has

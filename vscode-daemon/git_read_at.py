@@ -4,7 +4,7 @@ A company's standards file (``.fabrique/standards.toml``) and the files its
 ``command`` standards depend on (their ``guards``) are imported from the
 **default branch's** head commit, never from a task branch, a sprint's
 integration branch or a delivery's worktree
-(``docs/design/COMPANY_STANDARDS.md`` §4, §10 T2): a delivery that edits the
+(``docs/archive/design/COMPANY_STANDARDS.md`` §4, §10 T2): a delivery that edits the
 file cannot change the rule it is judged by.
 
 ``workspace.git.read_at`` answers, read locally (no remote is contacted,

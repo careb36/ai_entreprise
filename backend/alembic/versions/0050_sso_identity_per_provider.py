@@ -1,4 +1,4 @@
-"""One SSO identity per account and provider (issue #512; ``docs/design/SSO.md``,
+"""One SSO identity per account and provider (issue #512; ``docs/archive/design/SSO.md``,
 T33): a unique index on ``sso_identities (user_id, issuer)``. The code already
 refuses a second subject at the same issuer (``identity_conflict``); the index
 makes two links racing past that check fail in the database instead of

@@ -1,4 +1,4 @@
-"""Verifying that an inbound chat request came from the platform (``docs/design/CHAT_APPROVALS.md``, C1, C2).
+"""Verifying that an inbound chat request came from the platform (``docs/archive/design/CHAT_APPROVALS.md``, C1, C2).
 
 Pure functions over the raw body and the headers; nothing here reads the
 database or parses the body before the signature holds.

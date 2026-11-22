@@ -1,5 +1,5 @@
 """The segregation-of-duties policy and its report (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``): only a signed-in Owner changes the
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``): only a signed-in Owner changes the
 policy, each change audited; a company with one person who can approve gets
 an explicit, audited exception that stops once a second person can, never a
 silent bypass; with the rule off the approval passes and the report, computed

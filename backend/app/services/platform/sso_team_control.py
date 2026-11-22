@@ -1,5 +1,5 @@
 """An Owner's hand on SSO-managed teams (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R16, R18, R19, R26–R28).
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R16, R18, R19, R26–R28).
 
 - **Conversion** (R19, G22): a team with members becomes SSO-managed only
   after a preview (the members, kept as manual exceptions; the backend's

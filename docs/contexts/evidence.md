@@ -95,7 +95,7 @@ no test keeps the old wording `<command> exited <code>: <tail>`.
 - `company_standards_check.py`: a company's own standards as pure functions of
   observations. Declared paths never satisfy `then`. A file not read back, a
   spent byte budget, missing RE2 or a run outside `container`/`bwrap` is
-  `unverifiable`. Design: [`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
+  `unverifiable`. Design: [`COMPANY_STANDARDS.md`](../archive/design/COMPANY_STANDARDS.md).
 
 ### Grounding
 
@@ -153,7 +153,7 @@ Design: [`rsi-loop.md`](../design/rsi-loop.md) §2.4–2.6.
 ## See also
 
 - The Verifier, the gate and the risk tier at work: steps 4 to 6 of [the sprint loop](../SPRINT_LOOP.md).
-- Settings: [configuration](../CONFIGURATION.md). Sandbox image and full logs: [workspace](workspace.md), [`EXECUTION_ENVIRONMENT.md`](../design/EXECUTION_ENVIRONMENT.md).
+- Settings: [configuration](../CONFIGURATION.md). Sandbox image and full logs: [workspace](workspace.md), [`EXECUTION_ENVIRONMENT.md`](../archive/design/EXECUTION_ENVIRONMENT.md).
 - Reads and research: [tools](tools.md). Console producers: [producers](producers.md).
 - Design rules: [the positioning](../POSITIONING.md). The Verifier benchmark: [testing](../TESTING.md).
 - How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-5-evidence).

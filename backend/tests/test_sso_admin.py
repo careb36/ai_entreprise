@@ -1,5 +1,5 @@
 """A company's SSO connection, managed by its Owners (``routers/sso_admin.py``;
-docs/design/SSO.md, T5–T8, T11, T12, T14, T19): only a signed-in human Owner
+docs/archive/design/SSO.md, T5–T8, T11, T12, T14, T19): only a signed-in human Owner
 reads or changes it; the client secret is encrypted and never returned; the
 issuer, domains and default role are checked (never Owner, never a public mail
 domain); Google and Entra are presets of the issuer; the test reports what the
@@ -284,7 +284,7 @@ def test_a_domain_verified_by_one_company_is_held_by_it(
     body = _body()
     assert test_client.put(_url(acme.id), json=body, headers=owner).status_code == 200
     squat = _body(allowed_domains=["unique-x.test", body["allowed_domains"][0]])
-    # Unverified, the first listing holds nothing (docs/design/SSO.md, T19).
+    # Unverified, the first listing holds nothing (docs/archive/design/SSO.md, T19).
     assert (
         test_client.put(_url(other.id), json=squat, headers=other_owner).status_code
         == 200

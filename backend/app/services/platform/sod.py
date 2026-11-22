@@ -1,5 +1,5 @@
 """Segregation of duties: who asked for a change does not approve it (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 The rule is one pure function, ``decide``: an approval by *actor* of work that
 *requesters* asked for or wrote is refused when the actor is one of them, for

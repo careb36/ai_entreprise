@@ -1,4 +1,4 @@
-"""The periodic access review (issue #543; ``docs/design/SEGREGATION_OF_DUTIES.md``).
+"""The periodic access review (issue #543; ``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 An Owner reviews, every ``review_interval_days`` (90 by default, quarterly),
 who can reach the company: every member with their own, team-derived and

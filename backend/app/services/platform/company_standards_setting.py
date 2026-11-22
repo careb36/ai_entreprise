@@ -1,5 +1,5 @@
 """A company's standards set: drafts, the version in force, and who changes it
-(issue #700; ``docs/design/COMPANY_STANDARDS.md`` §7, §12 decisions 4 and 8).
+(issue #700; ``docs/archive/design/COMPANY_STANDARDS.md`` §7, §12 decisions 4 and 8).
 
 - ``create_draft`` stores what an import read (the planning context reads it
   through the daemon): the bytes, the sha256 computed here over them, the

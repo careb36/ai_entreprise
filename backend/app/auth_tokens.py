@@ -100,7 +100,7 @@ def create_access_token(
 
     A browser session's token carries its family's public id (``sid``) and
     the digest of its CSRF token (``csrf``); a token without ``sid`` is a
-    Bearer token for a non-browser client (``docs/design/SESSIONS.md``).
+    Bearer token for a non-browser client (``docs/archive/design/SESSIONS.md``).
     """
     from config import settings
 

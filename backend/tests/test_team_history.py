@@ -1,5 +1,5 @@
 """Team membership history and the usage report's team at the time of the work
-(issue #702; ``docs/design/TEAMS_AND_USAGE.md``, Team membership history).
+(issue #702; ``docs/archive/design/TEAMS_AND_USAGE.md``, Team membership history).
 
 When an Owner adds a member to a team, the backend opens a period; when the
 member leaves the team, the team is deleted or the person leaves the company,

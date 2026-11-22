@@ -1,6 +1,6 @@
 """A company's own standards, imported from its repository, and the
 time-boxed exceptions to a standard (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §7, §11.3, §12).
+``docs/archive/design/COMPANY_STANDARDS.md`` §7, §11.3, §12).
 
 - ``GET  /v1/companies/{id}/standards``                          the catalogue, the set in force, the exceptions in force (Viewer)
 - ``GET  /v1/companies/{id}/standards/versions``                 history (Viewer)

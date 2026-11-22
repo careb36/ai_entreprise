@@ -69,7 +69,7 @@ CI's result. Neither job blocks anything.
 
 ```yaml
 # Post-landing: CI as a second opinion after scripts/land.sh (issue #728,
-# docs/design/LOCAL_LANDING.md). Nothing here gates: main was moved by the
+# docs/archive/design/LOCAL_LANDING.md). Nothing here gates: main was moved by the
 # machine that ran the checks, and its record (refs/notes/verification) is a
 # claim by that machine. This workflow compares the claim with what CI sees
 # and opens an issue when they disagree, a landed commit has no passing
@@ -173,7 +173,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           {
-            echo "A push to main needs the owner's look (docs/design/LOCAL_LANDING.md)."
+            echo "A push to main needs the owner's look (docs/archive/design/LOCAL_LANDING.md)."
             echo
             cat "$RUNNER_TEMP/landing.md"
             echo
@@ -257,7 +257,7 @@ For `e2e.yml`, the comment above the group changes as well:
 -# commit's run covers the ones merged before it), instead of queueing behind them.
 +# The self-hosted runners are shared by every pull request and by main: a new
 +# push to a pull request cancels the run of the commit it replaces. On main
-+# each landed commit's run finishes (docs/design/LOCAL_LANDING.md): CI there is
++# each landed commit's run finishes (docs/archive/design/LOCAL_LANDING.md): CI there is
 +# the second opinion on a landing, and a cancelled run would hide a red commit.
 ```
 

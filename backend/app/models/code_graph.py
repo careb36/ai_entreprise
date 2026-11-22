@@ -1,6 +1,6 @@
 """
 The stored code knowledge graph (issue #438, second slice;
-``docs/design/CODE_GRAPH.md``).
+``docs/archive/design/CODE_GRAPH.md``).
 
 What the workspace daemon observed of a project's code, per company and
 project folder: each file with the sha256 the daemon read from disk, the

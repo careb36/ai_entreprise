@@ -1,5 +1,5 @@
 """Identity-provider groups mapped to teams (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``).
+``docs/archive/design/SSO_GROUP_MAPPING.md``).
 
 - ``sso_connections``: ``groups_enabled`` (false), ``groups_claim``
   (``groups``) and ``group_role_cap`` (``Viewer``; a check constraint keeps

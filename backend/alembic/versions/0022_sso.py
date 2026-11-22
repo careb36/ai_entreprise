@@ -1,4 +1,4 @@
-"""Single sign-on over OpenID Connect (issue #512, phase 3; ``docs/design/SSO.md``):
+"""Single sign-on over OpenID Connect (issue #512, phase 3; ``docs/archive/design/SSO.md``):
 ``sso_connections`` (one identity provider per company, the client secret
 encrypted), ``sso_identities`` (an account's ``(issuer, subject)``) and
 ``sso_flow_states`` (the one-time login state and handoff codes, hashed).

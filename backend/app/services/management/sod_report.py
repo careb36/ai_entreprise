@@ -1,5 +1,5 @@
 """The segregation-of-duties matrix and violation report (issue #543;
-``docs/design/SEGREGATION_OF_DUTIES.md``).
+``docs/archive/design/SEGREGATION_OF_DUTIES.md``).
 
 Computed from records, never claimed:
 

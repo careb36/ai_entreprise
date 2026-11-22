@@ -1,4 +1,4 @@
-"""Documentation packs (issue #530, phase 1; ``docs/design/PROJECT_DOCUMENTATION.md``):
+"""Documentation packs (issue #530, phase 1; ``docs/archive/design/PROJECT_DOCUMENTATION.md``):
 ``documentation_packs``, one row per compiled version of a project's
 management documentation (charter, scope, WBS, schedule, RACI, risk register,
 lessons learned, C4 diagrams) with the sources each document cites, the digest

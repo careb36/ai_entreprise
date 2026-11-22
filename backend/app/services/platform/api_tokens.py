@@ -7,7 +7,7 @@ A caller holding a token acts as ``api-token:<id>``, so the audit rows its
 requests write name the token.
 
 A token never outranks its creator's **current** effective role in its company
-(issue #512, ``docs/design/TEAMS_AND_USAGE.md`` T5). On every use, a token
+(issue #512, ``docs/archive/design/TEAMS_AND_USAGE.md`` T5). On every use, a token
 whose creator was demoted below it, left the company or no longer has an
 account is refused, not quietly lowered: the role on the token is what its
 holder was promised, and a request that would act below it fails loudly
@@ -16,7 +16,7 @@ with the reason (at most one per token, reason and hour, so a script retrying
 cannot flood the chain). The token is not revoked: promoted back, its creator
 carries it again. A token with no recorded creator (minted while
 authentication was off) is not capped; the access review lists it with no
-owner (``docs/design/SEGREGATION_OF_DUTIES.md``, residual risks).
+owner (``docs/archive/design/SEGREGATION_OF_DUTIES.md``, residual risks).
 
 The creator is found by account id (``created_by_user_id``), never by email
 when the id is there: a creator who changes address keeps the token's

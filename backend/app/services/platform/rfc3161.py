@@ -1,6 +1,6 @@
 """RFC 3161 time-stamp tokens: build the request, read the answer, check the token.
 
-Pure functions over bytes (issue #542, ``docs/design/AUDIT_ANCHORS.md``): no
+Pure functions over bytes (issue #542, ``docs/archive/design/AUDIT_ANCHORS.md``): no
 network here. ``services/integrations/tsa_client.py`` posts the request; this
 module builds it and checks what comes back.
 

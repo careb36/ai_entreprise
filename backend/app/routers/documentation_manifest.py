@@ -1,6 +1,6 @@
 """Documentation manifest router — the signed manifest of a documentation pack.
 
-Endpoint (issue #694, phase 4 of ``docs/design/PROJECT_DOCUMENTATION.md``):
+Endpoint (issue #694, phase 4 of ``docs/archive/design/PROJECT_DOCUMENTATION.md``):
 - ``GET /v1/documentation/{pack_id}/manifest`` — download the manifest (Viewer).
 
 The manifest is built from the stored pack by

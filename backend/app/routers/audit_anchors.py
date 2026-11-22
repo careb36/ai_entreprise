@@ -1,6 +1,6 @@
 """Anchors of a company's audit chain outside the factory (issue #542).
 
-``docs/design/AUDIT_ANCHORS.md``.
+``docs/archive/design/AUDIT_ANCHORS.md``.
 
 - ``GET /v1/audit/anchors`` (Viewer): which anchors cover which range of the
   chain, the tail none covers, and every anchor that no longer matches.

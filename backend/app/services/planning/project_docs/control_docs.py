@@ -30,7 +30,7 @@ from services.planning.project_docs.scope_docs import spec_ref, task_ref, tasks_
 REASON_LIMIT = 240
 LOOP_DOC = "docs/SPRINT_LOOP.md"
 PLANNING_DOC = "docs/contexts/planning.md"
-PACK_DOC = "docs/design/PROJECT_DOCUMENTATION.md"
+PACK_DOC = "docs/archive/design/PROJECT_DOCUMENTATION.md"
 
 
 def cell(value: Any, limit: int = 120) -> str:

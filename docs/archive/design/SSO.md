@@ -171,7 +171,7 @@ unlink another company's.
 
 ## Residual risks
 
-- Sessions already issued (updated by #524, `docs/design/SESSIONS.md`):
+- Sessions already issued (updated by #524, `docs/archive/design/SESSIONS.md`):
   turning on "require SSO" now revokes the password-started sessions of the
   members it would refuse, and removing a member here
   (`DELETE /v1/company/{id}/members/{user_id}`, Owner) revokes theirs, at once

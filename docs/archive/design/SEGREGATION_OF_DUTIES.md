@@ -2,7 +2,7 @@
 
 Status: draft, written with the `threat-model` skill; a person reviews it
 before it guides more work · Issue: #543 · SDL practice 3 · Builds on teams
-and effective roles (#512, `docs/design/TEAMS_AND_USAGE.md`)
+and effective roles (#512, `docs/archive/design/TEAMS_AND_USAGE.md`)
 
 Taken from IT general controls audit practice and PCI DSS 4.0 (Requirement
 6.5, change management: who requests or makes a change does not approve it,

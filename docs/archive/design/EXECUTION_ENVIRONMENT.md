@@ -4,9 +4,9 @@ Agent-written code is installed, tested and started by the workspace daemon,
 in the sandbox the company asked for, and the Verifier judges only what the
 daemon reported. This note records where #315 stood on 2026-11-14, what this
 slice adds, what was taken from AixleHQ/flow and what was not, and what is
-left. The modules are described in [workspace](../contexts/workspace.md),
-[evidence](../contexts/evidence.md) and
-[configuration](../CONFIGURATION.md).
+left. The modules are described in [workspace](../../contexts/workspace.md),
+[evidence](../../contexts/evidence.md) and
+[configuration](../../CONFIGURATION.md).
 
 ## Where it stood
 

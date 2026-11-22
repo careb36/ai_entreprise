@@ -1,5 +1,5 @@
 """Identity-provider groups mapped to teams: the pure part (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``).
+``docs/archive/design/SSO_GROUP_MAPPING.md``).
 
 Everything here is a function of its arguments; nothing reads the database,
 the clock or the network. ``read_claim`` classifies the configured claim of a

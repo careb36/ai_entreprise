@@ -4,8 +4,8 @@ A task's context should be the code it will touch and the code that depends
 on it, chosen from the project's structure rather than by the model's
 guesses. This note records what the first two slices build, what they leave for
 later and what was studied. The modules are described in
-[tools](../contexts/tools.md), [workspace](../contexts/workspace.md),
-[evidence](../contexts/evidence.md) and [loop](../contexts/loop.md).
+[tools](../../contexts/tools.md), [workspace](../../contexts/workspace.md),
+[evidence](../../contexts/evidence.md) and [loop](../../contexts/loop.md).
 
 ## Slice 1: computed on demand, no new storage
 

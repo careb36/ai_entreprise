@@ -7,7 +7,7 @@ import { mainWindowNavigation, newWindowRequest, ssoWindowNavigation, type Decis
 // `npm run electron:dev` passes --dev and serves the renderer from Vite;
 // otherwise the built renderer is served by the local server
 // (local-server.ts), so the page and the API share one origin and the
-// session cookies are first-party (issue #524, docs/design/SESSIONS.md,
+// session cookies are first-party (issue #524, docs/archive/design/SESSIONS.md,
 // "Desktop app").
 const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development'
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || 'http://localhost:5173'

@@ -1,5 +1,5 @@
 """The pure evaluation of the SSO group mapping (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``, R5–R11, R17, G4, G9, G15): one case per
+``docs/archive/design/SSO_GROUP_MAPPING.md``, R5–R11, R17, G4, G9, G15): one case per
 claim state, Entra's overage marker with ``_claim_names``/``_claim_sources``
 and with ``hasgroups``, an empty list, a malformed or oversized claim, the
 cap, another company's team, an Owner-managed team, a stale token, an

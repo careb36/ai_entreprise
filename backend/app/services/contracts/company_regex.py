@@ -1,5 +1,5 @@
 """A company's regular expressions, on RE2 only (issue #700;
-``docs/design/COMPANY_STANDARDS.md`` §10 T5 and §12 decision 3).
+``docs/archive/design/COMPANY_STANDARDS.md`` §10 T5 and §12 decision 3).
 
 A ``forbid_pattern`` standard carries a pattern a company wrote in its
 repository, which agents also write to. Python's ``re`` backtracks, so a

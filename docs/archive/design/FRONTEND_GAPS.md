@@ -43,7 +43,7 @@ nice to have. "PR" names the pull request that closes the gap.
 | `DELETE /v1/run-secrets/{id}?company_id=` | Manager | Deleting a run secret | #733 |
 | `GET /v1/audit/chain?company_id=` | Viewer | The company's audit chain walked end to end: whether it verifies, where it breaks, its head (sequence and hash) to record elsewhere. The Evidence page only checks one interaction (`/v1/audit/verify`) | #735 |
 | `GET /v1/tasks/{id}/events` | Viewer | A task's event log in order, with its own hash chain's state and which record the board reads (`events` or `comments`) | #735 |
-| `GET /v1/audit/anchors/statement?company_id=` | Viewer | The statement of the chain's head to sign with the company's own key (customer-key anchor, `docs/design/AUDIT_ANCHORS.md`) | #735 |
+| `GET /v1/audit/anchors/statement?company_id=` | Viewer | The statement of the chain's head to sign with the company's own key (customer-key anchor, `docs/archive/design/AUDIT_ANCHORS.md`) | #735 |
 | `POST /v1/audit/anchors/signature?company_id=` | Viewer (verified against the keys an Owner registered) | Submitting the signature made outside the factory | #735 |
 | `GET /v1/audit/anchors/{id}/export?company_id=` | Viewer | Downloading an anchor's receipt to verify it outside the factory | #735 |
 | `GET/POST /v1/companies/{id}/security/wstg[/reviews]` | Viewer reads, Manager records | The project's OWASP WSTG plan, each test's status and a person's review of one test. The documentation pack shows the same rows read-only | #741 |

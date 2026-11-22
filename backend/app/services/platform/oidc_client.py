@@ -1,4 +1,4 @@
-"""The identity providers' HTTP adapter (single sign-on, ``docs/design/SSO.md``).
+"""The identity providers' HTTP adapter (single sign-on, ``docs/archive/design/SSO.md``).
 
 ``oidc`` decides what an answer means; this module only asks: ``GET`` a JSON
 document (discovery, JWKS) and ``POST`` a form (the token endpoint), and

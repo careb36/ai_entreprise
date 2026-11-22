@@ -1,4 +1,4 @@
-"""CORS with credentials (issue #524, ``docs/design/SESSIONS.md``, S6): the
+"""CORS with credentials (issue #524, ``docs/archive/design/SESSIONS.md``, S6): the
 session cookies cross origins only to the explicit origins in
 ``CORS_ORIGINS``, never to ``*``, since Starlette answers a wildcard with
 credentials by echoing whatever origin asks."""

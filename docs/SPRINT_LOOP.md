@@ -54,7 +54,7 @@ the LangGraph graph is only an optional kickoff conversation.
    for the task's modules and concepts, then the decisions in force and the
    glossary, within `WIKI_MAX_CHARS`, each statement with its citations and
    called a claim (`services/loop/worker/wiki_section.py`,
-   [design](design/PROJECT_WIKI.md)); only when no module or concept page
+   [design](archive/design/PROJECT_WIKI.md)); only when no module or concept page
    applies, the company's past decisions from vector memory (scoped by
    `company_id`), and
    **Lessons from Recent Sprints**: the retrospective counts and the review
@@ -66,7 +66,7 @@ the LangGraph graph is only an optional kickoff conversation.
    only, newest first, within `SPRINT_BOARD_MAX_CHARS`), each a claim with
    what the Verifier's records observed beside the files it names, and how
    to write a note (`services/loop/worker/sprint_notes.py`,
-   [design](design/SPRINT_BOARD.md)).
+   [design](archive/design/SPRINT_BOARD.md)).
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files (a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
@@ -233,7 +233,7 @@ the LangGraph graph is only an optional kickoff conversation.
      baseline. Outcomes and proposals are posted to the team as `proposal`
      messages. The numbers decide, never a model.
    - Then the **project wiki** (`services/loop/wiki_close.py`,
-     [design](design/PROJECT_WIKI.md)): the TechWriter (else the ScrumMaster)
+     [design](archive/design/PROJECT_WIKI.md)): the TechWriter (else the ScrumMaster)
      updates the pages the sprint's verified runs touched, at most
      `WIKI_COMPILE_MAX_PAGES`, from the runs and the files the daemon observed
      them write, the retrospective and the board's active notes, in the

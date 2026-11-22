@@ -1,5 +1,5 @@
 """A company's teams, managed by its Owners (issue #512, phase 5;
-``docs/design/TEAMS_AND_USAGE.md``).
+``docs/archive/design/TEAMS_AND_USAGE.md``).
 
 A team has a name, a description and a role scope (Viewer or Manager, never
 Owner) that applies to its members within the company; a member's effective
@@ -18,7 +18,7 @@ membership opens or closes a period of the membership history
 - ``DELETE /v1/companies/{id}/teams/{team_id}/members/{uid}``  remove them
 
 A team is Owner-managed (as above) or SSO-managed (issue #703;
-``docs/design/SSO_GROUP_MAPPING.md``): its members come from the
+``docs/archive/design/SSO_GROUP_MAPPING.md``): its members come from the
 identity provider's groups, so the member routes refuse to add to it and only
 end a manual exception (R18); switching it needs a preview and a confirmation
 (R19), and a mapped team's role is never raised (R16). The break-glass

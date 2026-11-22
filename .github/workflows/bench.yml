@@ -231,10 +231,8 @@ jobs:
           # A proxy already running on the runner, preferred when set.
           PROXY_URL: ${{ vars.BENCH_LLM_URL }}
           # The names the proxy reads (llm-proxy/app.py, docker-compose.yml).
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
-          NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
         run: |
           healthy() { curl -sf -m 5 "$1/health" | python3 -c 'import json, sys; sys.exit(json.load(sys.stdin).get("status") != "healthy")' 2>/dev/null; }
           if [ -n "$PROXY_URL" ]; then
@@ -246,7 +244,7 @@ jobs:
           # The keys the default roles need (docs/CONFIGURATION.md); the others
           # are optional. Names only, never values.
           missing=""
-          for name in GEMINI_API_KEY DEEPSEEK_API_KEY; do
+          for name in DEEPSEEK_API_KEY; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -256,7 +254,7 @@ jobs:
           docker build -q -t "llm-proxy-bench:$GITHUB_RUN_ID" llm-proxy >/dev/null
           # -e NAME passes the value from this step's environment, never on the command line.
           docker run -d --name "llm-proxy-bench-$GITHUB_RUN_ID" -p "127.0.0.1::5100" \
-            -e GEMINI_API_KEY -e DEEPSEEK_API_KEY -e QWEN_API_KEY -e NEBIUS_API_KEY \
+            -e DEEPSEEK_API_KEY -e QWEN_API_KEY \
             -e PROXY_PORT=5100 -e OTEL_SDK_DISABLED=true \
             "llm-proxy-bench:$GITHUB_RUN_ID" >/dev/null
           port="$(docker port "llm-proxy-bench-$GITHUB_RUN_ID" 5100/tcp | head -1 | sed 's/.*://')"

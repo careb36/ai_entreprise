@@ -8,8 +8,8 @@ This note designs **documentation packs**: per project, a versioned set of
 documents compiled from the records, with a model writing only the prose that
 has no structured source. Phase 1 (this note's scope) is built; the later
 phases are listed at the end. The modules are described in
-[planning](../contexts/planning.md) and the page in
-[frontend](../contexts/frontend.md).
+[planning](../../contexts/planning.md) and the page in
+[frontend](../../contexts/frontend.md).
 
 ## The evidence rule, applied to documents
 
@@ -487,7 +487,7 @@ element table each.
 
 **The code level** (`c4_code`, `collect_code`, issue #693) is a section of
 the document, not a fourth diagram. `collect_code` reads the stored code
-graph of the folder the task worker stores it for (`docs/design/CODE_GRAPH.md`,
+graph of the folder the task worker stores it for (`docs/archive/design/CODE_GRAPH.md`,
 slice 2) through the tools context's interface (`services/tools/code_level`),
 and never asks the daemon: the pack shows the graph as the daemon last
 reported it, with that time. The snapshot's `code_graph` keeps the two kinds
@@ -754,7 +754,7 @@ not built.
   enters the manifest's digest in the company's audit chain (action
   `documentation_pack_compiled`, attributed to the person who compiled it,
   details: pack, version, inputs digest, manifest digest, file count). That
-  chain is what external anchors (`docs/design/AUDIT_ANCHORS.md`: a TSA token,
+  chain is what external anchors (`docs/archive/design/AUDIT_ANCHORS.md`: a TSA token,
   a customer's key, a webhook) cover; a pack rewritten in the database
   afterwards gives a manifest whose digest no longer matches the chained one,
   and the download says so (`audit.matches`). With no key configured, the

@@ -16,7 +16,7 @@ Endpoints:
 - ``DELETE /v1/company/{id}/members/{user_id}`` — remove a member (Owner);
   ends that person's sessions.
 
-Browser sessions (issue #524): ``docs/design/SESSIONS.md``.
+Browser sessions (issue #524): ``docs/archive/design/SESSIONS.md``.
 
 Passwords are hashed with bcrypt directly (``app.passwords``) before storage.
 Sensitive-route enforcement is gated by AUTH_REQUIRED.
@@ -150,7 +150,7 @@ async def login(
         session.commit()
 
     # Checked after the password, so the answer says nothing about an
-    # account to someone who does not know it (docs/design/SSO.md, T14).
+    # account to someone who does not know it (docs/archive/design/SSO.md, T14).
     try:
         sso_flow.check_password_login(session, user)
     except SsoError as exc:
@@ -163,7 +163,7 @@ async def login(
         return session_cookies.start(response, session, user, "password")
     # A non-browser client: a short Bearer token, no family, no refresh. It
     # is issued only for a password, never from a session cookie, so a script
-    # in the page cannot mint a portable token (docs/design/SESSIONS.md, S1).
+    # in the page cannot mint a portable token (docs/archive/design/SESSIONS.md, S1).
     token = auth_tokens.create_access_token(
         user_id=user.id,
         email=user.email,
@@ -307,7 +307,7 @@ async def remove_member(
     """Remove a member from a company (Owner). The company's last Owner stays.
 
     The person's browser sessions end at once, in every company, since a
-    session is not company-scoped (``docs/design/SESSIONS.md``, S5).
+    session is not company-scoped (``docs/archive/design/SESSIONS.md``, S5).
     """
     require_company_role(session, caller, company_id, "Owner")
     member = session.exec(

@@ -1,4 +1,4 @@
-"""Browser sessions (issue #524, ``docs/design/SESSIONS.md``).
+"""Browser sessions (issue #524, ``docs/archive/design/SESSIONS.md``).
 
 - ``SessionFamily`` — one sign-in of one person in one browser: the method it
   started with (``password`` | ``sso``), the sha256 of its CSRF token, an

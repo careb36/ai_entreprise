@@ -1,4 +1,4 @@
-"""Browser sessions (issue #524; ``docs/design/SESSIONS.md``):
+"""Browser sessions (issue #524; ``docs/archive/design/SESSIONS.md``):
 ``session_families`` (one sign-in in one browser, its CSRF digest, absolute
 expiry and revocation) and ``refresh_tokens`` (each rotation's token, stored
 as sha256). New tables only; Bearer callers are untouched.

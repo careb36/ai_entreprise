@@ -1,5 +1,5 @@
 """SSO group mapping router — identity-provider groups to teams, decided by
-the company's Owners (issue #703; ``docs/design/SSO_GROUP_MAPPING.md``).
+the company's Owners (issue #703; ``docs/archive/design/SSO_GROUP_MAPPING.md``).
 
 A signed-in human Owner only; an API token is refused whatever its role, and
 the acting Owner is read from the session, never from the body (R15, G8, G19).

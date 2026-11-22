@@ -26,7 +26,7 @@
 # protected-paths workflow reads them from the base) is refused unless
 # LAND_OWNER=1. That variable is a GUARD AGAINST MISTAKES, NOT A SECURITY
 # BOUNDARY: anyone who can run this script can set it, or edit the script.
-# The boundary is who may push main to the remote (docs/design/LOCAL_LANDING.md).
+# The boundary is who may push main to the remote (docs/archive/design/LOCAL_LANDING.md).
 #
 # Environment:
 #   LAND_CHECK_CMD      the checks, a shell command run at the worktree's root

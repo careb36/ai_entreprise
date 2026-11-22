@@ -1,5 +1,5 @@
 """The stored code knowledge graph (issue #438, second slice;
-``docs/design/CODE_GRAPH.md``): ``code_graph_files`` (one row per company,
+``docs/archive/design/CODE_GRAPH.md``): ``code_graph_files`` (one row per company,
 project folder and file, with the sha256 the workspace daemon read from
 disk), ``code_graph_definitions`` and ``code_graph_references`` (what the
 daemon parsed in each file, replaced with it when its sha256 changes) and

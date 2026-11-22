@@ -1,4 +1,4 @@
-"""DNS verification of a company's SSO domains (issue #512; docs/design/SSO.md,
+"""DNS verification of a company's SSO domains (issue #512; docs/archive/design/SSO.md,
 T16–T22): every allowed domain gets a random token issued by the backend;
 the Owner publishes it as a TXT record at ``_la-fabrique-verify.<domain>``;
 a check, on request or at the re-check, records what DNS answered and when,

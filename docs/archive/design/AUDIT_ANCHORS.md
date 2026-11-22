@@ -187,7 +187,7 @@ accepts these.
 - **KMS in the customer's account**: the same Ed25519 (or ECDSA P-256)
   verification, with the customer's job calling their KMS `Sign`. Only the key
   type would change; ECDSA is a small addition to `parse_public_key`.
-- **Documentation pack extract** (`docs/design/PROJECT_DOCUMENTATION.md`,
+- **Documentation pack extract** (`docs/archive/design/PROJECT_DOCUMENTATION.md`,
   later phases): the audit-trail extract embeds `coverage` for the range it
   shows and lists every anchor with its export, so an auditor can verify it
   without access to the product.
