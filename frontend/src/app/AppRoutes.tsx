@@ -37,6 +37,7 @@ import Notifications from '../pages/Notifications'
 import ProjectSettings from '../pages/ProjectSettings'
 import AuditTrail from '../pages/AuditTrail'
 import ModelCatalog from '../pages/ModelCatalog'
+import Routines from '../pages/Routines'
 import SsoComplete from '../pages/SsoComplete'
 import GitHubIntegration from '../pages/GitHubIntegration'
 import HelpDesk from '../pages/HelpDesk'
@@ -104,6 +105,7 @@ export function AppRoutes() {
         <Route path="/company/duties" element={<CompanyDuties />} />
         <Route path="/company/security-tests" element={<SecurityTests />} />
         <Route path="/company/execution" element={<ExecutionSettings />} />
+        <Route path="/company/routines" element={<Routines />} />
         <Route path="/company/mcp" element={<McpServers />} />
         <Route path="/company/self-improvement" element={<SelfImprovement />} />
         <Route path="/company/usage" element={<Usage />} />
