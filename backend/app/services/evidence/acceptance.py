@@ -44,6 +44,7 @@ from sqlmodel import Session, select
 
 from services.contracts.manifest import parse_file_manifest
 from services.contracts.task_dependencies import depends_on_of
+from services.contracts.task_text import DESCRIPTION_MAX
 from services.contracts.verdicts import VERDICT_VERIFIED
 from services.evidence.criteria_tests import (
     ACCEPTANCE_KIND,
@@ -87,7 +88,7 @@ def test_task(requirement: dict[str, Any]) -> dict[str, Any]:
             "missing module fails that test rather than the whole file. The tests "
             "fail until the implementation task makes them pass; do not implement "
             "the feature here."
-        )[:500],
+        )[:DESCRIPTION_MAX],
         "priority": "high",
         "assignee": QA_ROLE,
         "covers": [c["id"] for c in criteria],
