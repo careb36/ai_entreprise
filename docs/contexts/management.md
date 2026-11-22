@@ -8,7 +8,7 @@ Reviewer and Support agents. Read this before changing
 - **Folder:** `backend/app/services/management/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md). Nothing imports it.
 - **Interface:** none.
-- **Modules:** `brief_mail`, `company_export`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `company_export`, `company_import`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `sod_report`, `support_agent`.
 
 ## How it works
 
@@ -126,6 +126,19 @@ listed in `redacted`; a URL's user and password are dropped. No members,
 emails or history. `manifest.sha256` is the backend's digest of the content,
 recorded in the `company_exported` audit row. From Paperclip's company
 portability export (MIT).
+
+### Importing a company
+
+`company_import.py`: `POST /v1/companies/import` (any signed-in person)
+creates a company from an export file, owned by the caller, with its agents,
+business units and routines. Each value passes the check of its own route;
+what fails is listed in `skipped`, never half applied. A file never sets the
+stack commands, research hosts, sandbox, console producers, protected paths,
+forge policy or integration review, and level 3 autonomy becomes 2: the
+Owner sets those on their own audited routes. Routines arrive turned off;
+provider connections are listed under `to_set_up`, not created. The
+backend's digest of the content and the file's claimed one are both in the
+`company_imported` audit row, with whether they match.
 
 ## See also
 

@@ -233,6 +233,7 @@
         "carry_over",
         "delivery_checks",
         "preconditions",
+        "routines",
         "run_review",
         "sod_requesters",
         "sprint_control"
@@ -965,6 +966,9 @@
         "models"
       ],
       "test_company_export.py": [
+        "management"
+      ],
+      "test_company_import.py": [
         "management"
       ],
       "test_company_limits.py": [
