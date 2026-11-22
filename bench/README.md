@@ -189,8 +189,9 @@ off until the owner turns it on.
   names the LLM proxy reads; a missing required key fails the job by name.
   Or set the variable `BENCH_LLM_URL` to a proxy already running on the
   runner.
-- **Budget.** The repository variable `BENCH_TOKEN_BUDGET` (300000 when
-  unset) caps reported tokens for the run. Past it, the running sprint is
+- **Budget.** The repository variable `BENCH_TOKEN_BUDGET` (5000000 when
+  unset: the six specs' DeepSeek arm used 2.79M on 2026-11-22, and a tight
+  cap cuts the run and wastes what it spent) caps reported tokens for the run. Past it, the running sprint is
   stopped, the rest are skipped (`skipped: budget`, never graded) and the
   card says `budget_exceeded`. It counts only reported usage, so keep a
   spending limit at the provider too. `BENCH_TIMEOUT` is 1200 s per sprint
