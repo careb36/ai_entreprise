@@ -9,7 +9,7 @@
 # If scripts are blocked on this machine, run:
 #   powershell -ExecutionPolicy Bypass -File .\scripts\start-daemon.ps1
 #
-# When the broker has one user per component (SECURITY.md, "Securing the
+# When the broker has one user per component (docs/OPERATIONS.md, "Securing the
 # bus"), give the daemon its credentials: $env:NATS_DAEMON_PASSWORD (user
 # "daemon"), $env:NATS_USER and $env:NATS_PASSWORD, -Creds <file> (or
 # $env:NATS_CREDS_FILE), or $env:NATS_NKEY_SEED; for TLS, $env:NATS_TLS = 'true'

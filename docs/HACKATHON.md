@@ -34,31 +34,13 @@ claim holds.
 | Model access | A single LLM proxy that enforces per-company token budgets and routes by model id |
 | Frontend | React 18 + TypeScript + Tailwind, over REST and Server-Sent Events |
 
-## Nebius × NVIDIA: where Nemotron enters
-
-Every model call goes through `llm-proxy/`, and the proxy routes NVIDIA open
-models to **Nebius Token Factory** over its OpenAI-compatible endpoint. The
-model catalogue is fetched live at startup and hourly, so new Nemotron releases
-appear without a code change:
-
-| Route | Setting | Example model |
-| --- | --- | --- |
-| strategic | `NEMOTRON_MODEL_STRATEGIC` | `nvidia/Nemotron-3-Ultra-550b-a55b` |
-| default | `NEMOTRON_MODEL` | `nvidia/nemotron-3-super-120b-a12b` |
-| fast | `NEMOTRON_MODEL_FAST` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` |
-
-Agent roles opt in with `NEMOTRON_ROLES`; unset, the DeepSeek defaults are
-untouched. `scripts/verify-nebius.sh` proves the three layers separately so a
-failure points at the broken one. See
-[Model Providers](../README.md#model-providers-nebius--nvidia-nemotron).
-
 ## The 5-minute demo (no API keys)
 
 The whole point of the product is that the three verdicts exist and are
 distinguishable — so the demo seeds one run per verdict and shows the screen
 that tells them apart. No model or collector key is needed.
 
-1. Start the stack and register a user (see [README](../README.md#installation)).
+1. Start the stack and register a user (see the [README quick start](../README.md#quick-start)).
 2. Seed the evidence layer:
 
    ```bash
@@ -70,8 +52,8 @@ that tells them apart. No model or collector key is needed.
    observations on the other.
 
 The seed is idempotent: each run carries a fixed `external_ref`, and a run that
-already has a verification is left alone. The screenshots in the
-[README](../README.md#screenshots) are this exact demo.
+already has a verification is left alone. The image in the
+[README](../README.md#what-it-is) is this exact demo.
 
 ## Evidence that it works
 
@@ -98,7 +80,7 @@ frontend, proxy, e2e, security and file-size jobs) on a self-hosted runner.
   verdict.
 - **The audit chain.** `POST /v1/audit` signs entries; `GET /v1/audit/chain`
   walks the chain and reports where it breaks.
-- **The Nebius/NVIDIA wiring.** `llm-proxy/` fetches the Token Factory catalogue
-  live and routes Nemotron ids; nothing about Nebius is hardcoded.
+- **The LLM proxy.** `llm-proxy/` enforces per-company token budgets and routes
+  every model call by model id.
 - **The governance story.** A blocked task is triaged by the ScrumMaster in a
   fixed, parsable format, and the Review page shows a person what needs them.

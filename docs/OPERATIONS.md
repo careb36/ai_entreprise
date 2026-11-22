@@ -1,254 +1,122 @@
 # Operations runbook
 
-How to run La Fabrique from this repository: deploy, upgrade, keys, health,
-the usual incidents, backups, retention and how many workers may run (issue
-#328). The page follows the shape of OpenHands' self-hosted deployment docs:
-one section per concern, commands first. Where the workspace daemon runs,
-on the person's computer or on a server, is the operator's choice, the way
-Factory leaves local or cloud execution of its Droids to the operator.
+How to run La Fabrique from this repository, commands first. Every variable
+is in [`CONFIGURATION.md`](CONFIGURATION.md).
 
 ## Deploy
 
-1. Copy `.env.example` to `.env` and set at least `POSTGRES_PASSWORD`,
-   `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and the model
-   keys, or plan a provider connection per company. The default team
-   (`ROLE_MODEL_MAP` in `backend/app/services/models/model_factory.py`) runs
-   on DeepSeek alone: DeepSeek Pro (`deepseek-v4-pro`) for the PO, Architect,
-   SecOps and the Reviewer agent, DeepSeek Flash (`deepseek-flash`) for every
-   other role and agent, so it needs only `DEEPSEEK_API_KEY`. `AGENT_MODEL`
-   set to another provider's model needs that provider's key instead.
-   Optional: `QWEN_API_KEY` (no default role uses it), `GEMINI_API_KEY` (no
-   default role uses it; Gemini model ids, and the proxy's embeddings only
-   with `EMBEDDING_PROVIDER=gemini`: by default memory is embedded by a local
-   model in the proxy) and `NEBIUS_API_KEY` (only for
-   `NEMOTRON_ROLES` or `nvidia/…` ids). The keys go to the LLM proxy only.
-   DeepSeek's API processes requests in China: before personal or client
-   data goes through it, see `DEEPSEEK_API_KEY` in `docs/CONFIGURATION.md`
-   (GDPR arts. 44–49 and 35, and serving the open weights yourself through a
-   provider connection). `docs/CONFIGURATION.md` lists every variable.
-2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
-   the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
-   on by default: the backend does not wait for it and connects once it
-   answers; the Neo4j section below says how to run without it.
+1. Copy `.env.example` to `.env`. Set at least `POSTGRES_PASSWORD`,
+   `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and
+   `DEEPSEEK_API_KEY` (the default team runs on DeepSeek alone;
+   `QWEN_API_KEY` is optional). DeepSeek processes requests in China: read
+   `DEEPSEEK_API_KEY` in `CONFIGURATION.md` before personal or client data
+   goes through it.
+2. `docker compose up -d` starts Postgres, NATS, the LLM proxy, the backend,
+   the frontend, the janitor and [Neo4j](#neo4j).
 3. Start the workspace daemon on the computer that holds the projects:
-   `./scripts/start-daemon.sh` (or `.ps1` on Windows). That is the local
-   choice. The daemon may instead run on a server that holds the checkouts
-   (`docker compose --profile docker-daemon up`, Linux, `PROJECTS_ROOT`
-   mounted). Agent-written code then runs on that server, so set
-   `DELIVERY_SANDBOX=container` and `FABRIQUE_SANDBOX_REQUIRED=container`
-   there. Keep `NATS_BIND=127.0.0.1` unless the daemon is on another
-   machine: anyone who reaches NATS can ask the daemon to run commands.
-4. Check `GET /health` (below), check the model keys (next section),
-   register the first user in the frontend and create a company.
+   `./scripts/start-daemon.sh` (`.ps1` on Windows). On a server instead
+   (`docker compose --profile docker-daemon up`), also set
+   `DELIVERY_SANDBOX=container` and `FABRIQUE_SANDBOX_REQUIRED=container`.
+   Keep `NATS_BIND=127.0.0.1` unless the daemon is on another machine
+   ([Securing the bus](#securing-the-bus)).
+4. Check `GET /health` and the model keys (below). Register the first user
+   and create a company.
+
+Also:
+
+- Serve the frontend and API over https on one site (sessions use
+  `Secure; SameSite=Strict` cookies). List the frontend's origins in
+  `CORS_ORIGINS`, never `*`.
+- The backend container runs `alembic upgrade head` on start. By hand, run
+  it yourself or set `DB_AUTO_UPGRADE=true`.
+- Set `API_DOCS_ENABLED=false` on a stack that faces users.
 
 ### Check the model keys
 
-DeepSeek is the only provider a sprint needs (issue #751): with
-`DEEPSEEK_API_KEY` alone, a request DeepSeek fails with 429 or 5xx moves to
-its other model (Pro and Flash) and never to another provider unless
-`LLM_FALLBACK_PROVIDERS` names one, and memory embeds locally (a semantic
-model in the proxy image, issue #755). When DeepSeek
-itself is out of credit, the sprint pauses on the 402 (`sprint_control`) and
-says so; top up and resume.
-
-The proxy records what each provider answered, but a key check is not
-always a credit check:
-
-- At startup the proxy asks each provider whether its key works
-  (`llm-proxy/provider_keys.py`) and logs one line per provider:
-  `provider <name>: ok (HTTP 200, checked …)`, or `no_credit` (402, or the
-  provider's quota or billing error), `invalid_key` (401/403), `rate_limited`,
-  `unreachable` (timeout or 5xx), `unexpected`, or `not_configured` for a key
-  that is empty or still the `.env.example` placeholder, which is never sent.
-  The proxy starts whatever the outcome, and logs an error when no provider
-  answered.
-- `curl -s localhost:5100/v1/providers | jq` lists each provider's `status`,
-  `observed_at`, `http_status`, `source` and `checked`. `checked: key`
-  (Gemini and Nebius, a model listing) proves the key, not the credit;
-  `key_and_credit` (DeepSeek, Qwen, or any request the proxy served) proves
-  both. After topping up an account,
-  `curl -s 'localhost:5100/v1/providers?refresh=1'` checks again (at most once
-  every 30 s). A request refused for lack of credit or for its key updates the
-  entry as it happens, and a served request records `ok`.
-- The proxy's `GET /health` carries the same `providers` block; its
-  `"database": "connected"` is still a fixed string. The backend's
-  `/health/deep` shows the block under `llm_proxy` without changing its
-  overall status.
-- `GET /v1/models` lists the ids the chat endpoint routes. A provider other
-  than Gemini is listed only when its key is set and its catalogue was
-  fetched (at startup, then hourly), so a missing provider here means a
-  missing or refused key, or a fetch that failed (the proxy logs
-  `<provider> model refresh failed`).
-
-To know that a role's model answers, send one 1-token request through the
-proxy and compare what it served with what was asked:
-
 ```bash
+curl -s localhost:5100/v1/providers | jq              # status per provider
+curl -s 'localhost:5100/v1/providers?refresh=1' | jq  # check again after a top-up
 curl -s localhost:5100/v1/models | jq -r '.models[] | "\(.provider) \(.id)"'
 curl -s localhost:5100/v1/chat/completions -H 'Content-Type: application/json' \
-  -d '{"model": "<a role model id from the list>", "max_tokens": 1,
+  -d '{"model": "<a role model id>", "max_tokens": 1,
        "messages": [{"role": "user", "content": "ping"}]}' \
   | jq '{requested_model, served_model, provider, fallback_from, error, status, message}'
 ```
 
-The key works when `provider` is the provider you meant, `served_model` is
-the model you asked for (`requested_model`) and there is no `fallback_from`. A 429, a 5xx or a refusal for lack of credit (a 402, or a
-message about balance or quota, `llm-proxy/upstream.py`) makes the proxy try
-one model of each other provider: the answer then has another
-`served_model` and `provider`, and `fallback_from` holds the failed call's
-`provider`, `model`, `status` and `message`. With no fallback left the proxy
-answers 429 or 502 with `"error": "upstream_error"` and the same fields. Do
-it once per model the team uses (`deepseek-v4-pro` and `deepseek-flash` for
-the default team).
-
-The browser's session lives in `HttpOnly; Secure; SameSite=Strict` cookies
-(issue #524): serve the frontend and the API over https (a browser accepts
-`Secure` cookies from `http://localhost` too), and list the frontend's
-origins in `CORS_ORIGINS` (never `*`). When the frontend and the API are on
-different hosts, the page cannot read the API's CSRF cookie and asks
-`GET /v1/auth/csrf` for it; keep both under one site (the same registrable
-domain) or `SameSite=Strict` cookies are not sent at all.
-
-The packaged desktop app (`npm run electron:build` in `frontend/`) needs none
-of that: it serves its page and forwards `/v1/*` from its own
-`http://127.0.0.1:<port>`, so set only `BACKEND_URL` on the computer that runs
-it (default `http://localhost:8000`; https for a backend on another machine,
-since the app refuses plain http beyond localhost; `docs/CONFIGURATION.md`,
-The desktop app).
-Leave `SESSION_COOKIE_SECURE` on and `CORS_ORIGINS` and `SSO_FRONTEND_URL` as
-they are for the web frontend. If sign-in in the desktop app does not hold,
-check that `BACKEND_URL` reaches the backend and that nothing else rewrote the
-cookies (`docs/design/SESSIONS.md`, Desktop app).
-
-The backend container runs `alembic upgrade head` before it starts. When you
-run the backend by hand, run the migrations yourself (`cd backend && alembic
-upgrade head`) or set `DB_AUTO_UPGRADE=true`. The backend refuses to start on
-a database behind head and names both versions.
-
-The interactive API documentation (`/docs`, `/redoc`, `/openapi.json`) is off
-unless `API_DOCS_ENABLED=true`. `docker-compose.yml` turns it on for local
-development; set `API_DOCS_ENABLED=false` in `.env` on a stack that faces
-users (WSTG-v42-CONF-05).
+- A key works when `served_model` equals `requested_model` and there is no
+  `fallback_from`. Try each model the team uses (`deepseek-v4-pro`,
+  `deepseek-flash`).
+- `/v1/providers` status: `ok`, `no_credit`, `invalid_key`, `rate_limited`,
+  `unreachable`, `unexpected` or `not_configured`. The proxy logs the same at
+  startup.
+- A 429 or 5xx from one DeepSeek model moves to the other. No other provider
+  is tried unless `LLM_FALLBACK_PROVIDERS` names one.
 
 ### Behind a reverse proxy
 
-Every per-address limit (`LOGIN_RATE_LIMIT`, `REGISTER_RATE_LIMIT`,
-`REFRESH_RATE_LIMIT`, `SSO_RATE_LIMIT`, `RATE_LIMIT_DEFAULT`) keys on the
-address the request comes from. Behind nginx or Traefik that is the proxy,
-for every client, so ten failed sign-ins anywhere lock everyone out for a
-minute. List the proxy in `TRUSTED_PROXY_IPS` and the backend takes the
-client from `X-Forwarded-For` instead, only for connections from that proxy:
-the right-most address in the header that is not itself a listed proxy. Any
-other caller's `X-Forwarded-For` is ignored, so a client cannot choose its
-own bucket.
+Rate limits key on the client address, which behind a proxy is the proxy.
 
-1. Find the address the backend sees the proxy connect from: on the compose
-   network, `docker network inspect <project>_default` (the proxy
-   container's `IPv4Address`), or the subnet of that network to cover a
-   proxy that is recreated with a new address (`172.18.0.0/16`). Never list
-   `0.0.0.0/0` or a network the internet reaches the backend from.
-2. Make the proxy append, not pass through, the header:
-   - nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`
-     (nginx appends `$remote_addr`). In front of another proxy, also set
-     `set_real_ip_from` there, or list both in `TRUSTED_PROXY_IPS`.
-   - Traefik: the entry point's `forwardedHeaders.trustedIPs` lists only the
-     hops in front of Traefik (a load balancer), or nothing when clients
-     connect to it directly; Traefik then appends the client address.
-3. Set `TRUSTED_PROXY_IPS=<the address or network>` in `.env` and
-   `docker compose up -d backend`. A malformed entry stops the backend at
-   startup with a message naming it.
-4. Check: from two machines, ten wrong passwords from one get `429`; the
-   other still signs in.
+1. Find the proxy's address or subnet:
+   `docker network inspect <project>_default`. Never list `0.0.0.0/0`.
+2. Make the proxy append the header. nginx:
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+   Traefik: `forwardedHeaders.trustedIPs` lists only the hops in front of it.
+3. Set `TRUSTED_PROXY_IPS=<address or subnet>`, then
+   `docker compose up -d backend`.
+4. Check: ten wrong passwords from one machine get `429`; another still
+   signs in.
 
-The image runs uvicorn with `--no-proxy-headers`, so its own header handling
-(which trusts `127.0.0.1` by default) does not run beside this one. When you
-run uvicorn by hand behind a proxy, pass `--no-proxy-headers` too.
+Running uvicorn by hand, pass `--no-proxy-headers`.
 
 ### The email migration stops on duplicates
 
-Migration `0045` lower-cases and strips every stored email address and adds a
-unique index on `lower(email)`, so `Ana@x` and `ana@x` are one account. If two
-existing accounts would become the same address, it changes nothing and
-stops, and `alembic upgrade head` (the backend container's entrypoint) fails
-with:
+Migration `0045` fails with `migration 0045 stopped: … (ana@example.com:
+user ids 12, 31)` when two accounts differ only by case. Nothing changed.
 
-```
-migration 0045 stopped: these accounts share an email address once it is
-lower-cased and stripped (ana@example.com: user ids 12, 31). Nothing was
-changed. ...
-```
-
-It never merges or deletes an account: an operator decides. For each address
-listed, look at the accounts (`SELECT id, email, full_name FROM users WHERE
-id IN (12, 31)` and their `company_members` rows), keep one, and either give
-the others a different address (`UPDATE users SET email = 'ana+old@example.com'
-WHERE id = 31`) or move their memberships to the kept account and delete them.
-Back up first (`scripts/backup.sh`), then run `alembic upgrade head` again.
+1. Back up: `scripts/backup.sh`.
+2. Inspect: `SELECT id, email, full_name FROM users WHERE id IN (12, 31)`
+   and their `company_members` rows.
+3. Keep one. Rename the others
+   (`UPDATE users SET email = 'ana+old@example.com' WHERE id = 31`), or move
+   their memberships and delete them.
+4. `alembic upgrade head`.
 
 ### The SSO identity migration stops on duplicates
 
-Migration `0050` adds a unique index on `sso_identities (user_id, issuer)`:
-one single sign-on identity per account and provider (`docs/design/SSO.md`,
-T33). The application has always refused a second one, so this should find
-nothing; if an account already holds two at one provider (a past race), it
-changes nothing and stops with:
+Migration `0050` fails with `migration 0050 stopped: … (user 7 at
+https://idp.example.com: identity ids 3, 9)` when an account has two
+identities at one provider. Nothing changed.
 
-```
-migration 0050 stopped: these accounts hold more than one SSO identity at the
-same provider (user 7 at https://idp.example.com: identity ids 3, 9). Nothing
-was changed. ...
-```
-
-It never deletes an identity: an operator decides. Look at them (`SELECT id,
-subject, email, created_at, last_login_at FROM sso_identities WHERE id IN
-(3, 9)`), keep the one the person signs in with (usually the most recent
-`last_login_at`) and delete the others (`DELETE FROM sso_identities WHERE id =
-9`); the person can link again from their Account page if the wrong one was
-kept. Back up first (`scripts/backup.sh`), then run `alembic upgrade head`
-again.
+1. Back up: `scripts/backup.sh`.
+2. Inspect: `SELECT id, subject, email, created_at, last_login_at FROM
+   sso_identities WHERE id IN (3, 9)`.
+3. Keep the most recent `last_login_at`; delete the rest
+   (`DELETE FROM sso_identities WHERE id = 9`).
+4. `alembic upgrade head`.
 
 ## Upgrade
 
-1. Back up with `scripts/backup.sh` (below). The baseline migration is
-   irreversible on purpose, so rolling back means restoring that backup.
-2. Stop the backend replicas and the janitor (`docker compose stop backend
-   janitor`). Work in flight returns to `todo` on the next review cycle;
-   assignments wait in JetStream.
-3. `git pull`, then `docker compose build backend janitor llm-proxy frontend`.
-4. `docker compose up -d`. The backend's entrypoint migrates to head. With
-   several replicas, start one first and the others once it is up: Alembic
-   takes no lock of its own.
-5. Check `GET /health/deep` and the Glassroom of a running sprint, and the
-   backend's startup log for a setting that no longer does anything
-   (`is set but no longer does anything`); remove it from `.env`.
+1. `scripts/backup.sh`. Migrations do not roll back; the backup is the
+   rollback.
+2. `docker compose stop backend janitor`.
+3. `git pull && docker compose build backend janitor llm-proxy frontend`.
+4. `docker compose up -d`. With several replicas, start one first: Alembic
+   takes no lock.
+5. Check `GET /health/deep`, a running sprint, and the startup log for
+   `is set but no longer does anything` (remove those settings).
 
-To roll back: stop everything, run `scripts/backup.sh restore <file> --yes`
-(it replaces the whole database, below), check out the previous release,
-then build and start it.
+Roll back: stop everything, `scripts/backup.sh restore <file> --yes`, check
+out the previous release, build and start.
 
 ## Releasing
 
-A release is a `vX.Y.Z` tag on `main`, following
-[Semantic Versioning](https://semver.org/) (issue #512). A tag is the only
-thing that publishes: a merge to `main` publishes nothing. The process is
-taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
-`NOTICE`), on `main` instead of a `develop` branch.
+A release is a `vX.Y.Z` tag on `main`. Only a tag publishes.
 
-1. **Changelog pull request.** On a branch cut from `main`, run
-   `python3 scripts/release_notes.py release X.Y.Z` (or `cut X.Y.Z`): it
-   first collects the changelog fragments, folding every
-   `changelog.d/<issue>-<slug>.md` into `[Unreleased]` under its section and
-   deleting it (issue #731, `changelog.d/README.md`), then moves everything
-   under `[Unreleased]` in `CHANGELOG.md` into a dated `## [X.Y.Z] -
-   YYYY-MM-DD` section. It refuses, changing no file, while a fragment is bad
-   (the reason names the file) or the version already has a section. Commit
-   the deleted fragments with `CHANGELOG.md`. Update the link references at
-   the end of the file by hand, read the section as a user would (it is the
-   release announcement), and open the pull request as
-   `chore(release): X.Y.Z`. `python3 scripts/release_notes.py collect` folds
-   the fragments alone, without cutting.
-2. **Merge it** once its head is green.
-3. **Tag the merge commit on `main`** and push the tag, as a person:
+1. On a branch from `main`: `python3 scripts/release_notes.py release X.Y.Z`.
+   It folds `changelog.d/` into `CHANGELOG.md` under a dated `[X.Y.Z]`.
+   Commit with the deleted fragments, fix the link references by hand, read
+   the section, and land it as `chore(release): X.Y.Z`.
+2. Tag as a person (a tag pushed by `GITHUB_TOKEN` starts no workflow):
 
    ```bash
    git fetch origin main
@@ -256,68 +124,17 @@ taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
    git push origin vX.Y.Z
    ```
 
-   A tag created with a workflow's `GITHUB_TOKEN` starts no other workflow,
-   so nothing would be published.
-4. **Check both runs** (`Release`, `Publish Images`) and the GitHub Release.
+3. Check the `Release` and `Publish Images` runs and the GitHub Release.
 
-`python3 scripts/release_notes.py notes vX.Y.Z` prints the notes exactly as
-the release will show them, and `python3 scripts/release_notes.py unreleased`
-prints `[Unreleased]` with the fragments not yet collected folded in.
+`release_notes.py notes vX.Y.Z` previews the notes. Pre-releases
+(`vX.Y.Z-rc.N`) are tagged straight from `main` and never move `latest`.
 
-**Pre-releases** (`vX.Y.Z-rc.N`) are for trying a release on a staging
-deployment first. Tag them straight from `main`, without a changelog pull
-request: they get no section of their own, and their GitHub Release, marked
-pre-release, shows `[Unreleased]` as of the tagged commit, with that commit's
-uncollected fragments folded in (`notes` reads them). They never move
-`latest`.
+The tag runs `release.yml` (GitHub Release, component SBOMs, `SHA256SUMS`)
+and `images.yml` (six images to `ghcr.io/<owner>/<repo>/<service>:X.Y.Z`,
+`linux/amd64`, each signed with keyless cosign and with an SBOM attestation).
+A new GHCR package is private until you change it.
 
-What pushing the tag runs:
-
-- **`release.yml`** checks that the tag is `vX.Y.Z` or `vX.Y.Z-pre` and that
-  its commit is on `main`, then creates the GitHub Release (`gh release
-  create`): the notes are the `[X.Y.Z]` section of `CHANGELOG.md` (or
-  `[Unreleased]` for a pre-release), the list of images, and the pull
-  requests merged since the previous tag. A tag off `main`, a missing or
-  empty section fails the run with the reason.
-- **`images.yml`** makes the same checks and publishes the five images
-  `docker-build.yml` builds (`backend`, `janitor`, `frontend`, `llm-proxy`,
-  `vscode-daemon`) to `ghcr.io/<owner>/<repo>/<service>:X.Y.Z`, plus
-  `:latest` for a stable release. Those five are built for `linux/amd64`
-  only, on the self-hosted runner with plain `docker build`. A sixth image,
-  `browser-sandbox` (`vscode-daemon/images/browser`, issue #529), is
-  published from the same tag by a job of its own, outside that list:
-  `linux/amd64` only with buildx, the same `:X.Y.Z` (plus `:latest` for a
-  stable release), the same SBOM and the same keyless signature as the rest.
-  Its arm64 variant builds under QEMU, but its browser aborts under emulation
-  (`.github/workflows/browser-image-probe.yml`, manual `workflow_dispatch`),
-  so it is not published until it has been run, with its probe, on arm64
-  hardware. A new package on GHCR is
-  private until its visibility is changed in the package's settings.
-
-Each release also records what it is made of and who built it (issue #522,
-part C):
-
-- **SBOMs of the components.** `release.yml` writes a CycloneDX SBOM of each
-  component's lock with [syft](https://github.com/anchore/syft) (Apache-2.0;
-  the release binary is pinned and checked against its sha256 in the
-  workflow): `backend/poetry.lock`, `llm-proxy/poetry.lock`,
-  `vscode-daemon/requirements.txt` and `frontend/package-lock.json` (without
-  its devDependencies). They are attached to the GitHub Release as
-  `la-fabrique-<component>-X.Y.Z.cdx.json` with a `SHA256SUMS`.
-- **SBOMs of the images.** `images.yml` scans each image it pushed (the base
-  image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
-  artifact `sbom-<image>` for 90 days and attached to the image in the
-  registry as a signed CycloneDX attestation. `browser-sandbox` is scanned by
-  its digest in the registry (buildx pushes it without loading it into the
-  Docker daemon).
-- **Signatures.** `images.yml` signs each image by its digest with keyless
-  [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
-  (`id-token: write`, on the two publish jobs only) gets a short-lived
-  certificate from Fulcio naming this workflow and the tag, and the signature
-  is logged in the public Rekor transparency log. No signing key exists to
-  store, rotate or leak.
-
-Verify an image before deploying it (cosign 2.x or 3.x):
+Verify an image before deploying it, by digest when you can:
 
 ```bash
 image=ghcr.io/<owner>/<repo>/backend:X.Y.Z
@@ -328,445 +145,174 @@ cosign verify-attestation "$image" --type cyclonedx \
   --certificate-identity-regexp '^https://github\.com/<owner>/<repo>/\.github/workflows/images\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   | jq -r '.payload' | base64 -d | jq '.predicate.metadata.component'
-```
 
-Prefer the digest the run printed in its summary (`...@sha256:...`) to the
-tag: a tag can be pushed again, a digest cannot. A failed verification means
-the image was not built by this repository's `images.yml` from a `v*` tag;
-do not deploy it. Verifying in the cluster at admission (Sigstore's
-policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
-steps run on the self-hosted runner and have not been exercised by a release
-yet; the first tag after this change is their first run
-(`docs/design/SELF_HOSTED_RUNNER.md` records the runner's risks).
-
-The browser sandbox is pinned the same way: the publish run's summary prints
-the line to paste into the backend's environment,
-`DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
-(`docs/CONFIGURATION.md`), so the application check runs its browser e2e
-commands in the published linux/amd64 image, by digest, never by
-`:latest`. The verification commands above apply to it unchanged (same
-workflow, same certificate identity). No release has published it yet, so no
-digest is recorded here; the first `v*` tag after #529 prints it. An arm64
-host builds the image locally from the same Dockerfile (both downloads are
-pinned by sha256, re-checked in #529 against the origin's own object hash)
-and sets `DELIVERY_BROWSER_IMAGE` to the local image ID (`sha256:…`), until
-an arm64 variant has been run with its probe on arm64 hardware.
-
-Since #315 the browser sandbox is built once per Playwright release listed
-in `vscode-daemon/images/browser/playwright_versions.json`, each tagged
-`X.Y.Z-playwright-<release>` and signed and attested by its own digest; the
-default release also keeps `X.Y.Z` (and `latest`). Each release's summary
-prints its `<release>=…@sha256:…` entry for `DELIVERY_BROWSER_IMAGES`, and its
-`sbom-browser-sandbox-playwright-<release>` artifact keeps the SBOM and a
-`.digest.json` record of the image, digest, tag and commit. Paste the
-entries, never a tag: the backend refuses an entry without a digest. Each
-image is verified with the commands above, by its own digest.
-
-Check a release's component SBOMs against their checksums:
-
-```bash
 gh release download vX.Y.Z --pattern '*.cdx.json' --pattern SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-Every pull request adds its line under `[Unreleased]` in the same pull
-request (`CONTRIBUTING.md`), so cutting a release is a move, not a search
-through the history. Migrations do not roll back: a release that ran a
-migration the previous code cannot read cannot be rolled back past without
-the backup (Upgrade, above).
+If verification fails, do not deploy the image.
+
+For the browser sandbox, paste the `DELIVERY_BROWSER_IMAGE` and
+`DELIVERY_BROWSER_IMAGES` digests the run's summary prints, never tags.
 
 ## Single sign-on
 
-A company's Owner connects its identity provider on the **Single sign-on**
-page (`/company/sso`); the design and threat model are in
-`docs/design/SSO.md`, the settings in `docs/CONFIGURATION.md`. The operator's
-part first:
+An Owner connects the identity provider at `/company/sso`
+([`design/SSO.md`](design/SSO.md)). The operator:
 
-1. Set `SSO_CALLBACK_URL` to the address the browser reaches the backend's
-   `/v1/auth/sso/callback` at (behind a proxy, the public `https://` one) and
-   `SSO_FRONTEND_URL` to the frontend's address. Set `FERNET_SECRET_KEY`, or
-   client secrets are stored with a `plaintext:` prefix.
-2. Put at least one Owner per company that will require SSO in
-   `SSO_BREAK_GLASS_EMAILS` before anyone turns the requirement on (below).
+1. Sets `SSO_CALLBACK_URL` (public URL of `/v1/auth/sso/callback`),
+   `SSO_FRONTEND_URL` and `FERNET_SECRET_KEY`.
+2. Lists at least one Owner per company in `SSO_BREAK_GLASS_EMAILS` before
+   anyone turns on **Require SSO**.
 
-Then, at the provider, register a web application with the redirect URI the
-SSO page shows, and on the page:
+| Provider | Setup |
+|---|---|
+| Google Workspace | OAuth client ID, type *Web application*; *Google* preset. |
+| Microsoft Entra ID | Single-tenant app, *Web* redirect URI, client secret, optional `email` claim; preset with the tenant GUID. |
+| Other OIDC | *Generic* preset, https issuer; PKCE (S256) and asymmetric ID-token signatures. Private issuer: `SSO_ALLOW_PRIVATE_ISSUERS=true`. |
 
-- **Google** (Google Workspace): Google Cloud console, APIs & Services,
-  Credentials, *OAuth client ID* of type *Web application*; add the redirect
-  URI. Choose the *Google* preset, paste the client ID and secret, and list
-  the Workspace domains (a `gmail.com` address is never accepted as a
-  company domain).
-- **Microsoft Entra ID**: Entra admin center, App registrations, *New
-  registration*, single tenant, a *Web* redirect URI; create a client secret
-  under *Certificates & secrets*; under *Token configuration* add the
-  optional `email` claim to the ID token (Entra sends no `email` otherwise,
-  and sends no `email_verified`; the tenant-pinned issuer is what vouches for
-  the address). Choose the *Microsoft Entra ID* preset and enter the
-  *Directory (tenant) ID*, a GUID: multi-tenant issuers (`common`,
-  `organizations`) are refused.
-- **Any other OpenID Connect provider** (Okta, Keycloak, Auth0, …): the
-  *Generic* preset with the issuer URL (the one whose
-  `/.well-known/openid-configuration` answers, https). A provider on a
-  private network needs `SSO_ALLOW_PRIVATE_ISSUERS=true`. The provider must
-  support the Authorization Code flow with PKCE (S256) and sign ID tokens
-  with an asymmetric algorithm (RS256, PS256, ES256, …).
+Then **Test connection**, enable, and sign in once as an Owner. Only then
+can Require SSO be turned on.
 
-Press **Test connection**: it fetches discovery and the signing keys and shows
-what the provider answered. Turn the connection on, then sign in once through
-it yourself (log out, *Sign in with SSO*, type the company's SSO name or your
-work email): only after an Owner has done that can **Require SSO** be turned
-on. With auto-join off, only existing members (invited by email) get in; with
-it on, anyone the provider authenticates in an allowed domain who has no
-account yet joins with the default role, never Owner. An existing account is
-linked only when it is a member of this company and of no other; it then
-becomes SSO-only (its password is cleared) unless it is an Owner. Someone who
-already has an account and is not a member is told to ask an Owner for an
-invitation; someone who belongs to other companies too keeps signing in with
-their password.
-
-**Verify each allowed domain.** SSO creates or links accounts only in a
-domain the company has proved it holds. After saving, the page lists each
-domain with a TXT record to publish at your DNS host:
+Verify each allowed domain: publish the TXT record the page shows, press
+**Check**, and leave the record in place (a daily re-check unverifies it if
+gone). The backend needs outbound DNS.
 
 ```
 _la-fabrique-verify.acme.com.  TXT  "la-fabrique-domain-verification=<token>"
 ```
 
-then press **Check** (or wait for the daily re-check,
-`SSO_DOMAIN_RECHECK_HOURS`). Each check is recorded with what DNS answered.
-Leave the record in place: a re-check that finds it gone unverifies the
-domain, and new people can no longer join through it (members already linked
-keep signing in). A domain another company has verified cannot be listed;
-if your company now holds a domain someone else verified, publish your record
-and check: their claim is looked up again first and released if their record
-is gone. Domains listed before the upgrade to migration `0049` keep working
-unverified for `SSO_LEGACY_DOMAIN_GRACE_DAYS` (30) while
-`SSO_LEGACY_DOMAIN_GRACE` is on; verify them in that time. The backend asks
-the system's resolver unless `SSO_DNS_NAMESERVERS` names others, and needs
-outbound DNS (UDP and TCP port 53) to them.
-
-Every sign-in writes an `sso_sign_in` audit row with what the provider asserted
-and the outcome (`created`, `linked`, `signed_in` or `refused:<reason>`), and
-every change an `sso_connection_*` row. Turning **Require SSO** on (with the
-connection enabled) ends the browser sessions its members started with a
-password, except a break-glass Owner's; the audit row counts them
-(`sessions_ended`). Removing a member (`DELETE /v1/company/{id}/members/{user_id}`)
-ends all of that person's sessions. Removing someone only at the provider
-ends nothing: their session lasts until it is refreshed past
-`REFRESH_TOKEN_ABSOLUTE_DAYS` or they are removed here (issue #524,
-`docs/design/SESSIONS.md`).
-
 ### Groups mapped to teams
 
-On the SSO page an Owner can map the provider's groups to **SSO-managed**
-teams (issue #703, `docs/design/SSO_GROUP_MAPPING.md`). Each SSO sign-in then
-sets the person's membership in the mapped teams from the ID token's claim:
-an `sso_group_observations` row records what was seen (only the values that
-match a pair, their count and a hash), and an `sso_group_sync` audit row
-records every change. The mapping never reaches Owner; a pair to a Manager
-team needs the cap raised to Manager and a second Owner's approval.
-
-- **Nothing changes at sign-in.** Check the last observation's `state`:
-  `absent` (the provider sends no such claim: check the claim name and the
-  application's token configuration), `malformed` (not a list of strings, or
-  more than 1000 values), `overage` (below), or `skipped` reasons such as
-  `stale_token`, `excluded`, `role_above_cap`.
-- **Entra overage.** Past 200 groups Entra leaves `groups` out of the token
-  and names a Graph endpoint instead (`_claim_names`, `_claim_sources`). La
-  Fabrique never calls it, and changes nothing for that sign-in; the page
-  shows the last sign-in that hit it. Fix it in Entra: use **app roles** and
-  the `roles` claim (the recommended setting, which has no overage), or set
-  the application's group claim to **groups assigned to the application**.
-  Google's ID token carries no groups at all; its mapping waits for the
-  Directory sync (#716).
-- **Take someone out now.** The member routes refuse to remove a person the
-  provider placed in an SSO-managed team. Use the break-glass exclusion on
-  the team page (a reason is required); every other Owner is notified and it
-  is listed in each access review until an Owner lifts it.
-- **Revoked at the provider.** The mapping acts only at sign-in: a person
-  removed from a group keeps the team until they sign in again by SSO, an
-  Owner excludes them, removes the pair or removes them from the company.
+Mapped teams change only at SSO sign-in
+([`design/SSO_GROUP_MAPPING.md`](design/SSO_GROUP_MAPPING.md)). If nothing
+changes, read the last observation's `state` (`absent`, `malformed`,
+`overage`, `skipped`). For Entra overage (over 200 groups), use app roles or
+*groups assigned to the application*. To remove someone at once, use the
+break-glass exclusion on the team page.
 
 ### Break-glass: the provider is down or misconfigured
 
-While a company requires SSO, password sign-in is refused for its members.
-To get in:
+1. An Owner in `SSO_BREAK_GLASS_EMAILS` signs in with a password (audited).
+2. If none can, add one and restart the backend.
+3. The Owner fixes the connection or turns Require SSO off. Remove the
+   address again.
 
-1. An Owner listed in `SSO_BREAK_GLASS_EMAILS` signs in with their password as
-   usual; each such sign-in writes an `sso_break_glass_login` audit row. A
-   listed address that is not an Owner of every SSO-requiring company it
-   belongs to is still refused.
-2. If no listed Owner can, the operator adds one (`SSO_BREAK_GLASS_EMAILS` in
-   `.env`) and restarts the backend.
-3. The Owner fixes the connection or turns **Require SSO** off (or the
-   connection off: the requirement is void while it is disabled), then the
-   operator removes the address from the list again.
-
-As a last resort the operator can switch the requirement off in the
-database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
-(that change is not in the audit chain; record it in the incident notes).
+Last resort, not audited (note it in the incident record):
+`UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
 
 ## Personal notifications
 
-Each person has their own notifications (issue #683): the bell in the top
-bar counts what is unread, and `/notifications` lists, marks read and
-snoozes them and holds the person's preferences per kind. What writes them:
-
-| Kind | Who receives it | Written when | Security notice |
-|------|-----------------|--------------|-----------------|
-| `sso_break_glass_exclusion`, `sso_break_glass_lifted` | every other Owner | an Owner takes a person out of an SSO-managed team, or lifts that exclusion (also queued on NATS `company.owner_notice`) | yes |
-| `sso_domain_lapsed` | every Owner | a re-check (or a newer proof's conflict check) unverifies a verified SSO domain | yes |
-| `review_requested` | Managers and Owners | QA approved a high-risk delivery that waits for a person (`risk_hold`) | no |
-| `integration_waiting` | Managers and Owners | a sprint's integration stopped and waits for a person (conflict, failing suite, missing branch, daemon unreachable or refused) | no |
-
-- **A security notice cannot be muted** in the app; a person can turn off
-  only its email, and snooze it for at most 24 hours (other kinds: 30 days).
-- **Email** is a copy, sent through the `SMTP_*` settings only while
-  `SMTP_HOST` is set, on for security notices and off for the others by
-  default. It names the kind and nothing else (no task, company or domain).
-  Without SMTP nothing is queued and nothing waits; a failing mail server
-  is retried by the outbox (up to 5 attempts, then the row is `failed`:
-  `SELECT id, retry_count FROM outbox_events WHERE event_type =
-  'notification_email' AND status = 'failed';`).
-- **What a row holds**: the receiver, the company, the kind, a reference to
-  the subject and the integer ids of its link; never a title, a reason or an
-  address. A person who leaves a company stops seeing its notifications at
-  once, and the janitor deletes them on its next run.
-- **Retention**: `RETENTION_NOTIFICATIONS_DAYS` (90), read or not; it is
-  never unbounded (see Retention below).
-- **Nobody received a break-glass notice**: the company has a single Owner
-  (the actor is never notified of their own action), or every other Owner
-  left. The audit row `sso_team_exclusion_created` names the Owners notified
-  (`owners_notified`).
+Each person's notifications are at `/notifications`. Security notices cannot
+be muted. Email copies need `SMTP_HOST`. Failed sends:
+`SELECT id, retry_count FROM outbox_events WHERE event_type =
+'notification_email' AND status = 'failed';`
 
 ## Approvals in Slack and Teams
 
-A delivery held for a person's acceptance (the risk hold) can be approved or
-sent back from Slack or Microsoft Teams (issue #512, phase 4). The design and
-threat model are in `docs/design/CHAT_APPROVALS.md`, the settings in
-`docs/CONFIGURATION.md`. The operator sets `FERNET_SECRET_KEY` (required),
-`PUBLIC_API_URL` (the public `https://` address Slack and Teams reach the
-backend at) and `CHAT_APP_URL` (the frontend the messages link to). The
-backend must be reachable from the internet at `/v1/integrations/` only; the
-rest of the API need not be.
+Managers approve held deliveries from Slack or Teams
+([`design/CHAT_APPROVALS.md`](design/CHAT_APPROVALS.md)). Set
+`FERNET_SECRET_KEY`, `PUBLIC_API_URL` (public https) and `CHAT_APP_URL`.
+Expose only `/v1/integrations/` to the internet.
 
-**Slack.** One Slack app per company, created by a workspace admin at
-api.slack.com/apps:
+**Slack** (one app per company):
 
-1. *OAuth & Permissions*: bot token scopes `chat:write` (post and edit the
-   approval) and `commands` (the `/fabrique` command). No other scope is
-   needed: La Fabrique never reads profiles or emails. Install the app to the
-   workspace and copy the **Bot User OAuth Token**; invite the bot to the
-   channel (`/invite @app`).
-2. *Basic Information*: copy the **Signing Secret**.
-3. On La Fabrique's Chat approvals page (an Owner): the workspace (team) id,
-   the channel id, the bot token and the signing secret; save, then copy the
-   **Request URL** the page shows.
-4. *Interactivity & Shortcuts*: on, Request URL = that URL. *Slash Commands*:
-   create `/fabrique` with the same Request URL.
-5. *Test connection* on the page: it calls `auth.test` (the token must belong
-   to the workspace id entered) and posts a line to the channel.
+1. Bot scopes `chat:write` and `commands`. Install; copy the bot token;
+   `/invite` the bot to the channel. Copy the Signing Secret.
+2. On the Chat approvals page, enter workspace id, channel id, token and
+   secret. Save; copy the **Request URL**.
+3. Use that URL for *Interactivity* and a `/fabrique` slash command.
+4. **Test connection**.
 
-**Teams.** No Azure registration is needed (an outgoing webhook, not a bot):
+**Teams**:
 
-1. In the channel, *Workflows* → "Post to a channel when a webhook request is
-   received" (or a classic incoming webhook where still available); copy the
-   URL. It is a bearer credential: whoever holds it can post to the channel.
-2. On the Chat approvals page: the Microsoft Entra tenant id and that URL as
-   the incoming webhook URL; save, and copy the **Request URL**.
-3. In the team: *Manage team* → *Apps* → *Create an outgoing webhook*, name it
-   (people will mention it: `@Fabrique approve K7Q2M9PX`), callback URL = the
-   Request URL. Teams shows a **security token** once: paste it as the signing
-   secret and save.
-4. *Test connection* posts a card through the incoming webhook.
+1. Channel *Workflows* → "Post to a channel when a webhook request is
+   received". Copy the URL (a bearer credential).
+2. On the page, enter the tenant id and that URL. Save; copy the
+   **Request URL**.
+3. *Manage team* → *Apps* → *Create an outgoing webhook* with that URL.
+   Paste its one-time security token as the signing secret.
+4. **Test connection**.
 
-**People.** Each member links their own account on the same page (*Link my
-Slack account* gives a ten-minute code to type as `/fabrique link CODE`, or
-`@Fabrique link CODE` in Teams). Only a linked account with the Manager role
-or above decides; a Viewer's click is refused and recorded. Two kinds of
-message are posted: a delivery held for acceptance (Approve, Send back) and a
-task blocked for a person's triage (Send back only, as on the board). A
-send-back with a reason is `/fabrique sendback CODE <reason>` in Slack (the
-code is on the message) or `@Fabrique sendback CODE <reason>` in Teams; the
-Slack button sends it back without one. The slash command needs no new scope.
+Members link their account with `/fabrique link CODE` (Teams:
+`@Fabrique link CODE`).
 
-**Rotating the secrets.** Each is changed on the page by an Owner; an empty
-field keeps the stored value, and every change is audited by field name.
+**Rotating** (Owner, on the page; an empty field keeps the value):
 
-| Secret | Where to get a new one | Effect while it changes |
+| Secret | New one from | Meanwhile |
 |---|---|---|
-| Slack signing secret | Slack app → *Basic Information* → *Regenerate* | Clicks are refused (401) between regenerating it in Slack and saving it here. |
-| Slack bot token | *OAuth & Permissions* → reinstall or rotate | Posts fail and are retried by the outbox (five attempts) until the new token is saved. |
-| Teams outgoing webhook token | delete and recreate the outgoing webhook (Teams shows the token only at creation) | Mentions are refused until the new token is saved. |
-| Teams incoming webhook URL | recreate the workflow or webhook | Posts fail and are retried until the new URL is saved. |
+| Slack signing secret | *Basic Information* → *Regenerate* | Clicks refused until saved. |
+| Slack bot token | Reinstall the app | Posts retried (5 attempts). |
+| Teams outgoing token | Recreate the outgoing webhook | Mentions refused until saved. |
+| Teams incoming URL | Recreate the workflow | Posts retried. |
 
-If a signing secret leaked, rotate it first, then read the
-`chat_approval_*` audit rows since the leak: a forged request still needed a
-linked Manager's chat user id and a current approval, and each decision names
-both.
+After a leak, rotate first, then read the `chat_approval_*` audit rows.
 
 ## Rotate keys
 
-| Key | Where | What rotating does | How |
-|-----|-------|--------------------|-----|
-| `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. The new key must be at least as long as the hash (32 bytes for HS256, 48 for HS384, 64 for HS512); a shorter one counts as unset and login answers 503 (`secrets.token_urlsafe(48)` gives 64). |
-| `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
-| `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. Anchors (issue #542) are not affected by the rotation: they cover the statement, not the key, and their tokens and customer signatures still verify. |
-| `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
-| Model keys (`QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `NEBIUS_API_KEY`) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
+Generate keys as `CONFIGURATION.md`, Required Environment Variables, says.
 
-`docs/CONFIGURATION.md` (Required Environment Variables) has the command that generates
-each key.
+| Key | Effect | How |
+|---|---|---|
+| `JWT_SECRET_KEY` | All sessions end. API tokens keep working. | Change, restart **all** replicas at once. At least 32 bytes (`secrets.token_urlsafe(48)`). |
+| `FERNET_SECRET_KEY` | Nothing re-encrypts: stored secrets become unreadable. SSO-only companies need break-glass. | Note what each company stored, change, restart, re-enter. |
+| `AUDIT_SIGNING_KEY` | Older rows report `hash_mismatch`. | Only after a leak. [Archive each chain](#archiving-the-audit-chain) with the old key first. |
+| `LLM_PROXY_INTERNAL_TOKEN` | Company provider connections fail while values differ. | Same value on backend and llm-proxy; restart both. |
+| `DEEPSEEK_API_KEY`, `QWEN_API_KEY` | None. | Change, restart `llm-proxy`. |
+
+End every browser session without rotating:
+`UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;`
 
 ## MCP servers
 
-A company's Manager adds MCP servers in the app (`POST /v1/mcp/servers`).
-HTTP servers need nothing from the operator as long as their URL is https on
-a public address. **stdio servers are off** until the operator allows their
-command (SECURITY.md §8.7); a server saved before this was enforced and not
-on the list keeps its row, lists with `start_refused`, and is never started.
+HTTPS MCP servers on public addresses need nothing. **stdio servers are off**
+until allowed (SECURITY.md §8.7):
 
-To enable a stdio server:
+1. Install the server in the backend image as a fixed program in a directory
+   the backend cannot write (a wrapper that `exec`s it is fine). Never allow
+   `npx`, `uvx`, `node`, `python` or a shell.
+2. Set `MCP_STDIO_ALLOWED_COMMANDS=/opt/mcp/bin/github-server`
+   (comma-separated) and restart the backend.
+3. The Manager saves the server with exactly that `command` and checks
+   `GET /v1/mcp/servers/{id}/tools`.
 
-1. Install the server in the backend's image, as a fixed program: a binary,
-   or a wrapper script that execs one with its arguments fixed, for example
-   `/opt/mcp/bin/github-server` containing
-   `exec /usr/local/lib/node_modules/.bin/github-mcp-server stdio`. Put it in
-   a directory the backend's user cannot write. Do not allow `npx`, `uvx`,
-   `node`, `python` or a shell: their arguments, which a Manager chooses, can
-   run anything as the backend.
-2. Name it in the backend's environment (`.env`, forwarded by
-   `docker-compose.yml`): `MCP_STDIO_ALLOWED_COMMANDS=/opt/mcp/bin/github-server`
-   (comma-separated for several). Restart the backend.
-3. The Manager saves the server with exactly that path as `command`
-   (`{"github": {"command": "/opt/mcp/bin/github-server", "env": {"GITHUB_TOKEN": "…"}}}`)
-   and lists its tools (`GET /v1/mcp/servers/{id}/tools`, Manager) to check it
-   starts. A refusal names the reason (400 when saved, 409 when enabled or
-   started).
-4. Each start is in the company's audit trail: `mcp_server_start` (the
-   command, the number of arguments, who or which role) and
-   `mcp_server_start_refused`.
-
-To withdraw one, remove its path from `MCP_STDIO_ALLOWED_COMMANDS` and
-restart: the servers that used it stop being started at once, and their rows
-stay for the Manager to delete. Plain http to an MCP server is allowed only
-for a host in `MCP_HTTP_ALLOWED_HOSTS`, and never to a private, loopback or
-link-local address: an MCP server on the LAN must be reached through a public
-https address, or run as a stdio wrapper.
+To withdraw one, remove its path and restart. Plain http needs
+`MCP_HTTP_ALLOWED_HOSTS`; private addresses are always refused.
 
 ## Read `/health` and `/metrics`
 
-- `GET /health` is the cheap, public liveness check. It returns `status`,
-  `nats` (its `state`: `connecting` while the backend retries the broker,
-  `connected` once its workers started; with `connected`, `jetstream`,
-  `authenticated` and `tls`, Securing the bus below) and `jetstream`. With `jetstream: false` the
-  backend runs on core NATS: assignments published while no worker runs are
-  lost, and two replicas both get every assignment, which the task claim
-  below makes harmless.
-- `GET /health/deep` probes Postgres, the LLM proxy, NATS and Neo4j. It says
-  `down` when Postgres or the proxy is unreachable (no agent work at all),
-  `degraded` when NATS is, or Neo4j while it is enabled (API reads work, but
-  without NATS no sprint moves), and `healthy` otherwise. Each component
-  carries its `reason`. Neo4j switched off (`NEO4J_ENABLED=false`) is
-  reported as `disabled`, is not probed and degrades nothing. The
-  `llm_proxy` component carries the proxy's `providers` block as it is:
-  the proxy being up does not mean a provider can serve (a key without
-  credit is `no_credit`), and this does not change the severity.
-- `/health/deep`'s `capabilities` section (issue #751) names what this
-  deployment can do with the configuration it has: each entry is `on`, `off`
-  or `degraded` with its `reason`, never a setting's value. The backend's
-  (`auth`, `memory`, `knowledge_graph`, `github_token`, `forge`, `mail`,
-  `webhooks`, `sso`, `error_reports`, `research_tools`, `grounding_lookups`,
-  `model_catalog_refresh`, the Manager, Support and Reviewer agents,
-  `credential_encryption`, `audit_signing`) sit beside the proxy's
-  (`llm.providers`, `llm.embeddings`, `llm.failover`; `llm: off` when the
-  proxy did not say). The Models page shows the same list (Capabilities).
-  Off by configuration is not a fault and changes no status; the same list
-  is logged once at startup by the backend and by the proxy
-  (`Effective capabilities: …`). With DeepSeek alone, expect
-  `llm.embeddings: on` (the local model `multilingual-e5-small`: DeepSeek has
-  no embeddings endpoint), `memory: on`, and `llm.failover: on,
-  same_provider` (Pro and Flash stand in for each other);
-  `docs/CONFIGURATION.md`, Minimal configuration: DeepSeek only.
-- **`llm.embeddings: degraded` and `memory: degraded`** mean the hash vector
-  stands in for the local model; the reason says why. A file missing or not
-  matching its sha256 (an image built without the model stage, or a mounted
-  `EMBEDDING_MODEL_DIR`): rebuild the proxy image (`docker compose build
-  llm-proxy`), which fetches and verifies the model, or outside the image run
-  `python llm-proxy/fetch_embedding_model.py`. The runtime missing: the
-  proxy's Poetry environment is out of date (`poetry install` in
-  `llm-proxy/`). The self-check failed: the CPU's int8 kernels lost too much;
-  memory keeps working on the hash vector. Memory never errors either
-  way, and once the model loads, the backend re-embeds at its next start the
-  rows the hash vector wrote (`Memory: N rows re-embedded` in its log; a
-  search compares only rows of one model meanwhile). Each proxy worker holds
-  the model, about 400 MB more memory per worker (`LLM_PROXY_WORKERS`, 2 by
-  default); on a machine short of memory, `EMBEDDING_PROVIDER=local-hash`
-  keeps the proxy at its earlier size.
-- `GET /metrics` is Prometheus text: `fabrique_requests_total` and
-  `fabrique_request_duration_seconds` by route template,
-  `fabrique_agent_runs_ingested_total` by producer,
-  `fabrique_agent_runs_verified_total` by verdict,
-  `fabrique_sprints_created_total`, `fabrique_sprints_completed_total`,
-  `fabrique_errors_total` and `fabrique_active_connections`. Each replica
-  exposes its own counters, so scrape every replica and add them up.
-- The SSO re-checks (issue #684, `docs/design/SSO.md`, T20–T21) are counted
-  there too. The backend re-checks one thing about SSO on its own: each
-  allowed domain's DNS record. Sign-ins validate the ID token when they
-  happen, and the legacy-domain grace is read from the clock when a domain
-  is used, so neither is a re-check and neither has a counter.
-  - `fabrique_sso_domain_rechecks_total{trigger, outcome, reason}`: one per
-    re-check lookup. `trigger` is `recheck` (the schedule,
-    `SSO_DOMAIN_RECHECK_HOURS`) or `conflict` (a newer proof by another
-    company looked the older claim up again); an Owner's own check is not
-    counted. `outcome="ok"` with `reason="verified"` when the record still
-    holds the token; otherwise `outcome="failed"` with `reason` one of
-    `not_found` (no such name: the domain is unverified), `no_match` (no
-    string holds the token: unverified), `unavailable` (timeout, SERVFAIL or
-    no resolver: the status is kept), `verified_elsewhere` or `other`.
-  - `fabrique_sso_domain_recheck_cycles_total{outcome}`: one per cycle of the
-    scheduled loop that this replica ran under the `sso-domain-recheck` lock
-    (a replica that did not hold the lock counts nothing); `failed` when the
-    cycle raised (the database, for instance), which before was only a log
-    line.
+| Endpoint | Meaning |
+|---|---|
+| `GET /health` | Liveness. `nats.state`: `connecting` or `connected`, with `jetstream`, `authenticated`, `tls`. |
+| `GET /health/deep` | `down`: Postgres or LLM proxy unreachable. `degraded`: NATS, or Neo4j while enabled. Each component has a `reason`. |
+| `capabilities` in `/health/deep` | Each `on`, `off` or `degraded` with a reason. Off by configuration is not a fault. |
+| `GET /metrics` | Prometheus text, per replica: scrape all and add up. |
 
-  No label names a company, a domain or a person, and every series exists
-  from zero. Which domain failed, and what DNS answered, is in
-  `sso_domain_checks` and the audit chain. Worth alerting on: a rise of
-  `reason="unavailable"` (the resolver, or `SSO_DNS_NAMESERVERS`, is broken:
-  nothing is being re-checked), any `failed` cycle, and `not_found` or
-  `no_match`, each of which unverified a domain.
+With DeepSeek alone expect `llm.embeddings: on`, `memory: on` and
+`llm.failover: on, same_provider`. If embeddings are `degraded`, memory still
+works on a hash vector. Fix: `docker compose build llm-proxy`, or
+`EMBEDDING_PROVIDER=local-hash` if short of memory (about 400 MB per proxy
+worker).
+
+SSO domain re-checks: alert on rising
+`fabrique_sso_domain_rechecks_total{reason="unavailable"}` (DNS broken), any
+`fabrique_sso_domain_recheck_cycles_total{outcome="failed"}`, and
+`reason="not_found"` or `"no_match"` (a domain was unverified; details in
+`sso_domain_checks`).
 
 ## Run La Fabrique on itself
 
-The factory can develop La Fabrique the way it develops any project (issue
-#329): `scripts/self_host/self_host.py` makes a "La Fabrique" company on a
-snapshot of this repository, imports La Fabrique's own specification and
-architecture (`docs/architecture/`), checks they render `docs/ARCHITECTURE.md`
-and `docs/adr/` unchanged, and can specify an issue, run its sprint, show the
-integration a person reviews and compile the documentation pack. The steps
-against a real stack, with real models, are in
-[`scripts/self_host/README.md`](../scripts/self_host/README.md); the e2e run
-exercises the same harness with the fake model (step 9d). The snapshot has no
-remote: what is kept comes back to this repository as an ordinary pull
-request.
+`scripts/self_host/self_host.py` builds a "La Fabrique" company on a snapshot
+of this repository ([`scripts/self_host/README.md`](../scripts/self_host/README.md)).
 
 ### Run a self-improvement cycle
 
-Once the sprint's change is back as a pull request (`docs/design/rsi-loop.md`
-§7 step 5), `scripts/rsi/cycle.py` measures it against `main` and says
-whether it may be kept. It never merges, pushes or approves; a person does
-(details in [`scripts/rsi/README.md`](../scripts/rsi/README.md)).
+`scripts/rsi/cycle.py` measures a pull request against `main`. It never
+merges ([`scripts/rsi/README.md`](../scripts/rsi/README.md)).
 
-1. Save the company's findings as the platform reports them:
-   `GET /v1/findings?company_id=<id>` with an Owner's token, to
-   `findings.json`. A specification whose cycle was reverted does not start
-   again unless you name the person who asks (`--retry-by "<name>"`, REQ-20).
-2. Fetch the pull request's head locally (`git fetch origin
-   pull/<n>/head`), export `GITHUB_TOKEN` (read access to checks and pull
-   requests), the bench's settings (`BENCH_LLM_URL`, the Postgres variables,
-   `BENCH_TOKEN_BUDGET`; `bench/README.md`) and run a dry run first:
+1. Save `GET /v1/findings?company_id=<id>` to `findings.json`.
+2. `git fetch origin pull/<n>/head`, export `GITHUB_TOKEN` and the bench
+   settings, and dry-run:
 
    ```bash
    python3 scripts/rsi/cycle.py run --dry-run --pr <n> --repository <owner>/<repo> \
@@ -776,296 +322,99 @@ whether it may be kept. It never merges, pushes or approves; a person does
      --grading-image fabrique-grading:backend
    ```
 
-   The measures and the bench grade in the sandbox only (Grading in the
-   sandbox, below): without a usable image the cycle is refused or
-   `unmeasured`, never graded in-process. It checks the inputs from git and the files (the specification at B and
-   its measure, the findings, the graders' trees) and prints every step.
-3. Run it again without `--dry-run`. It takes hours (K = 3 real bench runs
-   per side, alternating). Exit status: 0 keep, 1 revert, 2 unmeasured, 3
-   refused (the target already passes on B, a reverted specification, a card
-   not graded by B, a step that failed). The record names every command, its
-   exit status and its output's sha256, and every kept file with its hash.
-4. **Keep**: merge the pull request yourself, pinned to the head the record
-   names (`candidate_sha`; GitHub's "expected head sha"). Then
+3. Run without `--dry-run` (hours). Exit: 0 keep, 1 revert, 2 unmeasured,
+   3 refused.
+4. Keep: merge pinned to `candidate_sha`, then
    `python3 scripts/rsi/cycle.py record --record /tmp/rsi/cycle-<n>.json
-   --merged-sha <merge commit> --out rsi/cycles/<cycle id>.json` and commit
-   that file in a pull request (`rsi/cycles/` is protected): the nightly watch
-   reads it (REQ-19). **Revert / unmeasured**: close the pull request unmerged
-   (or pass `--close-pr` to the run) and record the decision on the finding.
-5. `python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-<n>.json`
-   hashes the kept files again before anyone relies on them.
+   --merged-sha <merge commit> --out rsi/cycles/<cycle id>.json` and land
+   that file. Otherwise close the pull request.
+5. `python3 scripts/rsi/cycle.py verify --record /tmp/rsi/cycle-<n>.json`.
 
 ### Grading in the sandbox
 
-The self-improvement runner grades a candidate build in the workspace
-daemon's container sandbox (`scripts/bench/sandbox_grading.py`, rsi-loop
-PR 12): the target measure (`self_host.py --steps measure`) and the bench's
-acceptance tests (`scripts/bench/run.sh`). What the host needs:
+Grading runs in the daemon's container sandbox. The host needs Docker or
+Podman (`docker info`; not `bwrap`), room for 2 CPUs and 2 GB per grade,
+`vscode-daemon/sandbox.py` from the same checkout, and a local grading image:
 
-- **Docker or Podman** on the PATH of the account that runs the harness or
-  the bench, with its daemon answering (`docker info`);
-  `FABRIQUE_SANDBOX_RUNTIME` picks one. `bwrap` is not enough: it applies no
-  CPU or memory limit, so grading refuses it.
-- **A grading image already on the machine.** It is never pulled while
-  grading (`--pull=never`) and is run from its content ID, recorded in the
-  report. The measure needs the backend's dependencies and pytest; the
-  bench's tests need Python and pytest. One way to build the backend's,
-  from this repository:
+```bash
+docker compose build backend
+printf 'FROM %s\nRUN pip install --no-cache-dir "pytest>=8.1.1,<10"\n' \
+  "$(docker compose images -q backend | head -1)" | docker build -t fabrique-grading:backend -
+export FABRIQUE_GRADING_IMAGE=fabrique-grading:backend   # the bench: BENCH_GRADING_IMAGE
+```
 
-  ```bash
-  docker compose build backend
-  printf 'FROM %s\nRUN pip install --no-cache-dir "pytest>=8.1.1,<10"\n' \
-    "$(docker compose images -q backend | head -1)" | docker build -t fabrique-grading:backend -
-  export FABRIQUE_GRADING_IMAGE=fabrique-grading:backend
-  ```
-
-  For the bench, `BENCH_GRADING_IMAGE` (or `FABRIQUE_GRADING_IMAGE`); CI
-  reads the repository variable `BENCH_GRADING_IMAGE` and grades in-process
-  until it is set (the card's `criteria.isolation` says which).
-- **Room for the limits**: 2 CPUs, 2048 MB of memory, 256 processes, a
-  512 MB `/tmp` and a 256 MB `/workspace` (both tmpfs, nothing on the host's
-  disk) per grade, which runs with the network off, the root file
-  system read-only and the uid of the account running it.
-- **The daemon's code beside the scripts**: `vscode-daemon/sandbox.py` of
-  the same checkout (or `FABRIQUE_DAEMON_DIR`); `run.sh` names its own.
-
-Without any of these the measure is `unmeasured` with the reason
-(`self_host.py` exits 4) and a bench grade leaves every criterion missing;
-it never falls back to the runner's own Python. `--in-process-measure` and
-`BENCH_GRADE_IN_PROCESS=1` do that explicitly, for local development only,
-and the report says `isolation: in_process`, which the fitness decision
-refuses.
+Without these the result is `unmeasured`.
 
 ## Documentation export (DOCX and PDF)
 
-A documentation pack downloads as DOCX or as PDF/A-3b declaring PDF/UA-1
-(issue #694; `docs/design/PROJECT_DOCUMENTATION.md`, "Export to DOCX and
-PDF"). DOCX needs only Python packages. PDF needs WeasyPrint's native
-libraries, which `backend/Dockerfile` installs from Debian: `libpango-1.0-0`
-(with HarfBuzz, fontconfig, FreeType, GLib, FriBidi and libthai),
-`libpangoft2-1.0-0` and `fonts-dejavu-core`.
-
-- **Image size.** About +100 MB uncompressed, estimated, not measured: the
-  Python packages take about 79 MB installed (fontTools 28 MB, Pillow 21 MB
-  with its bundled libraries, lxml 12 MB, Pyphen's dictionaries 6 MB,
-  WeasyPrint, python-docx, pydyf, tinycss2 and the rest about 12 MB), and the
-  Debian packages with their dependencies about 20 to 25 MB. Measure it on
-  the first build with `docker image ls` before and after, and write the
-  figure here.
-- **Running outside the image.** On a host without Pango (the backend run
-  natively, a slim image of your own), the backend starts and DOCX works; the
-  PDF route answers 503 with the loader's message, and
-  `GET /v1/documentation/exports` names it. Install the three packages above
-  (`apt-get install libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core`, or
-  `brew install pango` on macOS) and restart.
-- **Cost.** A PDF renders in a thread of the backend, one at a time per
-  process; a 44-page pack takes about 8 seconds of one CPU. DOCX takes well
-  under a second.
-- **Fonts.** The PDF embeds DejaVu Sans and Sans Mono subsets; a pack in a
-  script DejaVu does not cover would need another font package in the image.
+PDF needs `libpango-1.0-0`, `libpangoft2-1.0-0` and `fonts-dejavu-core`
+(about +100 MB in the image, estimated). Outside the image the PDF route
+answers 503 until you install them and restart.
 
 ## When something is wrong
 
-**The daemon is absent.** `GET /v1/workspace/status` says `absent` (NATS
-answers and nothing listens) or `unknown` (NATS is unreachable or nothing
-answered in time; that never means stopped). Start the daemon on the
-projects' computer (`./scripts/start-daemon.sh`); it reconnects on its own.
-Meanwhile the files a task delivers are queued in JetStream
-(`workspace.deliver`), the run waits for that job and the review loop holds
-the task. When the daemon connects it writes them and reports on
-`workspace.delivered`, and the run is verified against the hashes recorded
-at delivery. There is nothing to replay by hand.
+**The daemon is absent.** `GET /v1/workspace/status` says `absent` or
+`unknown`. Run `./scripts/start-daemon.sh` on the projects' computer.
+Deliveries wait in JetStream; nothing to replay. Other fields
+([`PROTOCOL.md`](../vscode-daemon/protocol/PROTOCOL.md)):
 
-**Offline is not incompatible.** `GET /v1/workspace/status` tells them apart
-([`vscode-daemon/protocol/PROTOCOL.md`](../vscode-daemon/protocol/PROTOCOL.md)):
-- `liveness` comes from the daemon's heartbeat (`workspace.heartbeat`, every
-  20 s by default), timed on the backend's clock: `online`, `stale` after
-  `DAEMON_HEARTBEAT_STALE_SECONDS` (60) without one, `offline` after
-  `DAEMON_HEARTBEAT_OFFLINE_SECONDS` (90). `heartbeat` says when the last one
-  was observed and how many beats were missed. `source: request` means no
-  heartbeat was ever observed (a daemon from before protocol 1, or a broker
-  configuration that does not allow the subject: regenerate it with
-  `python3 scripts/nats_config.py`) and the state comes from asking
-  `workspace.status`, as before. Offline: start the daemon, as above.
-- `state: incompatible` means the daemon answers but speaks a protocol
-  version outside the backend's range; `reason` says which side to update
-  (`update the daemon`: restart it from the same checkout as the backend,
-  `./scripts/start-daemon.sh`; `update the backend`: deploy the backend that
-  matches the daemon). Meanwhile requests to it are refused with that reason
-  and a task's delivery is not sent or queued: its evidence says `the
-  workspace daemon is incompatible: <reason>`. Once a compatible daemon
-  answers or beats, work resumes; the refusal lifts at the latest
-  `DAEMON_HEARTBEAT_OFFLINE_SECONDS` after the incompatible one was last heard.
-- `protocol.state: unknown` with `unknown protocol version (older daemon)` is
-  a daemon that reports no version: it is served as before. Update it when
-  convenient to get the heartbeat.
-- Everything the daemon says about itself (version, protocol, host, id) is
-  under `reported_by_daemon`: its claim, not an observation.
+- `liveness: offline`: no heartbeat for 90 s. Start the daemon.
+- `state: incompatible`: `reason` says which side to update.
 
-**A sprint is stuck.** Check in this order:
-1. Its status. `planned`, `paused` and `cancelled` sprints do not move. A
-   planned sprint starts with `POST /v1/sprints/{id}/start`; a paused one
-   shows its `pause_reason` and resumes with `/resume`.
-2. `GET /v1/inbox`: tasks blocked until a person acts, high-risk holds, and
-   tasks waiting on a dependency held by one of those. A Manager accepts,
-   sends back or carries them over.
-3. Tasks in `todo` that never start: `POST /v1/sprints/{id}/dispatch`
-   queues them again. Check that `/health` says `connected` and that the
-   backend's log says `Task Worker consuming task.assign`.
-4. Tasks left in `in_progress` by a crashed replica return to `todo` at
-   the next review cycle of any live replica (every 30 seconds), which
-   finds that no live replica holds them and queues them again.
-5. A delivery waiting for the daemon: see above.
+**A sprint is stuck.** In order:
 
-**A provider is out of credit.** The worker pauses the sprint, with
-`pause_reason` naming the provider (a 402, or a 429 that names a quota or a
-balance), and puts the task back to `todo` instead of blocking it. Add
-credit, or change the role's model on the company's Models page, then call
-`POST /v1/sprints/{id}/resume`. The company gets no follow-up sprint of its
-own while one is paused.
-On the default team the provider is DeepSeek (`DEEPSEEK_API_KEY`, every
-role); Qwen, Gemini or Nebius only where a role, an agent or `AGENT_MODEL`
-names one of their models. Before resuming,
-check the key with the 1-token request in Deploy, Check the model keys: the
-proxy's startup log says "validated successfully" for a key without credit,
-and its `/health` says nothing about providers. While another provider still
-has credit, the proxy falls back to it and the sprint does not pause; the
-answers then carry `fallback_from` with the 402.
+1. `planned`: `POST /v1/sprints/{id}/start`. `paused`: read `pause_reason`,
+   then `POST /v1/sprints/{id}/resume`.
+2. `GET /v1/inbox`: tasks waiting for a person.
+3. `todo` tasks never start: `POST /v1/sprints/{id}/dispatch`; check
+   `/health` says `connected` and the log says
+   `Task Worker consuming task.assign`.
+4. `in_progress` tasks of a crashed replica return to `todo` within 30 s.
 
-**The nightly real-model bench spends too much.** The job `bench-real` in
-`.github/workflows/bench.yml` runs only while the repository variable
-`BENCH_REAL_MODELS` is `true`. To stop it, set the variable to anything else
-(or delete it), or disable the Bench workflow in the repository's Actions
-tab; a run already going can be cancelled there. Each run also stops itself
-past `BENCH_TOKEN_BUDGET` reported tokens (a repository variable; 300000 when
-unset): the running sprint is stopped, the remaining specifications are
-skipped and the card says `budget_exceeded`. The budget counts only the
-turns whose usage the provider reported, so the provider's own spending
-limit is still the last guard (`bench/README.md`, "The nightly real-model
-run").
+**A provider is out of credit.** The sprint pauses, naming the provider. Add
+credit or change the role's model, re-check with
+[Check the model keys](#check-the-model-keys), then resume.
 
-**A revert pull request opened.** The nightly `watch` job
-(`.github/workflows/bench.yml`; `docs/design/rsi-loop.md` §1.6, REQ-19)
-compares every merged self-improvement cycle with its baseline B for two
-nights (`scripts/rsi/watch.py`, the records under `rsi/cycles/`). When a
-nightly real-model run regresses beyond both the threshold of decision 4
-and B's own spread, the `revert` job opens a pull request titled
-`revert: cycle <id> regressed the nightly bench (<sha>)` from the branch
-`rsi/revert-<cycle id>`, with the nights, the numbers and the reasons in
-its body. **Nothing merges it automatically.** A person reads the numbers
-(the pull request's body and the `watch` job summary of the nightly run),
-decides whether the regression is the cycle's, and merges the revert — or
-closes it when the numbers are wrong (a provider or a machine that moved,
-a card that was not comparable) and records that as a finding on the
-cycle. If the revert does not apply cleanly the job fails without pushing:
-prepare the revert by hand. If the job says a revert pull request is
-already open, the watch found the regression again on a later night; the
-open pull request is the one to decide on. A record whose watch answers
-`unmeasured` for the same reason every night (a void pair: the models
-served changed; a card nobody commits) is a record a person must look at —
-the watch job fails on a record that does not validate. Once a cycle
-closed (two nights ok) or was reverted, its record under `rsi/cycles/` may
-be removed in the retrospective or the revert's pull request; a record
-kept after the cycle closed only reports `ok`. To stop the watch
-altogether, remove the records or turn `BENCH_REAL_MODELS` off, which
-stops the nightly runs that feed it (`bench/README.md`, "The watch after a
-merge").
+**The nightly real-model bench spends too much (the kill switch).** Set the
+repository variable `BENCH_REAL_MODELS` to anything but `true`, or disable
+the Bench workflow. Each run stops at `BENCH_TOKEN_BUDGET` (300000).
 
-**The runners stop taking jobs, or their disk fills up.** The runner services
-are user services on this machine: `systemctl --user is-active
-'actions-runner-lafabrique*'` answers `active` for all seven while GitHub shows
-some `offline`, or `online` and `busy=false` with the queue growing and nothing
-dispatched (`gh run list --status in_progress` empty). A runner whose job died
-mid-run — usually under disk pressure — keeps its session wedged: the service
-stays up, the connection does not. Check `df -h /` first, then restart the
-wedged services, and only once `gh run list --status in_progress` is empty, or
-you cancel a running e2e job:
+**A revert pull request opened.** The nightly `watch` job found a merged
+self-improvement cycle regressed. Nothing merges it automatically. Read the
+numbers, then merge it, or close it and record a finding.
+
+**The runners stop taking jobs, or their disk fills up.**
 
 ```bash
+df -h /
+gh run list --status in_progress     # wait until empty, or cancel
 systemctl --user restart 'actions-runner-lafabrique*'
 ```
 
-`runner-hygiene.yml` keeps the disk bounded daily (#566): this repository's
-stopped e2e and smoke containers with their volumes, dangling images older than
-a week, and anonymous dangling volumes older than a week are removed, and the
-buildkit cache is kept under 2 GB. It never prunes by name: the named volumes
-`la-fabrique_*` hold a person's development data (they show `dangling` while
-that stack is down), and the named images belong to the other repositories
-sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
-a finished run leaks nothing.
+Never prune the named volumes `la-fabrique_*`.
 
 ### From an error id to the log line
 
-An unhandled error answers `500 {"detail": "Internal server error",
-"error_id": "<16 hex>"}` and nothing else (`backend/app/exception_handlers.py`).
-The backend logs the traceback under that id, on stdout, as one JSON line
-(`logging_config.JSONFormatter`) whose `message` reads `unhandled <Exception>
-on <METHOD> <route template> [error_id=<id>]` followed by the traceback (its
-last 4000 characters, the newlines escaped). To find it:
+A 500 returns an `error_id`. Search every replica:
 
 ```bash
 docker compose logs backend --since 24h | grep 'error_id=<id>'
 ```
 
-Search every replica's log when several run. Uvicorn may print its own
-`Exception in ASGI application` traceback beside it, without the id. The same
-id, with the exception's class and the route template (never the path, the
-message or the body), goes to `system.maintenance.create_ticket` on NATS and,
-when set, to `ERROR_REPORT_URL`. The web app does not show the id yet: a
-person finds it in the browser's network tab (the failed request's response)
-or gives the time and the page, and you search the log by time and route.
-Errors in the workers (the task worker, the outbox, the janitor) have no
-error id: search by the task or sprint id they log.
-
 ### CI failures on the shared runners
 
-The self-hosted runners share one machine, one Docker daemon and its memory.
-A failure that does not reproduce alone is often a collision between jobs.
-
-**A port already in use (e2e).** Step 9c reports `nothing else listens on the
-web project's port` failed, or a task's `application_started` is
-unverifiable because `app_run.py` refused a port in use; later steps then
-fail on what did not run. Cause: two e2e runs used the fixed web port 18765.
-Since #580 `e2e.yml` and `scripts/e2e/run.sh` pick it per run
-(`E2E_WEB_PORT`), as they already did for the backend and fake model. If it
-recurs, look for a fixed port added back, or a leftover container holding it
-(`docker ps`), and rerun.
-
-**An image the job just built is gone (Docker Build).** The smoke test fails
-with `Unable to find image 'fabrique-<name>:ci' locally … pull access denied`
-a second after a green build. Cause: another job's cleanup
-(`docker rmi -f`) removed the same fixed tag. Since #589 each build is
-tagged `fabrique-<name>:ci-<run_id>-<attempt>`; if it happens again, a job
-still uses a fixed tag or name on the shared daemon: give it the run id.
-
-**A timing test fails on a busy machine.** A wall-clock assertion fails, for
-example the task filter's page budget with timings of 0.4 to 1.4 s against
-300 ms, while the code did not change. Cause: other jobs on the same machine.
-Since #590 (merged with #588 and #589) every pull request counts the filter's
-SQL statements, and since #605 holds the timing to five times a reference
-read of the same rows timed in the same moment, so the load weighs on both;
-the strict 300 ms runs in the nightly bench (`PERF_STRICT=1`). A timing test that fails twice
-on a quiet machine is a real regression.
-
-**A run killed for lack of memory.** The job ends with `exit code 137`,
-`Killed`, or pytest-xdist's `node down: Not properly terminated` and
-`replacing crashed worker`, with no assertion failure. Cause: the kernel's
-OOM killer, when several jobs (or `-n auto` in each) run at once. Check
-`dmesg -T | grep -i 'out of memory'` and `free -h` on the machine, run the
-backend suite by hand with a fixed, small `-n` (`-n 2`) while CI runs, and
-rerun the job once the machine is quieter.
-
-**A self-hosted runner freezes.** A job stays `in_progress` with no new log
-lines, or jobs wait with `Waiting for a runner to pick up this job` while the
-runners show `online`. Cause: a runner whose job died mid-run (often under
-disk or memory pressure) keeps a wedged session. Cancel the stuck run, then
-follow "The runners stop taking jobs" above (`df -h /`, then restart the
-services).
+| Symptom | Action |
+|---|---|
+| Port in use in e2e | `docker ps`, remove the leftover container, rerun. |
+| Image missing right after a green build | Another job removed a fixed tag; tag with the run id. |
+| A timing test fails | Rerun; failing twice on a quiet machine is real. |
+| `exit code 137`, `Killed` | OOM: `dmesg -T \| grep -i 'out of memory'`; see [Runner capacity](#runner-capacity). |
+| Job stuck with no log lines | Cancel, then restart the runners (above). |
 
 ## Landing locally
 
-Changes reach `main` through `scripts/land.sh` on a machine that runs the
-checks, and GitHub is a mirror (issue #728; `CONTRIBUTING.md`, Branches).
+Changes reach `main` through `scripts/land.sh`; GitHub is a mirror
+([`design/LOCAL_LANDING.md`](design/LOCAL_LANDING.md)).
 
 ```bash
 scripts/land.sh my-branch            # merge, check, fast-forward local main, record
@@ -1074,485 +423,188 @@ scripts/land.sh --push               # mirror main and refs/notes/verification o
 scripts/land.sh --verify <sha>       # re-run the checks on <sha>, compare with its record
 ```
 
-**What a landing does.** It fetches `main` from `origin`, merges `main` and the
-branch in a worktree it keeps beside the checkout, `<checkout>.land-worktree`
-(never under `.git`: Vite denies `**/.git/**`, and vitest there loaded no
-setup file, so every frontend suite failed; reset and cleaned
-first; a merge commit with `main` as first parent, never a rebase), runs
-`scripts/check.sh full` on that merge commit and, when it exits 0, writes the
-record and fast-forwards local `main` (through `git merge --ff-only` in the
-checkout that has `main`, or a compare-and-swap `git update-ref` when none
-does). While the checks run, a `main` that moves (locally or on `origin`) is
-merged and checked again, up to `LAND_MAX_ATTEMPTS` (default 3). One landing
-runs at a time: `.git/fabrique/land.lock` holds the process id and host, and a
-lock whose process is gone on the same host is taken over.
+It merges `main` and the branch in `<checkout>.land-worktree` (never a
+rebase), runs `scripts/check.sh full`, then writes a record under
+`refs/notes/verification` and fast-forwards `main`. The record is an
+unsigned claim by that machine. A change to a protected path needs
+`LAND_OWNER=1` (a guard, not a security boundary).
 
-**The record.** `.git/fabrique/verifications/<sha>.json` and the note of
-`<sha>` under `refs/notes/verification` (`git notes --ref=verification show
-<sha>`): the commit, tree and parents, `main` before, the branch and its head,
-the command, each step's status and seconds, overall status and duration, the
-SHA-256 of the log (`.git/fabrique/logs/`, not pushed), the tool versions, the
-host name and system, the OS account and git committer name (never an email),
-the blob id of the script that ran, and the protected paths with whether the
-owner overrode them. It is a claim by that machine and nothing signs it
-(`docs/POSITIONING.md`: a party's report of its own run is a claim, not an
-observation). It is the SLSA notion of provenance without its trust: who built
-what from which inputs with which tools, stated by the builder. Signing it is a
-follow-up. Pushing the notes publishes the host and account names with them.
+Exit: 0 done; 1 checks failed or conflict (`main` untouched); 2 usage;
+3 refused (protected path, diverged, nothing to land); 4 lock held.
 
-**Confirming a record.** `scripts/land.sh --verify <sha>` fetches the notes,
-checks `<sha>` out in the clean worktree, runs the same command and compares
-the status and each step's name and status with the record; the run's own
-record is written as `<sha>.verify.<time>.json` and the notes are not changed.
-Exit 0 means the record was reproduced on this machine. Run it on a second
-machine, or let CI after the push be the second opinion
-(`docs/design/LOCAL_LANDING.md`).
+When it goes wrong:
 
-**Protected paths.** A landing whose changes (the branch's diff against `main`
-and what `main` receives from the merge) touch a path of
-`backend/app/services/contracts/protected_paths.py`, with the evidence's tests
-from `docs/architecture/contexts.json`, both read from `main` as the
-protected-paths workflow reads them from the base, is refused unless
-`LAND_OWNER=1`, and a list that cannot be read refuses. **This is a guard
-against mistakes, not a security boundary**: anyone who can run the script can
-set the variable or edit the script. What holds against an agent is who may
-push `main` to GitHub, which is the owner's setting
-(`docs/design/LOCAL_LANDING.md`), and the record, which names the override.
-
-**Exit status.** 0 landed, pushed or verified; 1 the checks failed, the merge
-conflicted, `main` kept moving or a verification differs (`main` untouched); 2
-usage or environment (no such branch, `origin` unreachable without
-`LAND_OFFLINE=1`); 3 refused (protected path, local `main` and `origin/main`
-diverged, nothing to land, no record to push or verify); 4 another landing holds
-the lock.
-
-**Variables.** `LAND_CHECK_CMD` (default `scripts/check.sh full`),
-`LAND_OWNER`, `LAND_MAIN` (default `main`), `LAND_REMOTE` (default `origin`),
-`LAND_OFFLINE=1`, `LAND_WORKTREE`, `LAND_PYTHON` (default `python3`, which
-reads the protected list), `LAND_MAX_ATTEMPTS`.
-
-**When it goes wrong.** *The lock is held* and no landing runs: the owner line
-in `.git/fabrique/land.lock/owner` names the process and host; remove the
-folder once you have checked. *Diverged*: someone pushed `main` from another
-machine while yours had local landings; merge `origin/main` into local `main`
-by hand (never force), run the checks, and land again. *The push is refused*:
-`origin` moved on, or branch protection still requires pull requests; fetch,
-reconcile (`git notes --ref=verification merge` for the notes) and push again,
-or open the pull request. *The checkout of `main` could not fast-forward*:
-the record is already written; commit or stash the local changes in that
-checkout and run the `git merge --ff-only` the message prints.
+- Lock held, nothing running: check `.git/fabrique/land.lock/owner`, then
+  remove the folder.
+- Diverged: merge `origin/main` into local `main` by hand (never force),
+  then land again.
+- Push refused: fetch, `git notes --ref=verification merge`, push again.
 
 ## Protected paths
 
-`.github/workflows/protected-paths.yml` (status check `protected-paths`)
-fails a pull request whose git diff (`base...head`) touches a protected path
-(`backend/app/services/contracts/protected_paths.py`: the bench and its
-graders, the evidence, CI, the ratchets, the list and this check) unless a
-code owner of each such path approved the head sha
-(`docs/design/rsi-loop.md` §3.3, layer 4). It runs the base commit's copy of
-`scripts/protected_paths_check.py` with the base's list and CODEOWNERS, and
-runs again when a review is submitted or dismissed. The job summary lists the
-matched paths, their owners, who approved and at which sha, and the decision.
-A push after an approval turns it red until an owner approves the new head.
-
-**It gates nothing until the owner makes it required.** In Settings →
-Branches (or Rulesets) for `main`, add `protected-paths` as a
-required status check, and turn on "Require review from Code Owners" (#182),
-which is the backstop: a pull request that edits this workflow runs its own
-edited copy, so only GitHub's code-owner rule holds against that one. GitHub
-never counts an author's approval of their own pull request, and the check
-does not either: a protected change the sole code owner opens is merged by an
-admin bypass, deliberately, or approved by another owner. The pull request
-that adds the check fails it by design (the base has no copy of the script
-yet, and the head's is never run).
+`.github/workflows/protected-paths.yml` fails a pull request that touches a
+path in `backend/app/services/contracts/protected_paths.py` unless a code
+owner approved the head. It gates nothing until the owner makes
+`protected-paths` a required check and turns on "Require review from Code
+Owners" for `main`.
 
 ## Third-party CLIs on the daemon's computer
 
-The only way a terminal CLI (Claude Code, Codex, Gemini CLI, Cursor) works
-on a company's tasks is a console producer a Manager named for a role on
-the Models page (`PUT /v1/companies/{id}/console_producers`; issue #750 and
-SECURITY.md §7.4). Nothing turns one on by detection or by default.
-
-- **Check that none runs:** `GET /v1/companies/{id}/console_producers`
-  answers `{"producers": {}}` for a company that never chose one; the
-  Glassroom shows a `producer.console` event for every console run.
-- **The console assistants are gone** (issue #750): before, the backend asked
-  any Copilot CLI or Claude CLI it found on the daemon's computer for advice
-  on a task, on by default, under the account signed in there. Their
-  settings (`CONSOLE_ASSISTANTS_ENABLED`, `CONSOLE_ASSISTANT_*`,
-  `COPILOT_CLI_COMMAND_TEMPLATE` and the `CLAUDE_CLI_*` ones except
-  `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES`) do nothing now; the backend starts
-  with them and logs `<NAME> is set but no longer does anything` once per
-  name at startup. Remove them from `.env`. No migration: rows the
-  assistants left in `assistant_runtime_state` (keys `claude`, `copilot`) are
-  no longer read, and board notes they wrote stay as history.
-- **Where the second opinion comes from now:** the Architect's consultation
-  (`ARCHITECT_CONSULT_ENABLED`, on by default), on the Architect's model
-  (DeepSeek Pro unless the company or `AGENT_MODEL_ARCHITECT` chose
-  another). A company without an Architect agent gets no brief.
+A terminal CLI works on tasks only as a console producer a Manager chose
+(SECURITY.md §7.4). `GET /v1/companies/{id}/console_producers` answers
+`{"producers": {}}` when none is set. Remove the old
+`CONSOLE_ASSISTANT*`, `COPILOT_CLI_*` and `CLAUDE_CLI_*` settings from
+`.env`.
 
 ## Forge policy
 
-A company's git contacts an outside forge only as its forge policy allows
-(issue #727; `docs/contexts/release.md`, The forge policy): `none` (never),
-`fetch` (the base is fetched before a new branch) or `publish` (fetch, plus
-push and the request's comments). A company created after migration `0053`
-starts at `none`; every company that existed then was set to `publish`.
+A company's git reaches an outside forge only as its policy allows: `none`,
+`fetch` or `publish` ([`contexts/release.md`](contexts/release.md)).
 
-- **Lower it** (a company whose code must not leave the computer that holds
-  it): an Owner picks *Local only* on the Models page, or
-  `PUT /v1/companies/{id}/forge_policy` with `{"forge_policy": "none"}`. The
-  change is audited as `forge_policy_changed` (`GET /v1/audit/verify` checks
-  the chain). Sprints keep integrating, testing and merging locally; publish
-  answers 409 `forge_disabled`.
-- **An air-gapped install** sets `FORGE_POLICY_MAX=none` on the backend and
-  on each daemon's computer. The backend then holds every company at `none`
-  whatever is stored (the Models page says so), refuses a wider value with
-  409, and the daemon refuses any remote operation even if a backend asks.
-- **Upgrade order.** The daemon reads a request without a policy as `none`:
-  a daemon newer than the backend fetches nothing and publishes nothing until
-  the backend is upgraded too. A daemon older than the backend ignores the
-  field and fetches as before (the backend still refuses publishing), so
-  upgrade the daemons to enforce the policy on their side.
-- **A publish answered `forge_disabled`** names the policy in force; raise it
-  only as an Owner's decision, and only up to `FORGE_POLICY_MAX`.
-- **At creation** (issue #745) the New company form asks the Owner for the
-  policy: `fetch` is pre-selected only for a folder with a remote, and the
-  choice is audited as `forge_policy_changed` with `at: creation`, `none`
-  included.
+- Lower it: `PUT /v1/companies/{id}/forge_policy` with
+  `{"forge_policy": "none"}`, or *Local only* on the Models page.
+- Air-gapped: `FORGE_POLICY_MAX=none` on the backend and every daemon.
+- Upgrade the daemons with the backend so both enforce it.
 
 ### Bring a local copy up to date
 
-A local clone weeks behind its remote makes a new company read old files.
-Under `fetch` or `publish`, the Owner ticks *Bring my local copy up to date*
-on the New company form, or a Manager presses *Bring the local copy up to
-date* on the company's Git settings (also offered on the board of a planned
-sprint whose local base is behind; `POST /v1/companies/{id}/git/sync_base`).
-The daemon only fast-forwards the base branch (`workspace.git.sync_base`): no
-merge commit, rebase or reset, so no commit is lost. Each attempt is recorded
-as `base_sync_observed` with the old and new commit and the outcome. When it
-refuses, nothing changed; act on the outcome:
+`POST /v1/companies/{id}/git/sync_base` only fast-forwards. If it refuses:
 
-- `dirty`: commit or stash the changes to tracked files in the checkout
-  that has the base, then try again.
-- `operation_in_progress`: finish or abort the rebase, merge, cherry-pick or
-  revert (`git rebase --abort`, `git merge --abort`…).
-- `diverged`: both sides have commits; decide by hand (`git pull --rebase`
-  or a merge) — La Fabrique never chooses which commits to keep.
-- `remote_unreachable`: the daemon's computer could not read the remote with
-  the person's git credentials (offline, credentials, VPN); `git fetch` in a
-  terminal there shows the same reason.
-- `forge_disabled`: the company's policy is `none`, or a ceiling
-  (`FORGE_POLICY_MAX` on the backend or the daemon) holds it there.
+| Outcome | Action |
+|---|---|
+| `dirty` | Commit or stash in the checkout. |
+| `operation_in_progress` | `git rebase --abort` or `git merge --abort`. |
+| `diverged` | Decide by hand. |
+| `remote_unreachable` | Run `git fetch` there to see why. |
+| `forge_disabled` | The policy is `none`. |
 
 ## Run window
 
-A company can have work that can wait start only in the hours it chooses
-(issue #736; `docs/contexts/loop.md`, The run window): off (the default and
-every company's value after migration `0055`), a provider's off-peak hours
-(`provider_off_peak:deepseek`: DeepSeek bills off-peak at half the peak
-price) or intervals of its own, in a named IANA time zone.
+A company can start deferrable work only in chosen hours
+([`contexts/loop.md`](contexts/loop.md)):
 
-- **Set it**: an Owner picks it on the Models page (Run window), with the
-  zone (the browser's by default) and a preview of the next 7 days, or
-  `PUT /v1/companies/{id}/run_window`, e.g.
-  `{"run_window": {"timezone": "America/Montevideo", "preset": "provider_off_peak:deepseek"}}`.
-  `{"run_window": null}` turns it off. Each change is audited as
-  `run_window_changed` with both values (`GET /v1/audit/verify` checks the
-  chain); a Manager or a Viewer gets 403.
-- **What waits**: outside the window a new sprint, a started or resumed one,
-  and each task's next model turn (the claim, the dispatch of `todo` tasks,
-  QA's review). A model call already running finishes. The board says
-  "waiting for the run window until HH:MM (local)"; the Review page lists
-  the waiting sprints. Each task records `run_window_wait` and
-  `run_window_release` events (`GET /v1/tasks/{id}/events`).
-- **Something cannot wait**: a Manager ticks *Urgent* on the board, or
-  `PUT /v1/sprints/{id}/urgent` `{"urgent": true}`, or sends `"urgent": true`
-  with `POST /v1/start_sprint`. The sprint starts at once; the bypass is
-  audited as `sprint_urgent_changed` with the account.
-- **Nothing started at the boundary**: the release worker
-  (`run_window_release` in the startup log) wakes at the earliest boundary,
-  at least every `RUN_WINDOW_RECHECK_SECONDS` (default 300), never more than
-  once a minute, so a release can be up to a minute late. A restart mid-wait
-  loses nothing: the hold is in the database (`sprints.run_window_wait_until`)
-  and the worker releases a due sprint as soon as it starts. A paused sprint
-  is left alone until it is resumed. Turning the window off releases what it
-  held at the worker's next look.
-- **Holidays**: the `cn` calendar (Chinese public holidays, which DeepSeek's
-  preset uses) ships as data, one file per year in
-  `backend/app/services/platform/holiday_calendars/cn/`, each citing the
-  State Council's notice; 2026 and 2027 are there. When a new year's notice
-  is published (usually in November), add `<year>.json` in the same shape,
-  with its source. Until then that year has no Chinese holidays and the
-  preset treats them as ordinary weekdays (it may hold work it need not,
-  never the other way); an Owner can add dates to the window meanwhile
-  (`holidays.dates`).
-- **Prices**: the cost report still prices every call at the catalogue's
-  single (peak) rate, so off-peak work costs less than it shows.
+```http
+PUT /v1/companies/{id}/run_window
+{"run_window": {"timezone": "America/Montevideo", "preset": "provider_off_peak:deepseek"}}
+```
+
+`null` turns it off. To skip it, a Manager ticks *Urgent* on the board. When
+a new year's Chinese holidays are published, add `<year>.json` to
+`backend/app/services/platform/holiday_calendars/cn/`.
 
 ## Runner capacity
 
-The seven self-hosted runners (`lafabrique`) share one machine of about 4
-cores and 16 GB with the workspace daemon, so CI jobs compete for CPU and
-memory; too many at once failed wall-clock tests and had runs killed for lack
-of memory. Four knobs bound that, all outside the code (`docs/TESTING.md`, CI,
-has the design):
+Seven self-hosted runners share one machine (about 4 cores, 16 GB).
 
-- **Which jobs run.** A pull request runs only the jobs its files can affect
-  (`.github/workflows/changes.yml`); a push to `main` runs everything. Widen a
-  job's paths there, never with `on.pull_request.paths`.
-- **How many e2e jobs run at once: the runner label `e2e`.** Off by default:
-  an e2e job takes any `lafabrique` runner. To allow at most two at once,
-  **first** add the label `e2e` to two runners, **then** set the repository
-  variable `E2E_RUNS_ON` to `["self-hosted","linux","x64","lafabrique","e2e"]`
-  (`gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique","e2e"]'`).
-  The number of runners with the label is then the limit; the fake-model
-  bench on a pull request (`bench-pr.yml`), which starts the same stack, asks
-  for the same label. In the other order
-  every e2e job waits for a runner until GitHub cancels it after 24 hours. In
-  Settings > Actions > Runners, open a runner and add the label, or:
+- **Which jobs run**: `.github/workflows/changes.yml`.
+- **e2e jobs at once**: label runners `e2e` **first**, then set the variable,
+  or e2e jobs wait 24 h and fail.
 
   ```bash
   gh api repos/{owner}/{repo}/actions/runners \
     --jq '.runners[] | [.id, .name, ([.labels[].name] | join(","))] | @tsv'
   gh api -X POST repos/{owner}/{repo}/actions/runners/<id>/labels -f 'labels[]=e2e'
-  gh api -X DELETE repos/{owner}/{repo}/actions/runners/<id>/labels/e2e
+  gh variable set E2E_RUNS_ON --body '["self-hosted","linux","x64","lafabrique","e2e"]'
+  gh variable delete E2E_RUNS_ON                        # lift the limit
   ```
 
-  (`orgs/<org>/actions/runners/...` when the runners are registered to the
-  organisation.) Add the label to a third runner to allow three, remove one to
-  allow one. The runners with the label still take other jobs, so an e2e job
-  can wait behind a backend run on them. To lift the limit again, delete the
-  variable (`gh variable delete E2E_RUNS_ON`).
-- **Backend test workers: `BACKEND_TEST_WORKERS`.** `backend-tests.yml` runs
-  pytest with `-n 4`; each worker is a Python process with the application
-  imported and its own SQLite database. `gh variable set BACKEND_TEST_WORKERS
-  --body 2` halves that memory and roughly doubles the suite's time (about 2
-  minutes with four, about 11 in one process); `gh variable delete
-  BACKEND_TEST_WORKERS` goes back to four.
-- **Memory caps on the e2e containers: `E2E_POSTGRES_MEMORY`,
-  `E2E_NATS_MEMORY`.** Passed to `docker run --memory` (for example `1g` and
-  `256m`); unset means no cap, the default. The backend, the daemon and the
-  fake model of an e2e run are processes on the runner, not containers, and
-  have no cap; most of the run's memory is theirs, so the label above is the
-  knob that bounds it.
-
-A superseded run is still cancelled: each workflow's concurrency group is
-per ref with `cancel-in-progress: true` (#559), so a new push to a pull
-request stops its older run, queued e2e jobs included.
+- **Backend test workers**: `gh variable set BACKEND_TEST_WORKERS --body 2`
+  (default 4).
+- **e2e memory caps**: `E2E_POSTGRES_MEMORY`, `E2E_NATS_MEMORY`.
 
 ## Backups
 
-`scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`
-(`pg_dump -Fc`, checked with `pg_restore --list`) with a `.sha256` file
-beside it, and removes backups older than `BACKUP_KEEP_DAYS` (14). It runs
-`pg_dump` inside the `factory-postgres` container when that container is
-running. `PG_CONTAINER` names another container; set it empty to use the
-`pg_dump` on PATH with `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER` and
-`POSTGRES_PASSWORD`. Unset values are read from `.env`. With
-`NEO4J_ENABLED=true` and the `factory-neo4j` container running, it also
-exports the graph as Cypher through APOC (`neo4j-<time>.cypher`). The
-APOC export is streamed (APOC's file export is not enabled in
-`docker-compose.yml`), each batch base64-encoded by the query and decoded
-by the script, so the file holds plain Cypher statements and not
-`cypher-shell`'s quoted result table.
+```bash
+scripts/backup.sh                                                     # back up
+scripts/backup.sh restore backups/postgres-factory-<time>.dump --yes  # restore
+```
 
-Everything is written with `umask 077`, readable only by the account that
-runs the script: a backup holds every company's data and the stored
-credentials. `.gitignore` leaves out `/backups/`, `*.dump`,
-`*.dump.partial`, `*.dump.sha256` and `neo4j-*.cypher`, so a backup in the
-checkout is never committed; keep `BACKUP_DIR` outside it where you can.
+- Writes a Postgres dump with a `.sha256` (and a Neo4j export while
+  enabled) to `backups/`, keeping `BACKUP_KEEP_DAYS` (14).
+- Backups hold every company's data and credentials. Keep them outside the
+  checkout and copy them to another machine.
+- Run it daily:
+  `17 3 * * * cd /srv/la-fabrique && scripts/backup.sh >>backups/backup.log 2>&1`
 
-Run it daily from cron on the host, for example
-`17 3 * * * cd /srv/la-fabrique && scripts/backup.sh >>backups/backup.log 2>&1`,
-and copy `backups/` to another machine. CI backs up the e2e database and
-restores it on every run (`.github/workflows/e2e.yml`).
+**Restore.**
 
-**Restore.** Stop the backend replicas and the janitor, then run
-`scripts/backup.sh restore backups/postgres-factory-<time>.dump --yes`. It
-checks the checksum, then replaces the whole database rather than editing
-it in place (`pg_restore --clean` drops only what the archive holds, and a
-table a later migration added would block it or be left behind):
-1. creates an empty database `<db>_restore_<time>` (from `template0`,
-   UTF8), connected to `PG_MAINTENANCE_DB` (default `postgres`);
-2. restores the dump into it with `pg_restore --single-transaction
-   --exit-on-error --no-owner`: a restore that fails leaves nothing, the
-   empty database is dropped and `POSTGRES_DB` is untouched;
-3. renames `POSTGRES_DB` to `<db>_pre_restore_<time>` and the restored
-   database to `POSTGRES_DB`. A rename needs no session on either database,
-   so it stops here while a backend is still connected.
+1. `docker compose stop backend janitor`.
+2. Run the restore. It restores into a new database, then swaps it in; the
+   old one is kept as `<db>_pre_restore_<time>`. A failed restore changes
+   nothing.
+3. Start the backend; it migrates to head.
+4. Drop `<db>_pre_restore_<time>` once checked.
 
-Drop `<db>_pre_restore_<time>` once you have checked the restore. By hand,
-the same is: `CREATE DATABASE <new> TEMPLATE template0`, `pg_restore
---single-transaction -d <new> <file>`, then `DROP DATABASE <db>` (or rename
-it) and `ALTER DATABASE <new> RENAME TO <db>`. Then start the backend: it
-checks that the schema is at head and migrates a backup from an older
-release. Load a Neo4j export with `cypher-shell < neo4j-<time>.cypher` into
-an empty database. Always restore the whole Postgres database, never single
-tables: the audit chain would show the missing rows.
+Always restore the whole database, never single tables.
 
 ## Retention
 
-The janitor applies these settings once a day (`JANITOR_INTERVAL_SECONDS`).
-Each is a number of days; `0` keeps everything (`backend/janitor/retention.py`).
-Retention runs in transactions; only the vector index rebuild (`REINDEX
-CONCURRENTLY`) runs in autocommit. Superseded run versions go in batches,
-each one transaction: the runs are locked (`FOR UPDATE`), the guards
-checked again under the lock, so a review, comment, approval or
-publication recorded meanwhile keeps its run, and the verifications are
-deleted with their runs or not at all.
+The janitor applies these daily. `0` keeps everything.
 
-| Setting | Default | Deletes | Never deletes |
-|---------|---------|---------|---------------|
-| `RETENTION_OUTBOX_DAYS` | 7 | delivered outbox events | pending and failed events |
-| `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded versions of a run, with their verifications | the latest version of each run (the evidence of record), any version a person reviewed, commented on, approved or published, and any version a task event points at (directly or through its verification) |
-| `RETENTION_KPI_TURNS_DAYS` | 0 | KPI turn rows of `audit_log` outside a hash chain (rows without a company, or older than the chain) | any row of a company's chain, and any row a run, verification, approval, review or publication points at |
-| `RETENTION_NOTIFICATIONS_DAYS` | 90 (never unbounded: `0` or less keeps 90, over 365 is cut to 365) | personal notifications older than that, read or not, and at once those of a person no longer a member of the company | nothing else: a notification is a pointer, its subject is never touched |
+| Setting | Default | Deletes |
+|---|---|---|
+| `RETENTION_OUTBOX_DAYS` | 7 | delivered outbox events |
+| `RETENTION_AGENT_RUNS_DAYS` | 0 | superseded run versions nothing points at |
+| `RETENTION_KPI_TURNS_DAYS` | 0 | KPI rows outside a hash chain |
+| `RETENTION_NOTIFICATIONS_DAYS` | 90 | notifications |
 
-Once the database grows, `RETENTION_AGENT_RUNS_DAYS=90` is reasonable. The
-janitor logs how many chained KPI turns it kept because the chain needs them.
+There is no audit or task-event retention: each row is a link of a hash
+chain.
 
-There is **no audit retention and no task-event retention**, on purpose:
-every row of a company's audit log is a link of its hash chain, and every
-task event a link of its task's chain; deleting one shows as a gap
-(`GET /v1/audit/chain`, `verify_chain`). `RETENTION_GLASSROOM_DAYS` used to
-delete the task events of closed sprints without looking at the chains; it
-was removed (issue #766) and the janitor logs a warning when it is still set.
+### Archiving the audit chain
 
-**Archiving the audit chain.** To keep old audit rows outside the live
-database, archive a company's whole chain, never part of it:
-1. Back up (above).
-2. Export the company's rows with every column the chain hashes:
-   `\copy (SELECT * FROM audit_log WHERE company_id = <id> ORDER BY chain_seq) TO 'audit-<id>.csv' CSV HEADER`.
-   Keep with it the `GET /v1/audit/chain` answer of that moment (its
-   `head` and `anchors`), the export of each anchor
-   (`GET /v1/audit/anchors/{id}/export`) and, if the chain is keyed, which
-   `AUDIT_SIGNING_KEY` keyed it.
-3. Keep the archive read-only. Deleting the archived rows from the live
-   database is not supported yet, because the chain would report the gap.
-   Until the chain can start from a checkpoint, the archive is a copy and
-   the database keeps the rows.
+Archive a company's whole chain, never part of it:
 
-**Anchoring the audit chain outside** (issue #542,
-`docs/design/AUDIT_ANCHORS.md`). `AUDIT_SIGNING_KEY` is held by the factory,
-so the chain alone does not stop someone with that key and the database from
-rewriting it. An Owner turns on anchors on the Audit anchors page
-(`/company/audit-anchors`): a cadence (hourly by default), posting each head
-to the company's webhook, an RFC 3161 timestamping authority (its URL and its
-certificate, taken from the authority itself), and the customer's Ed25519
-public keys, whose private halves sign heads from the customer's own job.
-`GET /v1/audit/anchors` (and `anchors` in `GET /v1/audit/chain`) must read
-`covered` after a cadence; `uncovered_tail` between cadences is normal,
-`no_anchors` means nothing outside covers the chain, and `anchor_mismatch` is
-an incident: the chain or an anchor was rewritten (handle it as SECURITY.md
-§9). An anchor whose delivery failed shows as `undelivered`: check the
-webhook's last error or the authority's URL, then `POST /v1/audit/anchors`.
-Rotating a customer key: add the new public key, move the signing job to it,
-then retire the old one (it keeps verifying what it signed). Replacing the
-authority's certificate: paste the new one; anchors keep the certificate
-they were verified with.
+1. Back up.
+2. `\copy (SELECT * FROM audit_log WHERE company_id = <id> ORDER BY chain_seq) TO 'audit-<id>.csv' CSV HEADER`
+3. Keep with it the `GET /v1/audit/chain` answer, each
+   `GET /v1/audit/anchors/{id}/export`, and the `AUDIT_SIGNING_KEY` used.
+4. Store it read-only. The live rows stay.
+
+### Anchoring the audit chain outside
+
+An Owner turns on anchors at `/company/audit-anchors`
+([`design/AUDIT_ANCHORS.md`](design/AUDIT_ANCHORS.md)).
+`GET /v1/audit/anchors` should read `covered`. `undelivered`: fix the webhook
+or authority URL, then `POST /v1/audit/anchors`. `anchor_mismatch` is an
+incident (SECURITY.md §9).
 
 ## How many workers may run
 
-Several backend replicas may run against one Postgres and one NATS. Each
-replica serves the HTTP API and runs the workers. Give each its own host
-port, or put them behind a load balancer: the Glassroom works through any
-replica, since each one subscribes to every sprint's stream. All replicas
-need the same `.env` and the same `NATS_NAMESPACE`. In `docker-compose.yml`
-the backend has a fixed `container_name` and port, so a second replica is a
-second service or a second host; `docker compose up --scale backend=2` does
-not work as the file stands.
+Several backend replicas may share one Postgres and NATS, with the same
+`.env` and `NATS_NAMESPACE`. Locks make it safe
+(`services/loop/replicas.py`). The compose file's fixed container name means
+`--scale backend=2` does not work: add a service or a host.
 
-What makes several replicas safe (`backend/app/services/loop/replicas.py`,
-`backend/app/services/platform/locks.py`):
-
-- **Assignments.** Replicas share one durable JetStream consumer
-  (`task-worker`), so each stored assignment goes to one of them. A second
-  assignment for the same task (from another dispatch) does no harm: a
-  replica claims a task with a conditional update from `todo`, and only the
-  replica whose update matched runs it.
-- **Restarts and crashes.** The replica working on a task holds the
-  task's Postgres advisory lock, which is its lease: a crashed replica's
-  locks go with its connections. Every review cycle (the startup one
-  included) first returns to `todo` the `in_progress` tasks nobody holds,
-  and its dispatch queues them again, so a surviving replica picks up a
-  dead one's task within a cycle (a survivor acknowledges the redelivered
-  assignment itself, since the task is no longer `todo`). Postgres notices
-  a killed process at once; a host that vanished is noticed when its TCP
-  connection times out, so set the server's `tcp_keepalives_idle` (for
-  example 60) to bound that.
-- **The review cycle** (QA reviews, the delivery gate, rework, dispatch,
-  dependency holds) runs under one advisory lock: one replica at a time,
-  and the others skip that round. The dispatch cooldown is kept per
-  replica; a task queued by two replicas is stored once (JetStream's
-  duplicate window on `assign-<task>-<updated_at>`) and claimed once
-  anyway.
-- **Closing a sprint** runs under the company's lock and closes the sprint
-  with a conditional update from `active`. There is one close, one
-  retrospective, one measurement of the procedures, one proposal round and
-  one follow-up.
-- **The ScrumMaster's triage** runs once per escalation: it takes the
-  escalation's lock and checks that no decision answers it yet.
-- **The Support and Reviewer agents' cycles** run under their own locks.
-- **The outbox** takes its rows with `FOR UPDATE SKIP LOCKED` and publishes
-  with `outbox-<id>` as the message id.
-- **Console producers' cooldowns** are stored in `assistant_runtime_state`.
-  The Glassroom buffer is per replica and needs nothing shared.
-
-A replica holds one more Postgres connection while it works on a task, and
-one for each cycle it leads. Size `max_connections` for about
-`replicas × (pool 5 + overflow 10 + 3)`.
-
-What is tested: `backend/tests/test_replicas.py` races two workers (threads
-on a file-backed SQLite database) on one task and one sprint. With
-`REPLICAS_POSTGRES_URL` set it runs the races on Postgres, which the e2e
-workflow does against its database. What is not tested yet: two backend
-processes driving the whole e2e loop together. That CI job is the next
-step.
+- Set Postgres `tcp_keepalives_idle` (e.g. 60) so a vanished host's tasks
+  are released.
+- Size `max_connections` for `replicas × (5 + 10 + 3)`.
 
 ## Neo4j
 
-Neo4j (the knowledge graph) is optional and on by default (issue #328):
-`docker compose up -d` starts it with `NEO4J_PASSWORD` (and
-`NEO4J_AUTH=neo4j/<password>`) from `.env`. The backend does not depend on
-it: it starts without waiting, and while Neo4j is enabled but not reachable
-yet it tries again every 15 seconds for ten minutes and records the graph
-from the moment it connects. If Neo4j stays unreachable longer, memory
-search keeps working, `memory_graph` stays false until a restart with Neo4j
-up, and `/health/deep` reports the stack `degraded`.
-
-To run without it (less memory; the Enterprise image in compose runs under
-an evaluation licence, so a production deployment either licenses it, moves
-to the Community image, or turns the graph off):
+Optional and on by default. The backend does not wait for it. The compose
+image is Enterprise under an evaluation licence: in production license it,
+use Community, or turn it off:
 
 ```bash
 NEO4J_ENABLED=false docker compose up -d --scale neo4j=0
 ```
 
-With `NEO4J_ENABLED=false` the backend never connects to it:
-
-- memory search and store (`/v1/memory/*`) run on Postgres with pgvector
-  alone; the store's answer says what each store kept (`vector`, `graph`:
-  `stored` or `not_recorded`);
-- engrams (sprint retrospectives, the kickoff) are kept in pgvector only,
-  and the agents' memory of past decisions comes from there;
-- file lineage (`GET /v1/enterprise/lineage`) answers `recorded: false`
-  with the reason, which the Lineage page shows as "not recorded" rather
-  than "no decisions";
-- `/v1/capabilities` says `memory_graph: false` beside `memory`, and
-  `/health/deep` shows `neo4j` as `disabled`.
-
-Nothing recorded while the graph was off is backfilled into it.
-`scripts/backup.sh` exports it only while it is enabled.
+Memory then runs on pgvector alone. Nothing is backfilled later.
 
 ## Securing the bus
-Anything that can publish on NATS can ask the workspace daemon to run commands, so give each component its own user and, when the bus leaves the machine, TLS (issue #327; SECURITY.md §8.6).
 
-1. Credentials. In `.env`, set two long random passwords (`python -c "import secrets; print(secrets.token_urlsafe(32))"`):
-   `NATS_BACKEND_PASSWORD=...` and `NATS_DAEMON_PASSWORD=...`. `docker compose up -d` then starts the broker with `nats/nats-server.conf` and the backend connects as `backend`. Start the daemon with the daemon's password: `NATS_DAEMON_PASSWORD=... ./scripts/start-daemon.sh` (or `NATS_USER=daemon NATS_PASSWORD=...`; with a `.creds` file, `./scripts/start-daemon.sh --creds FILE` or `-Creds FILE` on Windows). Setting only one password stops the broker with a message; setting neither keeps the old unauthenticated bus.
-2. Check. `curl -s localhost:8000/health` shows `"nats": {"state": "connected", "connected": true, "jetstream": true, "authenticated": true, "tls": false}`. The daemon logs `auth: password`.
-3. Permissions. After changing the subjects in `backend/app/nats_client.py` or `vscode-daemon/nats_scope.py`, run `python3 scripts/nats_config.py` and commit `nats/nats-server.conf`; `--check` fails while it is stale. A deployment with `NATS_NAMESPACE` writes its own: `python3 scripts/nats_config.py --namespace <ns> --output nats/nats-server.conf`.
-4. TLS with a self-signed CA. On the broker's machine:
+Anything that can publish on NATS can make the daemon run commands
+(SECURITY.md §8.6).
+
+1. In `.env`, set `NATS_BACKEND_PASSWORD` and `NATS_DAEMON_PASSWORD`
+   (`python -c "import secrets; print(secrets.token_urlsafe(32))"`), then
+   `docker compose up -d`. Start the daemon with
+   `NATS_DAEMON_PASSWORD=... ./scripts/start-daemon.sh`.
+2. Check: `curl -s localhost:8000/health` shows `"authenticated": true`.
+3. After changing NATS subjects, run `python3 scripts/nats_config.py` and
+   commit `nats/nats-server.conf`.
+4. TLS, on the broker's machine:
 
    ```bash
    mkdir -p nats/certs && cd nats/certs
@@ -1564,6 +616,11 @@ Anything that can publish on NATS can ask the workspace daemon to run commands, 
      -days 825 -sha256 -extfile server.ext -out server.crt
    ```
 
-   Add the broker's public name or address to `subjectAltName` if the daemon connects from another machine. Keep `ca.key` offline; `nats/certs` is ignored by git. Restart the broker (`docker compose up -d nats`): it requires TLS once `server.crt` and `server.key` exist, and with `NATS_TLS=true` in `.env` it refuses to start if either is missing, rather than run in the clear (likewise `NATS_TLS_VERIFY=true` without `ca.crt`). Set `NATS_TLS=true` in `.env` (the backend container reads the CA from `nats/certs/ca.crt`) and start the daemon with `NATS_TLS=true NATS_TLS_CA=/path/to/ca.crt`. `/health` then shows `"tls": true`.
-5. Client certificates (optional). Sign one per component like `server.crt` with `extendedKeyUsage=clientAuth` and set `NATS_TLS_VERIFY=true` for the broker. For a daemon started by `scripts/start-daemon.*`, set `NATS_TLS_CERT` and `NATS_TLS_KEY` to the files' paths. In the containers, `nats/certs` is mounted at `/etc/fabrique-nats/certs`: put the files there and name them in `.env` with `NATS_BACKEND_TLS_CERT` / `NATS_BACKEND_TLS_KEY` (backend) and `NATS_DAEMON_TLS_CERT` / `NATS_DAEMON_TLS_KEY` (the opt-in daemon container), e.g. `NATS_BACKEND_TLS_CERT=backend.crt`; compose passes `NATS_TLS_CERT=/etc/fabrique-nats/certs/backend.crt` and so on, and nothing when they are empty.
-6. Rotate a password by changing it in `.env` and restarting the broker, the backend and the daemon together; a component with the old one is refused and keeps retrying.
+   Keep `ca.key` offline. Set `NATS_TLS=true`, run
+   `docker compose up -d nats`, and start the daemon with
+   `NATS_TLS=true NATS_TLS_CA=/path/to/ca.crt`. `/health` shows `"tls": true`.
+5. Client certificates (optional): sign with `extendedKeyUsage=clientAuth`,
+   set `NATS_TLS_VERIFY=true`, and name the files with `NATS_TLS_CERT` /
+   `NATS_TLS_KEY` (daemon) or `NATS_BACKEND_TLS_*` (backend).
+6. Rotate a password: change it and restart broker, backend and daemon
+   together.
