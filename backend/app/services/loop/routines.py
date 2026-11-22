@@ -16,6 +16,14 @@ because the routine goes through the same worker and the same gates.
 - **Several replicas.** Each claims an occurrence with a conditional update of
   ``next_run_at``; only the replica whose update matched runs it.
 
+- **Revisions.** Each change that alters a routine is a numbered revision
+  (``routine_revisions``); a run records the revision it ran, and a Manager
+  can restore an earlier one.
+- **Variables.** A routine declares inputs (``routine_variables``) and writes
+  ``{{name}}`` in its description. A scheduled run takes the defaults; "run
+  now" may give values. A run whose required value is missing is skipped,
+  audited with the reason. The values a run used are in its audit row.
+
 Creating, changing, deleting, running and skipping a routine are each an
 audit row (``routine_*``) in the company's chain. The design follows
 Paperclip's routines (MIT: ``server/src/services/routines.ts``); no code taken.
@@ -33,8 +41,8 @@ from models import BacklogItem, BusinessUnit, OutboxEvent, Routine, Sprint
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from services.contracts import routine_schedule
-from services.loop import run_window_gate, sprint_control
+from services.contracts import routine_schedule, routine_variables
+from services.loop import routine_revisions, run_window_gate, sprint_control
 from services.planning import sprint_team
 from services.platform.agent_service import AgentService
 
@@ -43,7 +51,7 @@ logger = logging.getLogger(__name__)
 TICK_SECONDS = 60
 TITLE_MAX = 200
 DESCRIPTION_MAX = 10_000
-FIELDS = ("title", "description", "assignee", "schedule", "enabled")
+FIELDS = routine_revisions.SNAPSHOT_FIELDS
 
 
 class RoutineRefused(ValueError):
@@ -70,6 +78,8 @@ def view(routine: Routine) -> dict[str, Any]:
         "assignee": routine.assignee,
         "schedule": routine.schedule,
         "enabled": routine.enabled,
+        "variables": routine.variables,
+        "revision": routine.revision,
         "next_run_at": routine.next_run_at.isoformat() if routine.next_run_at else None,
         "last_run_at": routine.last_run_at.isoformat() if routine.last_run_at else None,
         "last_sprint_id": routine.last_sprint_id,
@@ -133,7 +143,19 @@ def _clean(
             raise RoutineRefused(422, str(exc)) from exc
     if "enabled" in payload:
         out["enabled"] = bool(payload["enabled"])
+    if "variables" in payload:
+        try:
+            out["variables"] = routine_variables.validate(payload["variables"])
+        except routine_variables.InvalidVariables as exc:
+            raise RoutineRefused(422, str(exc)) from exc
     return out
+
+
+def _check_placeholders(description: str, variables: list[dict[str, Any]]) -> None:
+    try:
+        routine_variables.check_placeholders(description, variables)
+    except routine_variables.InvalidVariables as exc:
+        raise RoutineRefused(422, str(exc)) from exc
 
 
 def _reschedule(routine: Routine, now: datetime | None = None) -> None:
@@ -155,6 +177,7 @@ def create(
     if missing:
         raise RoutineRefused(422, f"missing: {', '.join(missing)}")
     values = _clean(session, company_id, payload)
+    _check_placeholders(values.get("description", ""), values.get("variables", []))
     routine = Routine(
         company_id=company_id,
         created_by_user_id=(actor or {}).get("user_id"),
@@ -163,6 +186,7 @@ def create(
     _reschedule(routine, now)
     session.add(routine)
     session.flush()
+    routine_revisions.write(session, routine, "Created", actor)
     _audit(session, routine, "routine_created", {"routine": view(routine)}, actor)
     session.commit()
     session.refresh(routine)
@@ -175,16 +199,32 @@ def update_routine(
     payload: dict[str, Any],
     actor: dict[str, Any] | None,
     now: datetime | None = None,
+    *,
+    summary: str | None = None,
+    restored_from: int | None = None,
 ) -> Routine:
+    """Change *routine*; a change that alters it is the next revision."""
     values = _clean(session, routine.company_id, payload)
     before = {k: getattr(routine, k) for k in FIELDS}
     changed = sorted(k for k, v in values.items() if before[k] != v)
     if not changed:
         return routine
+    _check_placeholders(
+        values.get("description", routine.description),
+        values.get("variables", routine.variables),
+    )
     for key in changed:
         setattr(routine, key, values[key])
     _reschedule(routine, now)
+    routine.revision += 1
     session.add(routine)
+    routine_revisions.write(
+        session,
+        routine,
+        summary or f"Changed {', '.join(changed)}",
+        actor,
+        restored_from,
+    )
     _audit(
         session,
         routine,
@@ -193,6 +233,8 @@ def update_routine(
             "changed": changed,
             "from": {k: before[k] for k in changed},
             "to": {k: values[k] for k in changed},
+            "revision": routine.revision,
+            "restored_from": restored_from,
         },
         actor,
     )
@@ -216,7 +258,31 @@ def _open_run(session: Session, routine: Routine) -> Sprint | None:
     return sprint
 
 
-def _open_sprint(session: Session, routine: Routine, now: datetime) -> Sprint:
+def restore(
+    session: Session, routine: Routine, number: int, actor: dict[str, Any] | None
+) -> Routine:
+    """Put back revision *number* of *routine*, as its next revision."""
+    revision = routine_revisions.find(session, routine, number)
+    if revision is None:
+        raise RoutineRefused(404, f"Routine {routine.id} has no revision {number}")
+    payload = {k: revision.snapshot.get(k) for k in FIELDS if k in revision.snapshot}
+    current = routine.revision
+    updated = update_routine(
+        session,
+        routine,
+        payload,
+        actor,
+        summary=f"Restored revision {number}",
+        restored_from=number,
+    )
+    if updated.revision == current:
+        raise RoutineRefused(409, f"The routine already holds revision {number}")
+    return updated
+
+
+def _open_sprint(
+    session: Session, routine: Routine, now: datetime, description: str
+) -> Sprint:
     business_unit = session.exec(
         select(BusinessUnit).where(BusinessUnit.company_id == routine.company_id)
     ).first()
@@ -226,7 +292,7 @@ def _open_sprint(session: Session, routine: Routine, now: datetime) -> Sprint:
         sprint_name=f"Routine: {routine.title} — {now.date().isoformat()}"[:255],
         scope_size="S",
         goal=routine.title,
-        objective=routine.description or routine.title,
+        objective=description or routine.title,
         team=None,
         team_source=sprint_team.ALL,
     )
@@ -236,7 +302,7 @@ def _open_sprint(session: Session, routine: Routine, now: datetime) -> Sprint:
     item = BacklogItem(
         sprint_id=sprint.id,
         title=routine.title,
-        description=routine.description,
+        description=description,
         priority="medium",
         assignee=routine.assignee,
     )
@@ -269,9 +335,23 @@ def run(
     routine: Routine,
     actor: dict[str, Any] | None = None,
     now: datetime | None = None,
+    values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """One occurrence of *routine*: its sprint, or why it was skipped. Commits."""
+    """One occurrence of *routine*: its sprint, or why it was skipped. Commits.
+
+    *values* are the variables given for this run (``None``: the defaults);
+    values a person gave that the routine refuses raise ``RoutineRefused``,
+    while a scheduled run that cannot fill a required variable is skipped."""
     now = now or _now()
+    try:
+        resolved = routine_variables.resolve(routine.variables, values)
+    except routine_variables.InvalidVariables as exc:
+        if values is not None:
+            raise RoutineRefused(422, str(exc)) from exc
+        reason = f"Cannot run revision {routine.revision}: {exc}"
+        _audit(session, routine, "routine_skipped", {"reason": reason}, actor)
+        session.commit()
+        return {"skipped": reason, "revision": routine.revision}
     open_run = _open_run(session, routine)
     if open_run is not None:
         reason = (
@@ -287,13 +367,20 @@ def run(
         )
         session.commit()
         return {"skipped": reason, "open_sprint_id": open_run.id}
-    sprint = _open_sprint(session, routine, now)
+    description = routine_variables.render(routine.description, resolved)
+    sprint = _open_sprint(session, routine, now, description)
     routine.last_run_at = now
     routine.last_sprint_id = sprint.id
     session.add(routine)
-    _audit(session, routine, "routine_ran", {"sprint_id": sprint.id}, actor)
+    _audit(
+        session,
+        routine,
+        "routine_ran",
+        {"sprint_id": sprint.id, "revision": routine.revision, "values": resolved},
+        actor,
+    )
     session.commit()
-    return {"sprint_id": sprint.id}
+    return {"sprint_id": sprint.id, "revision": routine.revision, "values": resolved}
 
 
 def _claim(session: Session, routine: Routine, now: datetime) -> bool:

@@ -4,7 +4,11 @@
 - ``POST   /v1/companies/{company_id}/routines`` — write one (Manager).
 - ``PATCH  /v1/routines/{routine_id}``           — change one (Manager).
 - ``DELETE /v1/routines/{routine_id}``           — delete one (Manager).
-- ``POST   /v1/routines/{routine_id}/run``       — run it now (Manager).
+- ``POST   /v1/routines/{routine_id}/run``       — run it now (Manager),
+  optionally with ``values`` for its variables.
+- ``GET    /v1/routines/{routine_id}/revisions`` — its revisions (Viewer).
+- ``POST   /v1/routines/{routine_id}/revisions/{number}/restore`` — put back
+  an earlier revision, as a new one (Manager).
 
 A routine decides what agents do, so changing or running one takes a Manager,
 like a sprint. Every change and run is audited (``services/loop/routines.py``).
@@ -18,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Routine, User
 from pydantic import Field
 from schemas import RequestModel
+from services.loop import routine_revisions as revisions
 from services.loop import routines
 from services.loop import run_window_gate as gate
 from services.platform import sod
@@ -35,6 +40,16 @@ class RoutineSchedule(RequestModel):
     weekday: int | None = None
 
 
+class RoutineVariable(RequestModel):
+    """One input the routine's description uses as ``{{name}}``."""
+
+    name: str = Field(max_length=40)
+    label: str | None = Field(default=None, max_length=100)
+    default: str | None = Field(default=None, max_length=500)
+    required: bool = False
+    options: list[str] = Field(default_factory=list, max_length=50)
+
+
 class RoutineCreateRequest(RequestModel):
     """A new routine."""
 
@@ -43,6 +58,7 @@ class RoutineCreateRequest(RequestModel):
     assignee: str = Field(max_length=100)
     schedule: RoutineSchedule
     enabled: bool = True
+    variables: list[RoutineVariable] = Field(default_factory=list, max_length=20)
 
 
 class RoutineUpdateRequest(RequestModel):
@@ -53,6 +69,13 @@ class RoutineUpdateRequest(RequestModel):
     assignee: str | None = Field(default=None, max_length=100)
     schedule: RoutineSchedule | None = None
     enabled: bool | None = None
+    variables: list[RoutineVariable] | None = Field(default=None, max_length=20)
+
+
+class RoutineRunRequest(RequestModel):
+    """Values for the routine's variables on this run; the rest take defaults."""
+
+    values: dict[str, str] | None = None
 
 
 def _payload(req: RequestModel) -> dict[str, Any]:
@@ -145,9 +168,46 @@ async def delete_routine(
 @router.post("/routines/{routine_id}/run")
 async def run_routine(
     routine_id: int,
+    req: RoutineRunRequest | None = None,
     session: Session = Depends(get_session),  # noqa: B008
     user: User | None = Depends(current_user_if_required),  # noqa: B008
 ):
     """Run a routine now (Manager); skipped while its previous run is open."""
     routine = _routine(session, user, routine_id, "Manager")
-    return routines.run(session, routine, _actor(session, user))
+    try:
+        return routines.run(
+            session, routine, _actor(session, user), values=req.values if req else None
+        )
+    except routines.RoutineRefused as exc:
+        raise _refused(exc) from exc
+
+
+@router.get("/routines/{routine_id}/revisions")
+async def routine_revisions(
+    routine_id: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Every version of the routine, newest first (Viewer)."""
+    routine = _routine(session, user, routine_id, "Viewer")
+    return {
+        "routine_id": routine_id,
+        "revision": routine.revision,
+        "revisions": revisions.listed(session, routine),
+    }
+
+
+@router.post("/routines/{routine_id}/revisions/{number}/restore")
+async def restore_routine_revision(
+    routine_id: int,
+    number: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Put back an earlier revision, recorded as a new one (Manager)."""
+    routine = _routine(session, user, routine_id, "Manager")
+    try:
+        routine = routines.restore(session, routine, number, _actor(session, user))
+    except routines.RoutineRefused as exc:
+        raise _refused(exc) from exc
+    return routines.view(routine)

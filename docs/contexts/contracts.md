@@ -7,7 +7,7 @@ docstring has the detail.
 - **Folder:** `backend/app/services/contracts/`
 - **May import:** no other context.
 - **Interface:** every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Rules
 
@@ -71,6 +71,16 @@ daemon's command policy and sandbox still apply at run time. Design:
 interval from the last run. `next_after` is the first occurrence strictly
 after a moment, so occurrences missed while the backend was down collapse
 into one.
+
+### A routine's variables
+
+`routine_variables.py`: the inputs a routine declares (`name`, `label`,
+`default`, `required`, `options`) and writes as `{{name}}` in its
+description. `resolve` takes given values over defaults and refuses a missing
+required value, a value outside its options or an undeclared name; `render`
+fills the text in one pass, never expanding a value again;
+`check_placeholders` refuses an undeclared `{{name}}` when the routine is
+written.
 
 ### The self-improvement records
 

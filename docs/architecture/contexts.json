@@ -1169,7 +1169,13 @@
         "evidence",
         "loop"
       ],
+      "test_routine_revisions.py": [
+        "loop"
+      ],
       "test_routine_schedule.py": [
+        "contracts"
+      ],
+      "test_routine_variables.py": [
         "contracts"
       ],
       "test_routines.py": [
