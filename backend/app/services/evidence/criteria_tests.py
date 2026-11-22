@@ -217,10 +217,25 @@ def verbose_command(command: str) -> str:
     return command
 
 
+# pytest's short summary: ``FAILED tests/x.py::test_y - ModuleNotFoundError: …``.
+_SUMMARY_LINE = re.compile(r"^(?:FAILED|ERROR) (\S+::\S+) - (.+)$", re.MULTILINE)
+
+
+def failure_reasons(output: str) -> dict[str, str]:
+    """Per failing test, the reason the runner's summary line gives (cut to
+    200 characters, at most 50 tests); ``{}`` when the output has none."""
+    reasons: dict[str, str] = {}
+    for name, reason in _SUMMARY_LINE.findall(output or ""):
+        if name not in reasons and len(reasons) < 50:
+            reasons[name] = reason.strip()[:200]
+    return reasons
+
+
 def record_results(evidence: dict[str, Any], output: str) -> None:
     """Add to ``evidence["test_run"]`` what the runner's output says per
     criterion (``criteria``), which tests failed (``failing_tests``, at most
-    50) and how many did (``failing_count``, uncapped)."""
+    50), how many did (``failing_count``, uncapped) and why, per its summary
+    line (``failure_reasons``)."""
     acceptance = evidence.get("acceptance")
     test_run = evidence.get("test_run")
     if not acceptance or not isinstance(test_run, dict):
@@ -229,6 +244,7 @@ def record_results(evidence: dict[str, Any], output: str) -> None:
     names = failing_tests(output)
     test_run["failing_tests"] = names[:50]
     test_run["failing_count"] = len(names)
+    test_run["failure_reasons"] = failure_reasons(output)
 
 
 def excused_failures(evidence: dict[str, Any]) -> tuple[bool, list[str]]:

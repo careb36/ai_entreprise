@@ -26,6 +26,7 @@ from services.evidence import (
     sources,
     standards,
     test_baseline,
+    unwritten_code,
     wstg_tests,
 )
 from services.evidence.claimed_paths import claim_strings, extract_claimed_paths
@@ -287,6 +288,17 @@ def check_tests_run(evidence: dict) -> dict:
                     f"criteria not implemented yet failed ({', '.join(excused)})"
                     f"{truncated}"
                 ),
+            }
+        explained, excused, unwritten = unwritten_code.explain(evidence)
+        if explained:
+            # QA's extra tests fail for the same reason as its criteria's:
+            # the code is not written yet (``unwritten_code``).
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": f"{target} exited {exit_code}: "
+                + unwritten_code.observation(excused, unwritten)
+                + truncated,
             }
         explained, excused, earlier = test_baseline.explain(evidence)
         if explained:

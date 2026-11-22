@@ -1501,6 +1501,9 @@
       "test_trusted_proxies.py": [
         "platform"
       ],
+      "test_unwritten_code.py": [
+        "evidence"
+      ],
       "test_usage_report.py": [
         "loop"
       ],
