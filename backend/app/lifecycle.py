@@ -16,7 +16,7 @@ from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
 from services.integrations.anchoring import cadence_loop as anchor_cadence_loop
 from services.integrations.outbox_service import process_outbox
-from services.loop import run_window_gate
+from services.loop import routines, run_window_gate
 from services.loop.task_worker import process_backlog_tasks
 from services.producers.agent_worker import process_agent_tasks
 from services.release import integration_jobs
@@ -112,6 +112,8 @@ async def _start_workers(app, client: NATSClient) -> None:
         "audit_anchor_cadence": anchor_cadence_loop(_engine()),
         # Work held for the company's run window, released at its boundary (issue #736).
         "run_window_release": run_window_gate.worker(_engine()),
+        # A company's routines, opened on their schedule (issue #774).
+        "routine_scheduler": routines.worker(_engine()),
     }
     for name, coro in worker_coros.items():
         task = asyncio.create_task(coro, name=name)

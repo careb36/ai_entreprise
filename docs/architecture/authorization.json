@@ -84,6 +84,9 @@
     "DELETE /v1/mcp/servers/{server_id}": {
       "access": "Manager"
     },
+    "DELETE /v1/routines/{routine_id}": {
+      "access": "Manager"
+    },
     "DELETE /v1/run-secrets/{secret_id}": {
       "access": "Manager"
     },
@@ -306,6 +309,9 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/research": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/routines": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/routing_record": {
@@ -596,6 +602,9 @@
     "PATCH /v1/mcp/servers/{server_id}": {
       "access": "Manager"
     },
+    "PATCH /v1/routines/{routine_id}": {
+      "access": "Manager"
+    },
     "PATCH /v1/sprints/{sprint_id}": {
       "access": "Manager"
     },
@@ -767,6 +776,9 @@
       "access": "Manager"
     },
     "POST /v1/companies/{company_id}/providers/{provider_id}/validate": {
+      "access": "Manager"
+    },
+    "POST /v1/companies/{company_id}/routines": {
       "access": "Manager"
     },
     "POST /v1/companies/{company_id}/rsi/cycles/import": {
@@ -978,6 +990,9 @@
       "access": "Manager"
     },
     "POST /v1/procedures/{procedure_id}/retire": {
+      "access": "Manager"
+    },
+    "POST /v1/routines/{routine_id}/run": {
       "access": "Manager"
     },
     "POST /v1/run-secrets": {

@@ -465,6 +465,7 @@ SQLModel.metadata.create_all(
         SavedViewPreference.__table__,
         SprintProgressSnapshot.__table__,
         TaskRelation.__table__,
+        TaskRelation.metadata.tables["routines"],
         Team.__table__,
         TeamMember.__table__,
         TeamMembershipPeriod.__table__,

@@ -1166,6 +1166,12 @@
         "evidence",
         "loop"
       ],
+      "test_routine_schedule.py": [
+        "contracts"
+      ],
+      "test_routines.py": [
+        "loop"
+      ],
       "test_routing_record.py": [
         "models"
       ],

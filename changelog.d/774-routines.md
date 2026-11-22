@@ -1,0 +1,3 @@
+Added
+
+* **Routines: a task that runs on a schedule (issue #774).** A Manager can write a routine, a task with a title, a description, the hired role that does it and a daily or weekly time in a timezone (`POST /v1/companies/{id}/routines`; `PATCH`, `DELETE` and `POST /v1/routines/{id}/run`). When it is due, the backend opens a small sprint with that task, which the worker runs like any other, under the run window, the sprint budget, the Verifier and QA. While the previous run is still open the occurrence is skipped, occurrences missed while the backend was down collapse into one, and with several replicas each occurrence runs once. Every change, run and skip is audited. New table `routines` (migration 0062). From Paperclip's routines (MIT).
