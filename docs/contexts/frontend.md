@@ -117,6 +117,7 @@ component is named.
 | `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
 | `/company/usage`, `/company/quotas`, `/company/models`, `/company/model-catalog` | `Usage`, `components/QuotaPanel`, `Models`, `ModelCatalog` |
 | `/company/project`, `/company/execution`, `/company/mcp` | `ProjectSettings`, `ExecutionSettings`, `McpServers` |
+| `/company/routines` | `Routines` (with `pages/routines/`): the company's scheduled tasks, run now with values, revisions and restore |
 | `/company/notifications`, `/company/api-tokens` | `Notifications` (the webhook), `ApiTokens` |
 | `/company/audit-trail`, `/company/audit-anchors` | `AuditTrail`, `AuditAnchors` |
 | `/company/procedures`, `/company/wiki`, `/company/documentation` | `Procedures`, `Wiki`, `Documentation` |
@@ -125,7 +126,7 @@ component is named.
 | `/company/findings[/:id]`, `/company/self-improvement` | `CompanyFindings`, `CompanyFindingDetail`, `SelfImprovement` |
 | `/company/security-tests` | `SecurityTests` |
 | `/bench` | `Bench` ([models](models.md#the-benchs-scorecards-the-bench-page)) |
-| `/agents`, `/governance` | `AgentSettings`, `components/GovernancePanel` (the Review page: inbox, intake queue, client requests, Manager policy) |
+| `/agents`, `/governance` | `AgentSettings` (an open card shows the agent's change history, `agentSettings/ConfigHistory`, with rollback for a Manager), `components/GovernancePanel` (the Review page: inbox, intake queue, client requests, Manager policy) |
 | `/support` | `HelpDesk` |
 | `/lineage`, `/memory`, `/generate` | `Lineage`, `MemorySearch`, `Generate` |
 | anything else | `NotFound` |

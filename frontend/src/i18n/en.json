@@ -48,7 +48,8 @@
     "project": "Project settings",
     "notifications": "Notifications",
     "auditTrail": "Audit trail",
-    "modelCatalog": "Model catalog"
+    "modelCatalog": "Model catalog",
+    "routines": "Routines"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -4974,5 +4975,90 @@
     "discardHelp": "Discarding needs the reason above. A discarded task is never run or carried over; reopen it to start it again.",
     "discardedNote": "Discarded by a person: it is not run or carried over. The reason is in the comments.",
     "reopen": "Reopen (move to To do)"
+  },
+  "agentHistory": {
+    "title": "Change history",
+    "loading": "Loading the history…",
+    "loadError": "The history could not be loaded.",
+    "empty": "No change recorded yet.",
+    "changed": "Changed {{fields}}",
+    "rollbackOf": "Rolled back change #{{id}}",
+    "byAt": "by {{by}}, {{at}}",
+    "reason": "Reason: {{reason}}",
+    "details": "Before and after",
+    "rollback": "Roll back",
+    "confirmRollback": "Confirm roll back",
+    "changedSince": "These fields had changed again since that revision and were also put back: {{fields}}"
+  },
+  "routines": {
+    "title": "Routines",
+    "subtitle": "Tasks the agents run on a schedule. Each run opens a small sprint that goes through the same run window, budget, Verifier and QA as any other work.",
+    "new": "New routine",
+    "create": "Create routine",
+    "save": "Save routine",
+    "cancel": "Cancel",
+    "noCompany": "Select a company to see its routines.",
+    "loadError": "The routines could not be loaded.",
+    "empty": "No routine yet.",
+    "disabled": "(off)",
+    "assignedTo": "For {{role}}",
+    "scheduleDay": "every day at {{at}} ({{timezone}})",
+    "scheduleWeek": "every {{day}} at {{at}} ({{timezone}})",
+    "nextRun": "Next run: {{at}}",
+    "noNextRun": "Not scheduled",
+    "revisionShort": "revision {{number}}",
+    "lastSprint": "last run: sprint #{{id}}",
+    "runNow": "Run now",
+    "runWithValues": "Run with these values",
+    "enable": "Turn on",
+    "disable": "Turn off",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "skipped": "Not run: {{reason}}",
+    "ran": "Sprint #{{id}} opened with revision {{revision}}.",
+    "field": {
+      "title": "Title",
+      "assignee": "Role that does it",
+      "description": "What to do",
+      "descriptionHint": "Use {{placeholder}} for a variable declared below.",
+      "schedule": "When",
+      "every": "Every",
+      "weekday": "Day",
+      "at": "Time",
+      "timezone": "Timezone (IANA, e.g. Europe/Madrid)",
+      "variables": "Variables"
+    },
+    "every": {
+      "day": "Day",
+      "week": "Week"
+    },
+    "weekday": {
+      "0": "Monday",
+      "1": "Tuesday",
+      "2": "Wednesday",
+      "3": "Thursday",
+      "4": "Friday",
+      "5": "Saturday",
+      "6": "Sunday"
+    },
+    "variable": {
+      "name": "Name",
+      "default": "Default",
+      "options": "Allowed values (comma-separated)",
+      "required": "Required",
+      "add": "Add variable",
+      "remove": "Remove variable {{name}}"
+    },
+    "revisions": {
+      "title": "Revisions",
+      "loading": "Loading the revisions…",
+      "loadError": "The revisions could not be loaded.",
+      "number": "Revision {{number}}",
+      "current": "current",
+      "restore": "Restore",
+      "confirmRestore": "Confirm restore",
+      "show": "Description in this revision"
+    }
   }
 }

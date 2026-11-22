@@ -2,6 +2,8 @@
 // the single `api` object and every name callers already import.
 import { createHttp } from './api/client'
 import { agentEndpoints } from './api/agents'
+import { agentRevisionEndpoints } from './api/agentRevisions'
+import { routineEndpoints } from './api/routines'
 import { analyticsEndpoints } from './api/analytics'
 import { benchEndpoints } from './api/bench'
 import { authEndpoints } from './api/auth'
@@ -34,6 +36,8 @@ import { workspaceEndpoints } from './api/workspace'
 export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setCsrfToken, setOnUnauthorized, setSessionHooks } from './api/client'
 export type { SessionHooks } from './api/client'
 export * from './api/agents'
+export * from './api/agentRevisions'
+export * from './api/routines'
 export * from './api/analytics'
 export * from './api/bench'
 export * from './api/auth'
@@ -97,6 +101,8 @@ const endpoints = {
   ...dutiesEndpoints(http),
   ...runWindowEndpoints(http),
   ...companyLimitsEndpoints(http),
+  ...agentRevisionEndpoints(http),
+  ...routineEndpoints(http),
   ...findingEndpoints(http),
   ...benchEndpoints(http),
   ...notificationEndpoints(http),

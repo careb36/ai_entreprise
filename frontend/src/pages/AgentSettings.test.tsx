@@ -30,6 +30,12 @@ vi.mock('../hooks/useQueries', () => {
   }
 })
 
+// The change history inside an open card has its own tests (agentSettings/ConfigHistory.test.tsx).
+vi.mock('../hooks/useAgentConfigRevisions', () => ({
+  useAgentConfigRevisions: () => ({ data: { revisions: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useRollbackAgentConfig: () => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false }),
+}))
+
 function modelSelect(): HTMLSelectElement {
   const select = screen.getByRole('option', { name: 'qwen3.7-plus (qwen)' }).closest('select')
   if (!select) throw new Error('model select not rendered')

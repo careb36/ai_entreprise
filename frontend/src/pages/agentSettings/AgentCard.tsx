@@ -6,6 +6,7 @@ import { draftFromAgent, isDraftDirty, type AgentDraft } from './drafts'
 import { tierClass } from './display'
 import { ActivityRow } from './ActivityRow'
 import { DraftFields } from './DraftFields'
+import { ConfigHistory } from './ConfigHistory'
 
 export function AgentCard({
   agent,
@@ -136,6 +137,8 @@ export function AgentCard({
               </button>
             </div>
           </div>}
+
+          <ConfigHistory agentId={agent.id} companyId={agent.company_id} readOnly={readOnly} />
         </div>
       )}
     </li>

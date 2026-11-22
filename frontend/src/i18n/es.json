@@ -48,7 +48,8 @@
     "project": "Ajustes del proyecto",
     "notifications": "Notificaciones",
     "auditTrail": "Registro de auditoría",
-    "modelCatalog": "Catálogo de modelos"
+    "modelCatalog": "Catálogo de modelos",
+    "routines": "Rutinas"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -4974,5 +4975,90 @@
     "discardHelp": "Para descartar hace falta el motivo de arriba. Una tarea descartada no se ejecuta ni pasa a otro sprint; reabrila para que vuelva a empezar.",
     "discardedNote": "Descartada por una persona: no se ejecuta ni pasa a otro sprint. El motivo está en los comentarios.",
     "reopen": "Reabrir (mover a Por hacer)"
+  },
+  "agentHistory": {
+    "title": "Historial de cambios",
+    "loading": "Cargando el historial…",
+    "loadError": "No se pudo cargar el historial.",
+    "empty": "Todavía no hay cambios registrados.",
+    "changed": "Cambió {{fields}}",
+    "rollbackOf": "Revirtió el cambio #{{id}}",
+    "byAt": "por {{by}}, {{at}}",
+    "reason": "Motivo: {{reason}}",
+    "details": "Antes y después",
+    "rollback": "Revertir",
+    "confirmRollback": "Confirmar reversión",
+    "changedSince": "Estos campos habían vuelto a cambiar después de esa revisión y también se restauraron: {{fields}}"
+  },
+  "routines": {
+    "title": "Rutinas",
+    "subtitle": "Tareas que los agentes ejecutan con un horario. Cada ejecución abre un sprint chico que pasa por la misma ventana de ejecución, presupuesto, Verifier y QA que cualquier otro trabajo.",
+    "new": "Nueva rutina",
+    "create": "Crear rutina",
+    "save": "Guardar rutina",
+    "cancel": "Cancelar",
+    "noCompany": "Elegí una empresa para ver sus rutinas.",
+    "loadError": "No se pudieron cargar las rutinas.",
+    "empty": "Todavía no hay rutinas.",
+    "disabled": "(apagada)",
+    "assignedTo": "Para {{role}}",
+    "scheduleDay": "todos los días a las {{at}} ({{timezone}})",
+    "scheduleWeek": "cada {{day}} a las {{at}} ({{timezone}})",
+    "nextRun": "Próxima ejecución: {{at}}",
+    "noNextRun": "Sin programar",
+    "revisionShort": "revisión {{number}}",
+    "lastSprint": "última ejecución: sprint #{{id}}",
+    "runNow": "Correr ahora",
+    "runWithValues": "Correr con estos valores",
+    "enable": "Encender",
+    "disable": "Apagar",
+    "edit": "Editar",
+    "delete": "Borrar",
+    "confirmDelete": "Confirmar borrado",
+    "skipped": "No se ejecutó: {{reason}}",
+    "ran": "Se abrió el sprint #{{id}} con la revisión {{revision}}.",
+    "field": {
+      "title": "Título",
+      "assignee": "Rol que la hace",
+      "description": "Qué hacer",
+      "descriptionHint": "Usá {{placeholder}} para una variable declarada abajo.",
+      "schedule": "Cuándo",
+      "every": "Cada",
+      "weekday": "Día",
+      "at": "Hora",
+      "timezone": "Zona horaria (IANA, p. ej. Europe/Madrid)",
+      "variables": "Variables"
+    },
+    "every": {
+      "day": "Día",
+      "week": "Semana"
+    },
+    "weekday": {
+      "0": "lunes",
+      "1": "martes",
+      "2": "miércoles",
+      "3": "jueves",
+      "4": "viernes",
+      "5": "sábado",
+      "6": "domingo"
+    },
+    "variable": {
+      "name": "Nombre",
+      "default": "Por defecto",
+      "options": "Valores permitidos (separados por coma)",
+      "required": "Obligatoria",
+      "add": "Agregar variable",
+      "remove": "Quitar la variable {{name}}"
+    },
+    "revisions": {
+      "title": "Revisiones",
+      "loading": "Cargando las revisiones…",
+      "loadError": "No se pudieron cargar las revisiones.",
+      "number": "Revisión {{number}}",
+      "current": "actual",
+      "restore": "Restaurar",
+      "confirmRestore": "Confirmar restauración",
+      "show": "Descripción en esta revisión"
+    }
   }
 }
