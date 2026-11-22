@@ -1,0 +1,3 @@
+Changed
+
+* **A rework that delivers the same bytes again is blocked for a person instead of going back (issue #774).** When the Verifier refutes a delivery for its code and the next attempt sends exactly the same files with the same content as the refuted one before, the task is blocked at once with both run numbers, rather than spending another model call and test run on the same verdict until the rework limit. The comparison uses the backend's own sha256 of what it sent, never a hash from the agent; a delivery the daemon never confirmed may always be sent again. From Paperclip's rewake throttle (MIT).
