@@ -8,9 +8,12 @@ Each side's cards are put in the order of their stamps, and the i-th card of
 the baseline (B) is paired with the i-th card of the candidate (C), as the
 runs were made alternately (B, C, B, C, ...). Then:
 
-- **Void pairs (REQ-7).** A pair whose models served per role (the union of
-  every specification's ``models``) differ is void: neither of its cards is
-  counted. A card with no partner is not counted either.
+- **Void pairs (REQ-7).** A pair whose models served per role differ is void:
+  neither of its cards is counted. The models are compared over the
+  specifications both cards ran and the roles both served: a role called on
+  one side only (the ScrumMaster, when a task is blocked) is an outcome of
+  the run, not a different configuration. A pair with no specification in
+  common is void; a card with no partner is not counted either.
 - **Complete runs.** A specification's numbers count only from runs where it
   ``completed``; the totals only from runs where every specification
   completed and the token budget did not cut the run. A ``timeout``,
@@ -108,20 +111,28 @@ def served_models(card: dict[str, Any]) -> dict[str, list[str]]:
     return {role: sorted(models) for role, models in sorted(roles.items())}
 
 
+def _served_to(card: dict[str, Any], names: set[str]) -> dict[str, list[str]]:
+    """Per role, the models served to the specifications in *names*."""
+    return served_models({"specs": [s for s in card["specs"] if s["name"] in names]})
+
+
 def pairs(
     before: list[dict[str, Any]], after: list[dict[str, Any]]
 ) -> tuple[list[tuple[dict, dict]], list[dict[str, Any]], list[str]]:
     """The counted pairs, the void ones (with the roles whose models differ)
-    and the stamps of the cards left without a partner."""
+    and the stamps of the cards left without a partner. The models are
+    compared over the specifications both cards ran and the roles both sides
+    served."""
     b = sorted(before, key=lambda c: c["stamp"])
     a = sorted(after, key=lambda c: c["stamp"])
     counted, void = [], []
     for old, new in zip(b, a, strict=False):
-        mo, mn = served_models(old), served_models(new)
-        if mo == mn:
+        names = {s["name"] for s in old["specs"]} & {s["name"] for s in new["specs"]}
+        mo, mn = _served_to(old, names), _served_to(new, names)
+        roles = sorted(r for r in set(mo) & set(mn) if mo[r] != mn[r])
+        if names and not roles:
             counted.append((old, new))
             continue
-        roles = sorted(r for r in set(mo) | set(mn) if mo.get(r) != mn.get(r))
         void.append({"before": old["stamp"], "after": new["stamp"], "roles": roles})
     n = min(len(b), len(a))
     return counted, void, [c["stamp"] for c in b[n:] + a[n:]]

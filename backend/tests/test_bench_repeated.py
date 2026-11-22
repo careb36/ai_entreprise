@@ -284,3 +284,40 @@ def test_a_grade_the_sandbox_could_not_give_has_no_criteria_rate():
     assert repeated.numbers(card["specs"][0], is_spec=True)["criteria_rate"] is None
     assert repeated._values([card], "total")[0]["criteria_rate"] is None
     assert repeated._values([card], "01-cli-wordcount")[0]["criteria_rate"] is None
+
+
+def test_a_role_served_on_one_side_only_does_not_void_the_pair():
+    before = _side("1", passed=[10, 10, 10])
+    after = _side("2", passed=[10, 10, 10])
+    # The second candidate run blocked a task and called the ScrumMaster.
+    after[1]["specs"][0]["models"] = {
+        **after[1]["specs"][0].get("models", {}),
+        "ScrumMaster": ["deepseek-v4-pro"],
+    }
+
+    result = repeated.compare_runs(before, after, LIMITS)
+
+    assert result["void_pairs"] == [] and result["pairs"] == 3
+
+
+def test_models_are_compared_over_the_specifications_both_cards_ran():
+    before = _side("1", passed=[10, 10, 10])
+    after = _side("2", passed=[10, 10, 10])
+    extra = dict(after[0]["specs"][0], name="02-b", models={"Developer": ["elsewhere"]})
+    after[0]["specs"].append(extra)
+
+    counted, void, _ = repeated.pairs(before, after)
+
+    assert len(counted) == 3 and void == []
+
+
+def test_a_pair_with_no_specification_in_common_is_void():
+    before = _side("1", passed=[10])
+    after = _side("2", passed=[10])
+    after[0]["specs"][0]["name"] = "09-z"
+
+    counted, void, _ = repeated.pairs(before, after)
+
+    assert counted == [] and void == [
+        {"before": before[0]["stamp"], "after": after[0]["stamp"], "roles": []}
+    ]
