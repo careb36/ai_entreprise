@@ -1,30 +1,68 @@
 # The learning context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/learning/`.
+How the company learns from its sprints: procedures kept or reverted by
+numbers, the retrospective, the ScrumMaster's triage, the Architect's record
+and the project wiki. Read this before changing
+`backend/app/services/learning/`; each module's docstring has the detail.
 
 - **Folder:** `backend/app/services/learning/`
-- **Responsibility:** How the company learns from its sprints: procedures kept or reverted by numbers, the retrospective, the ScrumMaster's triage and proposals, the Architect's record. It reads the task record and asks models through the proxy; it never moves a task.
-- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `architect`, `findings`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_store`. Another context imports only these modules and the package; the rest are internal.
+- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md).
+- **Interface:** `architect`, `findings`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_store`.
 - **Modules:** `architect`, `findings`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_sources`, `wiki_store`.
+
+## How it works
+
+It reads the task record and asks models through the proxy; it never moves a
+task. At sprint close the retrospective summarises the sprint, procedures are
+measured and kept or reverted, and the wiki is compiled.
+
+## Rules
+
+- Agents' claims are never the measure. A task counts as verified only by
+  the Verifier's verdict.
+- A finding's outcome is an observation the platform writes;
+  `record_outcome` refuses any other producer.
+- A finding's specification hash is computed from its canonical text, never
+  read from the file.
+- A specification whose cycle was reverted does not start again unless a
+  signed-in Manager or Owner of the company asks. An agent, an API token, a
+  Viewer or another company's person is refused.
+- In the wiki, a person's version is in force and locks the page; a
+  compilation then only proposes. An unknown citation is refused.
 
 ## Components
 
-### The findings the self-improvement loop works on
+### Procedures
 
-**`backend/app/services/learning/findings.py`** ([`docs/design/rsi-loop.md`](../design/rsi-loop.md), PR 9 of §8; REQ-18, REQ-20) — the retrospective's findings as `Finding` records (migration `0043`): where the finding was observed (`source`, `source_ref`, for example `F5` of the self-hosting retrospective), the specification drafted for it, its target measure (the repository path of the person-written check) and the outcomes of its cycles. `create_from_specification_file` reads a specification file in the PO's shape and computes the sha256 of its *canonical* text itself (`contracts/specification_text`, which the cycle runner `scripts/rsi/cycle.py` reads too) — a JSON specification is parsed and written again with sorted keys and no whitespace between tokens, its string values kept exactly; any other text only loses its line endings and trailing spaces — so formatting makes no second specification, a changed requirement does, and a sha the file claims is never read (rule 6); a second finding of the company with the same specification is refused, by the service and by a unique constraint. An outcome (the decision `keep` / `revert` / `unmeasured`, its reasons, the baseline's and the candidate's sha and the date) is an observation the platform writes: `record_outcome` refuses any other `produced_by` (REQ-27), and the finding's status follows the decision (`open`, `in_cycle`, `kept`, `reverted`, `unmeasured`, `closed_by_person`). `may_start` is REQ-20: a specification whose canonical text is the same as one whose cycle was reverted does not start a cycle again unless a person asked, a signed-in Manager or Owner of the company — an agent, an API token's synthetic user, a user that was never persisted, a Viewer or another company's person is refused, the way `routers/sod.owner_person` refuses a token; another company's reverts are never read. That request is `retry_by_person`: a `reverted` or `unmeasured` finding goes back to `in_cycle` with its earlier outcomes kept, a running, kept, open or person-closed one is refused; it and `close_by_person` are audited under the person's name (and so commit). The routes are read-only (`routers/findings.py`: `GET /v1/findings`, `GET /v1/findings/{id}`, any company Viewer); writing an outcome stays a service function.
+`procedures.py`: procedures measured, kept or reverted, and proposed (step 8
+of [the sprint loop](../SPRINT_LOOP.md)). `board_metrics` includes
+`claim_gap_rate`, the tasks claimed delivered and not verified; `evaluate`
+reverts a procedure under which it grew by more than `GAP_TOLERANCE`.
 
-### The gap between claimed and verified as a procedure's number
+### The retrospective and triage
 
-**`backend/app/services/learning/procedures.py`** (issue #531) — `board_metrics` adds `claim_gap_rate`: the tasks claimed delivered and not verified over the tasks of the sprints measured, from each sprint's first sealed progress snapshot or, without one, its task events (`services/tasks/progress_snapshot.claim_gap`, [tasks](tasks.md)). It is recorded in a procedure's baseline at adoption and in its outcome; `evaluate` reverts a procedure under which it grew by more than `GAP_TOLERANCE` (0.10) besides the rework and blocked tolerances, and a baseline recorded before #531 (without the key) is not compared on it. `describe_outcome` and the proposal prompt's history name it. The agents' claims are never the measure: the gap counts a task as verified only by the Verifier's verdict.
+- `retrospective.py`: the lessons in the prompt and the message to the team
+  (steps 2 and 7). Board notes it carries forward stay claims.
+- `scrum_master.py`: the triage of an escalation (step 6).
 
-## Described elsewhere
+### Findings
 
-- `procedures` (measured, kept or reverted, proposed): step 8 of [the sprint loop](../SPRINT_LOOP.md). The calibration of the difficulty estimate against observed effort (issue #534) is in [models](models.md); it measures the estimator, not a procedure, so it is not one of the procedures' metrics.
-- `scrum_master` (the triage of an escalation, `scrum_master.ask`): step 6 of [the sprint loop](../SPRINT_LOOP.md).
-- `retrospective` (the lessons in the prompt, the message to the team): steps 2 and 7 of [the sprint loop](../SPRINT_LOOP.md); it also carries the sprint board's counts, the contradiction measure and the notes worth keeping (`promotable_notes`, as claims) into the summary the memory engram and the procedure proposals read ([the sprint board](../design/SPRINT_BOARD.md)).
-- `wiki_store`, `wiki_sources`, `wiki_compile` (the project wiki, issue #445): the pages and their versions, the links derived from each body, a person's precedence (a person's version is in force and locks the page; a compilation then only proposes) and the lint's `stale`; each citation resolved against the company's records (runs and their verdict, verifications, tasks, notes, completed sprints' retrospectives, files with the daemon's sha256, requirements, ADRs and modules), an unknown one refused; the compilation at sprint close from structured inputs, in the project's language, by the TechWriter or else the ScrumMaster, bounded per sprint and per page: [the project wiki](../design/PROJECT_WIKI.md).
-- `architect` (the Architect's record): the paragraph on the removed console assistants in [producers](producers.md).
-- The tests of each (`test_procedures.py`, `test_scrum_master.py`, `test_architect.py`, `test_memory_lessons.py`, `test_findings.py`, `test_findings_retry.py`): [testing](../TESTING.md).
-- `CLAUDE.md` had no paragraph of its own for this context before it was split; the documents above hold what was written about it.
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-8).
+`findings.py`: the retrospective's findings for the self-improvement loop,
+each with its specification, target measure and cycle outcomes. Routes are
+read-only; writing an outcome is a service function. Design:
+[`rsi-loop.md`](../design/rsi-loop.md).
+
+### The project wiki
+
+`wiki_store.py`, `wiki_sources.py`, `wiki_compile.py`: pages and versions,
+citations resolved against the company's records, and the compilation at
+sprint close, bounded per sprint and per page. Design:
+[`PROJECT_WIKI.md`](../design/PROJECT_WIKI.md).
+
+### The Architect's record
+
+`architect.py`: see [producers](producers.md).
+
+## See also
+
+- How the context was built: [the migration record](../architecture/MIGRATION.md#step-8-learning).

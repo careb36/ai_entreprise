@@ -1,178 +1,143 @@
 # The frontend
 
-Not a backend context: the React application under `frontend/`. The index is [`CLAUDE.md`](../../CLAUDE.md), which holds the i18n rule every frontend change follows.
+The React 18 application under `frontend/` (Vite, TypeScript, Tailwind). Not a
+backend context: it has its own layers and its own dependency rule. A page or
+panel is described with the backend service it shows; this document is the map.
 
-## Components
+## The i18n rule
 
-**`frontend/src/`** — React 18 app. Key views:
-- `KanbanBoard` — the sprint board: five status columns of task cards, moved by drag and drop (`@dnd-kit`, pointer and keyboard sensors), by Alt+←/→ on a focused card, or with the card's status select; a Manager's "Move to sprint…" on a blocked or To do card (`MoveToSprint`). Its parts are in `components/board/`: `BoardToolbar` (the search, `/` to focus it, the role filter, the presets All, Needs a person, High risk and Waiting on tasks, compact cards, collapse all, the activity panel, refresh), `BoardColumn` (a sticky header with the status's icon and name, the count and how many tasks need a person; a fold into a narrow strip of `CollapsedCard` chips that stay links and stay draggable; the empty state, with and without filters), `TaskCard` (priority, title, number, the assignee's `RoleAvatar` and the time of the last change), `CardSignals` (two groups that never mix: **Observed**, from the board's `observed` facts and the latest task-worker run, solid chips under a shield; **Reported**, read from the task's messages and the board's `reported` protected paths only the producer declared, dashed chips; the board's snapshot decides the verdict and the run is linked only when it is the snapshot's run) and `ActivityPanel` (the latest task messages, each marked as a claim). The filters run on the loaded board (`lib/kanban.ts`); the folded columns and the density are this browser's preference (`hooks/useBoardPreferences.ts`, localStorage, optional). The design follows AixleHQ/flow's board (no code copied)
-- `SprintTaskViews` — the sprint's Board tab (issue #535, [design](../design/SAVED_VIEWS.md)): the Board and List layouts, the filter builder (`TaskFilterBuilder`, one labelled row per condition, all or any) and the saved views; with no filter on the Board layout it is the `KanbanBoard`, otherwise the server evaluates the filter, limited to the sprint, and `TaskListView` shows the tasks read-only, as a table (grouped when the view says so) or as columns by status (`hooks/useTaskViews.ts`, `lib/taskFilters.ts`, `services/api/taskViews.ts`)
-- `GlassRoom` — real-time agent activity monitor via SSE
-- `SprintWorkspace` — sprint creation and management
-- `SupportBot` — bilingual (EN/ES) built-in help desk chat
-- Feedback views every page uses, in the empty state's and the panel's look: `ErrorState` (an alert) and `ErrorBoundary`'s fallback, `LoadingSkeleton` (a status) with `CardSkeleton` and `TableSkeleton`, `GraphSkeleton`; their animations stop under reduced motion
-- `Wiki` — the company's project wiki (`/company/wiki`, issue #445): its pages by kind with their status, a page's statements each with the sources its citations resolved to beside it, the lint's reasons, the proposal waiting, the history; a Manager edits, creates, accepts or rejects proposals, runs the lint and turns the write to `docs/wiki/` on or off (`pages/Wiki.tsx`, `components/WikiPageView.tsx`, `hooks/useWiki.ts`, `services/api/wiki.ts`). Page text may be agent output: `components/WikiMarkdown.tsx` renders it without raw HTML or images and keeps only http(s), mailto and anchor links
-- `IntakeQueue` — the Review page's incoming requests (issue #532; `components/IntakeQueue.tsx`, `services/intake.ts`): the requests by status with their source and sender, the Support agent's suggestion beside each as a claim (never filled into the form), a person's decision, the task or specification it became and the request or task it duplicates; for a Manager the decision form (accept as a task in an open sprint or into a specification revision, decline with a reason, mark a duplicate as `intake:ID` or `task:ID`, snooze until a date, back to pending); for everyone a form to send a request; and the queue's numbers (`GET /v1/companies/{id}/intake-record`)
-- `ArchitectureDetail` — one version of the company's architecture (`pages/ArchitectureDetail.tsx`, `/company/specifications/:specId/architectures/:id`; `services/architectures.ts`): its check, questions, modules (with what each covers in the version's own specification and, under "Covers in", in the earlier specifications it keeps), interfaces, decisions and conventions; `components/ArchitectureHistory.tsx` (issue #329, F3) names the company's version number, whether it is the current one and the earlier specifications it also covers, and lists every version of the company's architecture from `GET /v1/companies/{id}/architecture` (status, the specification it was drafted for, how many it covers, its approval date), each linked; its loading and error lines are plain text, not a status or an alert, since the page's own actions own those roles
-- `SprintRelations` — the relations of the sprint's tasks on the Overview tab, read when opened (`components/SprintRelations.tsx`, `GET /v1/sprints/{id}/relations`): each from its sprint task's side, its state (a proposal dashed, as a claim) and the numbers, among them the confirmed duplicates both delivered
-- `SprintEventLog` — the sprint's raw event list on the Overview tab, read when opened (`components/SprintEventLog.tsx`, `GET /v1/sprints/{id}/events`): each event's type, task and time, a type filter, the payload as text on request
-- `SprintIntegration` — the sprint's integration on the Overview tab: the plan, the latest integration, a Manager's actions on it (`components/IntegrationActions.tsx`: integrate now, publish the integration branch as one request only while the company's forge policy in force is `publish`, otherwise disabled with the reason; merge locally after a confirmation, disabled with the reason while a required review has not approved it; the backend's refusals, such as the segregation of duties, shown as an alert; for everyone, where the latest integration was published and merged) and a person's review of it (`components/IntegrationReview.tsx`, `IntegrationDiff.tsx`, `services/integrationReviews.ts`): the merge gate's state and, for an Owner, its setting; the reviews and the comments; the diff the daemon reads (on demand) with a thread under each line commented and, for a Manager, a comment form on any line it shows; and the review form (comment, approve, request changes). See [release](release.md#a-persons-review-of-the-integration)
-- `BoardNotes` — the sprint page's Board notes tab (`/sprints/:id/notes`, issue #439): the sprint board's notes as claims with what was observed beside each file, the board's numbers, and for a Manager a form to add a note and a way to mark one wrong (`hooks/useBoardNotes.ts`, `services/api/boardNotes.ts`)
+Every string a person reads or hears is in both `frontend/src/i18n/en.json` and
+`frontend/src/i18n/es.json`, read with the `useTranslation` hook from i18next.
+Never hardcode English in JSX ([`CLAUDE.md`](../../CLAUDE.md), Frontend i18n).
+Three checks hold it:
 
-- **Findings** (`pages/CompanyFindings.tsx`, `/company/findings`, and `pages/CompanyFindingDetail.tsx`, `/company/findings/:id`; `components/FindingOutcomes.tsx`, `hooks/useFindings.ts`, `services/api/findings.ts`) — The self-improvement loop's findings ([design](../design/rsi-loop.md), §1 and §7), read-only for every member of the company, a Viewer included, from `GET /v1/findings?company_id=` and `GET /v1/findings/{id}` ([learning](learning.md)): each finding's source and reference, title, status (as text beside an icon, never colour alone), target measure, and a table of its cycles, each with the fitness decision, its reasons (guard, outcome, detail), the baseline's (B) and the candidate's (C) sha (the first 12 characters, the whole sha as the title) and the date; a finding's page adds the specification's path, its sha256 and its text, when it was recorded and changed, and who closed it. Loading, error (with a retry), empty and not-found states. The page has no button: the platform writes the outcomes, and a person's retry or close is not offered here.
-- **Documentation** (`pages/Documentation.tsx`, `/company/documentation`; `services/documentation.ts`, `components/PackMarkdown.tsx`, `components/C4DiagramView.tsx`, `lib/c4Layout.ts`; issue #530) — The project's documentation packs: the versions, the drift lint, each document as Markdown (`react-markdown` with `remark-gfm` for tables, raw HTML skipped, no images, only `#` and http(s) links kept) with its PMBOK 8th edition domain and focus area, sources, claims and person sections, and the C4 diagrams drawn as SVG from their data (the Mermaid source shown as text, never run). A Manager compiles and writes an approved pack; an Owner approves while the lint finds no drift. Under the charter, the risk register and the check results, the person sections (`components/documentation/`: `PersonSections`, `PersonSectionRow`, `PersonSectionHistory`, `StatementClaim`; `services/personSections.ts`, re-exported by `services/documentation.ts`; phase 2) show each section's statement as a claim (a dashed panel under a speech mark, with the author, company role, time and the backend's digest) and its history on request; an Owner or a Manager writes or withdraws one (a confirmation first), a Viewer sees neither control.
+- `npm run lint`: `eslint-plugin-i18next` fails on literal text in JSX and in
+  attributes read aloud (`title`, `alt`, `placeholder`, `aria-label`…).
+- `src/uiRules.test.ts` (rules in `src/test/uiRules.ts`): what the lint cannot
+  see (words in template literals, a disabled i18next rule) and the
+  accessibility basics: `alt` on images, a name on icon-only controls, a label
+  on every input, a key handler on a clickable element. Its allowlist,
+  `src/test/uiRulesBaseline.json`, only shrinks.
+- `src/i18n/locales.test.ts` and `src/i18n/coverage.test.ts`: both files have
+  the same keys, and every `t('…')` key exists in both.
 
-## Routes and the page that serves each
-
-For support: from the address a person reports to the file to read. The routes are in `App.tsx`; every page is in `pages/` unless a component is named.
-
-| Route | Page |
-|---|---|
-| `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete`, each one centred card in `pages/auth/AuthCard` (the product name, the page's `<h1>`, the line under the card) |
-| `/` | redirects to `/evidence` |
-| `/evidence`, `/evidence/:runId` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
-| `/sprints`, `/sprints/:id/:tab?` | `Sprints` (with `components/CostSummary`, `components/PromptWeight`; under its learning tiles, rework per task and blocked share, the bench's reference for the same number from the latest valid scorecard, dated and linked to /bench, and a dashed rule on the sparkline: `components/bench/BenchReferenceLine`, `lib/benchReference.ts`, issue #686; a number the card did not measure, or no valid card, draws nothing), `SprintWorkspace` (its tabs, the Overview through `Dashboard`; a sprint's status in both through `pages/sprint/SprintStatusBadge`, the Sprints list's look) |
-| `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` (its run secrets: `components/RunSecretsPanel`, `services/runSecrets.ts`; names for every member, add and delete for a Manager or an Owner, the value write-only; its event log, read when opened: `components/TaskEventLog`, `GET /v1/tasks/{id}/events`, the events in order with their actor, status and run, the task chain's state and which record the board reads; payloads shown as text) |
-| `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirects to the active sprint's tab |
-| `/companies/new`, `/companies/select` | `CompanyNew` (shows the person's pending invitations above the wizard, `components/PendingInvitations`), `CompanySelect` |
-| `/invitations` | `Invitations`: the signed-in person's pending invitations to accept or decline (`components/PendingInvitations`, `hooks/useInvitations`); `?token=` accepts an invitation link once, for the invited address only, and leaves the address bar. Open without a membership (`ProtectedRoute`), since it is how someone with no company joins one. |
-| `/account` | `Account`: the signed-in person's own settings; for now their single sign-on identities, to link at a company's provider or unlink (`components/SsoIdentities`, `hooks/useSsoIdentities`); the provider's return lands here with `?sso_link=` or `?sso_link_error=` |
-| `/notifications` | `MyNotifications`: the signed-in person's own notifications (issue #683; `components/NotificationList`, `components/NotificationPreferences`, `hooks/useNotifications`, `services/api/notifications.ts`): unread, snoozed or all, each with its kind in words (a security notice labelled "Security notice", never by colour alone), a link to the page that shows its subject (`notificationLink`), mark read or unread, snooze (a day at most for a security notice) and mark all read; the preferences per kind are fieldsets of two labelled checkboxes, the app one checked and disabled for a security notice with the reason written beside it, the email one disabled while the deployment has no mail server. The top bar's bell (`components/NotificationBell`) links here and carries the unread count in its accessible name; it polls `GET /v1/notifications/count` every 30 s and stops on a 4xx. WCAG 2.2 AA: 1.1.1, 1.3.1, 1.4.1, 2.1.1, 2.4.6, 3.3.2, 4.1.2 |
-| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers` (a Manager or Owner invites an address up to their own role; the answer is the same whatever the address, shows the invitation link once and lists and revokes the pending invitations; for an Owner, the members with their roles and last activity and a confirmed removal, `components/MemberList`, which ends the person's sessions; an Owner's own row has none), `CompanyTeams`, `CompanyDuties` (segregation of duties, protected paths, access review, service accounts: `components/SodPolicyPanel`, `ProtectedPathsPanel`, `SodReportPanel`, `AccessReviewPanel`, `ServiceAccountsPanel`) |
-| `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
-| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers` (a Manager or Owner invites an address up to their own role; the answer is the same whatever the address, shows the invitation link once and lists and revokes the pending invitations), `CompanyTeams`, `CompanyDuties` (segregation of duties, protected paths, access review, service accounts: `components/SodPolicyPanel`, `ProtectedPathsPanel`, `SodReportPanel`, `AccessReviewPanel`, `ServiceAccountsPanel`) |
-| `/company/sso`, `/company/chat`, `/company/github` | `CompanySso` (for an Owner, with a connection: the members' single sign-on identities, `components/SsoMemberIdentities`, `services/ssoMemberIdentities.ts`, `GET/DELETE /v1/companies/{id}/sso/identities`; each member's account and provider address, when linked and last used, and an unlink after a confirmation that says it ends the sessions they started through single sign-on; the Owner's own identity is unlinked from Account), `ChatApprovals`, `GitHubIntegration` |
-| `/company/usage`, `/company/quotas`, `/company/models` | `Usage`, `components/QuotaPanel`, `Models` |
-| `/company/project` | `ProjectSettings` (`services/projectSettings.ts`): how a sprint's team is chosen (suggested, or automatic) and the stack profile's overrides of the detection (stack, port, probe path, whether it serves web pages, and each command left to the detection, set, or turned off; the folders' own profiles kept as stored); every member reads them, a Manager changes them |
-| `/company/notifications` | `Notifications` (`services/webhook.ts`): the notification webhook's URL, events, state and last delivery for every member; a Manager creates or replaces it (https only, no credentials in the URL; a signing secret of at least 16 characters, write-only, required only for a new one), sends a test ping and deletes it after a confirmation |
-| `/company/audit-anchors`, `/company/procedures`, `/company/wiki` | `AuditAnchors` (each anchor's receipt downloads as JSON from `GET /v1/audit/anchors/{id}/export`), `Procedures`, `Wiki` |
-| `/company/audit-trail` | `AuditTrail`, for every member (`services/auditTrail.ts`, `pages/auditTrail/CounterSign.tsx`): the company's audit chain walked by the backend on request (`GET /v1/audit/chain`: intact, broken or empty, the hash mode, the head row and hash to record elsewhere, the breaks by row as an alert, the anchor coverage's sentence) and the head's statement to counter-sign with the company's Ed25519 key outside the factory, the base64 signature pasted back (`GET /v1/audit/anchors/statement`, `POST /v1/audit/anchors/signature`). Every verdict is the server's |
-| `/company/api-tokens` | `ApiTokens`: the company's API tokens for scripts and CI (`services/apiTokens.ts`, `pages/apiTokens/CreateTokenForm.tsx`); every member reads the list with each token's state (active, expired, revoked); a Manager or an Owner creates one (a role up to their own, never Owner, and always an expiry of 30 to 365 days: the UI never offers a token without one) and revokes an active one after a confirmation. The token is shown once, held only in the page's state until dismissed, never stored |
-| `/company/findings[/:id]` | `CompanyFindings`, `CompanyFindingDetail` |
-| `/company/security-tests` | `SecurityTests`: the project's OWASP WSTG plan (`services/securityTests.ts`, `pages/securityTests/WstgReviewForm.tsx`, issue #539): every test with how it is observed, its status (icon and word, filtered by status) and what set it (a Verifier's run, linked, or a person's review), the recorded reviews with the backend's digest, the catalogue's licence line; for a Manager the review form (tests waiting for a person first, a date no later than today, a note required for "not applicable") |
-| `/company/execution` | `ExecutionSettings` (`services/executionSettings.ts`): the sandbox in force with its limits and a warning when code runs on the host, the variables a sandboxed run sees by name, the research tools' sources (the deployment's and the company's); a Manager changes the mode, the names and the hosts (checked with the backend's rules before sending) and resets the dependency cache after a confirmation |
-| `/company/mcp` | `McpServers` (`services/mcpServers.ts`): each MCP server with its transport, target, roles, state (enabled, disabled, refused by the operator's policy) and secrets by name; a Manager enables or disables one (never one the policy refuses), sets its roles, lists its tools (which starts it, audited), removes it after a confirmation, and adds servers from a pasted `mcpServers` map, the field cleared after the save |
-| `/company/self-improvement` | `SelfImprovement` (`services/rsiCycles.ts`): the loop's state, limits and counts and its cycles (status, decision, B and C, the change's size, the merge); a signed-in Owner resumes the loop after its stop, records a person's merge of a kept cycle by its full sha and imports a runner's record |
-| `/company/model-catalog` | `ModelCatalog` (`services/modelCatalog.ts`): the public catalogue's providers and, for the one chosen, its models with their capabilities (an icon and a word for screen readers), context and list prices (`GET /v1/models/catalog/{provider}`), marked as the catalogue's record: only a validated connection on the Models page shows what a provider serves |
-| `/bench` | `Bench`: the bench's committed scorecards (issue #685; `components/bench/`, `hooks/useBench.ts`, `services/api/bench.ts`, `lib/benchFormat.ts`), linked from the company menu: the latest valid card (its header, totals and a table per specification), the prompt weight per section when the card has it, the HumanEval section of a v5 card (`HumanEvalPanel`: pass@1, the counts, the dataset and each problem's outcome), the SWE-bench Lite section of a v6 card (`SweBenchPanel`: the resolve rate over the instances measured, the counts, the pinned dataset and each instance's outcome with its FAIL_TO_PASS and PASS_TO_PASS counts), the edit format per model of a v7 card (`EditFormatPanel`: the format the run asked for, its deliveries, and each model and format's outcome, an unusable one never shown as a pass), the history of every card (an off-schema or unreadable one with the schema's problems and no number) and each specification across the valid cards. A metric the card did not measure is a "Not measured" badge with the card's reason (`MeasureValue`), never 0. See [models](models.md#the-benchs-scorecards-the-bench-page) |
-| `/company/specifications[/:id]` | `Specifications`, `SpecificationDetail` |
-| `/company/specifications/:specId/architecture[s/:id]` | `ArchitectureDetail` (its decisions as ADR files to save, numbered from a chosen first number: `components/AdrFiles`, `GET /v1/architectures/{id}/adrs`); on an approved specification without its own architecture, a Manager opens the next version of the company's architecture for it (`components/ArchitectureRevision`, `POST /v1/companies/{id}/architecture/revisions`; a link to the open draft while one exists) |
-| `/company/documentation` | `Documentation` (each pack's signed manifest downloads under the backend's file name: `components/documentation/ManifestDownload`; the pack as DOCX or PDF/A, each with its export's signed manifest, and a format the server cannot render disabled with the backend's reason: `components/documentation/ExportDownloads`, `services/packExport`) |
-| `/agents`, `/governance` | `AgentSettings`, `components/GovernancePanel` |
-| `/support` | `HelpDesk` (bug reports and the Support chat; a ticket's status is `components/TicketStatusBadge`, shared with `SupportBot`) |
-| `/lineage`, `/memory`, `/generate` | `Lineage`, `MemorySearch`, `Generate` |
-| anything else | `NotFound` |
-
-## The desktop app
-
-**`frontend/electron/`** — the Electron main process and preload, compiled by
-`npm run electron:compile` into `dist-electron-main/` and outside the layered
-`frontend/src` tree. `npm run electron:dev` loads the Vite dev server;
-`npm run electron:build` builds the renderer with `--mode electron` and
-packages it. The packaged app does not load `file://`: `local-server.ts`
-serves `dist/` on `127.0.0.1` at a port the system picks and forwards `/v1/*`
-to `BACKEND_URL` (default `http://localhost:8000`), so the page and the API
-share an origin and the session cookies of issue #524 are first-party; the
-desktop build calls the API on its own origin (`VITE_API_SAME_ORIGIN`, so
-`API_BASE` in `services/api/client.ts` is empty). `navigation.ts` keeps the
-main window on that origin, opens other links in the system browser and runs
-single sign-on in a window without the preload; `ipc-handlers.ts` answers only
-the local page. Design and threat model: `docs/design/SESSIONS.md`, Desktop
-app.
-
-## Layout of the larger views
-
-A view too large for one file keeps its entry file, with the same exports, and puts its parts in a folder beside it, named after it in lower camel case: subcomponents with one job each, and `useXxx` hooks for the state that separates cleanly. Every source file stays at or under 600 lines (`scripts/check_file_sizes.py`).
-
-- `components/GlassRoom.tsx` → `components/glassroom/`: the top bar, the three columns (`LeftSidebar`, `MessageFeed`, `RightPanel`), the right panel's panels, the message atoms and groups, the agent identities and formatters, and the hooks that derive the feed (`useFeed.ts`: scroll, clock, filters, presence) and the sprint's state (`useSprintInsights.ts`: assistant summary, tasks, quota, health, autonomy tree) from the stream.
-- `pages/CompanyNew.tsx` → `pages/companyNew/`: one component per wizard step (`ProjectStep` … `ReviewStep`), their cards, the constants and types, and the hooks for the project folder (`useProjectFolder`) and the team being drafted (`useTeamDrafts`).
-- `pages/AgentSettings.tsx` → `pages/agentSettings/`: the toolbar, the creator, the role groups and agent cards, the draft fields and model selector, the model recommendation, and the hooks for the list (`useAgentList`), the creator (`useAgentCreator`) and the two-step delete (`useConfirmDelete`).
-- `App.tsx` → `app/` and `components/shell/`: `App.tsx` keeps the router's provider (`BrowserRouter`; the query client's is in `main.tsx`) and re-exports `LanguageSwitcher` and `sectionForPath`; `app/AppLayout.tsx` is the page around every route (the session-expired redirect to login, the desktop app's native menu, the "Skip to content" link, the navigation bar, `<main>` as the scrolling area under it, the error boundary, the support bot and the toasts) and `app/AppRoutes.tsx` the routes and the legacy redirects. The navigation bar is in `components/shell/`: `NavBar.tsx` (links, the Company menu, the mobile menu), `navLinks.ts` (`sectionForPath`, `useNavLinks`), `StatusPill.tsx` (the services' health) and `LanguageSwitcher.tsx`.
-- `hooks/useQueries.ts` is a barrel over `hooks/queries/`, one module per domain: `system` (capabilities, the daemon's status, models, the current role), `evidence` (runs, verifications, approvals, the audit chain, standards, the Reviewer's record), `company` (inbox, procedures, messages, setup, members, GitHub, lineage), `sprints`, `quotas`, `agents` (agents, generation, memory) and `helpDesk`. Callers, and the tests that mock it with `vi.mock('../hooks/useQueries')`, import from `hooks/useQueries` as before; a hook goes in the module of its domain, never in the barrel.
-- `services/api.ts` is a barrel over `services/api/`: `client.ts` holds the fetch wrapper (base URL, timeout, retries, `ApiError`, the session: every request sends the cookies with `credentials: 'include'` and, on an unsafe method, `X-Fabrique-CSRF` from the `fabrique_csrf` cookie or the value login returned, kept in memory; a 401 tries one `POST /v1/auth/refresh` per tab at a time, a 409 from it means another tab refreshed and the request is resent, a refused refresh signs out; a 403 with `X-Fabrique-CSRF: required` fetches `GET /v1/auth/csrf` once and resends), the generic verbs and the file and text downloads (`fetchBlob`, `fetchText`). The client imports no store: `useAuthStore` registers `setSessionHooks` (which session a request belongs to, and ending it) and the app `setOnUnauthorized` (the redirect to login). `useAuthStore` keeps no credential (issue #524, `docs/design/SESSIONS.md`): the access and refresh tokens are HttpOnly cookies, and it persists only `user`, `memberships` and `expiresAt` (when the session ends at the latest); `sessionEpoch` changes on every sign-in and sign-out so a late answer from an older session is dropped; `logout` calls `POST /v1/auth/logout`; `stream.ts` opens the Glassroom's event stream (`openGlassroomStream`); each domain module (`agents`, `sprints`, `auth`, `system`, `companies`, `workspace`, `messages`, `boardNotes`, `progress`, `evidence`, `analytics`, `memory`, `support`, `github`, `findings`, `invitations`) holds its types and its endpoints. The barrel assembles the one `api` object and re-exports every name, so callers import from `services/api` as before. The endpoints call the verbs through that object, so a test that spies on `api.get` still sees every endpoint built on it.
+The worker's live-view messages carry a `message_key` the Glassroom translates
+(`lib/agentEvents.ts`); stored records keep the English text.
 
 ## The dependency rule between layers
 
-The frontend counterpart of the backend's rule between contexts (issue #519; the backend's is in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). `frontend/src` is divided into layers, listed from the bottom up in `docs/architecture/frontend.json`, each owning folders or files by path:
+`frontend/src` is divided into layers, listed from the bottom up in
+`docs/architecture/frontend.json` and checked by
+`scripts/check_frontend_architecture.py` (a step of `frontend-build.yml`; tests
+in `backend/tests/test_check_frontend_architecture.py`).
 
 | Layer | Paths | What it holds |
 |---|---|---|
-| foundation | `i18n/`, `styles/`, `electron.d.ts`, `vite-env.d.ts` | Translations, styles and ambient types; imports nothing of the application |
-| services | `services/` (the barrel `services/api.ts` and `services/api/`) | The backend's client, one module per domain, the React Query keys (`services/queryKeys.ts`) and the service hooks that call the client |
-| lib | `lib/` | Pure helpers and constants; some read the services' types or classify their errors, so they sit above services |
+| foundation | `i18n/`, `styles/`, `electron.d.ts`, `vite-env.d.ts` | Translations, styles, ambient types; imports nothing of the app |
+| services | `services/` | The backend's client (`services/api.ts` over `services/api/`, one module per domain), the query keys, the service hooks |
+| lib | `lib/` | Pure helpers and constants |
 | state | `store/`, `hooks/` | The zustand stores and the React Query hooks |
-| components | `components/` | Reusable views and the parts of the larger ones |
-| pages | `pages/` | One view per route, and the parts of the larger ones |
-| app | `App.tsx`, `main.tsx`, `app/` | The router, the entry point, the routes and the layout around them |
+| components | `components/` | Reusable views and the parts of larger ones |
+| pages | `pages/` | One view per route, and its parts |
+| app | `App.tsx`, `main.tsx`, `app/` | The router, the entry point, the routes and the layout |
 
-- **A module imports only from its own layer or one below.** `components` never imports `pages` (a part two pages share is a component: `components/SpecificationBadges.tsx`), and `services` never imports `components` or `hooks` (a type they share lives in services: `Source` in `services/specifications.ts`).
-- **The network belongs to services.** Only the modules in `network.modules` — `services/api/client.ts` (the fetch wrapper, `fetchBlob`, `fetchText`) and `services/api/stream.ts` (the Glassroom's `EventSource`) — may name `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket` or `axios`; every other module calls a function of `services` that returns data. This mirrors the backend's "HTTP only in adapters" rule (#511), itself after AixleHQ/flow's design rules (design only).
-- **Tests** (`*.test.ts(x)`, a `__tests__` folder and the support in `src/test/`) are exempt from both: a page's test renders the page and stubs `fetch`. They are not exempt from everything: no module that ships may import a test or the test support, and their relative imports must resolve like every other module's.
-- **Every source file is in exactly one layer**: a new folder under `src` is added to `frontend.json` in the same pull request.
+- **A module imports only from its own layer or below.** A part two pages share
+  is a component; a type services and a view share lives in services.
+- **The network belongs to services.** Only `network.modules`
+  (`services/api/client.ts`, `services/api/stream.ts`) may use `fetch`,
+  `XMLHttpRequest`, `EventSource`, `WebSocket` or `axios`.
+- **Tests are exempt** from both, but no shipped module may import a test or the
+  test support.
+- **Every source file is in exactly one layer**: a new folder under `src` is
+  added to `frontend.json` in the same change.
+- The allowlist is empty and only shrinks (`--update` drops stale entries,
+  never adds one).
 
-`scripts/check_frontend_architecture.py` (standard-library Python, like `scripts/check_architecture.py`) reads the imports from the text with comments and strings blanked — static `import … from`, `import '…'`, `export … from` and dynamic `import()`, `import type` included — resolves relative paths and the aliases in `frontend.json` (`aliases`, empty today: the project has no `@/` path alias), and maps each file to its layer by path. The allowlist holds what broke the rule when it was adopted, one entry per edge (`"services/api/client.ts -> store/useAuthStore.ts"` was the only one, the client reading the token, gone with #524) or per use of the network (`"file: fetch"`); it may only shrink: an entry that no longer occurs is reported and `--update` drops it, and never adds one. Today it is empty.
+## Rules
 
-```bash
-python3 scripts/check_frontend_architecture.py            # from the repository root
-python3 scripts/check_frontend_architecture.py --update   # drop stale allowlist entries
-```
+- **The session holds no credential in JavaScript.** The tokens are HttpOnly
+  cookies; `useAuthStore` keeps only `user`, `memberships` and `expiresAt`.
+  `services/api/client.ts` sends `X-Fabrique-CSRF` on unsafe methods and
+  refreshes once per tab on a 401 ([`SESSIONS.md`](../design/SESSIONS.md)).
+- **Observed and claimed never mix.** What the platform observed and what an
+  agent or producer reported are separate groups with their own heading:
+  observed solid under a shield, claimed dashed under a speech mark. A claim is
+  never styled as an observation, and a suggestion is never filled into a form.
+- **Every verdict is the server's.** The UI shows the backend's decisions and
+  refusals; it does not compute them.
+- **Agent output is untrusted.** Markdown from agents (`WikiMarkdown`,
+  `PackMarkdown`) renders without raw HTML or images and keeps only safe links;
+  Mermaid source is shown as text, never run.
+- **Status is an icon and a word, never colour alone.** Focus stays visible,
+  the keyboard reaches everything the mouse does, and every animation stops
+  under reduced motion.
+- A secret or token is shown once, write-only, and never stored.
+- Every source file stays at or under 600 lines (`scripts/check_file_sizes.py`).
+  A view too large for one file keeps its entry file and puts its parts in a
+  lower-camel-case folder beside it (`components/glassroom/`,
+  `pages/companyNew/`, `pages/agentSettings/`); `hooks/useQueries.ts` and
+  `services/api.ts` are barrels over one module per domain.
 
-It is a step of `.github/workflows/frontend-build.yml`, which runs on a change to `frontend/`, the script or `frontend.json`; its tests are `backend/tests/test_check_frontend_architecture.py` ([testing](../TESTING.md)).
+## Where views live
 
-## Design system
+- **Shell:** `App.tsx` (the router's provider), `app/AppLayout.tsx` (the page
+  around every route), `app/AppRoutes.tsx` (routes and legacy redirects),
+  `components/shell/` (navigation bar, health pill, language switcher).
+- **Design system:** `components/ui/` (`PageHeader`, `Toolbar`,
+  `SegmentedFilter`, `Panel`, `CountPill`, `StatusBadge`, `EmptyState`,
+  `AccessNotice`, loading and error states, form foot, table classes) and its
+  classes in `styles/index.css`; tokens in `tailwind.config.js`. Restyle a page
+  with these; add a primitive only when a second page needs it.
+- **The sprint board:** `components/KanbanBoard.tsx` and `components/board/`;
+  saved views and filters in `SprintTaskViews`. A card's signals keep
+  **Observed** and **Reported** apart.
+- **The live view:** `components/GlassRoom.tsx` and `components/glassroom/`,
+  over SSE (`services/api/stream.ts`).
+- **The desktop app:** `frontend/electron/`, outside the layers. The packaged
+  app serves `dist/` on `127.0.0.1` and forwards `/v1/*` to the backend, so the
+  page and the API share an origin; the main window stays on that origin and
+  other links open in the system browser.
 
-The sprint board's design language (PR #633, after AixleHQ/flow's board, design only) is the app's. Its pieces are React primitives in `components/ui/` (imported from `components/ui`, the barrel `index.ts`; they sit in the components layer) and the classes they use in `styles/index.css`, under "Design system". A page is restyled by using them, not by new one-off classes; a primitive is added only when a second page needs it, in the same pull request, and listed here.
+## Routes and the page that serves each
 
-| Need | Use | Notes |
-|---|---|---|
-| The top of a page | `PageHeader` (`title`, `subtitle`, `actions`, `breadcrumbs`) | The page's one `<h1>`; actions wrap below on a phone |
-| Filters and presets above a list | `Toolbar` (`label`, `sticky`) | A labelled group of ordinary controls: `btn-tool`, `input control-sm`, `select control-sm`, a `SegmentedFilter`. `sticky` keeps it under the bar while `<main>` scrolls |
-| Presets with a count | `SegmentedFilter` (`options`: `value`, `label`, `icon`, `count`, `attention`) | Toggle buttons with `aria-pressed`; the parent decides what a press does. The board's presets and Evidence's verdicts |
-| A list, a table or a group of fields | `Panel` (`title`, `count`, `actions`) | A `<section>` named by its header when titled. Rows inside: `<ul className="data-list">` with `data-row`, or `data-row-link` when the whole row is a link |
-| How many | `CountPill` (`count`, `total`, `label`) | Tabular figures; `count/total` while a filter hides some; `label` says in words what it counts (the pill is an image with that name) |
-| A status | `StatusBadge` (`icon`, `label`, `tone`) | Icon and word, the tone repeats them. For a run's verdict use `Verdict`. Not the shell's `components/shell/StatusPill.tsx`, which is the services' health |
-| A status from a fixed vocabulary | `statusLook(looks, status)` with a `Record<string, StatusLook>`; `SprintStatusBadge` (`status`, `defaultLabel`), `TicketStatusBadge` (`status`) | The map gives each value its icon and tone, an unknown value the neutral dashed icon; the word stays the page's translation. `SPRINT_STATUS_LOOK` and `TICKET_STATUS_LOOK` are exported for a page that needs the map |
-| Nothing to show | `EmptyState` (`icon`, `title`, `description`, `actions`, `dashed`, `role`) | `dashed` when it stands alone on the page; `role="status"` when it replaces the page and should be announced |
-| A page the role does not reach | `AccessNotice` (children: why) | A dashed `EmptyState` with a lock, announced as a status |
-| Something loading | `LoadingLine` (children: what), `LoadingRows` (`rows`, `label`), `Spinner` (`size`, 14 by default, 13 in a button) | A status line with a spinner; panel-shaped skeletons named "Loading" unless `label` says more; a bare decorative spinner (a button keeps its words). All stop under reduced motion |
-| A load that failed | `LoadError` (children: the reason, `onRetry`) | An alert with Retry when `onRetry` is given |
-| The foot of a settings form | `FormActions`, `SavedNote` (children) | The button row above a divider; a check and a word announced as a status after a save |
-| A table, a long text | `TABLE`, `TH`, `TR`, `TD`, `READABLE_TEXT` (class strings) | A data table inside a `Panel` in the board's density; a block of prose at a readable line length |
-| A quiet action | `btn-tool` (on: add `btn-tool-on`) | The board's ghost button, 32px high; `btn-primary` stays for the page's one main action |
-| A value tag | `chip` | A producer, a role, a file name |
+The routes are in `app/AppRoutes.tsx`; every page is in `pages/` unless a
+component is named.
 
-The company and administration pages (Select company, New company, Invitations, Members, Teams, Single sign-on, Duties and access, Chat approvals, GitHub, Audit anchors, Models, Agents) and their panels use these primitives (their access notice, loading rows, load error, form foot and table classes were promoted from local pieces after #638). The sign-in frame, `pages/auth/AuthCard.tsx` (the product name and logo above one card, with its label and link classes), stays with the three sign-in pages: it is their layout, not a primitive another page would reuse. The New company wizard is one panel: the step indicator (`pages/companyNew/StepIndicator.tsx`, an `<ol>` with `aria-current="step"` and a check for a done step) above the step, Back and Next below; its icons are lucide (`pages/companyNew/icons.ts`), not emoji. A claim shown beside observations keeps its own look: an audit anchor in the `claim` state is a dashed badge, the observed states are `StatusBadge`s.
+| Route | Page |
+|---|---|
+| `/login`, `/register`, `/login/sso` | `Login`, `Register`, `SsoComplete` (frame: `pages/auth/AuthCard`) |
+| `/` | redirects to `/evidence` |
+| `/evidence[/:runId]` | `Evidence`, `EvidenceDetail` (a run, its verdict and checks) |
+| `/sprints`, `/sprints/:id/:tab?` | `Sprints`, `SprintWorkspace` (its tabs; the Overview through `Dashboard`) |
+| `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` (run secrets, event log, edit task) |
+| `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirect to the active sprint's tab |
+| `/companies/new`, `/companies/select` | `CompanyNew`, `CompanySelect` |
+| `/invitations`, `/account`, `/notifications` | `Invitations`, `Account`, `MyNotifications` |
+| `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` |
+| `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
+| `/company/usage`, `/company/quotas`, `/company/models`, `/company/model-catalog` | `Usage`, `components/QuotaPanel`, `Models`, `ModelCatalog` |
+| `/company/project`, `/company/execution`, `/company/mcp` | `ProjectSettings`, `ExecutionSettings`, `McpServers` |
+| `/company/notifications`, `/company/api-tokens` | `Notifications` (the webhook), `ApiTokens` |
+| `/company/audit-trail`, `/company/audit-anchors` | `AuditTrail`, `AuditAnchors` |
+| `/company/procedures`, `/company/wiki`, `/company/documentation` | `Procedures`, `Wiki`, `Documentation` |
+| `/company/specifications[/:id]` | `Specifications`, `SpecificationDetail` |
+| `/company/specifications/:specId/architecture[s/:id]` | `ArchitectureDetail` |
+| `/company/findings[/:id]`, `/company/self-improvement` | `CompanyFindings`, `CompanyFindingDetail`, `SelfImprovement` |
+| `/company/security-tests` | `SecurityTests` |
+| `/bench` | `Bench` ([models](models.md#the-benchs-scorecards-the-bench-page)) |
+| `/agents`, `/governance` | `AgentSettings`, `components/GovernancePanel` (the Review page: inbox, intake queue, client requests, Manager policy) |
+| `/support` | `HelpDesk` |
+| `/lineage`, `/memory`, `/generate` | `Lineage`, `MemorySearch`, `Generate` |
+| anything else | `NotFound` |
 
-**Tokens** (`tailwind.config.js`): surfaces `surface-950` (the page), `surface-900` (panels, the bar), `surface-800` (hover, a pressed tool), `surface-700` (borders, dividers, a pressed preset); `brand-*` for the current page, links and focus; `rounded-xl` for panels, `rounded-md` for controls and pills. Type: 20px semibold page title, 13px for row titles, panel titles and nav links, 12px (`text-xs`) for controls and body in rows, 11px (`text-meta`, `count-pill`, `status-badge`) for metadata.
+## See also
 
-**Rules.**
-
-- **Status is an icon and a word, never colour alone.** A coloured dot or tone always comes with the label, or carries `role="img"` and a name.
-- **Focus is visible.** Every control keeps the base `:focus-visible` outline or draws `focus-ring` (rows: `data-row-link`, presets: `segmented-item`). The keyboard reaches everything the mouse does; the shell's "Skip to content" link goes to `<main id="main-content">`.
-- **Dense and calm.** Lists are rows in one panel with dividers, not a card per row; controls in a toolbar are 32px (`h-8`); one primary button per view.
-- **Numbers in tabular figures** (`tabular-nums`) wherever they line up or change: counts, percentages, dates, costs.
-- **Observed and claimed never mix.** What the platform observed (a verdict, a check, a file the daemon read) and what a producer or agent reported (its messages, its test run, its declared paths) are separate groups with their own heading, as the board's card signals are (**Observed**: solid chips under a shield; **Reported**: dashed chips). A claim is never styled as an observation.
-- **Contrast.** Secondary text on a dark surface is `text-gray-400` or lighter; `text-gray-500` and below only for decoration or a disabled control.
-- **Motion.** Every animation and transition has `motion-reduce:` off (`motion-reduce:animate-none`, `motion-reduce:transition-none`).
-
-**The specification and knowledge pages** (`Specifications`, `SpecificationDetail`, `ArchitectureDetail`, `EvidenceDetail`, `Documentation`, `Wiki`, `MemorySearch`, `Procedures`, `CompanyFindings`, `CompanyFindingDetail`) follow these rules. Each section is a titled `Panel` (so a screen reader reaches it as a region by its heading), its items `data-row`s; the statuses they show (a specification's, a criterion's coverage and its acceptance test, a finding's and a cycle's decision, a procedure's result, a wiki page's, a documentation pack's) are `StatusBadge`s or `status-badge` spans with an icon. Long text (a summary, a decision, a requirement, a procedure, a Markdown document in `PackMarkdown` or `WikiMarkdown`) keeps a readable line length (`max-w-prose`, `72ch` for a document). On a run's evidence the **Claimed** panel is dashed under a speech mark and the **Observed** panel solid under a shield, each a region named by its own heading, with the verdict at the foot of the observed one; the Reviewer agent's suggestion is dashed too, a claim. Their loading line, load error with Retry and readable-text class are the design system's `LoadingLine`, `LoadError` and `READABLE_TEXT`.
-
-## Text and accessibility in the views
-
-Every string a person reads or hears is in `en.json` and `es.json` ([`CLAUDE.md`](../../CLAUDE.md), Frontend i18n). Three checks hold it, and the accessibility basics, in place:
-
-- `npm run lint`: `eslint-plugin-i18next` fails on literal text in JSX and in a `title`, `alt`, `placeholder`, `aria-label`, `aria-description` or `label` attribute (`eslint.config.mjs`).
-- `src/uiRules.test.ts`, over every view in `pages/` and `components/` (rules in `src/test/uiRules.ts`, read from the TypeScript syntax tree with the `typescript` package already installed): what the lint rule cannot see — a template literal with words shown as text or given to an attribute read aloud (`` `${n} tokens` ``), prose given to any other attribute (a component's own `heading`, `aria-valuetext`), an `eslint-disable` of the i18next rule — and the accessibility basics: an `<img>` without `alt`; a `<button>`, `<a>` or `<Link>` whose only content is a `lucide-react` icon (in every branch of a conditional) and that has no `aria-label`, `aria-labelledby` or `title`; an `<input>`, `<select>` or `<textarea>` with no label wrapping it, no `htmlFor` naming its `id`, and no `aria-label`, `aria-labelledby` or `title`; and a non-interactive element with `onClick` that has no key handler, or neither a `role` nor a `tabIndex` (`role="presentation"` and `aria-hidden` excepted, for a backdrop). The allowlist, `src/test/uiRulesBaseline.json`, counts by `file: rule` and only shrinks, like `scripts/file_size_baseline.json`: a count above what is found fails until it is lowered (`UPDATE_UI_RULES_BASELINE=1`). It holds one entry: `NavBar`'s mobile menu, which closes on a click bubbling up from its links (a keyboard activates those too).
-- `src/i18n/locales.test.ts`: `en.json` and `es.json` have the same keys; `src/i18n/coverage.test.ts`: every key a `t('…')` names exists in both.
-
-A label is tied to its control with `htmlFor` and an `id` from `useId()` when the view can be shown twice (`pages/companyNew/AgentCard.tsx`, `pages/agentSettings/DraftFields.tsx`); an icon-only control has an `aria-label` and its icon `aria-hidden`; a spinner that replaces a button's text keeps the text for screen readers (`sr-only`); a status shown by a coloured dot alone carries `role="img"` and a name (`components/glassroom/TopBar.tsx`).
-
-## Described elsewhere
-
-- The i18n rule (every string in `en.json` and `es.json`): [`CLAUDE.md`](../../CLAUDE.md), Frontend i18n.
-- The frontend's checks (`npm run lint`, Vitest): [testing](../TESTING.md).
-- A page or component is described with the backend service it shows: the Models page in [models](models.md), the Review page and the Manager policy in [management](management.md), Files changed, reviews and the sprint's controls in [evidence](evidence.md), [loop](loop.md), [release](release.md) and [workspace](workspace.md).
-- Running the dev server and the production build: [`CLAUDE.md`](../../CLAUDE.md), Running the System.
-- The Chat approvals page (`pages/ChatApprovals.tsx`, `components/ChatConnectionForm.tsx`, `hooks/useChat.ts`, `services/api/chat.ts`): [integrations](integrations.md#approvals-in-slack-and-teams).
-- The Duties and access page (`pages/CompanyDuties.tsx`, Owner; `components/SodPolicyPanel.tsx`, `ProtectedPathsPanel.tsx` (whether the company hosts the factory, the list read-only), `AccessReviewPanel.tsx`, `SodReportPanel.tsx`, `ServiceAccountsPanel.tsx`, `hooks/useDuties.ts`, `services/api/duties.ts`; issue #543): [platform](platform.md#auth-and-multi-tenancy) and [management](management.md).
-- The Teams page (`pages/CompanyTeams.tsx`, Owner; `hooks/useTeams.ts`, `services/api/teams.ts`) and the effective role `useCurrentRole` returns (`effective_role` from `/v1/auth/me`, else `human_role`): [platform](platform.md#auth-and-multi-tenancy). The Usage page (`pages/Usage.tsx`, Manager; `services/api/usage.ts`, the CSV through `fetchText`): [models](models.md#who-used-what-the-usage-report).
+- The frontend's checks and the test commands: [testing](../TESTING.md).
+- Views described with their service: the Models page in [models](models.md),
+  the Review page and the Manager policy in [management](management.md), the
+  sprint controls and reviews in [loop](loop.md), the integration in
+  [release](release.md#a-persons-review-of-the-integration), Chat approvals in
+  [integrations](integrations.md#approvals-in-slack-and-teams), teams, duties
+  and roles in [platform](platform.md#auth-and-multi-tenancy), the Usage page in
+  [models](models.md#who-used-what-the-usage-report).
+- Running the dev server and the build: [`CLAUDE.md`](../../CLAUDE.md), Running the System.

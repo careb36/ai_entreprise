@@ -1,46 +1,76 @@
 # The integrations context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/integrations/`.
+Telling the outside world: the notification webhook, chat approvals and
+regressions, personal notifications and audit anchors. Read this before
+changing `backend/app/services/integrations/`; each module's docstring has the
+detail.
 
 - **Folder:** `backend/app/services/integrations/`
-- **Responsibility:** Telling the outside world: the company's notification webhook and the outbox processor that posts it. It listens to changes of the task record and the evidence; nothing below it imports it.
-- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [evidence](evidence.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): none: no other context imports it, and the rule keeps it so.
+- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [evidence](evidence.md). Nothing imports it.
+- **Interface:** none.
 - **Modules:** `anchor_settings`, `anchoring`, `chat_approvals`, `chat_client`, `chat_connections`, `chat_links`, `chat_messages`, `chat_regression_messages`, `chat_regressions`, `chat_signatures`, `outbox_service`, `person_notices`, `tsa_client`, `webhook_client`, `webhooks`.
-- **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `webhook_client` (the signed POST, raising `WebhookPostError`; `webhooks.deliver` calls it); `chat_client` (Slack's Web API at the fixed `https://slack.com/api/` for four named methods, and a POST to a Teams incoming webhook URL already checked; raises `ChatPostError` with Slack's error code or the transport exception's type, never the Teams URL; `chat_approvals.deliver` and `chat_connections.test` call it). `tsa_client` (issue #542: the `TimeStampReq` POST to the Owner's RFC 3161 authority, no redirects, the answer capped at 64 KiB, raising `TsaRequestError`; `anchoring.deliver_tsa` calls it; `webhook_client.post_for_receipt` posts a webhook anchor and returns at most 4 KiB of the answer). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
+- **HTTP adapters:** `webhook_client`, `chat_client`, `tsa_client`. Only these import an HTTP library; they return data and raise named errors.
+
+## How it works
+
+A `before_flush` or `after_flush` listener sees a change on the record (a task
+done or blocked, a sprint closed, a refuted verification, a risk hold) and adds
+an `OutboxEvent` in the same transaction, so a rolled-back change sends
+nothing. `outbox_service.py` delivers it later and retries with backoff. A
+receiver that is down never holds up a sprint.
+
+## Rules
+
+- Every outbound message is built from the record at delivery time, never from
+  what an agent claimed.
+- Credentials (webhook secret, bot tokens, chat keys) are Fernet-encrypted and
+  never returned; responses say `has_*`.
+- A chat decision is held to the same role and segregation-of-duties checks as
+  the web review.
 
 ## Components
 
-### Audit anchors
-
-**`backend/app/services/integrations/anchoring.py`**, **`anchor_settings.py`** / **`routers/audit_anchors.py`** — The audit chain's head recorded outside the factory (issue #542; design and threat model in [`docs/design/AUDIT_ANCHORS.md`](../design/AUDIT_ANCHORS.md)). `take` creates one anchor per kind the Owner configured (`webhook` when `publish_webhook` and the company's webhook is on, `tsa` when a URL and certificate are set) with an outbox event in the same transaction; it runs on the Owner's cadence (`cadence_loop`, started by `lifecycle.py`, one replica at a time under the advisory lock `audit-anchor-cadence`), from an `audit_anchor_take` event a `before_flush` listener (`install`, called by `main.py`) queues when a sprint closes or a run or sprint integration is published, and on demand. The outbox processor calls `deliver`: `deliver_webhook` posts the statement signed like a notification (`X-Fabrique-Event: audit_anchor`) and keeps the answer as a claim (verified only if signed by a customer key); `deliver_tsa` asks for a token with a nonce and keeps it once `rfc3161.verify_token` accepts it with the pinned certificate. The last failed attempt marks the anchor `failed`. Records, statement and coverage: [platform](platform.md#audit-anchors).
-
 ### The notification webhook
 
-**`backend/app/services/integrations/webhooks.py`** / **`routers/webhooks.py`** — The company's notification webhook (issue #357): one per company (`CompanyWebhook`: an https URL, a Fernet-encrypted secret never returned, the events among `task_done`, `task_blocked`, `sprint_closed`, `run_refuted`, on or off; `GET`/`PUT`/`DELETE /v1/companies/{id}/webhook`, Viewer / Manager, `POST .../webhook/ping`). A `before_flush` listener over every session (`install`, called by `main.py`) sees a task's status change to done or blocked (with `block_reason` and `waits_for_a_person`), a sprint's to completed and a new refuted `Verification`, and adds an `OutboxEvent` (`webhook_post`) in the same transaction, so a change that rolls back sends nothing and no caller has to know about webhooks. The outbox processor posts it (`deliver`) with `X-Fabrique-Event`, `X-Fabrique-Delivery` and `X-Fabrique-Signature-256: sha256=<HMAC of the body>` (GitHub's shape); a non-2xx answer or an error is recorded on the webhook (`last_status`, `last_error`) and retried with backoff (the outbox waits `retry_count² × 10 s` between attempts, five at most). A webhook that is down never holds up a sprint. The URL's host must resolve to public addresses unless `WEBHOOK_ALLOW_PRIVATE_HOSTS`.
+`webhooks.py`, `webhook_client.py`: one webhook per company
+(`/v1/companies/{id}/webhook`), https only and public hosts unless
+`WEBHOOK_ALLOW_PRIVATE_HOSTS`. Bodies are signed
+`X-Fabrique-Signature-256` (GitHub's shape).
 
 ### Approvals in Slack and Teams
 
-A chat decision is held to segregation of duties like the web's, since it calls the same `submit_review` (issue #543): the person who started the sprint is refused in chat with the reason, the claimed message is released for another person, and `sod_refused` and `chat_approval_refused` are audited.
-
-**`backend/app/services/integrations/chat_*.py`** / **`routers/chat_approvals.py`**, **`routers/chat_interactions.py`** — Approving from chat (issue #512, phase 4; design and threat model in [`docs/design/CHAT_APPROVALS.md`](../design/CHAT_APPROVALS.md); `models/chat.py`, migration `0023`). One connection per company and provider (`ChatConnection`, `chat_connections`): Slack (workspace id, channel id, bot token, signing secret) or Teams (tenant id, incoming webhook URL on a Microsoft host, outgoing webhook key), both credentials Fernet-encrypted and never returned (`describe` says `has_*`), managed only by a signed-in Owner (`GET /v1/companies/{id}/chat`, `PUT`/`DELETE …/chat/{provider}`, `POST …/chat/{provider}/test`; API tokens refused), every change audited by field name. The approval point wired is the **risk hold**: a `before_flush` listener (`chat_approvals.install`, called by `main.py`) sees a new `risk_hold` task event and queues `chat_approval_post` in the same transaction for each enabled connection; the outbox processor (`deliver`) reads the point again from the record (`approval_point`: still held, the latest run and version, the Verifier's verdict and the checks that did not pass, links to `/evidence/{run}` and the task; never the run's claims) and posts Block Kit buttons (Slack) or an Adaptive Card with a short code (Teams), recording a `ChatApprovalMessage` with the hold event's chain hash and the run's version. Inbound (`routers/chat_interactions.py`, public, `CHAT_RATE_LIMIT`, 64 KiB): `POST /v1/integrations/slack/{public_id}/interactions` (buttons and the `/fabrique link CODE` command) and `POST /v1/integrations/teams/{public_id}/messages` (an outgoing webhook: `approve CODE`, `sendback CODE <reason>`, `link CODE`). In order: the URL's connection; the signature (`chat_signatures`: Slack v0 HMAC over `v0:{ts}:{body}` with the timestamp within 300 s, Teams `Authorization: HMAC` over the body with the activity's own timestamp within 300 s; `hmac.compare_digest`); the interaction id stored once (`ChatInteraction`, unique: a replay does nothing); the workspace or tenant; the chat user's link (`ChatIdentity`, made by a one-time code the person asked for while signed in, `chat_links`; never by email); `require_company_role(..., "Manager")` with that user, as the web review; the message still matching the record and taken with a conditional update (`chat_approvals.claim`). Then `services/loop/run_review.submit_review` decides with `via` (its `run_review_<event>` audit row carries `via` and `user_id`), `chat_approval_<outcome>` names the person, the platform and the chat user, and `chat_approval_update` edits the Slack message (Teams answers in the thread). A refusal changes nothing, is audited as `chat_approval_refused` and is shown in chat (Slack: `chat_ephemeral` through the outbox; Teams: the reply). The second approval point is the **triage block** (issue #512): the listener also queues a post for any new event that blocks a task, and `deliver` posts it only when `chat_approvals.triage_point` finds the inbox's blocked task (nothing the worker does moves it, not frozen, not carried over, no risk hold, not archived, with an in-house run); `current_point` answers either point, and a message names the event that blocked the task (the latest that set `blocked`), so a note added since leaves it current and any move makes it stale (`kind_of` reads which point a message is from that event). It offers Send back only (`approve` refused with `ONLY_SEND_BACK`); the Slack button, Slack's `/fabrique sendback CODE <reason>` and Teams' `sendback CODE <reason>` pass the same checks in the same order and then call the board's own `services/loop/board_moves.send_back` (the function `PATCH /v1/backlog/{id}` uses: the `sent_back` event written as the person, the note `Sent back to work by a person via <platform>: <reason>`, the task started), audited as `chat_approval_sent_back` with the task event's id. Only one pending post per connection and task is queued (`_post_pending`); its delivery reads the record as it is then. Each member links or unlinks their own account (`GET /v1/companies/{id}/chat/links`, `POST …/links/{provider}/code`, `DELETE …/links/{provider}`); the page is `/company/chat` (`pages/ChatApprovals.tsx`, `components/ChatConnectionForm.tsx`).
-
-### Regressions in Slack and Teams
-
-**`backend/app/services/integrations/chat_regressions.py`** / **`chat_regression_messages.py`** — Information only (issue #682, split from #512's chat phase). A regression is an observation: a sprint integration whose test run failed (`tests_failed`, from the daemon's exit code) where the company's previous integration on the same repository and base with a test outcome passed with the same test command; or a refuted `Verification` of a run whose previous verification was `verified` while its task is done. An `after_flush` listener (`install`, called by `main.py`) decides from what the flush wrote and `after_flush_postexec` queues one `chat_regression_post` per enabled connection in the same transaction, keyed `<connection>:<kind>:<id>` in `aggregate_id` (a key already queued is not queued again; delivery skips a key another row delivered). The outbox processor (`deliver`) reads the regression again from the record and posts it with a link to the evidence (the sprint's integration, or `/evidence/{run}` with the checks that did not pass); no button, nothing an agent claimed.
+- `chat_connections.py`, `chat_links.py`: one Slack or Teams connection per
+  company, managed by a signed-in Owner. A chat user is linked by a one-time
+  code, never by email.
+- `chat_signatures.py`, `chat_client.py`: inbound requests checked by HMAC
+  within 300 s; outbound calls to Slack's Web API or a Teams webhook.
+- `chat_approvals.py`, `chat_messages.py`: a risk hold posted to chat and
+  decided there through the same `run_review.submit_review` as the web, with
+  the Manager role. A replayed interaction does nothing; only the record is
+  shown. Design: [`CHAT_APPROVALS.md`](../design/CHAT_APPROVALS.md).
+- `chat_regressions.py`, `chat_regression_messages.py`: information only, for
+  an integration whose tests now fail or a done task whose verification went
+  from verified to refuted.
 
 ### Personal notifications
 
-**`backend/app/services/integrations/person_notices.py`** — The company events that target a person, written as personal notifications (issue #683; the rows and their rules are [platform's](platform.md#personal-notifications)). Watched over every session, as the webhook is (`install`, from `main.py`): a new `risk_hold` task event writes `review_requested` (subject: the task; context: the sprint) to the members whose effective role may accept it (Manager or Owner, `teams.members_with_role`); a `SprintIntegration` written with, or changed to, a status in `WAITS_FOR_A_PERSON` writes `integration_waiting` (subject: the integration) to the same members, once per integration and status. The changes are read in `after_flush` (ids assigned, attribute history still there) and the rows added in `after_flush_postexec`, so the commit that records the change flushes them too; a failure is logged and never stops the change. `deliver_email` is the outbox processor's `notification_email`: a plain-text mail to the receiver's own address that names the kind (`EMAIL_SUBJECTS`) and nothing of the subject or the company; it is dropped, never retried, when SMTP is gone, the person left the company or turned the email off, and a mail server failure raises so the outbox retries it.
+`person_notices.py`: `review_requested` and `integration_waiting` written to
+the members who may act, plus an optional email that names the kind and
+nothing else. The rows themselves: [platform](platform.md).
 
-### Other modules
+### Audit anchors
 
-- `chat_messages`: what an approval looks like in Slack (Block Kit) and Teams (an Adaptive Card). Pure functions over the recorded verdict and failed checks; the record's text is escaped and capped, and nothing an agent claimed is shown. A triage block gets its own heading, the block's reason labelled "as recorded", a Send back button only and the `sendback CODE` hint.
+`anchoring.py`, `anchor_settings.py`, `tsa_client.py`: the audit chain's head
+recorded outside the factory, as a signed webhook statement (kept as a claim)
+or an RFC 3161 timestamp checked against the pinned certificate. Design:
+[`AUDIT_ANCHORS.md`](../design/AUDIT_ANCHORS.md).
 
-## Described elsewhere
+### The outbox
 
-- `request <text>` (Slack's `/fabrique request …`, a Teams message `request …`): a linked chat account with at least the Viewer role sends a request to the company's intake queue, source `chat`, `source_ref` `<provider>:<workspace>` (`routers/chat_interactions._request`); an unlinked account is told to link first. The queue itself: [planning](planning.md#the-intake-queue).
-- `outbox_service` (the outbox processor that stores `task.assign` and posts webhooks): step 1 of [the sprint loop](../SPRINT_LOOP.md) and the paragraph below.
-- `WEBHOOK_ALLOW_PRIVATE_HOSTS`, `CHAT_APP_URL`, `CHAT_RATE_LIMIT`, `PUBLIC_API_URL`: [configuration](../CONFIGURATION.md).
-- Creating the Slack app or the Teams webhooks, and rotating their secrets: [operations](../OPERATIONS.md#approvals-in-slack-and-teams).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-13).
+`outbox_service.py`: stores `task.assign` and delivers every event above.
+
+## See also
+
+- Settings (`WEBHOOK_ALLOW_PRIVATE_HOSTS`, `CHAT_APP_URL`, `CHAT_RATE_LIMIT`, `PUBLIC_API_URL`): [configuration](../CONFIGURATION.md).
+- Setting up Slack or Teams and rotating secrets: [operations](../OPERATIONS.md#approvals-in-slack-and-teams).
+- The intake requests sent from chat: [planning](planning.md#the-intake-queue).
