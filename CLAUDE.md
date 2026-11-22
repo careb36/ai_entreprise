@@ -1,203 +1,154 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code in this repository. This file is an index; the detail
+lives in the documents it links.
 
-## What This Project Is
+## What this project is
 
-**La Fabrique** is a platform for running IT projects of any kind (software, data science, machine learning, deep learning…) with a company of AI agents that plan, build and document the work, and that records verifiable evidence of what the agents did. Today the loop executes software tasks end to end and the project documentation pack is built (`docs/contexts/planning.md`); other project types, automation and research are direction. For software it orchestrates a multi-agent team (PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter, and the specialised BackendDeveloper, FrontendDeveloper, DevOps, Designer and DataEngineer; `services/contracts/roles.py`) using LangGraph to execute software sprints — from backlog to code generation and execution — inside a user's VS Code workspace.
+**La Fabrique** is a company of AI agents that plans, builds and documents IT
+projects, and records verifiable evidence of what the agents did. Today the
+loop runs software sprints end to end inside a user's workspace, with LangGraph
+roles (`services/contracts/roles.py`), and builds the project documentation
+pack (`docs/contexts/planning.md`). Other project types, automation and
+research are direction.
 
-> **Direction adopted (2026-09-19).** The repositioning in
-> [`docs/POSITIONING.md`](docs/POSITIONING.md), tracked in issue #38, is the
-> project's direction: the agents become interchangeable producers, and the
-> product becomes the layer that verifies their work and records evidence. The
-> description above still reflects what the code does today, not where it is
-> going. Read the positioning document before planning new work, and note the
-> design rules in it — in particular that a
-> claim and an observation must never share a field, that an agent's report of
-> its own test run is a claim rather than an observation, and that hashes and
-> signatures are never accepted from the party being recorded.
->
-> **Amendment (2026-10-18).** The factory manages itself as a company of AI
-> agents that follow procedures, talk to each other and learn from
-> retrospectives. The evidence keeps the last word: messages between agents are
-> claims, and procedure changes are kept or reverted by deterministic metrics.
-> See the amendment at the end of `docs/POSITIONING.md` for the design and the
-> order of work.
->
-> **Reference implementations (2026-11-07).** Before building a piece of the
-> factory, study how the agents that already ship it did it and take as much as
-> can be taken, design first and code where the licence allows: GitHub Copilot
-> coding agent (CI as the evidence of a run), OpenAI Codex cloud (sandboxed
-> runs with the commands and logs cited in the pull request), OpenHands (an
-> open-source, self-hostable Docker runtime per session and the trajectory as
-> an event stream; the MCP loop here already follows its `software-agent-sdk`),
-> Devin (session replay, parallel agents), Kiro by Amazon (spec-driven:
-> requirements with EARS criteria, design and tasks before code) and Factory
-> (Droids: enterprise execution, local or cloud, with compliance). Name what
-> was taken, and from where, in the pull request.
->
-> **Scope (2026-11-19).** The owner broadened the scope: La Fabrique manages
-> IT projects, not only software development (data science, machine learning,
-> deep learning and others), documents the work, and grows toward automation
-> and research. The evidence rules apply unchanged: an agent's reported
-> metric is a claim, and a metric is an observation only when the platform
-> measured it. See the amendment "Scope (2026-11-19)" at the end of
-> `docs/POSITIONING.md`, which also records the owner's decisions on the questions it raises.
+Owner directives (detail in [`docs/POSITIONING.md`](docs/POSITIONING.md); read
+it before planning new work):
 
-## Running the System
+- **Direction (2026-09-19, issue #38).** The agents are interchangeable
+  producers; the product is the layer that verifies their work and records
+  evidence.
+- **Amendment (2026-10-18).** The factory runs itself as a company of agents
+  with procedures and retrospectives. Messages between agents are claims, and
+  deterministic metrics keep or revert procedure changes.
+- **Reference implementations (2026-11-07).** Before building a piece, study
+  how shipping agents did it (Copilot coding agent, Codex cloud, OpenHands,
+  Devin, Kiro, Factory) and take what the licence allows. Name the source in
+  the pull request.
+- **Scope (2026-11-19).** La Fabrique manages IT projects of any kind (data
+  science, ML, deep learning…), not only software. An agent's reported metric
+  is a claim; it is an observation only when the platform measured it.
+
+Design rules that constrain every change:
+
+- A claim and an observation never share a field.
+- An agent's report of its own test run is a claim, not an observation.
+- Hashes and signatures are never accepted from the party being recorded.
+
+## Running the system
 
 ```bash
-# Full stack (preferred)
-docker compose up -d
-
-# Individual services
-docker compose up backend -d
-docker compose up frontend -d
-docker compose up llm-proxy -d
-
-# The knowledge graph (Neo4j) is optional and on by default; without it:
-NEO4J_ENABLED=false docker compose up -d --scale neo4j=0
-
-# Workspace daemon: runs natively on the computer that holds your projects
-./scripts/start-daemon.sh        # macOS / Linux
-.\scripts\start-daemon.ps1       # Windows (PowerShell)
+docker compose up -d                                     # full stack
+NEO4J_ENABLED=false docker compose up -d --scale neo4j=0  # without Neo4j
+./scripts/start-daemon.sh                                # daemon (.\scripts\start-daemon.ps1 on Windows)
+cd frontend && npm install && npm run dev                # frontend with hot reload
 ```
 
-The daemon is the only component that touches the user's files, so the folder
-chosen in "New company" is a path on that computer (`/Users/ana/code/app`,
-`/home/ana/src/app`, `C:\Users\ana\source\repos\app`). The backend never needs
-to see the user's disk; `docker compose --profile docker-daemon up` is an
-opt-in Linux-only alternative that mounts `PROJECTS_ROOT` instead.
+Backend `http://localhost:8000` (OpenAPI at `/docs`), frontend
+`http://localhost:5173`, LLM proxy `http://localhost:5100`. The daemon runs
+natively on the computer that holds the projects and is the only component
+that touches the user's files. Every environment variable is in
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
-- Backend API: `http://localhost:8000` — OpenAPI docs at `/docs`
-- Frontend: `http://localhost:5173` (Vite dev) or `http://localhost:3000` (production)
-- LLM Proxy: `http://localhost:5100`
-
-**Frontend dev server (hot reload):**
-```bash
-cd frontend && npm install && npm run dev
-```
-
-**Local git hooks** (`.pre-commit-config.yaml`): `pip install pre-commit && pre-commit install --hook-type pre-commit --hook-type post-merge --hook-type post-rewrite`. Before a commit, ruff, the `.env` check and gitleaks over the staged changes (with `.gitleaks.toml`, the version CI runs; pre-commit builds it with Go on first use) run; after a pull, merge or rebase that changed `frontend/package-lock.json`, `scripts/hooks/sync-frontend-deps.sh` runs `npm ci` in `frontend/` (it never fails the git command, and says so when npm is missing or the install failed).
-
-**Frontend production build:**
-```bash
-cd frontend && npm run build
-```
-
-
-Every environment variable is in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
-
-## Architecture Overview
-
-```
-React Frontend (Vite + TypeScript + TailwindCSS)
-        ↓ REST / SSE
-FastAPI Backend  ←→  LangGraph Agent Orchestration
-        ↓                   ↓
-    Postgres           NATS JetStream (pubsub)
-    (pgvector)               ↓
-    Neo4j             VS Code Daemon
-    (knowledge graph)  (writes files, runs shell)
-         ↓
-    LLM Proxy (Flask, port 5100)
-         ↓ ↓
-    Gemini API    DeepSeek API
-```
+Local git hooks: `pip install pre-commit && pre-commit install --hook-type
+pre-commit --hook-type post-merge --hook-type post-rewrite` (ruff, the `.env`
+check and gitleaks before a commit; `npm ci` in `frontend/` after a pull that
+changed its lock file).
 
 ## Contexts
 
-`backend/app/services` is divided into fourteen contexts, each a folder with one responsibility. **Read the context's document before changing code in that context.** This file is an index; the detail lives in the documents it links.
+`backend/app/services` is divided into fourteen contexts. **Read the context's
+document before changing code in it.**
 
-| Context | Folder | What it owns | May import | Document |
+| Context | Folder | Owns | May import | Document |
 |---|---|---|---|---|
-| contracts | `services/contracts/` | The shapes several contexts exchange, as plain data and pure functions | nothing | [`docs/contexts/contracts.md`](docs/contexts/contracts.md) |
-| platform | `services/platform/` | The infrastructure every context may use: audit, locks, Glassroom, tokens, health, the knowledge graph reader | contracts | [`docs/contexts/platform.md`](docs/contexts/platform.md) |
-| tasks | `services/tasks/` | A task's record: events and their hash chain, projections, the board readers, dependencies | contracts, platform | [`docs/contexts/tasks.md`](docs/contexts/tasks.md) |
-| models | `services/models/` | Which model a role runs and what it costs | contracts, platform, tasks | [`docs/contexts/models.md`](docs/contexts/models.md) |
-| evidence | `services/evidence/` | Judging a run from what was observed: the Verifier, risk tier, standards, acceptance tests, the gate before QA | contracts, platform | [`docs/contexts/evidence.md`](docs/contexts/evidence.md) |
-| workspace | `services/workspace/` | The client of the workspace daemon over NATS (and, here, the daemon itself) | contracts, platform | [`docs/contexts/workspace.md`](docs/contexts/workspace.md) |
-| tools | `services/tools/` | What a model may call during a task: the tool loop, MCP, workspace tools, edits, repository map, research | contracts, platform, evidence, workspace | [`docs/contexts/tools.md`](docs/contexts/tools.md) |
-| learning | `services/learning/` | How the company learns from its sprints: procedures, retrospective, triage, the Architect's record | contracts, platform, tasks, models | [`docs/contexts/learning.md`](docs/contexts/learning.md) |
-| planning | `services/planning/` | What is built and in which tasks: specification, architecture, the PO's plan, the sprint's team | contracts, platform, tasks, models, evidence, workspace, tools | [`docs/contexts/planning.md`](docs/contexts/planning.md) |
-| producers | `services/producers/` | The interchangeable producers other than the task worker's own model call | contracts, platform, tasks, models, evidence, workspace, tools | [`docs/contexts/producers.md`](docs/contexts/producers.md) |
-| loop | `services/loop/` | Driving a sprint's tasks: the task worker, board moves, carry-over, sprint control, a person's review | contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers | [`docs/contexts/loop.md`](docs/contexts/loop.md) |
-| release | `services/release/` | What leaves the factory once accepted: publish, local merge, integration, undo | contracts, platform, tasks, models, evidence, workspace, planning, loop | [`docs/contexts/release.md`](docs/contexts/release.md) |
-| integrations | `services/integrations/` | Telling the outside world: the notification webhook and the outbox processor | contracts, platform, tasks, evidence | [`docs/contexts/integrations.md`](docs/contexts/integrations.md) |
-| management | `services/management/` | The owner as a client: the Manager, Reviewer and Support agents, the brief | contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers, loop, release, integrations | [`docs/contexts/management.md`](docs/contexts/management.md) |
+| contracts | `services/contracts/` | Shared shapes, pure functions | nothing | [contracts.md](docs/contexts/contracts.md) |
+| platform | `services/platform/` | Audit, locks, Glassroom, health, graph reader | contracts | [platform.md](docs/contexts/platform.md) |
+| tasks | `services/tasks/` | Task events, hash chain, board readers | contracts, platform | [tasks.md](docs/contexts/tasks.md) |
+| models | `services/models/` | Model per role, cost | contracts, platform, tasks | [models.md](docs/contexts/models.md) |
+| evidence | `services/evidence/` | Verifier, risk tier, standards, gate before QA | contracts, platform | [evidence.md](docs/contexts/evidence.md) |
+| workspace | `services/workspace/` | Daemon client over NATS | contracts, platform | [workspace.md](docs/contexts/workspace.md) |
+| tools | `services/tools/` | Tool loop, MCP, edits, repo map, research | contracts, platform, evidence, workspace | [tools.md](docs/contexts/tools.md) |
+| learning | `services/learning/` | Procedures, retrospective, triage | contracts, platform, tasks, models | [learning.md](docs/contexts/learning.md) |
+| planning | `services/planning/` | Specification, architecture, PO plan, team | contracts, platform, tasks, models, evidence, workspace, tools | [planning.md](docs/contexts/planning.md) |
+| producers | `services/producers/` | Producers other than the worker's model call | contracts, platform, tasks, models, evidence, workspace, tools | [producers.md](docs/contexts/producers.md) |
+| loop | `services/loop/` | Task worker, board moves, sprint control, review | contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers | [loop.md](docs/contexts/loop.md) |
+| release | `services/release/` | Publish, local merge, integration, undo | contracts, platform, tasks, models, evidence, workspace, planning, loop | [release.md](docs/contexts/release.md) |
+| integrations | `services/integrations/` | Notification webhook, outbox | contracts, platform, tasks, evidence | [integrations.md](docs/contexts/integrations.md) |
+| management | `services/management/` | Manager, Reviewer, Support agents, brief | all of the above | [management.md](docs/contexts/management.md) |
 
-Outside `services/`: the workspace daemon (`vscode-daemon/`) is described in workspace; a router with the service it fronts; the LLM proxy (`llm-proxy/`) and model routing in models; the janitor, the migrations, the NATS client, locks and replicas, auth and multi-tenancy and memory in platform; the frontend's views in [`docs/contexts/frontend.md`](docs/contexts/frontend.md). The task worker's steps are in [`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md).
+Outside `services/`: the daemon (`vscode-daemon/`) is in workspace; the LLM
+proxy (`llm-proxy/`) in models; the janitor, migrations, NATS client, auth and
+memory in platform; the frontend in
+[`docs/contexts/frontend.md`](docs/contexts/frontend.md). The task worker's
+steps are in [`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md).
 
-**The dependency rule** (issue #469, `docs/ARCHITECTURE.md`, ADRs 0012–0018). A context imports only the contexts its row names; the evidence imports only contracts and platform. The assignment and the rule are data, `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py` (`python3 scripts/check_architecture.py`; `tests/test_check_architecture.py`, and a step of `backend-tests.yml`): a module in no context, a cycle between contexts or an import against the rule fails. Today it reports 0 shims and 0 allowlisted edges, and both stay there. Across contexts a module imports only the other context's public modules, its interface (`public` in `contexts.json`, ADR 0018; the `interface_allowlist` holds the six imports of internals left and only shrinks). HTTP lives only in named adapter modules: under `services/`, a module that imports an HTTP library (`httpx`, `requests`, `urllib.request`…) must be listed in `http_adapters` in `contexts.json`, returns data and raises named errors, and that list only shrinks unless a new adapter is reviewed (issue #511, after AixleHQ/flow's "no HTTP in domain services" rule). A new module names its context by its folder, `services/<context>/`, in the same pull request. How the code got there is [`docs/architecture/MIGRATION.md`](docs/architecture/MIGRATION.md).
+## Dependency rules
 
-The frontend has a rule of its own (issue #519): `frontend/src` is in layers, from the bottom up foundation (`i18n`, `styles`), `services`, `lib`, state (`store`, `hooks`), `components`, `pages` and the app (`App.tsx`, `main.tsx`); a module imports only from its layer or below, and only the modules in `network.modules` (`services/api/client.ts`, `services/api/stream.ts`) use `fetch`, `EventSource`, `WebSocket`, `XMLHttpRequest` or `axios`. The data is `docs/architecture/frontend.json`, checked by `scripts/check_frontend_architecture.py` (a step of `frontend-build.yml`; `backend/tests/test_check_frontend_architecture.py`), and its allowlist only shrinks; the detail is in [`docs/contexts/frontend.md`](docs/contexts/frontend.md).
+- **Backend** (issue #469, ADRs 0012–0018, [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)):
+  a context imports only the contexts its row names. The rule is data,
+  `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`.
+  It reports 0 shims and 0 allowlisted edges; keep both at 0.
+- Across contexts, import only the other context's public modules (`public` in
+  `contexts.json`, ADR 0018). The `interface_allowlist` only shrinks.
+- HTTP lives only in the adapter modules listed in `http_adapters` (issue
+  #511). That list only shrinks unless a new adapter is reviewed.
+- A new module names its context by its folder, `services/<context>/`.
+- **Frontend** (issue #519): `frontend/src` is layered (foundation, `services`,
+  `lib`, state, `components`, `pages`, app). A module imports only from its
+  layer or below, and only `services/api/client.ts` and
+  `services/api/stream.ts` use the network. Checked by
+  `scripts/check_frontend_architecture.py` against
+  `docs/architecture/frontend.json`.
 
 ## Tests and lint
 
-The whole section (the suites, the e2e run, the bench, CI) is [`docs/TESTING.md`](docs/TESTING.md).
-
 ```bash
-scripts/check.sh quick   # while working: the checks what you changed against origin/main can break
+scripts/check.sh quick   # while working: what your change can break
 scripts/check.sh full    # once before pushing: everything CI runs
 ```
 
-Both print each step's status and time and exit non-zero on a failure; they install `frontend/node_modules` or a Poetry venv only when it is missing or its lock file changed. `CHECK_PYTHON` names the backend's interpreter (default: the Poetry venv of `backend/`), and `CHECK_BACKEND_WORKERS=2` caps the parallel backend suite on a shared machine. What each mode runs is at the top of `scripts/check.sh` and in `docs/TESTING.md`.
-
-The individual commands, for reference:
+Individual commands:
 
 ```bash
-# Backend (no Postgres, NATS, Neo4j or LLM proxy needed)
-cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
-# runs on every core with pytest-xdist (dev group) by default; -n 0 for one process
-
-# Backend lint: the ruff version CI pins, since the default rule set moves between releases
-pip install "ruff==0.17.1"
-cd backend && ruff check app tests && ruff format --check app tests
-
-# LLM proxy, from the repo root with the proxy's Poetry environment
-python -m pytest llm-proxy/tests -q
-
-# Frontend
+cd backend && PYTHONPATH=.:app python3 -m pytest tests -q   # no Postgres, NATS or model needed
+cd backend && ruff check app tests && ruff format --check app tests   # ruff==0.17.1, as CI pins it
+python -m pytest llm-proxy/tests -q                         # with the proxy's Poetry env
 cd frontend && npx tsc --noEmit && npm run lint && npm run test:run && npm run build
-
-# The dependency rules (backend, frontend) and the file-size ratchet
 python3 scripts/check_architecture.py
 python3 scripts/check_frontend_architecture.py
 python3 scripts/check_file_sizes.py
 ```
 
-`scripts/check.sh quick` runs the backend tests through `scripts/affected_tests.py --run` (it follows the import graph from the lines you changed; `--by context` uses each test's context from `tests` in `docs/architecture/contexts.json`, `--explain` says why each test runs, and it says when it falls back to the whole suite) and the frontend's through `npm run test:changed`. Before pushing, run the full suite once.
-
-`scripts/check_file_sizes.py` keeps a source file at or under 600 lines; the files already over it (`scripts/file_size_baseline.json`) may shrink but never grow, and `--update` lowers an entry. Test files (`backend/tests`, `llm-proxy/tests`, `vscode-daemon/tests`, the frontend's `*.test.ts(x)`) follow the same rule with their own baseline, `scripts/test_file_size_baseline.json`.
+A source or test file stays at or under 600 lines; files already over it may
+shrink but never grow. Details: [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Frontend i18n
 
-All user-facing strings must be added to both:
-- `frontend/src/i18n/en.json`
-- `frontend/src/i18n/es.json`
-
-Use the `useTranslation` hook from i18next; never hardcode English strings in JSX.
+Every user-facing string goes in both `frontend/src/i18n/en.json` and
+`frontend/src/i18n/es.json`. Use the `useTranslation` hook; never hardcode
+English strings in JSX.
 
 ## Branches
 
-- Branches: trunk-based. Each change is a branch cut from `main`, landed locally once `scripts/land.sh <branch>` passes: it merges `main` and the branch in a clean worktree (never a rebase), runs `scripts/check.sh full` on that merge commit, fast-forwards local `main` and writes a verification record (a claim by the machine that ran it; `--verify <sha>` re-runs it elsewhere); `--push` mirrors `main` and `refs/notes/verification` to GitHub (`CONTRIBUTING.md`, Branches; `docs/OPERATIONS.md`, Landing locally). Pull requests remain possible for review but are no longer the gate. A protected path lands only with the owner (`LAND_OWNER=1`, a guard, not a security boundary). There is no `develop` integration branch.
-- The Glassroom VR entry for the Meta VR Start Developer Competition lives on
-  the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
+Trunk-based. Each change is a branch cut from `main`, landed with
+`scripts/land.sh <branch>`: it merges `main` and the branch in a clean worktree
+(never a rebase), runs `scripts/check.sh full`, fast-forwards local `main` and
+writes a verification record. `--push` mirrors `main` and the notes to GitHub.
+A protected path lands only with the owner (`LAND_OWNER=1`). There is no
+`develop` branch. The Glassroom VR entry lives on `main_meta`. Details:
+`CONTRIBUTING.md` and `docs/OPERATIONS.md`.
 
 ## Where things are documented
 
-- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) — Every environment variable
-- [`docs/TESTING.md`](docs/TESTING.md) — The test suites, the e2e run, the bench, CI and the security checks
-- [`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md) — Data flow for a sprint: the task worker's steps
-- [`docs/contexts/`](docs/contexts/) — One document per context (the table above), and [`frontend.md`](docs/contexts/frontend.md)
-- [`docs/architecture/MIGRATION.md`](docs/architecture/MIGRATION.md) — The record of the ADR 0016 migration, step by step
-- [`README.md`](README.md) — Project overview, architecture, setup, and API reference
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
-- [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
-- [`.claude/skills/`](.claude/skills/README.md) — Claude Code skills based on Microsoft's SDL practices: `sdl-review` (a change before its PR), `threat-model` (a new design), `sdl-program` (the quarterly or pre-release security review); and `ciberseguridad` (OWASP rules and gates per stack)
-- [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
-- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — Design with the owner's decisions (not built yet): workflows per board column, task kind or sprint close, as typed-step DAGs whose invariants keep the Verifier, the holds and the history checker; custom columns as views over the five statuses; Owner-only activation
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — The backend's contexts and their dependency rule, rendered from `docs/architecture/architecture.json`; ADRs in `docs/adr/`
-- [`docs/STANDARDS.md`](docs/STANDARDS.md) — The quality standards every project is held to, and which the loop checks without a model
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — The operations runbook: deploy, upgrade, key rotation, `/health` and `/metrics`, the daemon absent, a sprint stuck, a provider out of credit, backups and restore, retention, and how many workers may run
-- [`bench/README.md`](bench/README.md) — The bench: reference specifications graded by person-written tests, scorecards, and how to add a specification
+- [`docs/README.md`](docs/README.md): the index of every document
+- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): environment variables
+- [`docs/TESTING.md`](docs/TESTING.md): test suites, e2e, the bench, CI
+- [`docs/SPRINT_LOOP.md`](docs/SPRINT_LOOP.md): the task worker's steps
+- [`docs/contexts/`](docs/contexts/): one document per context
+- [`docs/POSITIONING.md`](docs/POSITIONING.md): direction and design rules
+- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md): workflow design (not built yet)
+- [`docs/STANDARDS.md`](docs/STANDARDS.md): the quality standards
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): the operations runbook
+- [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md)
+- [`.claude/skills/`](.claude/skills/README.md): security skills (`sdl-review`, `threat-model`, `sdl-program`)

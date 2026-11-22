@@ -7,7 +7,7 @@
 # server of the Docker stack (nats://localhost:4222, override with NATS_URL)
 # and keeps retrying until it is up.
 #
-# When the broker has one user per component (SECURITY.md, "Securing the
+# When the broker has one user per component (docs/OPERATIONS.md, "Securing the
 # bus"), give the daemon its credentials:
 #   NATS_DAEMON_PASSWORD=...  ./scripts/start-daemon.sh   (user "daemon")
 #   NATS_USER=... NATS_PASSWORD=...  ./scripts/start-daemon.sh

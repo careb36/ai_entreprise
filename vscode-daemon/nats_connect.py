@@ -125,7 +125,7 @@ def exposed_warning(url: str, env: Optional[Mapping[str, str]] = None) -> Option
     return (
         f"NATS at {host} without credentials: anything that reaches it can ask this "
         "daemon to run commands. Set NATS_USER/NATS_PASSWORD (or --creds FILE); "
-        "see SECURITY.md, Securing the bus."
+        "see docs/OPERATIONS.md, Securing the bus."
     )
 
 

@@ -126,7 +126,7 @@ def exposed_bind_warning(env: Mapping[str, str] | None = None) -> str | None:
         f"NATS_BIND is {bind} and NATS has no credentials: anything that reaches "
         "the broker can ask the workspace daemon to run commands. Set "
         "NATS_BACKEND_PASSWORD and NATS_DAEMON_PASSWORD (or NATS_CREDS_FILE), "
-        "or bind to 127.0.0.1. See SECURITY.md, Securing the bus."
+        "or bind to 127.0.0.1. See docs/OPERATIONS.md, Securing the bus."
     )
 
 

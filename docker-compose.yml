@@ -23,7 +23,7 @@ services:
     # survive a backend or daemon that is down when they are published.
     # nats/start.sh turns on one user per component when both passwords are
     # set (nats/nats-server.conf, scripts/nats_config.py) and TLS when
-    # nats/certs holds a certificate; see SECURITY.md, "Securing the bus".
+    # nats/certs holds a certificate; see docs/OPERATIONS.md, "Securing the bus".
     entrypoint: ["/bin/sh", "/etc/fabrique-nats/start.sh"]
     environment:
       NATS_BACKEND_PASSWORD: ${NATS_BACKEND_PASSWORD:-}
