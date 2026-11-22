@@ -587,6 +587,7 @@ class AgentUpdateRequest(RequestModel):
     model: str | None = None
     system_prompt: str | None = None
     token_budget: int | None = Field(default=None, ge=0)
+    reason: str | None = Field(default=None, max_length=500)  # On the revision.
 
 
 class AgentPromptRequest(RequestModel):

@@ -1,0 +1,3 @@
+Added
+
+* **Every change to an agent's configuration is a revision, and a Manager can roll it back (issue #774).** A change to an agent's prompt, model, persona, budget or role through `PATCH /v1/agents/{id}` used to overwrite it with no trace. It is now an `agent_config_changed` row in the company's chained audit log, with the fields before and after, who changed them and an optional reason. `GET /v1/agents/{id}/config-revisions` lists them, and `POST /v1/agents/{id}/config-revisions/{revision_id}/rollback` puts back what a revision replaced, recorded as a revision of its own. From Paperclip's agent configuration revisions (MIT).

@@ -415,6 +415,9 @@
       "test_agent_access.py": [
         "loop"
       ],
+      "test_agent_config_revisions.py": [
+        "loop"
+      ],
       "test_agent_language.py": [
         "loop"
       ],

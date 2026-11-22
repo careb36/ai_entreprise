@@ -29,7 +29,7 @@ from models import (
 )
 from sqlmodel import Session, func, select
 
-from services.loop import sprint_control
+from services.loop import agent_config_history, sprint_control
 from services.models import company_models
 from services.planning.sprint_planner import plan_foundation_sprint
 from services.platform.memory_graph import graph_enabled
@@ -418,11 +418,21 @@ class CompanyService:
         self.session.refresh(agent)
         return self._serialize_agent(agent)
 
-    def update_agent(self, agent_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        """Update an existing agent configuration."""
+    def update_agent(
+        self,
+        agent_id: int,
+        payload: dict[str, Any],
+        actor: dict[str, Any] | None = None,
+        *,
+        source: str = agent_config_history.SOURCE_EDIT,
+        rolled_back_from: int | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing agent configuration; the change is a revision
+        (``agent_config_history``), audited with *actor* in the same commit."""
         agent = self.session.get(Agent, agent_id)
         if not agent:
             raise ValueError(f"Agent {agent_id} not found")
+        before = agent_config_history.snapshot(agent)
 
         for field in (
             "name",
@@ -456,9 +466,41 @@ class CompanyService:
             raise ValueError("role cannot be empty")
 
         self.session.add(agent)
+        agent_config_history.record(
+            self.session,
+            agent,
+            before,
+            actor=actor,
+            reason=payload.get("reason"),
+            source=source,
+            rolled_back_from=rolled_back_from,
+        )
         self.session.commit()
         self.session.refresh(agent)
         return self._serialize_agent(agent)
+
+    def rollback_agent(
+        self,
+        agent_id: int,
+        revision_id: int,
+        actor: dict[str, Any] | None,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        """Put back what revision *revision_id* replaced, as a revision of its own."""
+        agent = self.session.get(Agent, agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+        restore, moved = agent_config_history.rollback_payload(
+            self.session, agent, revision_id
+        )
+        updated = self.update_agent(
+            agent_id,
+            {**restore, "reason": reason or f"Rollback of revision {revision_id}"},
+            actor,
+            source=agent_config_history.SOURCE_ROLLBACK,
+            rolled_back_from=revision_id,
+        )
+        return {"agent": updated, "restored": sorted(restore), "changed_since": moved}
 
     def delete_agent(self, agent_id: int) -> dict[str, Any]:
         """Delete an agent configuration."""

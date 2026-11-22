@@ -16,12 +16,17 @@ from auth_policy import (
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Agent, User
+from pydantic import Field
 from schemas import (
     AgentCreateRequest,
     AgentPromptRequest,
     AgentUpdateRequest,
+    RequestModel,
 )
+from services.loop import agent_config_history
+from services.loop import run_window_gate as gate
 from services.loop.company_service import CompanyService
+from services.platform import sod
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
@@ -126,10 +131,62 @@ async def update_agent(
     require_company_role(session, user, _agent_company(session, agent_id), "Manager")
     service = CompanyService(session)
     try:
-        return service.update_agent(agent_id, req.model_dump(exclude_unset=True))
+        return service.update_agent(
+            agent_id,
+            req.model_dump(exclude_unset=True),
+            gate.actor_fields(sod.actor_of(session, user)),
+        )
     except ValueError as exc:
         status = 404 if "not found" in str(exc).lower() else 422
         raise HTTPException(status_code=status, detail=str(exc))
+
+
+class RollbackRequest(RequestModel):
+    """Payload for a rollback: the reason, kept on the revision."""
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/agents/{agent_id}/config-revisions", tags=["Enterprise"])
+async def agent_config_revisions(
+    agent_id: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Every change to the agent's configuration, newest first (Viewer)."""
+    require_company_role(session, user, _agent_company(session, agent_id), "Viewer")
+    agent = session.get(Agent, agent_id)
+    return {
+        "agent_id": agent_id,
+        "revisions": agent_config_history.revisions(session, agent),
+    }
+
+
+@router.post(
+    "/agents/{agent_id}/config-revisions/{revision_id}/rollback", tags=["Enterprise"]
+)
+async def rollback_agent_config(
+    agent_id: int,
+    revision_id: int,
+    req: RollbackRequest | None = None,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Put back what a revision replaced (Manager, like any change); the
+    rollback is a revision of its own."""
+    require_company_role(session, user, _agent_company(session, agent_id), "Manager")
+    try:
+        return CompanyService(session).rollback_agent(
+            agent_id,
+            revision_id,
+            gate.actor_fields(sod.actor_of(session, user)),
+            req.reason if req else None,
+        )
+    except agent_config_history.RevisionRefused as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @router.delete("/agents/{agent_id}", tags=["Enterprise"])
