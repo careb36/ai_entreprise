@@ -348,6 +348,7 @@
         "test_bench_edit_formats.py",
         "test_bench_graders.py",
         "test_bench_grading.py",
+        "test_bench_paired.py",
         "test_bench_prompt_weight.py",
         "test_bench_repeated.py",
         "test_bench_routing.py",
@@ -513,6 +514,9 @@
       ],
       "test_bench_prompt_weight.py": [
         "repo"
+      ],
+      "test_bench_paired.py": [
+        "planning"
       ],
       "test_bench_repeated.py": [
         "planning"
