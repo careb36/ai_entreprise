@@ -8,7 +8,7 @@ module's docstring has the detail.
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
 - **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `touched`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -65,6 +65,13 @@ failing test that already failed in the folder's latest run for another task
 in a file this delivery did not write. `tests_run` then passes and names that
 run. A test file the delivery wrote, a cut list of failures or a baseline
 without test names excuses nothing.
+
+In QA's acceptance-test task, `unwritten_code.explain` also excuses a test
+that names no criterion when it is in a file the delivery wrote, every
+criterion the task covers is still unimplemented, and the runner's summary
+line (`test_run.failure_reasons`) says the import of the code failed
+(`ModuleNotFoundError`, `ImportError: cannot import name`). The
+implementation task is judged on the same tests with no such excuse.
 
 ### Acceptance tests per criterion
 
