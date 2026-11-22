@@ -8,7 +8,7 @@ Reviewer and Support agents. Read this before changing
 - **Folder:** `backend/app/services/management/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md). Nothing imports it.
 - **Interface:** none.
-- **Modules:** `brief_mail`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `company_export`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `sod_report`, `support_agent`.
 
 ## How it works
 
@@ -113,6 +113,19 @@ Manager decides ([planning](planning.md#the-intake-queue)).
 `reviewer_agent.py` suggests a decision on another producer's run nobody has
 decided; `support_agent.py` triages help-desk tickets. Both store suggestions
 beside what a person chose.
+
+### The company's export
+
+`company_export.py`: `GET /v1/companies/{id}/export` (Owner) returns the
+company's configuration as one file: its settings (an explicit field list),
+agents, business units, routines and provider connections. A provider's key
+and headers and a project credential's value are left out and named in
+`required_secrets`; every string is read with the Verifier's secret detectors
+(`evidence/standards`) and a secret-looking line is replaced, its place
+listed in `redacted`; a URL's user and password are dropped. No members,
+emails or history. `manifest.sha256` is the backend's digest of the content,
+recorded in the `company_exported` audit row. From Paperclip's company
+portability export (MIT).
 
 ## See also
 
