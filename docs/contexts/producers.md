@@ -1,33 +1,77 @@
 # The producers context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/producers/`.
+The interchangeable producers other than the task worker's own model call. A
+producer's output is a claim handed to the evidence. Read this before changing
+`backend/app/services/producers/`; each module's docstring has the detail.
 
 - **Folder:** `backend/app/services/producers/`
-- **Responsibility:** The interchangeable producers of work other than the task worker's own model call: the CLI producers a company chooses explicitly (console producers), the optional LangGraph kickoff (agent_worker, and backend/agents/graph.py after the migration) and the GitHub adapter that ingests pull requests as runs. A producer's output is a claim handed to the evidence.
-- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `console_producer`. Another context imports only these modules and the package; the rest are internal.
+- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md).
+- **Interface:** `console_producer`.
 - **Modules:** `agent_worker`, `cli_cooldowns`, `console_clis`, `console_producer`, `github_adapter`, `graph`, `graph_agents`, `graph_nodes`, `openproject_client`, `openproject_tools`.
-- **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `github_adapter` (the GitHub API) and `openproject_client` (`post_work_package`). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
+- **HTTP adapters:** `github_adapter` (the GitHub API), `openproject_client` (`post_work_package`). Only these import an HTTP library; they return data and raise named errors.
+
+## How it works
+
+Three producers live here: console producers (a terminal coding agent, the
+Claude, Codex, Gemini or Cursor CLI, produces a role's tasks instead of the
+model call), the optional LangGraph kickoff, and the GitHub adapter that
+ingests pull requests as runs. What they produce goes through the same
+delivery, Verifier and QA as the task worker's own output.
+
+## Rules
+
+- A console producer is opt-in per company (`Company.console_producers`). No
+  detection or default ever turns one on.
+- It fails closed. It runs only in a `container` or `bwrap` sandbox with the
+  network on, never on `host`: the CLIs run with their permission prompts off,
+  so the sandbox is the boundary. Otherwise the model produces the task, and
+  the board, the run's evidence (`console_producer_skipped`) and the Glassroom
+  say why.
+- It works only in the task's worktree with the Git workflow on, never in the
+  person's checkout.
+- The provider's key goes in `Company.console_env`, which only the console run
+  sees, never in `sandbox_env`, which every delivery test also sees.
+- The CLI's output is a claim, quoted in the deliverable and never put on the
+  evidence. The files the daemon read back, each with its sha256, are the
+  observation.
+- The host repository's metadata is guarded. The CLI sees a private repository
+  inside the worktree; the daemon restores git's pointer with file operations
+  before any host git runs; a change to the metadata refuses the run. The
+  daemon's alarm (`daemon_refused`) wins over every other outcome.
+- A deletion, a truncated listing or a text past the reply's bound refutes the
+  run rather than deliver a tree the CLI never produced.
 
 ## Components
 
-### The LangGraph producer
-
-**`backend/app/services/producers/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`, run by `producers/agent_worker.py`; its PO node opens a work package through `producers/openproject_tools.py` (a simulated ticket without OpenProject). Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`. The state and the steps every node shares (the transcript, the Glassroom publisher, one agent's turn, a node's failure) are in **`graph_agents.py`**, the Architect, Scrum Master, Developer, wrap-up and rejection nodes in **`graph_nodes.py`**; the kickoff, PO and burn nodes, which reach `create_work_package` and `get_engram_processor` (the collaborators the tests replace on `graph`), the graph and its run stay in `graph.py`, which re-exports the other names (issue #511). The OpenProject call itself is in **`openproject_client.py`** (`post_work_package`, raising `OpenProjectUnreachable`, `OpenProjectRequestError` or `OpenProjectStatusError`), one of the HTTP adapters `scripts/check_architecture.py` allows.
-
 ### Console producers
 
-**`backend/app/services/producers/console_producer.py`** / **`console_clis.py`** / **`routers/console_producers.py`** / **`vscode-daemon/console_run.py`** — Console producers: a terminal coding agent produces a role's tasks instead of the LLM call (after Aixle Flow, Apache 2.0: the headless commands from its adapters' `session_command`, the quota messages from its `quota_error_detector.rb`, a workspace per run). Opt-in per company, and never turned on by anything but that choice (no detection, no default: a company without `console_producers` has none): `Company.console_producers` (`{"Developer": "claude"}`, migration `0020`) and `Company.console_env` (migration `0021`: the variable names only a console producer's run sees, added to `sandbox_env` by `console_clis.run_sandbox`), `GET`/`PUT /v1/companies/{id}/console_producers` (Viewer / Manager; `{producers, env}`, `env` omitted keeps it; an unknown role or CLI, a bad variable name, or the Git workflow off, is a 422), edited on the Models page (`components/ConsoleProducers.tsx`). The CLIs (`console_clis.CLIS`): `claude -p --permission-mode bypassPermissions`, `codex exec --full-auto --skip-git-repo-check` (Codex keeps its own workspace-write sandbox, no approval prompts), `gemini --yolo -p`, `cursor-agent --print --force --disable-auto-update`, the task's prompt shell-quoted as the last argument (a word starting with `#`, `<<`, `$'`, and a trailing `$` that would meet the closing quote, travel as look-alikes, since the daemon's command policy reads none of them), and the whole command, as UTF-8 bytes after quoting, kept within `console_clis.COMMAND_MAX_BYTES` (100 KiB: the sandbox passes it as one `sh -c` argument and Linux holds 128 KiB in one) by cutting the prompt with a note (`sent_prompt`, `CUT_NOTE`); the run records the sha256 and length of the text actually sent and `prompt_cut`. The task worker's one hook (`console_producer.produce`, before `_execute_task`, called through `services/loop/console_host.py` with the worker as its host) returns `None` when the model produces the task: no CLI for the role, the CLI cooling down (`AssistantRuntimeState` under `producer:<cli>`, `console_clis.cooldown_key`, kept by **`cli_cooldowns.py`** with the Claude CLI's quota messages and reset time, `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES`; started by a quota message or a missing binary, exit 126/127 or a spawn error the daemon reports, never the output of a run that exited 0), the Git workflow off (a console producer works only in the task's worktree, never the person's checkout) or no project, and when the company's sandbox as resolved for the task is not `container` or `bwrap` with network on (`console_clis.sandbox_refusal`; then the board gets a System note, the model's run carries `console_producer_skipped` on its evidence and the Glassroom says why). Otherwise: `workspace.console.prepare` (the task's worktree as a delivery makes it, the prerequisites merged, reset to `HEAD`, with a guard: the sha256 of the repository's `config`/`hooks`/`info` and of the worktree's own git dir; the person's checkout is not guarded, since no sandbox mounts it and they may keep working in it), `workspace.execute` in that worktree (the company's sandbox, a command policy allowing only the CLI's own command, `CONSOLE_PRODUCER_TIMEOUT_SECONDS`), then `workspace.console.collect`: every file that differs from `HEAD` (committed by the CLI or not, tracked or new) with its change, bytes, sha256 read back and text, or why not (outside the worktree or into VCS metadata, a symlink, a file that may hold secrets, binary, too large, deleted, past the reply's bound), the reply bounded by its encoded size (`json.dumps` escapes non-ASCII) before the worktree is put back at `HEAD`; a change to the repository's metadata while the CLI ran refuses the whole run. **The git the CLI sees:** a linked worktree's `.git` is a pointer into the host repository's git dir, which no sandbox mounts (a git the CLI runs there finds no repository), and mounting it would hand the CLI the person's config and hooks. So `prepare` replaces the pointer with a private repository inside the worktree (`console_run.private_repository`: a shallow bare clone of the task's branch at `head` over `file://`, `core.bare` off, no remote, its index from `HEAD`, nothing in it naming the host), which the CLI may diff, stage or commit in; its commits are read from that repository's files as text (`private_head`, `committed_by_cli`, informative only), never by running git there. **The host git:** whatever the CLI did to that repository (an fsmonitor, hooks, diff drivers), `collect` discards it with file operations (a symlink removed, never followed) and writes git's pointer back (from the common dir's `worktrees/*/gitdir`, `git_workspace.admin_dir`) before any host git runs in the worktree, and a `.git` that is no longer a folder refuses the run; `git_workspace.worktree_for` does the same (`repair_pointer`) before any git runs in an existing La Fabrique worktree, so a private repository left by a run never collected (the backend stopped) is never read by the next delivery's or integration's git; every git command there names `--git-dir`/`--work-tree` from those paths, drops the inherited `GIT_*` environment, and passes `core.fsmonitor=false`, `core.hooksPath=/dev/null`, `submodule.recurse=false` (`console_run.SAFE_CONFIG`) and `--no-ext-diff --no-textconv --ignore-submodules=all` to diff; `clean -ffd` removes nested repositories too. The daemon's alarm (`refused`) wins over every other outcome and is kept on the run as `daemon_refused`. A deletion (also a rename's old path, which `workspace.generate` cannot apply), a listing cut at `MAX_FILES` (`truncated`) or a text past the reply's bound refutes the run rather than deliver a tree the CLI never produced; other changes not delivered (binary, too large, a file that may hold secrets, a type a delivery does not write) are named in the `console_run` check (`not_delivered`). The text files of a delivered type become `agent["tool_edits"]` (`source: console_producer`), so `workspace.generate` writes and commits them on the task's branch and the Verifier (files written, tests, criteria, acceptance guard, standards, risk tier) and QA see them as any delivery's. The run keeps the producer `le-fabrique-task-worker` (the review loop and every reader of the company's own runs keep working) with `console_run` on its evidence (`via: console:<cli>`, the command without the prompt, the prompt's sha256, worktree, head, exit code, timeout, the backend-measured duration, the daemon's sandbox report, each file and whether it was delivered) and the Verifier's `console_run` check; the CLI's output is a claim, quoted in the deliverable's text (no fence a manifest parser reads) and never on the evidence. A CLI that fails, times out, changed nothing deliverable or whose run was refused is a refuted run, one that never ran (refused by the policy, no worktree, no daemon) unverifiable; either is recorded and the task blocked with the reason (`Agent error`, retried once). A quota stop or a missing CLI starts the cooldown and hands this task to the model, with a System note on the board and the attempt on the model's run (`console_producer_skipped.attempt`), as the sandbox refusal does; never after the daemon's alarm. **Risk, and why it fails closed:** Claude's `bypassPermissions`, Gemini's `--yolo` and Cursor's `--force` turn the CLI's permission prompts off (Flow can, because it always runs them in a container); on the `host` sandbox the CLI would act on the person's computer with their home folder, credentials and network. So the sandbox is the boundary: a console producer never runs on `host` (the setting is accepted, with a `warnings` entry the Models page shows, and the model produces the tasks). Inside the sandbox it needs its provider's API: `DELIVERY_SANDBOX_NETWORK` must be on (off is refused with that reason rather than left to hang until the timeout), and only the variable names in the company's `sandbox_env` and `console_env` reach the CLI, so the provider's key (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) is listed in `console_env`, never in `sandbox_env`, which every delivery test, install and application check of agent-written code also sees, and the sandbox image (`DELIVERY_SANDBOX_IMAGE`) must contain the CLI. With network on, the CLI can still reach any host its sandbox allows. Left out: deletions (refuted) and file types a delivery does not write (listed, not delivered), the CLIs' own model and MCP configuration, a policy on a Windows daemon (refused there).
+- `console_producer.py`: the task worker's one hook (`produce`, called through
+  `services/loop/console_host.py`). It returns `None` when the model should
+  produce the task; otherwise it prepares the worktree, runs the CLI and
+  collects its files as `agent["tool_edits"]` (`source: console_producer`).
+- `console_clis.py`: the CLIs and their headless commands, prompt quoting, the
+  command size bound, the sandbox refusal (`sandbox_refusal`) and the run's
+  sandbox environment.
+- `cli_cooldowns.py`: a quota message or a missing binary cools the CLI down
+  and hands the task to the model. A run that exited 0 never starts one.
+- Daemon side: `vscode-daemon/console_run.py`, see [workspace](workspace.md).
+  Settings: `GET`/`PUT /v1/companies/{id}/console_producers`, on the Models page.
 
-### Removed: console assistants (issue #750)
+### The LangGraph producer
 
-Until issue #750 the task worker asked any terminal assistant the daemon found on the host (GitHub Copilot CLI, Claude CLI) for advice on a task, on by default (`CONSOLE_ASSISTANTS_ENABLED`): the CLI ran under the person's own account, at their cost, and received the task and the repository's context, a third party with no recorded decision. The owner removed it: the second opinion a task gets is the team's own, the Architect's consultation (`services/loop/worker/execute.py`, `should_consult_architect`, on the Architect's role default model from `model_factory`, DeepSeek Pro unless the company or an `AGENT_MODEL_*` setting chose another), extended to the roles the CLI used to advise (the coding roles, QA, PO and ScrumMaster; never the Architect's own tasks). Gone with it: `console_assistants`, `console_commands`, `console_capabilities` and `assistant_sandbox`, the startup probe, the `assistant.telemetry` Glassroom events, the board's console-advice note, the prompt's `console_assistant_notes` section and `GET /v1/sprints`' `console_advice` tally. The settings stay declared as no-ops (`config.REMOVED_SETTINGS`) so an old `.env` still loads, and startup names each one still set. Kept for history: `board.is_console_advice_note` still recognises an older board's note so it is never read as a verdict. The workspace daemon still serves `workspace.capabilities` and the sandbox purpose `assistant` for protocol compatibility with older backends; nothing in the backend asks for them.
+- `graph.py`, `graph_agents.py`, `graph_nodes.py`: off unless
+  `AGENT_GRAPH_ENABLED=true`. Runs are ingested as `AgentRun` records with
+  `producer: "le-fabrique-graph"`.
+- `agent_worker.py`: the NATS consumer that runs the graph.
+- `openproject_tools.py`, `openproject_client.py`: the PO node's work package,
+  simulated without OpenProject.
 
-The Architect's briefs are counted from the boards (`GET /v1/sprints`, `architect_advice`: done and rework per group, rework from the first brief on), so the Sprints page shows whether they help, and `services/learning/architect.py` tells the Architect, when it is asked again, how the company's briefed tasks went in its completed sprints against the rest. `services/platform/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
+### The GitHub adapter
 
-## Described elsewhere
+`github_adapter.py`: ingests a pull request as a run.
 
-- The loop's side of a console run (`services/loop/console_host.py`): described in the console producers paragraph below; the module belongs to [loop](loop.md).
-- `CONSOLE_PRODUCER_TIMEOUT_SECONDS` and `AGENT_GRAPH_ENABLED`: [configuration](../CONFIGURATION.md) and step 9 of [the sprint loop](../SPRINT_LOOP.md).
-- `github_adapter`, `agent_worker`: step 10 of [the migration record](../architecture/MIGRATION.md).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-10).
+## See also
+
+- `CONSOLE_PRODUCER_TIMEOUT_SECONDS`, `CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES`, `AGENT_GRAPH_ENABLED`: [configuration](../CONFIGURATION.md); step 9 of [the sprint loop](../SPRINT_LOOP.md).
+- Console assistants were removed; a task's second opinion is the Architect's consultation, in [loop](loop.md).
+- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-10-producers).

@@ -1,90 +1,159 @@
 # The evidence context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/evidence/`.
+Judging a run from what was observed: the Verifier, the risk tier, the
+standards, acceptance tests and the fitness decision of the self-improvement
+loop. Read this before changing `backend/app/services/evidence/`; each
+module's docstring has the detail.
 
 - **Folder:** `backend/app/services/evidence/`
-- **Responsibility:** Judging a run from what was observed: the Verifier's checks and verdict, the risk tier, the quality standards check, acceptance tests per criterion, the context-read check, the application and browser checks as read from the daemon's reply, SecOps scans, the gate before QA, the changes of a run and the ingestion of AgentRun records. It reads the daemon's reply as data from contracts; it never calls the daemon, the loop, the tools or a producer.
-- **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`. Another context imports only these modules and the package; the rest are internal.
+- **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
+- **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
 - **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
+
+## How it works
+
+The loop keeps the daemon's replies (tests, install, application check,
+probes) on the run's evidence. The Verifier runs one check per observation,
+each `pass`, `refuted` or `unverifiable`, and aggregates a verdict; the gate
+reads that record to let the task reach QA or send it back with a reason.
+Verification never touches the network: registry and signature lookups are
+observations recorded at delivery.
+
+## Rules
+
+- A claim and an observation never share a field. What a producer says (its
+  claims, declared files, summaries, a diff it sent) is kept apart and labelled
+  as a claim.
+- An agent's report of its own test run is a claim. Only the daemon's output,
+  the platform's `tests_run` or an independent CI conclusion counts as a test
+  observation.
+- Hashes and signatures are never accepted from the party being recorded. A
+  sha256 is computed by the backend over the bytes it received, or read back
+  from disk by the daemon; never taken from an agent's or a producer's report.
+  A log's hash is the backend's, over the bytes it read back from the store.
+- A declared path may add to a classification or a match, never remove one.
+- A check that could not run is `unverifiable`, never `pass`. A missing
+  required check is added as `unverifiable` with the reason.
+- The evidence imports only contracts and platform (`scripts/check_architecture.py`).
 
 ## Components
 
-### Protected paths of a company that hosts the factory
+### The Verifier and the gate
 
-**`backend/app/services/evidence/protected_check.py`** ([`docs/design/rsi-loop.md`](../design/rsi-loop.md), section 3.3 layer 1; REQ-10) — The Verifier's `protected_paths` check, only for a company whose `companies.protected_paths_enabled` an Owner turned on (`services/platform/protected_paths_setting.py`, [platform](platform.md)): the paths the platform observed the delivery change (the daemon's `workspace_writes` with status `written`, and the files the daemon saw a console producer change, `console_run.files`) plus the paths the producer declared (`claims.files`, the paths in its claims, the edit tool's files) are matched with `contracts.protected_paths.matches`; a declared path may add to a match, never remove one. The list in force is the running backend's, `patterns_in_force()`, read from `protected_list.json` beside the module: runtime data shipped in the image, generated by `scripts/protected_paths_data.py` (`--check` to compare) from the tuple in [contracts](contracts.md) and the tests whose contexts include evidence in `docs/architecture/contexts.json`, which the image does not have; `tests/test_protected_paths_review.py` fails when the file and the map disagree, and the file is itself protected. Never the company's project. Without the file it fails closed (`ProtectedListUnavailable`): the check is `unverifiable` and `risk.held_for_a_person` raises the tier to `high` (area `grader`), the Manager agent refuses the item and QA holds it. A later decision re-matches a recorded run with `touched(claims, subject, verification)`: the Verifier's recorded matches plus the daemon's observations, `subject.changed_files` and `claimed_paths.declared_paths` (`claims.files`, paths in the claims' prose, the edit tool's files, the same function the Verifier uses at delivery) under the list in force now. The outcome is always `pass` (touching a grader is a reason for a person, not a fault), with `matches` (`path`, `pattern`, `observed`), `observed` (whether the daemon reported any write) and the matched paths in the observation. `verification.check_risk_tier` passes the same list to `risk.classify(..., protected=...)`, which gives a matching path the tier `high` with the area `grader` before any other area, so the task waits for a person at every autonomy level; before QA closes an approved task of such a company, `loop/worker/record._protected_reasons` re-matches the latest recorded run and the deliverable under the setting as it is then, so a flag turned on after the verification still holds the task (`loop/worker/qa_review.py`). With the flag off nothing changes: no check, and `classify` without `protected` ignores the list. The module is named `protected_check` because the dependency check names edges by stem and `contracts.protected_paths` holds the name. `tests/test_protected_paths_guard.py` holds it, refusals first.
-
-### A company's own standards
-
-**`backend/app/services/evidence/company_standards_check.py`** (issue #700; [`docs/design/COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md), §3.1, §3.2, §5) — Each kind of a company standard evaluated once, as a pure function of observations (`Observation`: the paths the daemon observed written and added, the paths a producer declared, the bytes read back, the baselines read at the activated commit) and, for `command`, of the run the daemon reported. No model, network or clock; nothing a producer says is read. Declared paths add to `paths`, `when` and `forbid_path`, and never satisfy `then`. `forbid_pattern` runs on RE2 (`contracts.company_regex`) line by line and cites file and line; `max_lines` counts lines and lets a file in the `baseline` stay at its count; `require_together` with `on = "added"` reads added paths only; `forbid_path` reads both readings of a path. A file not read back, a byte budget spent (4 MiB a standard, 16 MiB in all), RE2 missing or an unread baseline is `unverifiable`, never `pass`; a command with no exit status, a timeout, a policy refusal, exit 126/127 or a run outside `container`/`bwrap` is `unverifiable` too. Until the loop passes a run, a `command` standard is `not_run`. Today it serves the import's dry run (`dry_run_targets`, `dry_run_summary`: `fails_on_source`, `blocking_fails_on_source`, `unverifiable`, `not_run`); the Verifier's `company_standards` check, the gate's reason and the pinned version per task come in the next pull request of #700. It does not touch the catalogue's `standards` check. `tests/test_standards.py` holds it, beside the catalogue.
-
-### What a run changed
-
-**`backend/app/services/evidence/review_changes.py`** — What a run changed, the way a code review shows it: `GET /v1/agent_runs/{id}/changes` reads the daemon's per-file diffs from the latest verification whose evidence carries them, or a pull request's diff (the artifact of a GitHub-ingested run), or, with neither, a diff the producer sent as its artifact (labelled `artifact`), with one `git diff` parser; the files the producer only declared come back apart (`declared_not_observed`), never as changes. The run page's **Files changed** tab (`components/ReviewChanges.tsx`, `lib/patch.ts`) renders it like a pull request.
-
-### The quality standards
-
-**`backend/app/services/evidence/standards.py`** — The quality standards every project is held to: a fixed catalogue by discipline (`STD-ARCH-1` … `STD-PO-1`, with `STD-OPS-2` for DevOps, `STD-DATA-1` for data and migrations and `STD-UX-1` for accessibility, `docs/STANDARDS.md`) that no model, request or procedure edits; `for_role` reads a role through `roles.canonical` and binds the specialised developers to every Developer standard too (`DISCIPLINES`), never fewer. `prompt_section(role)` goes into every prompt by role (the task prompt before the company's procedures, QA's review, the PO's draft and plan, the Architect's design); a procedure adds to the standards, never relaxes them. `check_delivery` is the Verifier's `standards` check over the files a deliverable declares: a secret-looking value (keys, tokens, private keys, a password assigned in code; placeholders and `os.environ` references are not) refutes the delivery and the gate sends it back (`standards violated`); code without a test, a `TODO`/`FIXME` left behind and an unpinned dependency (`requirements*.txt`, `package.json`) are findings the reviewer sees. `missing_quality_areas` gives the specification check its `quality_area_missing` warnings. `GET /v1/standards` serves the catalogue; `tests/test_standards.py` keeps the document in step with it.
-
-### The grounding check
-
-**`backend/app/services/evidence/grounding.py`** / **`manifests.py`** / **`imports.py`** — The Verifier's `grounded` check (issue #444): the packages, exact versions and imports a delivery names must exist. `manifests.dependencies_in` reads the delivered manifests (`requirements*.txt`, `pyproject.toml` PEP 621 and Poetry, `package.json`, `go.mod`, `Cargo.toml`; exact pins only, path/Git/URL dependencies left out), and an edit's fragment is read by its sections. `imports.imports_in` reads Python, JavaScript/TypeScript, Go and Rust imports; `imports.ProjectIndex` resolves the project's own modules against the paths the daemon reported (`project_files`, capped at `PROJECT_INDEX_MAX` and marked `truncated`), and `imports.audit` separates an unresolved project import from a third-party one its manifest does not declare. A package no registry has or an exact version the registry lacks refutes the delivery (`grounded` -> `invented dependency or import` in the gate); a registry that was not asked, an exact version no answer addressed, an unresolved import when the listing is truncated, an unresolved import from a test file (QA writes its acceptance tests before the module they name, `criteria_tests.is_test_file`), and an undeclared third-party import when the manifest was only edited are findings. The registry answers are observations recorded at delivery time (`services/tools/registry_lookup.py`, `registry_lookups` on the evidence) or by the run's own `research__package` calls; verification never reaches the network. **Symbols** (`signatures.py`): every call a delivered Python file makes to a project function or class is compared with its signature, and a mismatch is a finding in the check's details (`signature_mismatches`: file, line, callee, what was passed, the signature rendered as `f(a, b=…, *, c)`, and its source, `daemon` with the file's sha256 or `delivered`), never a refutation: the verdict and the gate do not change, since the map is partial and Python resolves names at run time. The callee is a name imported from a project file (`from a.b import f`, `a.b.f` after `import a.b`, `m.f` after `import a.b as m`, a relative import; the file found through `ProjectIndex`, one file or none, a standard-library name only at that exact path) or a module-level definition of a delivered file. Compared: the positional count against the signature's bounds, each keyword against the parameter names (unless `**kwargs`; a positional-only one or one given twice too), and the required parameters left unfilled. Skipped: a call unpacking `*x` or `**x`, a name bound more than once anywhere in the file (rebound, a parameter, a local), and a signature reported `unknown` (decorated, a constructor that is not the class's own `__init__`, a name bound twice in its module) or `missing` (a star import may provide it). The signatures of files the delivery did not write are observations the backend recorded at delivery time (`services/tools/signature_lookup.py`, `signatures` on the evidence: what was asked, the daemon's reply with each file's sha256, or `observed: false` and the reason when the daemon could not be asked, an older daemon included); a delivered file's own are read from the delivered text; verification never asks the daemon, and a model's claim is never read. The details say whether signatures were observed (`signatures_observed`) and how many calls were compared; calls to project code that could not be compared are named in the observation. Python only: JavaScript accepts any number of arguments, so a count proves nothing there, and Go and Rust are out of scope. A delivery queued for an offline daemon records the signatures as not observed. The idea is Gorilla's APIBench (invented API calls) and the repository map; no code taken. `tests/test_grounding_manifests.py` covers the parsers, `tests/test_grounding_imports.py` the resolution, `tests/test_grounding_lookups.py` the registry lookups, `tests/test_grounding.py` the outcomes and `tests/test_grounding_signatures.py`, `test_grounding_signature_check.py` and `test_grounding_signature_deliver.py` the symbols.
-
-### The security probe
-
-**`backend/app/services/evidence/security_probe.py`** (#540) — The Verifier's `security_probe` check: the running application's answers to the daemon's security probe (`evidence["app_run"]["security_probe"]`, `vscode-daemon/security_probe.py`, asked for on every application check, `security_probe_requested`) as OWASP WSTG items, each with its versioned identifier (`WSTG-<version>-<category>-<number>`, the guide's own format), its name, a `status` and the observation citing the request sent. The tests in release 4.2 carry `v42`: `CLNT-07` (CORS from `https://evil.example`, with and without a cookie, and a preflight), `CONF-04` (`/.git/HEAD`, `/.env`), `ERRH-02` and `ERRH-01` (a missing path and a malformed body: a stack trace pattern per runtime, a 5xx), `CONF-06` (OPTIONS, TRACE), `CONF-07` (HSTS), `CLNT-09` (`X-Frame-Options` or CSP `frame-ancestors`), `SESS-02` (cookie attributes); Content Security Policy and Other HTTP Security Header Misconfigurations are not in 4.2 and carry the commit they were read from (`WSTG-87cf4a4-CONF-12`, `-CONF-14`; only IDs and names are used, never the guide's text). **Refuted**: a credentialed answer to any origin (`*`, the origin echoed or `null` with `Access-Control-Allow-Credentials: true`), a stack trace in an error body, a served git HEAD (its shape, not a 200 alone: a single-page fallback is not one) or environment file (names assigned, not HTML); the gate sends the task back (`security probe refuted`, a code problem). **Findings**: missing CSP, `nosniff`, `Referrer-Policy` or framing protection, a version in `Server` / `X-Powered-By`, a cookie without `HttpOnly` or `SameSite`, `SameSite=None` without `Secure`, TRACE answering 2xx, a 5xx on a bad request, an origin reflected or `*` without credentials. **Unverifiable**: over plain http, HSTS and a cookie without `Secure` (an application may add it only over https), a probe that got no answer, no cookie set; never a pass. The check is `refuted` when an item is, `unverifiable` when no probe was observed (asked for and not answered, or `observed: false` with the daemon's reason, such as no `python3` in the image), `pass` otherwise, the findings and unverifiable items named in the observation. Only the daemon's reply is read, never the producer's claims (rules 1, 2 and 6 of [the positioning](../POSITIONING.md)); `tests/test_security_probe.py` holds it, and the Verifier bench seeds an insecure CORS it refutes. Next: an optional ZAP baseline scan image (Apache-2.0) pinned by digest, with no network beyond the application, its JSON parsed into the same items.
-
-### Which runs wrote which files
-
-**`backend/app/services/evidence/touched.py`** (#438) — A read of recorded observations, never a verdict: `runs_touching(session, company_id, paths, limit=5)` gives the latest task-worker runs of a company (`external_ref` `task-<id>`) whose latest daemon report (`workspace_writes`, the per-file report the daemon read back from disk) says it wrote any of the paths, newest first, as `{run_id, backlog_item_id, title, verdict, written, finished_at}`, with the verdict the Verifier last recorded for the run and only the files whose status was `written`; `written_by_task(session, company_id, item_id)` gives the files a task's own earlier runs wrote (at most 50). Both scan the company's latest `SCAN_RUNS` (200) runs and read the evidence in Python, not with JSON operators in SQL, so the same code runs on SQLite and Postgres. The related code in the Developer's prompt reads them ([tools](tools.md)).
-
-### Tests named after a WSTG test
-
-**`backend/app/services/evidence/wstg_tests.py`** (#539) — After a delivery's test run, `record` reads the runner's per-test lines (`criteria_tests.test_lines`) for tests named after an OWASP WSTG test (`test_wstg_athz_02_…`) and keeps `pass` or `fail` per test on `evidence["test_run"]["wstg"]`; the Verifier's `wstg_tests` check turns them into items in the security probe's shape (`{id, name, status, observation}`, the versioned id from `services/platform/wstg_catalogue.py`). The check's outcome is always `pass`: a failing security test reports a weakness of the application, which `tests_run` already judges, not a fault of the delivery. Only the daemon's output is read, never a producer's claim. The project's WSTG checklist (planning, `project_docs/wstg_status.py`) reads these items and the security probe's.
-
-### Acceptance tests a task branch holds
-
-**`backend/app/services/evidence/acceptance.py`** (`evidence_for`, `branch_lineage`; #329 retrospective) — With the daemon's `git` answer for a delivery on the task's own branch, what the delivery is judged against is what that branch can hold: `test_files` and `test_hashes` come from the test tasks in the task's lineage (itself and its done dependencies, transitively, the branches `workspace.git_workflow.delivery_spec` merges), `excused` counts as done only the implementation tasks in that lineage, and the sprint's other test files go in `other_test_hashes` for the loop's guard to check on disk (`loop/delivery_checks.guard_test_files`). Without the Git workflow every acceptance test of the sprint is guarded, as before.
+- `verification.py`: the Verifier's checks and verdict.
+- `required_checks.py`: what a delivery must show, decided before reading what
+  it showed. A code change requires a test observation; `verdict_policy` on the
+  evidence lets the verdict be recomputed from the row.
+- `risk.py`: `classify` gives `low`, `medium` or `high` from paths alone; the
+  tier is the highest any path reaches, so adding files never lowers it.
+- `delivery_gate.py`: `gate` says why the latest delivery must not reach QA,
+  read from the Verifier's record, never from the agent.
+- `claimed_paths.py`: the producer's declared paths, read the same way at
+  delivery and at a later re-match.
 
 ### What a failed test run says
 
-**`backend/app/services/evidence/required_checks.py`** — What a delivery must show, decided before reading what it showed (issue #766): a delivery that changes code (any path that is not documentation) requires an observation of tests, the platform's `tests_run` or an independent CI conclusion; a required check that did not run is added as `unverifiable` with the reason, so a missing check never reads as a pass. `verify_agent_run` calls `missing` before aggregating and records `verdict_policy` (`version`, `required`) on the verification's evidence, so the verdict can be recomputed from the row. The delivery records why tests did not run (`deliver._record_tests_not_run`: tests disabled, or files not confirmed). An agent's report of its own test run never satisfies it. `backend/tests/test_required_checks.py`.
+`verification.check_tests_run` with `criteria_tests.failure_summary`: when
+tests fail, the observation the task goes back with lists the failing tests
+(at most 20, then `(and N more)`), the criteria results when recorded, and the
+end of the output. Every part comes from the daemon's reply. A run that named
+no test keeps the old wording `<command> exited <code>: <tail>`.
 
-**`backend/app/services/evidence/verification.py`** (`check_tests_run`) and
-`criteria_tests.failure_summary` (self-hosting retrospective, F6) — When a
-delivery's tests fail, the observation the gate sends the task back with —
-which becomes the task's comment and its block reason unchanged — reads the
-daemon's output in the order a person reads it: `failing tests: <name, …>`,
-the tests the runner's per-test lines named, at most `FAILING_TESTS_QUOTED`
-(20) and then `(and N more)` from the uncapped `failing_count` that
-`criteria_tests.record_results` keeps beside the 50-name `failing_tests`;
-`criteria: <id> pass|fail|missing`, only when the run recorded them; and
-`output ends: <last 400 characters>`, the truncation note still last. A run
-whose output named no test returns `""` and the observation keeps its previous
-wording (`<command> exited <code>: <tail>`), byte for byte. Every part comes
-from the daemon's reply, never from the producer's claim.
+### Acceptance tests per criterion
 
-### Every command a delivery had to run
+- `criteria_tests.py`: the runner's per-test lines read back into criterion
+  ids (`req_1_2` speaks for `REQ-1.2`); the `criteria_tests` and
+  `acceptance_tests_untouched` checks.
+- `acceptance.py`: plans QA's test-writing tasks. On a task branch, the tests
+  judged are those of the task's lineage; the sprint's other test files are
+  guarded on disk by the loop.
+- `browser_smoke.py`: one Playwright smoke test per visible criterion, when
+  the project serves pages.
 
-**`backend/app/services/evidence/command_runs.py`** (self-hosting retrospective, F5) — The Verifier's `required_commands` check over `evidence["command_runs"]`: the suites of the folders a delivery wrote in, their installs and the company's every-delivery commands (`services/workspace/stack_roots.py`), each with its kind, folder, command, exit status and the sha256 of its output that the backend computed over the bytes it received (`runs` on the check). A non-zero exit or a timeout refutes and the gate sends the task back (`required command failed`, a code problem); a command that could not run (exit 126 or 127, "command not found", `python: No module named pytest` but not an import error inside a test, a refusal by the command policy, no exit status) leaves the delivery unverifiable; a suite whose only failures are acceptance tests of criteria not built yet passes, as `tests_run` excuses them. Absent when a delivery ran none: a single-root project's evidence is unchanged.
+### Commands, application and security checks
+
+- `command_runs.py`: the `required_commands` check. A non-zero exit or a
+  timeout refutes; a command that could not run (126/127, not found, a policy
+  refusal, no exit status) is unverifiable.
+- `app_check.py`: the `dependencies_installed`, `application_started` and
+  `e2e_run` checks, from the daemon's install and application run.
+- `security_probe.py`: the running application's answers to the daemon's probe
+  as OWASP WSTG items. A credentialed CORS answer to any origin, a stack trace,
+  a served git HEAD or `.env` refutes; missing headers are findings; what
+  plain http cannot show is unverifiable.
+- `wstg_tests.py`: tests named after a WSTG test, recorded `pass`/`fail` per
+  test. The check always passes; `tests_run` already judges failures.
+- `secops_checks.py`: dependency audit, secret scan and SAST, each able to
+  block.
+
+### Standards
+
+- `standards.py`: the fixed catalogue (`docs/STANDARDS.md`) that no model,
+  request or procedure edits; a procedure adds to the standards, never relaxes
+  them. `check_delivery` refutes a secret-looking value; a missing test, a
+  `TODO` or an unpinned dependency is a finding.
+- `company_standards_check.py`: a company's own standards as pure functions of
+  observations. Declared paths never satisfy `then`. A file not read back, a
+  spent byte budget, missing RE2 or a run outside `container`/`bwrap` is
+  `unverifiable`. Design: [`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
+
+### Grounding
+
+`grounding.py`, `manifests.py`, `imports.py`: the `grounded` check. A package
+no registry has, or an exact version it lacks, refutes; registry answers are
+observations recorded at delivery. `signatures.py` compares calls in delivered
+Python files with project signatures; a mismatch is a finding, never a
+refutation.
+
+### Protected paths
+
+`protected_check.py`: only for a company whose Owner turned on
+`protected_paths_enabled`. Observed and declared paths are matched against the
+running backend's list (`protected_list.json`, generated by
+`scripts/protected_paths_data.py`). A match gives the tier `high` (area
+`grader`) so a person decides at every autonomy level. Without the list it
+fails closed: the check is unverifiable and the tier `high`. Design:
+[`rsi-loop.md`](../design/rsi-loop.md) §3.3.
 
 ### Keep, revert or unmeasured: the fitness decision
 
-**`backend/app/services/evidence/fitness.py`** (`decide`; [the self-improvement loop](../design/rsi-loop.md) §2.4 to §2.6, PR 7: REQ-5, REQ-15, REQ-16, REQ-27) — Whether a candidate build C of the factory is kept against the baseline B it started from, as a pure function: no I/O, no clock, no model call (rule 5 of [the positioning](../POSITIONING.md)), and no import of another context; the protected paths C's diff touches are an input the runner matched from git, so it does not depend on `contracts/protected_paths.py`. The guards that read one observation each (the protected-path match, the graders, CI with the tests collected, the Verifier bench, the fake bench) live in **`fitness_checks.py`**, internal to the context. It reads per side the bench runs (paired B, C, B, C by `pair`; a pair whose models per role differ is void and counts on neither side; a run that ended `timeout`, `budget_exceeded` or `error` leaves its metrics unmeasured), the CI check-runs read by sha (the latest run per name of the trusted apps, `github-actions`; others are ignored and named) with the tests collected per suite (an observation of its own, `{produced_by, sha, suites}`, each count a non-negative integer), and the Verifier bench (every outcome on either side `pass` or `fail`); on C the fake bench; and the graders' tree hashes, the finding's target measure and the protected-path match with any approval. Every malformed input fails closed: only an explicit `touched: []` means no protected path (a missing, null or malformed list is unmeasured), and a Verifier outcome other than `pass` or `fail` on either side is unmeasured. Every observation carries `produced_by` and only `platform` is accepted; an observation produced by anyone else (the build under test, a producer, an agent), or naming a commit other than its side's sha, a single check-run included, is refused and counts as missing. No hash is read from any input. Every guard is named in `reasons` with its outcome, and the bench medians in `metrics`. The decision: **revert** when C touches a protected path without a person's approval recorded at C's sha naming every such path; otherwise **unmeasured** when any guard is (an observation missing or refused, graders that differ, CI not concluded or B not green, fewer than K = 3 complete runs on either side for a metric, a relative metric over a zero baseline); otherwise **revert** when any guard regressed (a check-run on C concluded `failure`, `timed_out`, `cancelled`, `action_required` or `stale`, a check green on B (`success`, `neutral` or `skipped`) absent on C, fewer tests collected in a suite, a Verifier bench case B passes and C fails, the fake bench below 100%, the target measure not failing on B and passing on C, or a median worse than B's by more than `max(threshold, spread_B)` in the totals or a specification: criteria rate, first-attempt share and blocked share 0.05, rework per task 0.25, tokens 0.15 and wall-clock 0.25 relative, the prompt weight 0.2 relative only when the target says the specification targets the prompt); otherwise **keep**. A change aimed at a bench number names the metric as its target, which then passes only when C's median is better than B's by more than the same margin. `scripts/rsi/decide.py` reads the files a cycle's runner saved (two sets of real-model scorecards, each file once and each stamp once, a fake-model card refused as a measurement of B or C and required for the circuit check; GitHub's check-run listing per sha, the tests collected, the target report, the Verifier bench, the fake card, the graders and the protected match; no network), stamps every file, and the protected match's approval, as the platform's unless it names another producer, computes the sha256 of every file it read, prints the decision as JSON and exits 0 keep, 1 revert, 2 unmeasured. `tests/test_rsi_fitness.py` holds every way a candidate must not be kept, `tests/test_rsi_fitness_inputs.py` the malformed inputs, `tests/test_rsi_fitness_keep.py` the keep path, `tests/test_rsi_decide.py` and `tests/test_rsi_decide_inputs.py` the script.
+`fitness.py` (`decide`) and `fitness_checks.py` (its guards, internal):
+whether a candidate build C of the factory is kept against its baseline B.
+Design: [`rsi-loop.md`](../design/rsi-loop.md) §2.4–2.6.
 
-### Other modules
+- A pure function: no I/O, clock, model call or import of another context.
+- It fails closed. Every malformed input is unmeasured; only an explicit
+  `touched: []` means no protected path.
+- Only observations with `produced_by: platform` and the side's own sha are
+  accepted; anything else counts as missing. No hash is read from any input.
+- **Revert** when C touches a protected path without a person's approval at
+  C's sha naming every such path.
+- Otherwise **unmeasured** when any guard is: an observation missing or
+  refused, graders that differ, CI not concluded or B not green, fewer than
+  three complete runs on either side for a metric.
+- Otherwise **revert** when any guard regressed: a CI check failing on C or
+  green on B and absent on C, fewer tests collected, a Verifier bench case B
+  passes and C fails, the fake bench below 100%, or a median worse than B's by
+  more than `max(threshold, spread_B)`.
+- Otherwise **keep**. `scripts/rsi/decide.py` exits 0 keep, 1 revert, 2
+  unmeasured.
 
-- `agent_run_service` (`ingest_agent_run`): stores a run handed in by an outside producer (`POST /v1/agent_runs`, the GitHub adapter) as an `AgentRun`. The backend computes the artifact's sha256 itself, refuses one over 2 MiB (`ArtifactTooLargeError`), returns the latest version unchanged when the artifact and claims match, and otherwise adds a version and an audit entry.
-- `secops_checks` (`check_dependencies`, `check_secrets_scan`, `check_sast`, `check_all`): SecOps as verification: the dependency audit, secret scan and SAST the Verifier runs (`verification`), each able to block.
+### Reads of the record
 
-## Described elsewhere
+- `touched.py`: which recorded runs wrote which files (`runs_touching`,
+  `written_by_task`, `verified_writes`, `verified_writers`). Never a verdict.
+- `review_changes.py`: a run's changes like a code review, from the daemon's
+  diffs, a pull request or, labelled `artifact`, the producer's diff. Declared
+  files come back apart as `declared_not_observed`.
+- `agent_run_service.py`: stores an outside producer's run. The backend hashes
+  the artifact itself and refuses one over 2 MiB.
+- `context_read.py`, `sources.py`, `console_run.py`: the checks over what the
+  Developer read, what research calls consulted, and a console producer's run.
 
-- `touched.verified_writes` (the writes of the latest verified task-worker runs, optionally of some tasks, with the daemon's sha256 and diff and when they were observed): what the project wiki compiles from and lints against, [the project wiki](../design/PROJECT_WIKI.md).
-- `touched.verified_writers` (per file, the latest verified task-worker run that wrote it, or none): what the sprint board shows beside a note, [the sprint board](../design/SPRINT_BOARD.md).
+## See also
 
-- `verification`, `acceptance`, `criteria_tests`, `risk` and `delivery_gate` at work: steps 4 to 6 of [the sprint loop](../SPRINT_LOOP.md).
-- `app_check`, `browser_smoke` and the `sandbox` check: [configuration](../CONFIGURATION.md) (`DELIVERY_TESTS_ENABLED`, stack profiles and the application check). The `sandbox` check and `dependencies_installed` name the image that ran (`image_identity`: the content ID and registry digest the daemon observed, `services/contracts/sandbox_report.py`; an identity that is not a `sha256:` content ID is recorded as none, with the reason) and, for an install, what the dependency cache did (kept, reset after the failure, quarantined): [workspace](workspace.md) and [`docs/design/EXECUTION_ENVIRONMENT.md`](../design/EXECUTION_ENVIRONMENT.md). `e2e_run` says whether a browser was present from the daemon's probe (`browser_presence`: "browser present: yes (chromium …, Playwright …, from the image)", "no (reason)", or "not observed" when the probe was asked for and an older daemon did not answer it), never from an assumption; a probe of the browser sandbox image's own Playwright that launched no browser makes an e2e failure the output does not explain `runtime_missing` (unverifiable, a person accepts), while a probe of the project's Playwright only annotates. The install's, the tests' and the application check's records carry `full_log`: per stream the object, the `size` and `sha256` the backend computed from the bytes it read back from the object store, and the daemon's own counts (`daemon_bytes`, `total_bytes`, `truncated` at its cap); a hash in the daemon's reply is never read (rule 6 of [the positioning](../POSITIONING.md)).
-- `context_read` and `sources`: the Developer's workspace tools and the research tools in [tools](tools.md).
-- `console_run`: the console producers paragraph in [producers](producers.md).
-- The Verifier benchmark (`bench/verifier/`): [testing](../TESTING.md).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-5).
+- The Verifier, the gate and the risk tier at work: steps 4 to 6 of [the sprint loop](../SPRINT_LOOP.md).
+- Settings: [configuration](../CONFIGURATION.md). Sandbox image and full logs: [workspace](workspace.md), [`EXECUTION_ENVIRONMENT.md`](../design/EXECUTION_ENVIRONMENT.md).
+- Reads and research: [tools](tools.md). Console producers: [producers](producers.md).
+- Design rules: [the positioning](../POSITIONING.md). The Verifier benchmark: [testing](../TESTING.md).
+- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-5-evidence).

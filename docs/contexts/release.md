@@ -1,50 +1,128 @@
 # The release context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/release/`.
+What leaves the factory once accepted: publishing a branch, merging locally, a
+sprint's integration and its review, undoing a delivery. Read this before
+changing `backend/app/services/release/`; each module's docstring has the
+detail.
 
 - **Folder:** `backend/app/services/release/`
-- **Responsibility:** What leaves the factory once accepted: publishing a branch, merging locally, a sprint's integration and its jobs and events, undoing a delivery from its snapshot, and bringing a request's comments back. It starts when the loop has closed work, through an event, never from inside the loop.
-- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [planning](planning.md), [loop](loop.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `delivery_undo`, `git_publish`, `integration`, `integration_review` (the review gate: `required`, `approving_review`), `local_merge` (with `needs_diff` and `protected_facts` for the protected-path guard), `protected_merge` (`inventory_problem`, which `management/rsi_cycle_steps` reads to trust a diff's size), `self_change` (the Owner's hold on merging a self-improvement cycle's integration or task branches: `cycle_for`, `require_owner`). Another context imports only these modules and the package; the rest are internal.
+- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [planning](planning.md), [loop](loop.md).
+- **Interface:** `delivery_undo`, `git_publish`, `integration`, `integration_review`, `local_merge`, `protected_merge`, `self_change`.
 - **Modules:** `base_sync`, `delivery_undo`, `folder_check`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `integration_state`, `local_merge`, `protected_merge`, `review_sync`, `self_change`.
+
+## How it works
+
+Release starts when the loop has closed work, through an event, never from
+inside the loop. When a sprint closes, the task worker emits `sprint.closed`;
+`integration_jobs.py` records a `running` integration and asks the daemon to
+merge the done task branches into `fabrique/sprint-<id>` and run the suite.
+A person reviews that integration, then merges it locally or publishes it to
+the forge. Every git operation runs on the daemon; the backend records what
+the daemon observed.
+
+## Rules
+
+- Nothing leaves the computer for a forge unless the company's
+  `forge_policy` allows it (`none` by default, then `fetch`, then `publish`),
+  capped by `FORGE_POLICY_MAX`. The backend refuses with `forge_disabled`, and
+  the daemon checks again on its own. The local merge, the integration and its
+  diff never contact a remote.
+- A local merge into the base branch is a release: `sod.enforce` runs before
+  the daemon is asked, so the person who started the sprint does not merge or
+  approve its work (403, audited `sod_refused`). Design:
+  [`SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md).
+- A diff is never the client's: the backend asks the daemon and computes
+  `diff_sha256` from the per-file hashes. Review words are claims; commit,
+  merge base and hashes are observations.
+- In a published request, files are listed as the daemon read them back; a
+  producer's diff or summary is marked as a claim.
+- Merging a self-improvement cycle's work, or a protected path, needs a
+  signed-in Owner: never the Manager agent, an API token or a Manager.
 
 ## Components
 
-### Undoing a delivery
+### Publishing and merging
 
-**`backend/app/services/release/delivery_undo.py`** / **`vscode-daemon/delivery_snapshot.py`** — Undoing a task's delivery for a company without the Git workflow, taken from opencode's snapshots (https://opencode.ai/v2/docs/snapshots/): a separate Git object store in the tool's data directory, never the project's `.git`, so it works for a folder that is not a repository, and undo restores only the paths the step changed. Before writing, the daemon keeps for each target whether it existed and its bytes (a blob) with their sha256, and after writing the sha256 read back; the manifest and blobs form a tree under `refs/fabrique/snapshots/<id>` in a bare store per project under `FABRIQUE_SNAPSHOT_STATE`, git run with no shell, no hooks and `GIT_DIR` on the store. Only the files the delivery changed are kept (created, or other bytes than before; a file written with the same bytes is left out), once per file however its path was spelled (`app.py` and `./app.py`), with the hash of the last write that succeeded. A delivery, an edit of the Developer's tool and an undo of one project hold its lock (`vscode-daemon/project_lock.py`, keyed by the canonical path) from their first read to their last write. The bytes of a file that may hold secrets are never copied (that delivery goes without a snapshot), and a snapshot that cannot be taken never blocks the delivery (`snapshot_error`). The reply's `snapshot` is an observation kept on the evidence (`git_workflow.record_reply`) and returned by `GET /v1/agent_runs/{id}/changes` with `undone_at` from the audit log. `POST /v1/agent_runs/{id}/undo` (Manager, `routers/reviews.py`) asks `workspace.undo`: all or nothing, every file must still lead where it was written and hold the bytes the delivery wrote (a file changed or deleted since is a 409 naming it and nothing is touched); everything is staged first (the bytes to put back, the delivery's bytes on disk, whether each folder can be written, a folder that cannot being a 409), then each file gets its bytes back or is removed when the delivery created it (with the folders it created, once empty), a write that fails midway puts the files already undone back as the delivery left them so the snapshot can still undo it, the ref is deleted so a second undo is a 409, and the answer is audited as `run_delivery_undone`. A delivery on a Git branch is refused (discard the branch). Undo touches files only: the task's status stays, and a Manager sends it back with a review if it should be done again. The Files changed tab offers it to a Manager after a confirmation (`components/UndoDelivery.tsx`).
+- `git_publish.py`: publishes a task's branch as a pull or merge request
+  through the daemon, with the person's own credentials; the description is the
+  run's evidence. `require_forge` holds the forge policy.
+- `local_merge.py`: merges a task's or the integration's branch into a local
+  base branch, with no remote. A conflict changes nothing.
+- `review_sync.py`: brings a published request's comments back as
+  `ReviewComment`s, never duplicated.
+- `git_setup.py`: sets the Git workflow from what the daemon observed in the
+  folder (`git.is_repo`), never from what the request says.
 
-### The forge policy
+### The forge policy and the base
 
-**`services/platform/forge_policy_setting.py`** / **`routers/forge_policy.py`** / **`vscode-daemon/forge_gate.py`** (issue #727) — Whether anything leaves the computer that holds the project for a forge is the company's recorded decision, `companies.forge_policy`: `none` (a new company's default: privacy by default, GDPR art. 25), `fetch` (the base read from its remote before a new branch, [workspace](workspace.md)) or `publish` (fetch, plus the publications below). Migration `0053` set every company that existed then to `publish`, so none changed behaviour silently. `git_publish.publish_spec` and `integration_publish.publish_spec` check it first (`git_publish.require_forge`) and answer 409 `{"code": "forge_disabled", "forge_policy", "message"}` below `publish`, before the daemon is asked; the Manager agent's `publish` action fails the same way; `review_sync.sync_spec` refuses reading a request's comments the same way. The local merge (`local_merge`), the integration and its tests, and the integration's diff never contact a remote and work under every policy; their requests carry the policy too. Each integration row records the policy it ran under (`sprint_integrations.forge_policy`, the daemon's reported value, else the one sent), and the published request's description names it (`Forge policy at integration`). The daemon refuses a publication the policy it received does not allow, reads a missing policy as `none` and caps it by its own `FORGE_POLICY_MAX`, so the backend's check is not the only one. An Owner changes the policy (`PUT /v1/companies/{id}/forge_policy`, audited `forge_policy_changed`), capped by the deployment's `FORGE_POLICY_MAX` ([platform](platform.md)); the Models page shows it to every member (`components/ForgePolicyPanel.tsx`).
-
-**`backend/app/services/release/base_sync.py`** / **`routers/company_sync.py`** / **`vscode-daemon/git_sync.py`** (issue #745) — Bringing the company's local copy up to date with its remote, so the first sprint, and the specification, architecture and repository map the agents read, start from current files. The New company form (`components/RemoteSyncChoice.tsx`) shows what the daemon read locally (`POST /v1/workspace/git_check`, `services/release/folder_check.py`: the remote URL without credentials, current and base branch, a clean checkout; with several accounts only a company member or the deployment's first account may call it, `GIT_CHECK_RATE_LIMIT` per account, each "Check remote" audited as `folder_remote_checked` with the account and the folder, and the answer limited to branch names, flags and counts, an unreadable remote as a code; SECURITY.md); "Check remote" sends `contact_remote` and the daemon fetches the base's one branch under `fetch` capped by `FORGE_POLICY_MAX`, and nothing contacts the remote before it is pressed. The Owner chooses the forge policy there (`init_company`'s `forge_policy`), `fetch` by default only when the folder has a remote, never above the ceiling (`GET /v1/capabilities` names it as `forge_policy_max`; a wider value is a 409 before anything is created), audited as `forge_policy_changed` with `at: creation` even when it is `none` (`forge_policy_setting.set_policy(at_creation=True)`). With `sync_base` and a policy that allows a fetch, `init_company` asks `workspace.git.sync_base` before it inspects the folder (`company_sync.before_creation`), so the creation reads the files as fast-forwarded, and when the base moved the stack the wizard's Scan read before the sync is read again from that inspection's snapshot (`company_sync.stack_after_sync`, `discovery_service.detect_stack`, `read_after_sync: true`; the team the Owner chose is kept); under `none` nothing is sent and the answer is `forge_disabled`. A refusal never stops the creation. What the daemon observed (`ok`, `outcome`, `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted`) is recorded on the new company as `base_sync_observed` (`details.at: creation`, `observed_by: workspace_daemon`, the account) and returned as `base_sync`: observations, never the request's claims (A.8.32: no change to the person's repository without a recorded decision, and fast-forward only). Later, `POST /v1/companies/{id}/git/sync_base` (Manager) does the same under the company's policy in force, recorded with `at: settings`, from the Git settings (`components/BaseSyncAction.tsx`) and from the board of a planned sprint, which says when the local base is behind its remote (`BaseBehindNotice`, from `GET /v1/companies/{id}/git?check=true`).
+- `folder_check.py`: what the New company form may learn about a folder's git
+  before the company exists. Restricted callers, rate-limited, audited, and the
+  answer limited to branch names, flags and counts.
+- `base_sync.py`: fast-forwards the company's local base from its remote,
+  under the forge policy, at creation or later from the settings. What the
+  daemon observed is recorded as `base_sync_observed`. A refusal never stops a
+  company's creation.
 
 ### A sprint's integration
 
-**`backend/app/services/release/integration.py`** / **`integration_publish.py`** / **`routers/integration.py`** — A sprint's integration (issue #314). `plan` orders the sprint's task branches by dependency. When a sprint closes, the task worker emits `sprint.closed` (`services/platform/hooks.py`, in process) and release's handler (`integration_jobs.on_sprint_closed`, registered by `integration_jobs.install()` from `main.py`) starts `schedule_after_close`, which with the Git workflow on runs the integration in the background (a Manager also can, `POST /v1/sprints/{id}/integrate`): the daemon starts `fabrique/sprint-<id>` from the company's base in a worktree and merges the done tasks' branches in that order with real git (`vscode-daemon/sprint_integration.py`, `workspace.git.integrate`, sharing `git_workspace.merge_one`; each task branch's tip is read once and that commit is checked, merged and recorded), stopping at the first merge git cannot make, which it aborts and reports with the conflicted files and hunks; a branch already in is skipped, so running it again only moves forward. The branch starts from the base as its remote has it (`git_base`, above), and a sprint branch started earlier whose commits lack that base gets it merged in first (`base_merge`, as a pull request's update branch; a conflict there stops it like a task's); `base_status` and `base_merge` are kept in the row's `details` and the request's description names the base commit and how far the local copy was behind. With `DELIVERY_TESTS_ENABLED` the project's test command then runs on the integrated worktree through `workspace_daemon.run_delivery_tests` (the company's sandbox, the failing tests named). One integration of a sprint runs at a time (`integration.sprint_lock`: an asyncio lock in the process and, across replicas, `locks.held(…, locks.SPRINT_INTEGRATION, sprint_id)`, taken and released in a thread on a small lock pool of its own (`INTEGRATION_MAX_CONCURRENT` connections, default 2, also the number of integrations a process runs at once); a Manager's request while another replica integrates is a 409), and the suite runs in a worktree the daemon detaches at the integrated commit for that attempt only (`test_worktree`, named after the backend's `attempt` token; beyond the newest three per sprint older ones are removed, never one a `workspace.execute` is running in, `sprint_integration.while_active`, nor one younger than ten minutes), so a later integration never changes what an earlier one tested (`tested_commit`). The answer is kept as a `SprintIntegration` (migrations `0011`, `0012`), audited, with each done task's state, the commit its branch pointed at and the task worker's run and verification as they were at integration (`tasks`): `status` is `tests_passed`, `tests_failed`, `untested`, `conflict`, `incomplete` (a done task's branch missing or refused), `running` (`services/release/integration_jobs.py`: when the sprint closes the job is kept before the daemon is asked and the attempt fills that row in place, so a restart mid-attempt leaves it to be retried), `pending` (no daemon answered at close; `retry_loop`, a lifecycle worker, tries again every `INTEGRATION_RETRY_SECONDS`, 60, each sprint whose latest row is `pending` or a `running` one nobody holds, reading it again once it holds the lock) or `error` (the daemon refused; a Manager integrates again); `conflict`, `tests_failed`, `incomplete`, `pending` and `error` wait for a person (`GET /v1/inbox`, `integrations`, listed up to the limit and counted in full as `integrations_total`, until a later integration of the sprint supersedes it). `GET /v1/sprints/{id}/integration` (Viewer) is the plan beside the latest integration and the earlier ones; `POST /v1/sprints/{id}/integration/publish` (Manager) publishes the branch through `workspace.git.publish` as one request for the sprint, pinned to the integrated commit and refused when `origin`'s base has commits the branch lacks (the daemon fetches it just before the push, `require_current_base`, and names how many; an unreadable `origin` base refuses too), and unless the status is `tests_passed`, `tests_failed` or `untested` and the row recorded its tasks (a row from before migration `0012` asks to integrate again), its description every integrated task (merged now or already in) with the verdict, checks and files of the run and verification recorded at integration and the acceptance line as it stood then (`spec_planning.acceptance_summaries`, the coverage read once per specification) (files only as the daemon read them back; a diff the producer sent is listed as a claim), the producers' summaries apart as claims, with `Fabrique-Sprint:` and `Fabrique-Integration:` trailers. The per-task publication stays.
+- `integration.py`: orders the task branches by dependency and integrates them
+  with real git on the daemon, stopping at the first conflict. Running it again
+  only moves forward. One integration of a sprint runs at a time across
+  replicas, and the suite runs in a worktree pinned to the integrated commit.
+- `integration_jobs.py`: the job that survives a restart; `retry_loop` retries
+  `pending` integrations.
+- `integration_publish.py`: publishes the integration as one request, pinned to
+  its commit and refused when the remote base has commits the branch lacks.
+- `integration_state.py`: `integrating`, `integrated`, `failed` or `none`
+  beside a sprint's `status`, read from its latest integration.
+- `integration_events.py`: each task's part in the integration as a task
+  event; the task's status does not change.
+
+`conflict`, `tests_failed`, `incomplete`, `pending` and `error` wait for a
+person in the inbox.
 
 ### A person's review of the integration
 
-**`backend/app/services/release/integration_review.py`** / **`routers/integration_reviews.py`** / **`vscode-daemon/git_diff.py`** — The integration is the one request of a sprint a person should read (F7 of [the self-hosting retrospective](../retrospectives/2026-11-self-hosting.md)), so it is reviewed as a run is ([loop](loop.md#reviews-of-a-run)), whether or not it was published: a Manager leaves `IntegrationReviewComment`s (a line of the diff, new or old side, or the whole integration) and submits an `IntegrationReview` (`comment` → `recorded`, `approve` → `approved`, `request_changes` → `changes_requested`, which needs a text or an open comment), which carries the open comments; a Viewer reads them (`GET /v1/sprints/{id}/integration/reviews`, `GET …/integration/diff`; `POST …/integration/comments`, `…/comments/{id}/resolve`, `…/reviews`, Manager; tables `integration_reviews` and `integration_review_comments`, migration `0037`). Both are on the sprint's latest integration, and a request naming an older `integration_id` is a 409. The diff is never the client's: the backend asks the daemon for `workspace.git.diff` (read-only: the files between the merge base of the base branch, the company's or the checked-out one, and the integration's pinned commit, their hunks, and the sha256 of each file's bytes on both sides from `git cat-file --batch`; at most 300 files), checks that it is of the integration's commit, and computes `diff_sha256` from the per-file hashes. A line comment is accepted only on a line a hunk of that diff shows, on the side it names (422 otherwise), and keeps the commit and the file's sha256 on that side; a review keeps the commit, the merge base, `diff_sha256` and the file count. The words are claims; those fields are observations. Each review is audited as `integration_review_<event>` with the account (`user_id`, `token_id` for an API token) and the segregation-of-duties outcome. An approval is held to `sod.enforce` (`release`, subject `sprint_integration_review`): the person who started the sprint does not approve its integration (403, `sod_refused`), nor one stopped at a conflict or whose suite failed (409). `GET /v1/sprints/{id}/integration` adds `review`: the latest review, `approved`, `required`, the open comments and the request's URL when published. **The merge gate:** `companies.integration_review_required` (false for every company until an Owner turns it on, `GET`/`PUT /v1/companies/{id}/integration_review`, Viewer reads, Owner writes, audited `integration_review_requirement_changed`) makes `local_merge.integration_merge_spec` refuse (409) unless the integration's latest decision (`approve` or `request_changes`; a `comment` changes nothing) is an `approve` of its commit; every caller is held to it (the web, the Manager agent, the self-hosting harness), and `local_merge` records the review it stood on (`review_id`). **A published integration:** the forge's own review decides a merge there; nothing is posted to it or read back from it, the review records the request's URL (`published_url`) and gates only the local merge. The Overview tab's Sprint integration shows it (`components/SprintIntegration.tsx`, `IntegrationReview.tsx`, `IntegrationDiff.tsx`, `services/integrationReviews.ts`).
+`integration_review.py`: the integration is reviewed as a run is
+([loop](loop.md#reviews-of-a-run)), published or not. A Manager comments on
+lines of the daemon's diff and submits `comment`, `approve` or
+`request_changes`. Only the latest integration may be reviewed. An approval is
+held to segregation of duties, and an integration stopped at a conflict or
+whose suite failed cannot be approved.
+
+With `integration_review_required` on (an Owner's choice), the local merge is
+refused unless the latest decision is an `approve` of the integration's
+commit. A published integration is decided by the forge's own review; nothing
+is posted there.
 
 ### Protected paths at the merge
 
-**`backend/app/services/release/protected_merge.py`** — The integration merge's guard for a company that hosts the factory (`companies.protected_paths_enabled`, [platform](platform.md); `docs/design/rsi-loop.md` §3.3 layer 3, REQ-13). With the flag on, `local_merge.needs_diff` asks every caller of `integration_merge_spec` (the web's `POST /v1/sprints/{id}/integration/merge`, the Manager agent's `merge_local`, the harness through the web) to read the integration's diff from the daemon first (`integration_review.read_diff`, git between the merge base and the pinned commit), and `protected_merge.guard` matches each file's path, and a renamed file's old path, against the running backend's list (`evidence.protected_check.patterns_in_force`); what the tasks declared or the integration recorded from its runs is never read. A match is merged only when the integration's approving review (its latest decision, an `approve` of that commit) was recorded by a signed-in Owner, names every matched path in `protected_paths_ack` (`integration_reviews.protected_paths_ack`, migration `0042`) and was made on the `diff_sha256` the backend computes now; otherwise the merge is a 409 naming the paths (no acknowledgement, one of an older commit, one missing a path, one not by a signed-in Owner, a diff changed since), audited `integration_merge_refused_protected_paths` and committed before the caller's rollback. The daemon also lists every path with `git diff --name-status -z --no-renames` (`paths`, NUL-separated and never quoted, a rename as its source and its destination; `vscode-daemon/git_diff.inventory`), which the guard matches too and which enters `diff_sha256`: the patch parser skips a header git quotes (a tab in a name), so a parsed file the list lacks, or a listed path the parser did not read in a whole diff, refuses the merge, as does a reply with no list (an older daemon). A diff the daemon cut short (300 files) is refused, and so is a merge without the diff. A review reads the diff again and, when it differs from the check kept from a refused merge (the base absorbed part of the integration), replaces that check (`protected_merge.refresh`), so the item can move on to a new guarded attempt. An acknowledgement may name up to 600 paths (300 files, a rename counting twice). The acknowledgement is part of `POST …/integration/reviews` with `event: approve`: only a signed-in Owner may send it (`routers.sod.owner_person`; a Manager, an API token and the Manager agent, which never submits reviews, are refused, 403), each path must be a protected path of the daemon's diff (422), it is normalized and audited in the review's `integration_review_approve` row. Each check is kept as `details["protected_paths"]` (commit, `diff_sha256`, matched, acknowledged, the refusal), `local_merge` records the matched paths beside the review it stood on, `GET /v1/sprints/{id}/integration` shows `review.protected_paths`, and the Manager agent's inbox reads it as facts ([management](management.md)). Without the flag nothing is read and nothing changes.
+`protected_merge.py`: for a company with `protected_paths_enabled`. Before
+the integration merge, the daemon's diff is matched against
+`evidence.protected_check.patterns_in_force`; what tasks declared is never
+read. A match merges only when a signed-in Owner's approval names every
+matched path and was made on the current `diff_sha256`. Otherwise the merge is
+a 409, audited `integration_merge_refused_protected_paths`. A truncated diff,
+a missing path list or a disagreement between the list and the parsed patch
+also refuses. Design: [`rsi-loop.md`](../design/rsi-loop.md) §3.3.
 
-**`backend/app/services/release/self_change.py`** — The Owner's hold on a self-improvement cycle's work (`docs/design/rsi-loop.md`, decision 1). A cycle (`rsi_cycles`, [management](management.md)) names its sprint and the integration whose diff measured C; `local_merge.integration_merge_spec` and `run_merge_spec` call `require_owner` with the caller's `merger` (the web routes pass the signed-in user, the Manager agent passes nobody), and the merge of that integration, of any integration of that sprint or of a task branch of that sprint (`sprint_of_run`, from the run's `task-<id>`) is refused, 403 and audited `self_change_merge_refused`, unless the merger is a signed-in Owner: never the Manager agent, an API token, a Manager or nobody. Work that is not a cycle's merges as before. The Manager inbox does not offer such an integration or task branch as `merge_local` either.
+`self_change.py`: `require_owner` refuses (403, audited
+`self_change_merge_refused`) the merge of a self-improvement cycle's
+integration or task branches unless the merger is a signed-in Owner.
 
-### Releases and segregation of duties
+### Undoing a delivery
 
-A local merge into the base branch is a release (issue #543, [`docs/design/SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md)): `POST /v1/agent_runs/{id}/merge` and `POST /v1/sprints/{id}/integration/merge` call `sod.enforce` before the daemon is asked, so the person who started the sprint does not merge its work (403, audited `sod_refused`). `record_integration_merge` records `merged_by_user_id` from the session, read by the segregation-of-duties report. Approving a sprint's integration in a review is held to the same rule (above). Publishing a pull request is not an approval: the platform's own review decides it.
+`delivery_undo.py`: undoes a task's delivery for a company without the Git
+workflow, from a snapshot the daemon keeps in a separate store, never the
+project's `.git` (after opencode's snapshots). All or nothing: a file changed
+since the delivery is a 409 and nothing is touched. A second undo is refused.
+Files only; the task's status stays. A delivery on a Git branch is refused
+(discard the branch instead).
 
-### Other modules
+## See also
 
-- `integration_state` (#699, F8 of [the self-hosting retrospective](../retrospectives/2026-11-self-hosting.md)): a sprint reads `completed` when its tasks settle, before its integration has merged and run the suite, so `GET /v1/sprints` and `GET /v1/sprints/{id}/board` add `integration_state` and `integration_status` beside `status`, read from the sprint's latest `SprintIntegration` (what git and the daemon answered; nothing stored): `integrating` (`running`, `pending`), `integrated` (`tests_passed`, `untested`), `failed` (`tests_failed`, `conflict`, `incomplete`, `error`) or `none` (no integration recorded). The job is written by the `sprint.closed` handler just after the close, so for that moment a completed sprint reads `none`. The frontend shows a completed sprint as "Integrating" or "Integration failed" (`lib/sprintStatus.ts`), and the self-hosting harness waits on the state.
-- `integration_events` (`record_for_tasks`): writes each task's part in a sprint's integration (merged, skipped, stopped at a conflict, branch missing) as that task's `integration` event; the task's status does not change.
-
-## Described elsewhere
-
-- `git_publish`, `local_merge` and `review_sync`: the Git workflow paragraph in [workspace](workspace.md).
-- `git_setup`: the workspace routes and the Git workflow in [workspace](workspace.md).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-12).
+- The Git workflow and the workspace routes: [workspace](workspace.md).
+- The forge policy setting and protected paths flag: [platform](platform.md).
+- Settings (`FORGE_POLICY_MAX`, `INTEGRATION_MAX_CONCURRENT`, `INTEGRATION_RETRY_SECONDS`): [configuration](../CONFIGURATION.md).
+- Self-improvement cycles and the Manager inbox: [management](management.md).
+- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-12-release).

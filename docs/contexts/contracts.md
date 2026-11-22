@@ -1,48 +1,97 @@
 # The contracts context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/contracts/`.
+The shapes several contexts exchange, as plain data and pure functions. Read
+this before changing `backend/app/services/contracts/`; each module's
+docstring has the detail.
 
 - **Folder:** `backend/app/services/contracts/`
-- **Responsibility:** The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue, the standards catalogue and the protected paths. It performs no I/O and imports no other context; it never decides anything.
-- **May import:** no other context (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): every module (`"*"`): the context exists to be shared.
+- **May import:** no other context.
+- **Interface:** every module (`"*"`): the context exists to be shared.
 - **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+
+## Rules
+
+- No I/O, no imports from other contexts, no decisions. A caller reads the
+  data (a file, the clock, the test map) and passes it in.
+- A stored setting that no longer validates is never applied: it reads as
+  the default (`company_limits`, `run_window`, `forge_policy`).
+- A company's regular expression is compiled and run only by
+  `company_regex.py`, on RE2 with bounded memory, never on Python's `re`.
+  Without the binding the pattern is refused; there is no fallback.
+- A company's standards file only adds: it never names a catalogue id
+  (`STD-…`) and never adds a kind.
 
 ## Components
 
 ### The role catalogue
 
-**`backend/app/services/contracts/roles.py`** (`services/contracts/roles.py` is its shim) — The role catalogue: `ROLES` is the `AgentRole` values of `services/models/model_factory.py` (CamelCase like `ScrumMaster`: PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter, and the new BackendDeveloper, FrontendDeveloper, DevOps (DevOps/SRE), Designer (UX/UI) and DataEngineer (Data/DBA)); `canonical` reads the older stored spellings as aliases (`Dev`, `BackendDev`, `FrontendDev`, `Data`, `SM`, `Security`…), nothing stored is rewritten. `DEVELOPER_ROLES` (Developer and the four coding roles) take the Developer's path: the delivery is role-agnostic, and `orchestration_metrics.canonical_kpi_role` maps them to `Developer`, so the Architect's consultation, the edit plan and the KPIs follow; `FILE_ROLES` add QA and the Designer (it writes UI specifications and markup, reading the existing components first) for the workspace tools; `RESEARCH_ROLES` is the research default. The coding roles' default model mirrors the Developer's (and `AGENT_MODEL_DEVELOPER` when they have no `AGENT_MODEL_<ROLE>`), `company_models` falls back to the company's Developer choice for them, and `model_suggestions` suggests them as code roles (the Designer as a deciding role). Agent roles stay free text (no validation on `POST /v1/agents`); the Agents page, the New company wizard and the Models page list the new roles, labelled from `teamRoles.*`.
+`roles.py`: `ROLES` (CamelCase, such as `ScrumMaster`), `canonical` for older
+stored spellings (nothing stored is rewritten), `DEVELOPER_ROLES` (the
+Developer and the four coding roles, which take the Developer's path),
+`FILE_ROLES` (adds QA and the Designer) and `RESEARCH_ROLES`. Agent roles
+stay free text on `POST /v1/agents`.
 
 ### The protected paths
 
-**`backend/app/services/contracts/protected_paths.py`** ([`docs/design/rsi-loop.md`](../design/rsi-loop.md), section 3; REQ-9) — The paths the factory's own sprints may not change without a person, as data: `PROTECTED`, each glob pattern with why it is protected, and `PATTERNS`. The list is the owner's wide one: `bench/**`, `scripts/bench/**`, `scripts/self_host/**`, `scripts/e2e/**`, `backend/app/services/evidence/**`, the bench's tests (`test_verificador_benchmark.py`, `test_bench_*.py`), `.github/workflows/**`, `.github/CODEOWNERS`, `docs/POSITIONING.md`, the list and its test, the ratchets and their data (`check_architecture.py`, `check_frontend_architecture.py`, `check_file_sizes.py`, `file_size_baseline.json`, `docs/architecture/contexts.json`, `frontend.json`), `history_check.py`, `tasks/board.py`, `learning/procedures.py`, `management/manager_policy.py` and `platform/sod.py`. The tests whose contexts include evidence are derived from the test map, not listed by hand: `evidence_test_patterns` takes the `tests.files` of `docs/architecture/contexts.json`, which the caller reads, and `protected_patterns(test_files)` is the list with them. `matches(paths, patterns)` returns each path that matches, normalised (POSIX separators, `.` and `..` resolved, a path outside the repository dropped), once, with the first pattern that matched; `**` crosses folders, `*` and `?` stay within one, and the match ignores case, since a match only adds a person's review. It decides nothing: the Verifier's `protected_paths` check and the `grader` area of the risk tier read it for a company that hosts the factory ([evidence](evidence.md)), and the Manager agent's `accept_high_risk` refuses a match ([management](management.md)); the integration merge, CI and the fitness decision are later steps of the design. The list in force is the running backend's copy, never a company project's. `.github/CODEOWNERS` gives every pattern an owner, and `tests/test_protected_paths.py` fails when a pattern has no owned line covering it (the catch-all `*` does not count, the last matching line wins).
+`protected_paths.py`: the paths the factory's own sprints may not change
+without a person, each pattern with why. `matches` normalises paths, drops
+any outside the repository and ignores case, since a match only adds a
+review. It decides nothing: the Verifier and the risk tier read it for a
+company that hosts the factory ([evidence](evidence.md)), and the Manager
+agent refuses a match ([management](management.md)). The list in force is
+the running backend's copy, never a company project's. Every pattern needs
+an owner in `.github/CODEOWNERS` (`tests/test_protected_paths.py`). Design:
+[`rsi-loop.md`](../design/rsi-loop.md), section 3.
 
 ### A company's standards file
 
-**`backend/app/services/contracts/company_standards.py`** / **`company_regex.py`** (issue #700; design in [`docs/design/COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md), §3, §4, §12) — The schema, parser and validator of `.fabrique/standards.toml`, pure: `parse(bytes)` reads TOML with the standard library's `tomllib` (no YAML) and returns `Parsed` with the standards and every refusal by name (`file_refusals` refuse the whole file: not UTF-8, over 64 KiB, invalid TOML, not `format = 1`, more than 50 standards, an unknown top-level field, and any catalogue id such as `STD-SEC-1` anywhere in the text, since a company only adds; `refusals` belong to one standard and keep the others parsed: an unknown kind or field, a missing field, an id not of the form `LF-ARCH-1` or with the `STD-` prefix, a duplicate, a role not in `roles.ROLES`, a glob outside the repository, a `command` without `guards` or one `command_refusal` refuses, a pattern RE2 refuses, an invalid `limit` or `on`). The five kinds are the closed list `KINDS` (`command`, `forbid_pattern`, `require_together`, `max_lines`, `forbid_path`); a file never adds one. Per-folder tables (`[folders."backend"]`) scope their standards: globs, guards and baselines are relative to the folder, which also becomes the command's folder and, without `paths`, its scope. A guard is a file or a folder with `exclude` globs (`guard_specs`); `guard_digest` is one sha256 over a guard's `<sha256>  <path>` lines sorted by path. `command_refusal` refuses at import what a standard may never run (network fetchers, a pipe into an interpreter, privilege, credentials paths, `git push`/`remote`/`config`, here-documents, multi-line commands); the daemon's command policy and sandbox still apply at run time. `company_regex` is the only place a company's pattern is compiled or run: on RE2 through the pinned `google-re2` binding (BSD-3-Clause, exact version in `backend/pyproject.toml`), with `max_mem` bounded and captures off, never on Python's `re` (OWASP ReDoS, CWE-1333); without the binding a pattern is refused at import (`re2_unavailable`) and never falls back. `tests/test_company_standards_file.py` requires the design's own La Fabrique file (§9.1, kept verbatim as `tests/fixtures/company_standards/la_fabrique.toml`) to parse with no refusal.
+`company_standards.py`, `company_regex.py`: parse and validate
+`.fabrique/standards.toml` (TOML only). File refusals reject the whole file;
+a standard's refusals keep the others. The five kinds are closed.
+`command_refusal` refuses at import what a standard may never run; the
+daemon's command policy and sandbox still apply at run time. Design:
+[`COMPANY_STANDARDS.md`](../design/COMPANY_STANDARDS.md).
 
-### The cycle record's rules
+### Company settings as data
 
-**`backend/app/services/contracts/rsi_cycle_record.py`** ([`docs/design/rsi-loop.md`](../design/rsi-loop.md), PR 10 of section 8; REQ-26, REQ-27) — The rules of the self-improvement cycle's record, schema version 1, as `scripts/rsi/cycle_record.py` holds them: `validate(record, required, optional)` with the metric names passed in (fitness's `GUARDED`, since contracts imports no other context), `cycle_id_ok`, `parse_when`, and `kept_files_problems`, the shape of the optional `kept_files` (`{path, sha256}`, distinct repository-relative paths) a record carries for REQ-26. It checks shapes only: the backend recomputes every kept file's hash it can read ([management](management.md)). `tests/test_rsi_cycle_record_parity.py` runs it and the script over the same records and fails when they disagree.
+- `forge_policy.py`: `none`, `fetch`, `publish`; default `none`. The daemon
+  keeps the same values. The setting is [platform](platform.md)'s.
+- `company_limits.py`: the Developer's limits within fixed floors and
+  ceilings.
+- `run_window.py`: a run window over IANA zones, never fixed offsets, with
+  presets and holidays passed in. The gate is [loop](loop.md)'s.
+- `language.py`: the line asking agents to write a person's prose in the
+  company's language while code and parsed markers stay in English.
+- `emails.py`: the one rule for comparing addresses (strip, lower-case).
 
-### Other modules
+### The self-improvement records
 
-- `emails`: `normalize_email`, the one rule for comparing email addresses (strip the spaces around it, lower-case the whole address; no dot or `+tag` folding), used by registration, sign-in, invitations and every lookup by address; migration 0045 applied it to the stored rows ([platform](platform.md), Auth and multi-tenancy).
-- `specification_text`: a specification's canonical text and its sha256 (REQ-20 of [`docs/design/rsi-loop.md`](../design/rsi-loop.md)), the key `learning/findings` stores a finding under and `scripts/rsi/cycle.py` compares a specification with the reverted ones by, with no database: a JSON specification re-serialised with sorted keys and no whitespace, any other text without its line endings and trailing spaces.
-- `forge_policy` (issue #727): the three values of a company's forge policy in order (`none`, `fetch`, `publish`; `DEFAULT` is `none`), `parse` (anything else is `none`), `cap` (the lower of a value and a ceiling), `allows_fetch`, `allows_publish` and `refusal`, the 409 body with `code: "forge_disabled"`. The daemon keeps the same values in `vscode-daemon/forge_gate.py`; the setting is [platform](platform.md)'s.
-- `company_limits` (issue #766): a company's limits on its agents' work as data: the Developer's `tool_rounds`, `result_max_chars` and `max_output_tokens` and the task's `max_reworks`, each within `FLOORS` and `CEILINGS` fixed here (50 rounds, 100000 characters, 10 reworks). `validate` (`InvalidLimits` naming every problem; `null` or `{}` clears) and `parse` (a stored value that no longer validates is dropped, never applied); `deployment_rework_limit` (`MAX_REWORKS`, else its old name, else 3). The setting is [platform](platform.md)'s; [models](models.md)'s profile reads the ceilings from here.
-- `run_window` (issue #736): a company's run window as data and pure functions, the clock and the holiday dates passed in. `validate` (the stored shape, `InvalidWindow` with the reason: an IANA zone name for `timezone`, a `preset` or `intervals` and not both, `HH:MM` times, ISO 8601 dates) and `parse` (anything unreadable is off); `PRESETS` holds `provider_off_peak:deepseek` (peak 01:00–04:00 and 06:00–10:00 UTC, Monday to Friday, except the `cn` calendar; with the pricing page's URL and the date it was read, 2026-11-19); `is_open`, `next_open`, `next_change` and `spans` (the open spans of the next days) work on aware instants and `zoneinfo` zones, never fixed offsets; an interval whose end is not after its start runs past midnight; a holiday date (in the preset's zone, else the window's) is open all day. `local_iso` is ISO 8601 with the zone's offset. The setting is [platform](platform.md)'s, the gate [loop](loop.md)'s.
-- `language`: the language a company's agents write to its people in (`Company.doc_language`, `en` or `es`; anything else is English). `person_note` is the prompt line asking for the person's prose (summaries, explanations, review reasons, questions) in that language while code, identifiers, paths, commit messages and the markers the platform parses (`APPROVED:`, `NEEDS WORK:`, the file blocks, `ARCHITECT_CONSULTED`) stay in English; it is empty for English. The task worker, the Architect's brief and QA's review add it ([loop](loop.md)).
-- `sandbox_schemas`: the pydantic shapes of a sandbox run (`SandboxExecutionRequest`, `SandboxExecutionResponse`, `SandboxHealthResult`) that `workspace/sandbox_manager.py` exchanges with the sandbox.
+- `specification_text.py`: a specification's canonical text and sha256, the
+  key a finding is stored under.
+- `rsi_cycle_record.py`: the cycle record's shape, checked against
+  `scripts/rsi/cycle_record.py` by a parity test. Shapes only; the backend
+  recomputes every kept file's hash.
 
-## Described elsewhere
+### Delivery and run shapes
 
-- `manifest` (`parse_file_manifest`) and `edit_blocks` (SEARCH/REPLACE edits): step 3 of [the sprint loop](../SPRINT_LOOP.md).
-- `standards_catalogue`: the quality standards paragraph in [evidence](evidence.md).
-- `wiki`, `wiki_lint`, `wiki_templates` (the project wiki's citation, statement and facts syntax and the links derived from a body; the three deterministic lint rules; the en/es scaffolding and lint reasons, `language_of` reading the company's `doc_language` defensively): [the project wiki](../design/PROJECT_WIKI.md).
-- `board_notes` (the sprint board's kinds, bounds, the `NOTE … END` format and its parser, the relevance of a note to a task): [the sprint board](../design/SPRINT_BOARD.md).
-- `intake_rules` (the intake queue's sources, statuses, transitions and categories, the typed links, and `measures`, the deterministic comparison of the Support agent's suggestion with a person's decision): [the intake queue](planning.md#the-intake-queue).
-- `task_filters` (the filter over a company's tasks: the allowlist of fields with their operators and values, the bounds of the AND/OR tree, `parse_filter`, `matches`, and a saved view's settings): [saved views](../design/SAVED_VIEWS.md).
-- `tool_calls`, `sandbox_report`, `task_dependencies`, `verdicts`: where each came from is in [the migration record](../architecture/MIGRATION.md) (steps 1, 5 and 6).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-1).
+- `manifest.py` (`parse_file_manifest`), `edit_blocks.py` (SEARCH/REPLACE):
+  step 3 of [the sprint loop](../SPRINT_LOOP.md).
+- `verdicts.py`, `tool_calls.py`, `sandbox_report.py`,
+  `task_dependencies.py`: shared shapes of a run and a task.
+- `sandbox_schemas.py`: the pydantic shapes `workspace/sandbox_manager.py`
+  exchanges with the sandbox.
+- `standards_catalogue.py`: the quality standards ([evidence](evidence.md)).
+
+### Feature syntaxes
+
+- `wiki.py`, `wiki_lint.py`, `wiki_templates.py`: the project wiki's
+  syntax, lint rules and templates ([`PROJECT_WIKI.md`](../design/PROJECT_WIKI.md)).
+- `board_notes.py`: the sprint board's note format ([`SPRINT_BOARD.md`](../design/SPRINT_BOARD.md)).
+- `intake_rules.py`: the intake queue's statuses and transitions
+  ([planning](planning.md#the-intake-queue)).
+- `task_filters.py`: the task filter's allowlist and bounds
+  ([`SAVED_VIEWS.md`](../design/SAVED_VIEWS.md)).
+
+## See also
+
+- How the context was built: [the migration record](../architecture/MIGRATION.md#step-1-contracts).

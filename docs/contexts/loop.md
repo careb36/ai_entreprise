@@ -1,95 +1,171 @@
 # The loop context
 
-Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/loop/`.
+Driving a sprint's tasks: the task worker, board moves, carry-over, sprint
+control, a person's review of a run and the company bootstrap. It decides what
+happens next from the evidence; it never computes a verdict itself. Read this
+before changing `backend/app/services/loop/`; each module's docstring has the
+detail.
 
 - **Folder:** `backend/app/services/loop/`
-- **Responsibility:** Driving a sprint's tasks: the task worker (dispatch, prompt, execution, delivery, recording, review, closing), the review digest, the edit plan, board moves, carry-over, replicas, sprint control, close and archive, a person's run review, and the company bootstrap. It decides what happens next from the evidence; it never computes a verdict itself.
-- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Interface** (`public` in `docs/architecture/contexts.json`, ADR 0018, checked by `scripts/check_architecture.py`): `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`. Another context imports only these modules and the package; the rest are internal.
+- **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
+- **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
 - **Modules:** `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `foundation_setup`, `preconditions`, `replicas`, `review_digest`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+
+## How it works
+
+`task_worker.py` is the `task.assign` consumer the lifespan starts; it
+re-exports the stages in `worker/`. `worker/intake` claims a task under its
+lock; `worker/task_run` gathers context, `worker/execute` calls the model,
+`worker/deliver` sends the files to the daemon and `worker/record` ingests the
+run and has the Verifier judge it. `worker/review` runs the review cycle (one
+replica at a time) that sends delivered tasks to QA, and `worker/close`
+finalises a sprint once its tasks settle. The step-by-step flow is
+[the sprint loop](../SPRINT_LOOP.md).
+
+## Rules
+
+- The verdict is the Verifier's. A review, an agent message or a sprint note is
+  a claim, never evidence; a note's observations go in a separate `observed`
+  field.
+- A cut model answer is sent back, never recorded.
+- A halted sprint (`planned`, `paused`, `cancelled`) dispatches, reviews and
+  retries nothing.
+- Work starts only when its preconditions hold: with delivery tests off or the
+  host sandbox, an Owner must have recorded an acknowledgement. Every endpoint
+  that starts work answers 409 `missing_acknowledgements` before changing
+  anything; the Manager agent never stands in for the Owner; the worker checks
+  again before it claims a task.
+- Segregation of duties: a person who started a task's sprint cannot accept its
+  held delivery, from the web, a chat button or the board alike (403, audited
+  `sod_refused`).
+- A company that hosts the factory (`protected_paths_enabled`) never gets a
+  model-planned follow-up sprint, whatever the setting.
+- A sprint with evidence is archived, never deleted; the audit chain is never
+  touched.
+- What a sprint does once (follow-up, retrospective, procedures, engram)
+  happens only at its first close.
 
 ## Components
 
 ### Reviews of a run
 
-**`backend/app/services/loop/run_review.py`** / **`routers/reviews.py`** — Reviews as on a pull request: `ReviewComment` (a line of a changed file, new or old side, or the run) and `RunReview` (`comment`, `approve`, `request_changes`, with its `outcome`). A Manager writes them, a Viewer reads them. A submitted review carries the open comments; on a task-worker run it acts only where the loop waits for a person (`request_changes` sends a task `waits_for_a_person` back to `todo` with a send-back note and one `NEEDS WORK:` comment listing `path:line: comment`, which `board.pending_rework_feedback` hands to the Developer; `approve` accepts an `awaits_risk_acceptance` hold), and anything else is a 409 with the reason; on another producer's run it records an `AgentRunApproval` (`record_approval`, shared with `POST /approve`). Audited as `run_review_<event>` (with `user_id` and `via`: `web`, or `slack`/`teams` when the decision came from chat through `routers/chat_interactions.py`, [integrations](integrations.md#approvals-in-slack-and-teams)); never evidence. The Files changed tab's line threads and form are `components/LineComments.tsx`, the review form and history `components/ReviewPanel.tsx`. A sprint's integration is reviewed the same way, with the diff read by the daemon: [release](release.md#a-persons-review-of-the-integration).
-
-**Segregation of duties at a person's approval** (issue #543, [`docs/design/SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md)). `submit_review` holds an `approve` to the rule before it records anything (`_segregate`): accepting a held delivery is refused (403, audited `sod_refused`) when the approver started the task's sprint, from the web, from a chat button and by marking it done on the board (`segregate_board_acceptance`, called by `PATCH /v1/backlog/{id}`) alike, and another producer's run under the `all` mode; `run_review_approve` carries the outcome (`sod`). `services/loop/sod_requesters.py` reads who asked for the work from records: a sprint's `started_by_user_id`, a run's task's or subject's sprint, a specification's or architecture's `drafted_by` person.
+`run_review.py`: reviews as on a pull request, line comments and a review
+(`comment`, `approve`, `request_changes`). A Manager writes them, a Viewer
+reads them; audited `run_review_<event>` with `via` (`web`, `slack`, `teams`).
+On a task-worker run a review acts only where the loop waits for a person
+(`request_changes` sends the task back with a `NEEDS WORK:` comment, `approve`
+accepts a risk hold); anything else is a 409. On another producer's run it
+records an approval. `sod_requesters.py` reads who asked for the work from the
+records, for the segregation check ([design](../design/SEGREGATION_OF_DUTIES.md)).
+The integration's review is in [release](release.md#a-persons-review-of-the-integration).
 
 ### The company bootstrap and its foundation sprint
 
-**`backend/app/services/loop/company_service.py`** / **`foundation_setup.py`** / **`routers/enterprise.py`** — `POST /v1/init_company` creates the company, its agents, its credentials and its project row, and plans "Sprint 0 — Foundations" (`services/planning/sprint_planner.py`) — unless the sprint is not wanted (retrospective F8, `test_foundation_sprint.py`). The request's `foundation_sprint` asks for it (`true`) or declines it (`false`); `null` (the default) leaves the decision to the workspace daemon's observation of the folder: `foundation_setup.observe_folder` sends the one `workspace.inspect` (with its file snapshot) whose `project` the route also hands to `git_setup.is_repository`, and a folder observed to be a repository whose files include source code (`planning.stack_detection.has_code_files`) gets no sprint. The observation is the daemon's, never a claim in the request (`detected_stack` decides nothing); an unobserved folder — no daemon answered, no folder was named, or an answer without a snapshot — keeps the old behaviour and the sprint is planned. `foundation_setup.decide` returns what the response carries as `foundation_sprint`: `planned`, the `reason` (`requested`, `declined`, `repository_with_code`, `folder_without_code`, `no_folder`, `daemon_unobserved`), its `detail` sentence, and `observed_repository_with_code` — the observation itself (`null` without one), apart from the decision. With no sprint the summary's `sprint_id` is `null`, and the New company wizard lands on the sprint list saying why (`companyNew.foundationOutcome`).
+`company_service.py`, `foundation_setup.py`: `POST /v1/init_company` creates the
+company, its agents and credentials, and plans "Sprint 0 — Foundations" unless
+it is declined, or the daemon observed the folder to be a repository with
+source code. The decision rests on the daemon's observation, never on a claim
+in the request; an unobserved folder gets the sprint.
 
 ### Sprint control and autonomy
 
-**`backend/app/services/loop/sprint_control.py`** / **`routers/sprint_control.py`** — Who decides when a sprint's agents work. A sprint runs only while `active` (or `needs_split`); `planned` (Sprint 0 left unstarted by the New company wizard, `start_now: false` on `POST /v1/init_company`, always at autonomy 1), `paused` and `cancelled` are halted: the worker neither dispatches, reviews nor retries their tasks (`is_halted`). `POST /v1/sprints/{id}/start` starts a planned sprint, `/pause` and `/resume` pause it (resume dispatches its waiting tasks), `/stop` cancels it for good (unfinished tasks blocked with a note, no follow-up), `/dispatch` re-queues `todo` tasks of a running sprint; all Manager. When a provider refuses a call for lack of credit (402, or a 429 that names a quota or balance; `credit_failure`), the worker pauses the sprint with `pause_reason` and puts the task back to `todo` instead of blocking it, so resuming runs it again and a sprint of failures cannot loop into follow-ups. A transient model failure (a provider timeout, a call the proxy dropped, a rate limit, a 5xx or an empty answer: `worker/intake.TRANSIENT_LLM_MARKERS`) queues the task again with a `retried` event instead of blocking it, at most `MAX_TRANSIENT_RETRIES` (3) times per task, after which it is blocked as any other failure (issue #766); a company with a planned or paused sprint gets no follow-up on its own. `GET`/`PUT /v1/companies/{id}/autonomy` reads (Viewer) or changes (Manager) the autonomy level: at 1 every task QA approves waits for a person like a high-risk delivery (`HUMAN_LED_REASON` in the hold note), at 2 only high-risk ones, at 3 follow-ups and procedures also run on the company's own. The model-planned follow-up (`worker/close._plan_follow_up`, `AUTO_SELF_IMPROVEMENT_ENABLED`) never runs for a company that hosts the factory (`companies.protected_paths_enabled`, [platform](platform.md)), whatever the setting says: the close answers `protected_paths_enabled`, logs it and audits `follow_up_sprint_skipped` (`docs/design/rsi-loop.md`, REQ-21). The Sprint page shows a banner on every tab for a planned or paused sprint (Start / Resume, the reason) and the Board tab's controls (`components/SprintControls.tsx`): Dispatch, Pause, Stop, Autonomy.
+`sprint_control.py`: start, pause, resume, stop and dispatch (all Manager).
+A provider out of credit pauses the sprint with a `pause_reason` and puts the
+task back to `todo`; a transient model failure re-queues it at most
+`MAX_TRANSIENT_RETRIES` (3) times, then blocks it. Autonomy (Manager to change):
+at 1 every QA-approved task waits for a person, at 2 only high-risk ones, at 3
+follow-ups and procedures also run on their own.
 
 ### The run window
 
-**`backend/app/services/loop/preconditions.py`** / **`routers/acknowledgements.py`** (issue #766) — What must hold before a sprint's work runs. With tests off (`DELIVERY_TESTS_ENABLED`) no code delivery can be verified, and with the host sandbox agent code runs unisolated; a company with either runs only once an Owner recorded an acknowledgement ([platform](platform.md), `acknowledgements`). Every endpoint that starts work (`POST /v1/start_sprint`, `/start`, `/resume`, `/dispatch`) answers 409 with `missing_acknowledgements` before changing anything (`routers/sprint_control.require_preconditions`); the Manager agent's resume is refused the same way and never stands in for the Owner; and the task worker asks `hold_task` before it claims a task (`worker/intake._claim`), so a task queued by any other path pauses its sprint with `pause_reason` "Missing acknowledgement: …" and a `paused` event, as a sprint out of credit does. `GET/POST /v1/companies/{id}/acknowledgements` (Viewer, Owner) and `DELETE …/{ack_id}` (Owner) read, record and withdraw them. The suite's `conftest.py` treats them as met unless a test is marked `preconditions` (`test_sprint_start_preconditions.py`).
-
-**`backend/app/services/loop/run_window_gate.py`** / **`routers/run_window.py`** (issue #736) — Work that can wait starts in the company's run window ([platform](platform.md) holds the setting, [contracts](contracts.md) the window). Outside it, and unless the sprint is `urgent`, starting a sprint (`POST /v1/start_sprint`, `/start`, `/resume` and `/dispatch` through `dispatch_or_defer`) queues none of its ready tasks and leaves its kickoff in the outbox as `held_for_run_window`, and the task worker asks `gate_task` before a task's next model turn: the claim (`worker/intake._claim`, through `hold_task`), the dispatch of `todo` tasks and QA's review of a delivered task (`worker/review._review_delivered`). A model call already running is never cut. Each hold is the task's `run_window_wait` event and each release its `run_window_release` event, by the System, with the window, its zone and the instant the backend computed (`until`, `until_local`, `observed_at`; `released_at`, `waited_until`, `reason`: `window_open`, `urgent` or `window_removed`); a task has one open wait at a time, and neither event changes its status (`task_projection` reads them as advice). `sprints.run_window_wait_until` (migration `0055`) says a sprint has work held and when; the lifecycle worker `run_window_release` (`worker`) releases every due sprint (`release_due`, under `locks.RUN_WINDOW_RELEASE`) and sleeps to the earliest hold, at least 60 s and at most `RUN_WINDOW_RECHECK_SECONDS`, so a restart mid-wait releases from the database alone. A released sprint starts as if a Manager had started it then: its kickoff goes out and `sprint_control.dispatch_todo` queues its ready tasks; a paused or planned one is left to its resume or start, which gate again. `PUT /v1/sprints/{id}/urgent` (Manager) and `urgent` on `POST /v1/start_sprint` mark the bypass (`set_urgent`, audited `sprint_urgent_changed` under `sprint:<id>:admin` with both values, `user_id`, `token_id` and whether it was waiting); marking a waiting sprint urgent releases it at once. The board (`GET /v1/sprints/{id}/board`: `urgent`, `run_window`) shows "waiting for the run window until HH:MM (local)" and the Manager's toggle (`components/RunWindowBadge.tsx`), and `GET /v1/inbox` lists the waiting sprints (`run_window_waiting`, not counted in `total`). The cost report keeps what was billed; time-of-day prices are [models](models.md)'s follow-up. Studied: cron windows and Kubernetes CronJob's `timeZone` (a schedule in a named IANA zone); no code taken.
+- `preconditions.py`: the Owner's acknowledgements a sprint needs before it runs
+  (see Rules); a task queued by another path pauses its sprint.
+- `run_window_gate.py`: outside the company's run window, and unless the sprint
+  is `urgent`, no ready task is queued and the worker holds a task before its
+  next model turn; a running model call is never cut. Each hold and release is
+  a task event by the System with the instant the backend computed; neither
+  changes the task's status. A lifecycle worker releases due sprints, so a
+  restart releases from the database alone. The setting is in
+  [platform](platform.md), the window in [contracts](contracts.md).
 
 ### Moves on the board
 
-**Moves on the board** (`services/loop/board_moves.py`, `services/loop/sprint_close.py`, `routers/board_moves.py`): a Manager moving a card to To do from another column (`PATCH /v1/backlog/{id}`) starts it. Without a comment of the person's the move is recorded as a send-back (`Sent back to work by a person (moved to To do on the board).`, so the rework budgets restart); a `completed` sprint (closed once every task settled) or a `cancelled` one is reopened to `active` with a conditional update from the status read, audited as `sprint_reopened` under `sprint:<id>:admin` with `from_status` and the task; an archived sprint is a 409; a `planned` or `paused` one is not started and the answer says why; a task whose dependencies are done gets its `task.assign` outbox event at once (the review cycle's second assignment loses `replicas.claim_todo`). The answer adds `queued`, `reopened`, `sprint_status` and `reason`, and the board shows them. `board_moves.record_person_change` writes a person's change (the event, then the start) for `PATCH /v1/backlog/{id}`, and `board_moves.send_back` is the board's "Send back to work" for a caller that already checked the role: a send-back from Slack or Teams (`routers/chat_interactions.py`, [integrations](integrations.md#approvals-in-slack-and-teams)) writes the board's event through it. A reopened sprint closes again when it settles, but what a sprint does once happened at its first close: a close after a reopening from `completed` (`board_moves.closed_before`) answers `reclosed_after_reopen` and opens no follow-up, posts no retrospective, measures and proposes no procedures and writes no engram; the integration of its branches runs again (it only moves forward). A sprint reopened from `cancelled` never closed, so its first close is a full one. "Move to sprint…" on a blocked or To do card (`components/MoveToSprint.tsx`, `services/boardMoves.ts`; Managers only) lists the company's open sprints (`GET /v1/backlog/{id}/carry_targets`, Viewer: planned, active, paused or needing a split, not archived, not its own) and a new sprint, and `POST /v1/backlog/{id}/carry_over` (Manager, `{target_sprint_id}`; none creates an active sprint `Carried from <name>`) carries it through `carry_over.carry_over`: once per task (409 after), only a task blocked for a person (a To do task is first blocked by the System with a `manual triage` note saying a person moved it), into an open sprint of the company with room under `SCOPE_HARD_MAX` (404 another company's, 409 archived or not open), queued when that sprint runs.
-
-**Editing a task** (`services/loop/task_edit.py`, `routers/board_moves.py`; issue #766): `PUT /v1/backlog/{id}/content` (Manager; `{title?, description?, reason, send_back?}`) changes a task's title or description, the text the Developer, the acceptance and QA read, so a person can narrow a task the agents could not finish without planning a new sprint. Only in `todo` or `blocked` (409 in progress, in review or done, and in an archived sprint); the reason is 10 to 500 characters, the title 1 to 200, the description at most 10,000, and an edit that changes nothing is a 422. The change is the task's `edited` event (actor `person`), chained like the others, with the title and description before and after, the description's sha256 each side and the reason, and its comment `Task edited by a person (<fields>): <reason>`; it is audited as `backlog_item_edited` under `sprint:<id>:task:<id>`. `send_back: true` also sends it back to work through `board_moves.send_back`, so its rework budget restarts with the new text. The task details page has "Edit task" for Managers (`components/TaskEditForm.tsx`).
+- `board_moves.py`: a Manager moving a card to To do starts it, recorded as a
+  send-back so the rework budget restarts; a `completed` or `cancelled` sprint
+  is reopened, an archived one is a 409.
+- `sprint_close.py`: a second close after a reopening answers
+  `reclosed_after_reopen` and skips what happens once.
+- `carry_over.py`: moves a task blocked for a person into another open sprint
+  of the company, once per task, within `SCOPE_HARD_MAX`.
+- `task_edit.py`: a Manager edits a `todo` or `blocked` task's title or
+  description with a reason; the change is a chained `edited` event with both
+  sides.
 
 ### Editing and removing a sprint
 
-**`routers/sprint_crud.py`** / **`services/loop/sprint_archive.py`** — Editing and removing a sprint. `PATCH /v1/sprints/{id}` (Manager) edits `sprint_name`, `goal` (empty clears it) and `duration_days` (1–90), nothing else (status, company and tasks are 422), and refuses an archived sprint (409); audited as `sprint_updated` with each field's before and after. `DELETE /v1/sprints/{id}` (Owner; an API token, at most a Manager, cannot, nor the Manager agent: `delete_sprint` is in `manager_policy.ALWAYS_ESCALATE`) takes only a halted sprint, `planned`, `cancelled` or `completed` (`active`, `needs_split` and `paused` are a 409: stop it first). A sprint without evidence is deleted with its backlog items, their bookkeeping events (the System's dependency notes and the block a stop writes), their run secrets and the outbox rows queued for them (`{"deleted": true, "removed": {...}}`, audited as `sprint_deleted`, naming the sprint by id in JSON only). Evidence (`evidence_of`) is any AgentRun of the company for one of its tasks (`task-<id>`) or naming it in `subject.sprint_id`, any other TaskEvent, an AgentMessage, a SprintIntegration, a sprint progress snapshot (issue #531, [tasks](tasks.md)), a Procedure proposed from it or measured after it, a ManagerDecision on one of its tasks, an audit row of the company about it or its tasks other than its own administration rows (`sprint:<id>:admin`), or a `performance_metrics` row; with any, the sprint is archived instead (`archived_at`, `archived_by`, `archive_reason`, migration `0017`; `{"archived": true, "archived_at": ..., "evidence": [...]}`, audited as `sprint_archived`). An archived sprint leaves `GET /v1/sprints` (unless `include_archived=true`), the inbox (blocked tasks, risk holds, integrations), the Manager agent's items, the integration retries and carry-over (a 409); its board, runs, events and audit rows stay readable by id and the audit chain is never touched. `POST /v1/sprints/{id}/unarchive` (Owner) brings it back (`sprint_unarchived`). The Sprints page (`components/SprintAdminActions.tsx`, `services/sprintAdmin.ts`) offers Edit to a Manager, Delete (with the confirmation that a sprint with recorded work is archived) and Unarchive to an Owner, and a toggle to show archived sprints; a Viewer sees no action.
+`sprint_archive.py`: `PATCH /v1/sprints/{id}` (Manager) edits name, goal and
+duration. Delete is Owner only (never a token or the Manager agent:
+`delete_sprint` is in `ALWAYS_ESCALATE`) and only for a halted sprint. A sprint
+with any evidence (runs, events, messages, audit rows about it…) is archived
+instead, stays readable by id, and an Owner may unarchive it.
 
-### The weight of a prompt
+### The Developer's prompt
 
-**`backend/app/services/loop/worker/prompt_budget.py`** (#443) — The Developer's task prompt (`worker/execute._developer_prompt`) is a list of named sections, in the order the prefix cache relies on: `output_format`, `standards_and_procedures`, `lessons`, `task`, `requirements`, `repository`, `related_code`, `wiki`, `memory`, `previous_attempt`, `completed_tasks`, `sprint_board`, `architect_brief`, `review_feedback` (`console_assistant_notes` went with the console assistants, issue #750). `fit` joins them and measures each (characters and estimated tokens, characters / 4 rounded up; the provider's tokenizer is not here and the proxy reports only the total). With a budget (`PROMPT_BUDGET_<ROLE>`, else `PROMPT_BUDGET`, in estimated tokens; `docs/CONFIGURATION.md`) an over-budget prompt loses whole sections from the highest priority number down (memory and completed tasks 5; lessons, the wiki and the sprint board 4; repository and related code 3; requirements, standards and previous attempt 2), the later one first among equals, and ends with `## Left out of this prompt` naming them so the model reads them through its tools; priority 0 (format, task, brief, review feedback) is never cut. The measure (`budget`, `tokens`, `chars`, `system_tokens`, `sections` with `cut`, `cut`) goes on the run's evidence as `prompt_sections` (`worker/record`), an observation of the backend's own; without a budget nothing is cut and the prompt is the same text as before. `PROMPT_SECTIONS_OFF` names optional sections to leave out of every prompt for a with/without comparison (`sections_off`; required names and unknown ones are ignored, and `startup_warnings`, logged by `lifecycle.startup`, says so and lists the known names); they go before the budget applies, unnamed in the prompt, and the measure records `off` and `off_dropped` so a scorecard tells the runs apart. Studied: Aider's map token budget and OpenHands' condenser; no code taken.
+- `worker/prompt`: the read-only context (memory, lessons, done tasks,
+  standards, procedures); a failing reader leaves its section out.
+- `worker/prompt_budget`: the prompt as named sections in cache order. Over
+  `PROMPT_BUDGET` whole sections go, least important first, named under
+  `## Left out of this prompt`; priority 0 (format, task, brief, review
+  feedback) is never cut. The measure goes on the run's evidence as an
+  observation of the backend's own.
+- `worker/related`: the seeds of the `## Related code` section (the approved
+  architecture's modules for the task's requirements, files earlier runs
+  wrote).
+- `worker/wiki_section`: the company's wiki pages in force for the task.
+- `worker/sprint_notes`: writes a delivery's `NOTE … END` blocks to the sprint
+  board and puts the relevant notes in the prompt.
+- `task_routing.py`: estimates the task's difficulty and routes its model; the
+  estimate is an `estimated` event and goes on the run's evidence.
+- `edit_plan.py`: the Architect's edit plan in architect/editor mode (off by
+  default; [models](models.md)).
 
-### The related code's seeds
+### Delivery and QA
 
-**`backend/app/services/loop/worker/related.py`** (#438) — Where a task's `## Related code` section starts (`services/tools/code_graph.py`, [tools](tools.md)): the `path` of every module of the approved architecture (`planning.arch_author.approved_for`) that covers one of the task's requirements (`spec_planning.covers_of`; a criterion `REQ-1.2` names `REQ-1` too), then the files the daemon reports the task's own earlier runs wrote (`evidence.touched.written_by_task`), at most 50. `related_code_section` builds it for a role with the workspace tools while the daemon is reachable, in the task's tool root (`developer_tools.tool_root`), and `_developer_prompt` adds it as the `related_code` section (priority 3) right after `repository`; with no seeds, `CODE_GRAPH_MAX_CHARS` at `0` or no daemon it is empty, `fit` skips it and the prompt and its measure are what they were before. With seeds, it first starts `code_graph.persist_soon` with the approved architecture (`architecture_for`: its content as the sprint's specification sees it, and its id), in the background and for the company's project folder (`developer_tools.tool_root(company_id)`), never the task's worktree, so the stored code graph is brought up to date and its architecture edges recorded (second slice) without the task waiting; the section then reads the stored graph, or asks the daemon on demand (always for a worktree, and while a sync is part way through).
+- `worker/deliver`: the files to the daemon (`workspace.generate`, or queued on
+  `workspace.deliver`).
+- `delivery_checks.py`: guards the acceptance tests on a task branch; a test
+  written on a sibling branch is not run against this task.
+- `delivery_suites.py`: runs the suites of the folders the delivery wrote in and
+  the company's every-delivery commands in the sandbox, for the Verifier's
+  `required_commands` check.
+- `worker/board_writes`: every board transition as a task event; a `verified`
+  event names the run's latest verification.
+- `worker/quality_gate`: the form check before QA.
+- `answers.py`: reads a model's answer before anything is recorded.
+- `review_digest.py`, `worker/review_prompt`, `worker/review_evidence`: what QA
+  sees: every file within a fixed size, the agent's message labelled as a
+  claim, the platform's observations marked as ones a review does not settle.
+- `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold
+  for a person, and the one rework budget per task (`MAX_REWORKS`, or the
+  company's `max_reworks`).
+- `worker/messages`: hand-over messages (claims) and the ScrumMaster's triage of
+  an escalation.
 
-### The model by difficulty
+### Closing a sprint
 
-**`backend/app/services/loop/task_routing.py`** (#319) — Before each Developer attempt `worker/execute._execute_task` calls `route_task`: it reads the task's plan and board (the approved architecture's modules and paths for its criteria via `planning.arch_author`, its `depends_on`, the `delivered` events so far, the `NEEDS WORK:` requests and a person's send-backs), has models estimate the difficulty (`models.model_routing.estimate_task`, the architecture passed in), reads the company's routing policy else the deployment's (`models.model_routing.effective_policy`) and lets `models.model_routing.route` choose. It stores the estimate and the routing on the task as an `estimated` event (actor `system`, no comment) and returns them; the worker keeps them on the agent so `worker/record` puts them on the run's evidence as `difficulty` and `routing`, beside `AgentRun.model`, the model the proxy reported. Any failure falls back to the deployment's routing with no event; no policy, the role default ([models](models.md)).
-### The sprint board in the worker
+`worker/close`: the retrospective, one close across replicas, and at a first
+close the procedures round (`worker/procedures_round`: keep or revert
+procedures by the board's numbers) and the wiki compile (`wiki_close.py`, which
+never raises).
 
-**`backend/app/services/loop/worker/wiki_section.py`** / **`backend/app/services/loop/wiki_close.py`** (#445, [design](../design/PROJECT_WIKI.md)) — `wiki_section.section` is the `wiki` section of every Developer-path prompt, priority 4, before the vector memory: the company's pages in force (never `stale` or `proposed`) for the task's modules (by name, or by the module's path holding a file the task touches, `sprint_notes.task_scope`) and the concept pages linking its files or requirements, then the decisions and the glossary, within `WIKI_MAX_CHARS`, with control-looking lines quoted (`wiki.for_prompt`). `task_run._gather_context` asks `wiki_then_memory` instead of the vector memory: the engram search runs only when no module or concept page applies. `wiki_close.after_close` runs at a first sprint close, after the procedures round: it gathers the structured inputs (verified runs and their files from `evidence.touched.verified_writes`, the retrospective, the board's active notes, the approved architecture, the requirements), compiles (`learning.wiki_compile`), lints every page (`lint_company`: the evidence, and the daemon's `workspace.hash` of cited files without the Git workflow), optionally writes the compiled pages to `docs/wiki/` through `workspace.generate` (on `fabrique/wiki` with the workflow), and audits `wiki_compiled` / `wiki_written_to_repo`; it never raises.
+### Elsewhere
 
-**`backend/app/services/loop/worker/sprint_notes.py`** (#439, [design](../design/SPRINT_BOARD.md)) — After a delivery is recorded, `record_from_delivery` (called from `deliver._deliver_artifacts`) writes the deliverable's `NOTE … END` blocks as notes of the sprint (`services/tasks/sprint_board.add`) with the role, name, task and run, records the blocks that were not notes with their reason, drops a `supersedes` that names no active note while the note stands, and skips a note the task already left word for word; a failure never stops the delivery. `board_section` is the `sprint_board` section of every task prompt, priority 4: the sprint's active notes relevant to the task (`task_scope`: files named in the task, its modules' paths and earlier writes from `related.seeds_for`, its modules' ids and names, its requirements; `board_notes.relevance`), matched before sprint-wide, newest first, within `SPRINT_BOARD_MAX_CHARS`, then the format. Beside each file a note names, `with_observations` puts the latest verified run that wrote it (`evidence.touched.verified_writers`) in `observed`, a field apart from the claim.
+`replicas.py` (claims, recovery, one close): [platform](platform.md).
+`console_host.py` (the loop's side of a console producer):
+[producers](producers.md).
 
-### Acceptance tests on a task branch, and the verification an event names
+## See also
 
-**`backend/app/services/loop/delivery_checks.py`** (`guard_test_files`) / **`backend/app/services/loop/worker/board_writes.py`** (#329 retrospective) — Under the Git workflow a delivery's `acceptance` (read after the daemon's `git` answer, `deliver._deliver_artifacts` passing it to `evidence.acceptance.evidence_for`) holds the test files of the task branch's lineage in `test_hashes` and the sprint's other test files in `other_test_hashes`. The guard asks the daemon's `workspace.hash` for both: a sibling's file reported `present` (its base holds it) joins the guarded files, one that is not goes to `acceptance.not_on_branch` and is neither restored nor run, so a task is never refuted for a test written on a sibling branch; the sprint's integration (`release/integration.py`) still runs the whole suite. `board_writes` adds to every `verified` event that names a run the run's latest `Verification`, as `verification_id` and `payload.verification` (`{id, verdict}`), which the documentation pack joins on.
-
-### The folders' suites and the every-delivery commands
-
-**`backend/app/services/loop/delivery_suites.py`** (self-hosting retrospective, F5) — After the root's test run, `run` runs the suites of the folders the delivery wrote in (`workspace.delivery_commands.folders_to_run`, the daemon's write report) and then the company's every-delivery commands, each through `delivery_commands.run_in_folder` in the company's sandbox, appended to `evidence["command_runs"]` (and `folders_run`: which folders and why) for the Verifier's `required_commands` check. When the root has no suite of its own, `summarise` makes `test_run` the folders' suites read together (`summary_of: "command_runs"`: the first failure's exit status, else the first run that could not happen, else 0), so the per-criterion reading, the gate, `_earlier_failure` and a sprint's integration (`integration.status_of`, which also reads the runs) read one test run as before.
-
-### Other modules
-
-- `task_worker`: the facade of the task worker, the `task.assign` consumer the lifespan starts (`process_backlog_tasks`), re-exporting the stages of `worker/`.
-- `answers`: reads a model's answer before anything is recorded (`llm_content`, `llm_failure`, `llm_finish_reason`, `gate_reason`, `review_format_reminder`). A cut answer is sent back, never recorded.
-- `company_service` (`CompanyService`): a company's lifecycle: creating the tenant with its agents, quotas, sprint health for the dashboard, the agents' CRUD and the seed of the knowledge graph.
-- `worker/intake`: the consumer, the claim under the task's lock, the queue markers and the dispatch; it also runs the review cycle every 30 seconds.
-- `worker/task_run`: runs one claimed task: announce, gather context, execute, deliver, record.
-- `worker/messages`: the `AgentMessage` rows a task's hand-overs leave (claims, not evidence) and the ScrumMaster's triage of an escalation.
-- `worker/prompt`: the read-only context of a task's prompt (memory, lessons, done tasks, standards and procedures). A failing reader leaves its section out.
-- `worker/deliver`: sends the agent's files to the daemon on `workspace.generate`, or queues them on `workspace.deliver` and records the result from `workspace.delivered`.
-- `worker/quality_gate`: the form check on a deliverable's text before QA. A rejected one goes back as `Quality gate`, and is blocked for a person once the shared rework budget is spent.
-- `worker/review_evidence`: what the platform observed about a delivery, for QA (issue #766): the latest verification of the task's latest run, its verdict, each check's outcome and observation, and the end of the root's test output and of each folder's suite, marked as observations a review does not settle (`section`, `render`). QA was never shown them before.
-- `worker/review_prompt`: what QA is asked about one delivery (`build`): the task, the task branch as the daemon reads it with this attempt's message labelled as the agent's claim (`task_branch`, `workspace/branch_view`, issue #766), else the run's whole files or the board's text, the verdict markers, the previous attempt, the requirements, the standards and procedures, and the company's language for the review's reasons (`contracts/language.person_note`; `prompt.language_note` gives the task worker and the Architect the same line).
-- **Glassroom messages in the person's language:** the worker's fixed live-view messages carry `message_key` (`glassroom.events.<name>`) and `message_params` beside the English `message`; the live view translates them with `en.json` / `es.json` and falls back to `message` for a key it does not know (`frontend/src/lib/agentEvents.ts`). The stored records keep the English text.
-- `worker/qa_review`: QA's review of a delivered task: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold for a person and the task's one rework budget, `MAX_REWORKS` (default 3; every cause's `NEEDS WORK:` since a person's send-back, `TaskRecord.reworks`; `AUTOPILOT_MAX_REWORK_CYCLES` is read for one release with a warning when `MAX_REWORKS` is unset; `rework_limit` is the company's `max_reworks` when it set one, [platform](platform.md)'s `company_limits_setting`, else `MAX_REWORKS`, and QA, the delivery gate and the quality gate all read it), and `EDIT_INSTRUCTION`, what every rework asks: change only what the problem needs on the task branch, deliver only the files changed (issue #766).
-- `worker/procedures_round`: after a sprint closes, keeps or reverts procedures by the board's numbers and asks the ScrumMaster for new ones.
-
-## Described elsewhere
-
-- The task worker's steps, from `POST /v1/start_sprint` to the close of a sprint: [the sprint loop](../SPRINT_LOOP.md).
-- The worker's stages (`services/loop/worker/`) and what each owns: step 11b of [the migration record](../architecture/MIGRATION.md).
-- `replicas` (claims, recovery, one close): the locks and replicas paragraph in [platform](platform.md).
-- `edit_plan` (Architect and editor mode): the model routing text in [models](models.md).
-- `console_host`: the console producers paragraph in [producers](producers.md).
-- `carry_over`: step 6 of [the sprint loop](../SPRINT_LOOP.md) and the moves on the board below.
-- `delivery_checks`: step 6 of [the migration record](../architecture/MIGRATION.md).
-- `review_digest` (what QA is shown of a delivery: the board's digest within `DIGEST_CHARS`, never over it, and for the review the run's whole files within `REVIEW_CHARS`, `for_review`, read by `worker/qa_review` from the company's latest task-worker run): `test_review_digest.py` and `test_review_gate.py` in [testing](../TESTING.md).
-- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-11-first-part).
+- The task worker's steps: [the sprint loop](../SPRINT_LOOP.md).
+- Settings (`PROMPT_BUDGET`, `MAX_REWORKS`, `DELIVERY_TESTS_ENABLED`, `RUN_WINDOW_RECHECK_SECONDS`): [configuration](../CONFIGURATION.md).
+- Design: [segregation of duties](../design/SEGREGATION_OF_DUTIES.md), [project wiki](../design/PROJECT_WIKI.md), [sprint board](../design/SPRINT_BOARD.md).
