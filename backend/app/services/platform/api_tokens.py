@@ -50,6 +50,16 @@ BELOW_TOKEN = "creator_role_below_token"
 REFUSAL_AUDIT_EVERY = timedelta(hours=1)
 
 
+# Every raw token starts with this, so a request can be told to carry one.
+PREFIX = "fab_"
+
+
+def bearer_is_token(authorization: str | None) -> bool:
+    """Whether an ``Authorization`` header carries an API token (valid or not)."""
+    scheme, _, value = (authorization or "").partition(" ")
+    return scheme.lower() == "bearer" and value.strip().startswith(PREFIX)
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -66,7 +76,7 @@ def create_token(
 ) -> tuple[ApiToken, str]:
     if role not in TOKEN_ROLES:
         raise ValueError(f"role must be one of {', '.join(TOKEN_ROLES)}")
-    raw = "fab_" + secrets.token_urlsafe(32)
+    raw = PREFIX + secrets.token_urlsafe(32)
     token = ApiToken(
         company_id=company_id,
         name=name,

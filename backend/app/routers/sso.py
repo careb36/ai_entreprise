@@ -12,6 +12,9 @@ Endpoints:
 - ``POST /v1/auth/sso/exchange``    — trades the handoff code for the same
   browser session ``/v1/auth/login`` starts (HttpOnly cookies, issue #524).
 
+``start`` and ``exchange`` refuse a request whose ``Authorization`` header
+carries an API token (401): a token is for scripts and never signs a person in.
+
 Rate-limited per client address (``SSO_RATE_LIMIT``). The design and its
 threat model: ``docs/archive/design/SSO.md``.
 """
@@ -28,7 +31,7 @@ from logging_config import logger
 from pydantic import Field
 from schemas import STRICT, RequestModel
 from security import limiter
-from services.platform import oidc, sso_flow, sso_link
+from services.platform import api_tokens, oidc, sso_flow, sso_link
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1/auth/sso", tags=["Auth"])
@@ -36,6 +39,12 @@ router = APIRouter(prefix="/v1/auth/sso", tags=["Auth"])
 BINDING_COOKIE = "fabrique_sso_binding"
 COOKIE_PATH = "/v1/auth/sso"
 LINK_RETURN_PATH = "/account"
+API_TOKEN_REFUSED = "API tokens cannot be used to sign in with SSO"
+
+
+def _refuse_api_token(request: Request) -> None:
+    if api_tokens.bearer_is_token(request.headers.get("authorization")):
+        raise HTTPException(status_code=401, detail=API_TOKEN_REFUSED)
 
 
 def _rate_limit() -> str:
@@ -76,6 +85,7 @@ def sso_start(
     key: str,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
+    _refuse_api_token(request)
     if not auth_tokens.is_auth_configured():
         return _frontend(error="not_configured")
     try:
@@ -134,6 +144,7 @@ def sso_exchange(
     req: ExchangeRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
+    _refuse_api_token(request)
     if not auth_tokens.is_auth_configured():
         raise HTTPException(status_code=503, detail="Authentication is not configured")
     try:
