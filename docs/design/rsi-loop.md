@@ -193,7 +193,10 @@ product.
 - **Same models.** If the models served per role (scorecard `models`)
   differ between a B run and a C run, that pair is void. The proxy's
   fallback tiers can cause this (ADR 0011, superseded; the proxy's tiers
-  remain).
+  remain). The models are compared over the specifications both runs ran
+  and the roles both served: a role called on one side only (the
+  ScrumMaster, when a task is blocked) is an outcome, not a different
+  configuration.
 - **Graded in the sandbox** (PR 12; threat model
   [`SANDBOX_GRADING_THREAT_MODEL.md`](../archive/design/SANDBOX_GRADING_THREAT_MODEL.md)). The
   target measure and the bench's acceptance tests import C's code, so they
