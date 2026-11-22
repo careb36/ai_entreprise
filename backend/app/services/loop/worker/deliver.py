@@ -34,7 +34,7 @@ from services.contracts.manifest import (
 )
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
-from services.loop import delivery_checks, review_digest
+from services.loop import delivery_checks, refuted_undo, review_digest
 from services.loop.worker import board_writes, record, sprint_notes
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
@@ -338,6 +338,17 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
 
     recorded = await asyncio.to_thread(record._reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
+    undone = await refuted_undo.undo_refuted(
+        nats_client,
+        engine,
+        company_id=company_id,
+        item_id=item_id,
+        run_id=recorded[0] if recorded else None,
+        verdict=recorded[1] if recorded else None,
+        evidence=evidence,
+    )
+    if undone:
+        comment = f"{comment}. {undone}"
     await asyncio.to_thread(
         board_writes._append_item_comment,
         item_id,
@@ -479,6 +490,18 @@ async def _deliver_artifacts(
 
     if targets:
         comment = _delivery_comment(targets, evidence, recorded)
+        # Without Git a refuted delivery is taken back out (refuted_undo).
+        undone = await refuted_undo.undo_refuted(
+            nats_client,
+            engine,
+            company_id=sprint["company_id"],
+            item_id=item["id"],
+            run_id=recorded[0] if recorded else None,
+            verdict=recorded[1] if recorded else None,
+            evidence=evidence,
+        )
+        if undone:
+            comment = f"{comment}. {undone}"
         await asyncio.to_thread(
             board_writes._update_item_status,
             item["id"],
