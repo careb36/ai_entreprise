@@ -230,7 +230,11 @@ class Settings(BaseSettings):
     # before delivering, for at most this many rounds. ``run_tests`` is offered
     # only with ``DELIVERY_TESTS_ENABLED``.
     DEVELOPER_TOOLS_ENABLED: bool = True
-    DEVELOPER_TOOL_ROUNDS: int = 8
+    # 5, measured in phase D (issue #766): with 8, a third of the runs used
+    # every round, they were verified no more often, and the bench's specs 01
+    # and 02 did not fit a million tokens; with 5 both did, every criterion
+    # passed, and spec 01 cost a third less (DeepSeek) to three fifths less (Qwen).
+    DEVELOPER_TOOL_ROUNDS: int = 5
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's
     # output limit (services/models/model_profile.py).
