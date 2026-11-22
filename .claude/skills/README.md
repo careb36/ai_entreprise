@@ -10,6 +10,7 @@ task matches its description; a person can also ask for one by name
 |---|---|---|
 | [`sdl-review`](sdl-review/SKILL.md) | Reviewing a diff, PR or plan before opening a pull request that touches auth, secrets, cryptography, the daemon or sandbox, NATS, dependencies, CI or agent-executed code; findings with severity, file:line, practice and fix | Microsoft SDL practices 2–9 |
 | [`threat-model`](threat-model/SKILL.md) | A short STRIDE threat model of a new feature or design over this system's trust boundaries, saved in `docs/design/` or the PR | Microsoft SDL practice 3 |
+| [`ciberseguridad`](ciberseguridad/SKILL.md) | Secure development on any change to inputs, files, network, dependencies, auth, APIs, prompts/LLM, containers or deployment: the OWASP Top 10 as concrete rules, the gates per stack (bandit, pip-audit, npm audit, Trivy), OWASP pytm and a definition of done | OWASP Top 10, OWASP LLM Top 10, OWASP pytm |
 | [`sdl-program`](sdl-program/SKILL.md) | The quarterly or pre-release review of `SECURITY.md`, the bug bar, exceptions, security metrics, the incident plan and training notes | Microsoft SDL practices 1, 9, 10 |
 
 The practices, their sources and the map of what La Fabrique already has for

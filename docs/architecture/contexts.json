@@ -371,7 +371,6 @@
       ".devcontainer/": "mentions",
       ".claude/": "mentions",
       ".atl": "mentions",
-      ".opencode": "mentions",
       "AGENTS.md": "mentions",
       "ARCHITECTURE.md": "mentions",
       "CHANGELOG.md": "mentions",
