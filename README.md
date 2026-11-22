@@ -41,7 +41,7 @@ their work:
 
 - **Plan**: the PO turns a brief into a specification with testable criteria;
   the Architect proposes the architecture; the PO splits it into sprint tasks.
-- **Run sprints**: a board with five columns, a review of each run's diff like
+- **Run sprints**: a board with a column per status, a review of each run's diff like
   a pull request, and a retrospective at each sprint close.
 - **Work on your code**: the daemon writes files, runs tests in a sandbox, and
   can keep one git branch per task and publish a draft pull request.

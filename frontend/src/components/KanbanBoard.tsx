@@ -47,7 +47,7 @@ function prefersReducedMotion(): boolean {
 function BoardSkeleton() {
   return (
     <div className="flex min-w-0 gap-3 overflow-x-auto p-4" aria-hidden="true">
-      {BOARD_COLUMNS.map(c => (
+      {BOARD_COLUMNS.filter(c => c.id !== 'discarded').map(c => (
         <div key={c.id} className="panel w-64 flex-shrink-0 space-y-2 p-2">
           <div className="skeleton mb-3 h-5 w-28 rounded" />
           {[1, 2].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
@@ -144,6 +144,10 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
 
   const handleStatusChange = (itemId: number, newStatus: BoardStatus, announce = false) => {
     setNotice(null)
+    if (newStatus === 'discarded') {
+      setNotice({ text: t('kanban.discardFromTask'), error: true })
+      return
+    }
     const item = allItems.find(entry => entry.id === itemId)
     const column = BOARD_COLUMNS.find(c => c.id === newStatus)
     updateMutation.mutate({ itemId, data: { status: newStatus } }, {
@@ -269,7 +273,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
             className="min-h-[26rem] min-w-0 flex-1 snap-x snap-mandatory overflow-auto overscroll-x-contain focus-visible:outline-offset-[-2px] sm:snap-none lg:max-h-[calc(100dvh-14rem)]"
           >
             <div className="flex min-w-max items-start gap-3 p-3 sm:p-4 lg:min-w-0">
-              {BOARD_COLUMNS.map(({ id, titleKey }) => (
+              {BOARD_COLUMNS.filter(({ id }) => id !== 'discarded' || (columns[id] ?? []).length > 0).map(({ id, titleKey }) => (
                 <BoardColumn
                   key={id}
                   id={id}

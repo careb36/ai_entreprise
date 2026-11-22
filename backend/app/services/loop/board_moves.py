@@ -76,6 +76,9 @@ MOVED_NOTE = (
 REOPEN_ACTION = "sprint_reopened"
 REOPENABLE = ("completed", sprint_control.CANCELLED)
 CARRY_SOURCES = ("blocked", "todo")
+DISCARDED = "discarded"
+# A task no worker holds: one in progress or in review may have a run in flight.
+DISCARD_SOURCES = ("todo", "blocked")
 
 
 class BoardMoveError(ValueError):
@@ -98,8 +101,17 @@ def prepare(
     comment to record: the person's, or the send-back note for a bare move.
 
     Refuses (409) a move to To do in an archived sprint, before anything is
-    written.
+    written. A move to Discarded needs the person's reason as the comment
+    (422) and a task no worker holds, To do or Blocked (409).
     """
+    if status == DISCARDED and item.status != DISCARDED:
+        if not (comment or "").strip():
+            raise BoardMoveError(422, "Say why the task is discarded in the comment")
+        if item.status not in DISCARD_SOURCES:
+            raise BoardMoveError(
+                409,
+                f"Only a task in To do or Blocked can be discarded; this one is {item.status}",
+            )
     starts = sprint is not None and moves_to_todo(item, status)
     if starts and sprint.archived_at is not None:
         raise BoardMoveError(

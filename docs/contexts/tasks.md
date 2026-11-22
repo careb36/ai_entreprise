@@ -23,6 +23,10 @@ pending rework, the block reason, whether it waits for a person.
 
 ## Rules
 
+- A task has six statuses: `todo`, `in_progress`, `in_review`, `done`,
+  `blocked` and `discarded`. Done and discarded are settled; blocked is
+  settled only while it waits for a person. Only a person discards, with a
+  reason, as a `discarded` event; the history checker refuses one without.
 - `task_events.record` is the only way a transition is written. The event's
   actor must match the comment's author. The caller commits.
 - The chain is append-only and keyed with `AUDIT_SIGNING_KEY` (a chain apart

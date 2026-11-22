@@ -404,8 +404,8 @@ def block_reason(comments: Any) -> str:
 
 
 def item_is_settled(item: BacklogItem) -> bool:
-    """Done, or blocked until a person acts: nothing the worker does moves it."""
-    if item.status == "done":
+    """Done, discarded, or blocked until a person acts: nothing the worker does moves it."""
+    if item.status in ("done", "discarded"):
         return True
     if item.status != "blocked":
         return False

@@ -36,7 +36,7 @@ from datetime import datetime
 from typing import Any
 
 SERIES_VERSION = 1
-STATUSES = ("todo", "in_progress", "in_review", "blocked", "done")
+STATUSES = ("todo", "in_progress", "in_review", "blocked", "done", "discarded")
 VERDICTS = ("verified", "refuted", "unverifiable")
 NONE = "none"
 # The key a ``verified`` event's payload carries the Verifier's verdict under.

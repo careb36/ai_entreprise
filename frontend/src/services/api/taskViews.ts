@@ -36,7 +36,7 @@ export interface FilteredTask {
   id: number
   sprint_id: number
   title: string
-  status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked'
+  status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked' | 'discarded'
   priority: string
   assignee: string | null
   assignee_role: string | null

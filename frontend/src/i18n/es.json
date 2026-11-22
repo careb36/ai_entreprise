@@ -748,7 +748,8 @@
       "in_progress": "En Progreso",
       "in_review": "En Revisión",
       "done": "Terminado",
-      "blocked": "Bloqueado"
+      "blocked": "Bloqueado",
+      "discarded": "Descartada"
     },
     "deliveryVerdict": "Entrega: {{verdict}}",
     "qaReworksTitle": "Retrabajos de QA: {{count}}/{{limit}}",
@@ -779,7 +780,9 @@
       "planned": "planificado",
       "paused": "en pausa",
       "needs_split": "requiere división"
-    }
+    },
+    "discarded": "Descartada",
+    "discardFromTask": "Una tarea se descarta desde su página, con el motivo: abrí la tarea y usá Descartar."
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -905,7 +908,8 @@
       "in_progress": "En progreso",
       "in_review": "En revisión",
       "done": "Terminado",
-      "blocked": "Bloqueado"
+      "blocked": "Bloqueado",
+      "discarded": "Descartada"
     },
     "taskPriorityValue": {
       "low": "Baja",
@@ -4320,7 +4324,8 @@
       "medium": "Medio",
       "high": "Alto",
       "true": "Sí",
-      "false": "No"
+      "false": "No",
+      "discarded": "Descartada"
     },
     "listPlaceholder": "Valores separados por comas",
     "placeholder": {
@@ -4951,5 +4956,21 @@
       "already_read": "Este aviso ya está leído.",
       "notification_not_found": "Este aviso ya no existe."
     }
+  },
+  "taskComments": {
+    "title": "Comentarios",
+    "count_one": "{{count}} comentario",
+    "count_other": "{{count}} comentarios",
+    "empty": "Todavía no hay comentarios de una persona.",
+    "listLabel": "Comentarios de personas",
+    "formLabel": "Agregar un comentario",
+    "label": "Comentario",
+    "placeholder": "Una nota para el equipo, o por qué se descarta la tarea",
+    "add": "Agregar comentario",
+    "discard": "Descartar tarea",
+    "discardNeedsReason": "Escribí el motivo primero",
+    "discardHelp": "Para descartar hace falta el motivo de arriba. Una tarea descartada no se ejecuta ni pasa a otro sprint; reabrila para que vuelva a empezar.",
+    "discardedNote": "Descartada por una persona: no se ejecuta ni pasa a otro sprint. El motivo está en los comentarios.",
+    "reopen": "Reabrir (mover a Por hacer)"
   }
 }

@@ -138,11 +138,12 @@ the task back.
 ### 3.5 Binding: columns, kinds and the sprint's close
 
 **Custom columns.** A company may add columns such as "Design review". Each
-maps to **exactly one** of the five statuses (`todo`, `in_progress`,
-`in_review`, `done`, `blocked`), so a column is a view over a status:
+maps to **exactly one** of the six statuses (`todo`, `in_progress`,
+`in_review`, `done`, `blocked`, `discarded`), so a column is a view over a
+status:
 
 - Task events, the history checker, dependencies, the inbox and sprint
-  closing read only the five statuses.
+  closing read only the six statuses.
 - A move between columns of one status changes no status and records no
   event. A move to another status's column is today's status move, with its
   rules.

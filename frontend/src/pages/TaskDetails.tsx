@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  ArrowLeft, Ban, Circle, CircleCheck, CirclePlay, ClipboardCheck, ClipboardList, Clock, Eye, Flag, Hourglass,
+  ArrowLeft, Ban, Circle, CircleX, CircleCheck, CirclePlay, ClipboardCheck, ClipboardList, Clock, Eye, Flag, Hourglass,
   MessageSquare, RefreshCw, RotateCcw, SearchX, ShieldCheck, User, type LucideIcon,
 } from 'lucide-react'
 import { Verdict } from '../components/Verdict'
@@ -17,6 +17,7 @@ import { TaskCostCard } from '../components/CostSummary'
 import { TaskRelations } from '../components/TaskRelations'
 import { RunSecretsPanel } from '../components/RunSecretsPanel'
 import { TaskEventLog } from '../components/TaskEventLog'
+import { TaskComments } from '../components/TaskComments'
 import { TaskEditForm } from '../components/TaskEditForm'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { CountPill, EmptyState, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
@@ -29,6 +30,7 @@ const STATUS_LOOK: Record<BacklogItem['status'], { icon: LucideIcon; tone: Statu
   in_review: { icon: Eye, tone: 'warning' },
   done: { icon: CircleCheck, tone: 'success' },
   blocked: { icon: Ban, tone: 'danger' },
+  discarded: { icon: CircleX, tone: 'neutral' },
 }
 
 const PRIORITY_TONES: Record<BacklogItem['priority'], StatusTone> = {
@@ -319,6 +321,7 @@ export default function TaskDetails() {
         </dl>
       </Panel>
 
+      <TaskComments task={task} />
       {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
       {companyId !== null && <TaskRelations taskId={task.id} />}
       {companyId !== null && <RunSecretsPanel companyId={companyId} taskId={task.id} />}

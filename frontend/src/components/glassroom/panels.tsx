@@ -18,6 +18,7 @@ export function SprintTaskPanel({ tasks, sprintId }: { tasks: SprintTaskEntry[];
     in_review: 'bg-amber-500/10 text-amber-300',
     done: 'bg-emerald-500/10 text-emerald-300',
     blocked: 'bg-red-500/10 text-red-300',
+    discarded: 'bg-surface-800 text-gray-500',
   }
 
   const priorityTone: Record<SprintTaskEntry['priority'], string> = {

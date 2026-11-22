@@ -21,6 +21,8 @@ and reports histories the loop must never produce:
   after this task's first deliverable;
 - ``decision_without_escalation``: a ScrumMaster decision that names an
   escalation the task never had;
+- ``discarded_without_person``: discarded with no note from a person (the
+  reason) at or after the move;
 - ``criteria_verified_without_run``: a run whose Verifier marked a criterion's
   acceptance test as passed with no observed test run (no exit status from the
   daemon) in its evidence.
@@ -33,7 +35,9 @@ beside the thread and never instead of it:
   event it renders (its author or its text);
 - and, once the events render the whole thread (every comment names one and
   none is a ``legacy`` marker): ``done_without_approval_event`` (done with no
-  ``reviewed`` approval and no ``approved_by_person`` event) and
+  ``reviewed`` approval and no ``approved_by_person`` event),
+  ``discarded_without_event`` (discarded with no ``discarded`` event from a
+  person carrying the reason) and
   ``status_differs_from_events`` (the status the latest transition left is
   not the task's).
 
@@ -234,6 +238,13 @@ def check_events(
         for e in events
     ):
         violations.append("done_without_approval_event")
+    if status == "discarded" and not any(
+        e.get("kind") == "discarded"
+        and (e.get("payload") or {}).get("author") == _PERSON
+        and str((e.get("payload") or {}).get("text") or "").strip()
+        for e in events
+    ):
+        violations.append("discarded_without_event")
     left = next(
         (e.get("task_status") for e in reversed(events) if e.get("task_status")),
         "todo",
@@ -277,6 +288,9 @@ def check_task(
     for index in approvals:
         if not any(_is_deliverable(c) for c in comments[:index]):
             violations.append(f"approved_without_delivery: comment {index}")
+
+    if status == "discarded" and not person_notes:
+        violations.append("discarded_without_person")
 
     if status == "done":
         if not approvals and not person_notes:

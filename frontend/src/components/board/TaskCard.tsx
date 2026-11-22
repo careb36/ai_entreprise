@@ -5,7 +5,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Hourglass, MessageSquare } from 'lucide-react'
 import type { AgentRunListItem, BacklogItem } from '../../services/api'
-import { VALID_STATUSES, adjacentStatus, needsPerson, relativeTime, type BoardStatus } from '../../lib/kanban'
+import { MOVE_TARGETS, adjacentStatus, needsPerson, relativeTime, type BoardStatus } from '../../lib/kanban'
 import type { BoardDensity } from '../../hooks/useBoardPreferences'
 import { ObservedSignals, ReportedSignals } from './CardSignals'
 import { RoleAvatar } from './RoleAvatar'
@@ -20,6 +20,7 @@ const PRIORITY_DOT: Record<string, string> = {
 /** The left edge says what needs attention; the words on the card say it too. */
 function accentOf(item: BacklogItem): string {
   if (item.status === 'blocked') return 'border-l-red-500'
+  if (item.status === 'discarded') return 'border-l-surface-600'
   if (needsPerson(item)) return 'border-l-amber-400'
   if (item.status === 'in_review') return 'border-l-yellow-500/60'
   if (item.status === 'done') return 'border-l-emerald-600/60'
@@ -148,7 +149,7 @@ export function TaskCard({
           className="select mt-2 h-7 w-full border-surface-700 bg-surface-900/60 py-0 text-[11px] text-gray-300 disabled:opacity-50"
           aria-label={t('kanban.changeStatus')}
         >
-          {VALID_STATUSES.map(s => (
+          {(item.status === 'discarded' ? [...MOVE_TARGETS, item.status] : MOVE_TARGETS).map(s => (
             <option key={s} value={s}>{t(`kanban.status.${s}`, s)}</option>
           ))}
         </select>

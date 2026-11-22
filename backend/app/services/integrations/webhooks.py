@@ -219,7 +219,7 @@ def _events_in(session: OrmSession) -> list[tuple[int, str, dict[str, Any]]]:
     for obj in list(session.new) + list(session.dirty):
         if isinstance(obj, BacklogItem) and obj.id is not None:
             status = _changed_to(obj, "status")
-            if status not in ("done", "blocked"):
+            if status not in ("done", "blocked", "discarded"):
                 continue
             sprint = session.get(Sprint, obj.sprint_id)
             if sprint is None:

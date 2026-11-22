@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import type { FilteredTask, GroupField, ViewColumn, ViewLayout } from '../services/api'
 
-const STATUSES: FilteredTask['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
+const STATUSES: FilteredTask['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked', 'discarded']
 
 type Translate = ReturnType<typeof useTranslation>['t']
 
