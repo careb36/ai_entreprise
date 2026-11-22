@@ -1,0 +1,147 @@
+{
+  "account": {
+    "git_user_name": "openhands",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "edc8d1d1aeb03580fdde02a248fd8895eb33ff5a",
+    "name": "docs/concise-2"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "8f646a7bc1c357655710c9a290b502aac3998aa3",
+  "duration_seconds": 866.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-22T03:57:40Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-43-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/8f646a7bc1c357655710c9a290b502aac3998aa3.20261122T034314Z.log",
+    "sha256": "266c3e2f0c5376e6755c267c46eeaac9cfaa638f71ee15850b8757217797d5e2"
+  },
+  "main_before": "046881bf9e1db33353aea10e87390e5f415702b9",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "046881bf9e1db33353aea10e87390e5f415702b9",
+    "edc8d1d1aeb03580fdde02a248fd8895eb33ff5a"
+  ],
+  "protected_paths": [
+    {
+      "path": "AGENTS.md",
+      "pattern": "AGENTS.md"
+    },
+    {
+      "path": "CLAUDE.md",
+      "pattern": "CLAUDE.md"
+    },
+    {
+      "path": "bench/README.md",
+      "pattern": "bench/**"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "93070dbc8936662fa1456d9d71970b615338553c",
+  "started_at": "2026-11-22T03:43:14Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n 2)",
+      "seconds": 613.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 40.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 8.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 111.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 63.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 6.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 1.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "66ef38621b6beebb10b09acfbb98c373bc5243e8"
+}
