@@ -133,6 +133,39 @@ def test_the_plan_stays_within_the_scope_dropping_tasks_from_the_end():
     ] == ["Docs"]
 
 
+def test_a_qa_task_writing_tests_the_test_tasks_write_is_left_out():
+    # Phase D's bench (issue #766): the PO planned QA test tasks over the
+    # criteria its acceptance tests already covered.
+    tasks = [
+        {"title": "Store", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
+        {"title": "Unit tests for store", "assignee": "QA", "covers": ["REQ-1.1"]},
+        {
+            "title": "Board",
+            "assignee": "Developer",
+            "covers": ["REQ-2.1"],
+            "depends_on": [1],
+        },
+        {"title": "Performance check", "assignee": "QA", "covers": []},
+        {"title": "Tests for the board", "assignee": "qa", "covers": ["REQ-2.1"]},
+    ]
+    planned = acceptance.with_test_tasks(tasks, SPEC, item_limit=10)
+    titles = [t["title"] for t in planned]
+    assert "Unit tests for store" not in titles
+    assert "Tests for the board" not in titles
+    # A QA task without criteria stays.
+    assert "Performance check" in titles
+    # Board waited for the duplicate: it waits for REQ-1's test task instead.
+    board = planned[titles.index("Board")]
+    req1_tests = titles.index("Acceptance tests for REQ-1: List the tasks")
+    assert req1_tests in board["depends_on"]
+    # QA alone covering a requirement: nothing implements it, so its test
+    # task is not planned for it and the QA task stays.
+    alone = acceptance.with_test_tasks(
+        [{"title": "QA only", "assignee": "QA", "covers": ["REQ-1.1"]}], SPEC, 10
+    )
+    assert "QA only" in [t["title"] for t in alone]
+
+
 # --- the independent check ---------------------------------------------------
 
 

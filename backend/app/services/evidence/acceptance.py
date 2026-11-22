@@ -4,7 +4,8 @@ A sprint planned from a specification gets, before its implementation
 tasks, one **test-writing task per requirement** (``kind ==
 ACCEPTANCE_KIND``, assigned to QA): one test per acceptance criterion,
 named after the criterion id (``REQ-1.2`` → ``test_req_1_2_…``), written
-through the daemon like any file. Each implementation task depends on the
+through the daemon like any file. A QA task of the PO's plan that would write
+tests for criteria those tasks already cover is left out of the plan. Each implementation task depends on the
 test tasks of the requirements it covers, so the Developer always has the
 tests to make pass, and its prompt names the test files.
 
@@ -113,12 +114,15 @@ def with_test_tasks(
         for c in r.get("criteria") or []
         if c.get("id")
     }
+    duplicates = _duplicate_test_tasks(tasks, requirement_of)
     kept: list[
         tuple[int, dict[str, Any], list[int]]
     ] = []  # (old position, task, test positions)
     test_tasks: list[dict[str, Any]] = []
     test_position: dict[str, int] = {}
     for old, task in enumerate(tasks):
+        if old in duplicates:
+            continue
         requirements = list(
             dict.fromkeys(
                 requirement_of[c]["id"]
@@ -144,10 +148,62 @@ def with_test_tasks(
             for d in task.get("depends_on") or []
             if isinstance(d, int) and d in old_to_new
         ]
+        # A task that waited for a duplicate left out waits for the test
+        # tasks that write those criteria's tests instead.
+        deps += [
+            test_position[r]
+            for d in task.get("depends_on") or []
+            if isinstance(d, int) and d in duplicates
+            for r in duplicates[d]
+            if r in test_position
+        ]
         result.append(
             {**task, "kind": None, "depends_on": list(dict.fromkeys(tests_of + deps))}
         )
     return result
+
+
+def _duplicate_test_tasks(
+    tasks: list[dict[str, Any]], requirement_of: dict[str, dict[str, Any]]
+) -> dict[int, list[str]]:
+    """The PO's QA tasks that would write tests the test tasks already write:
+    by position, the requirements each covers.
+
+    Phase D's bench (issue #766): the PO planned "Write unit tests for count"
+    for QA over the criteria its acceptance tests already covered, and QA's
+    test writing took up to three quarters of a run's tokens. A QA task is a
+    duplicate when every criterion it covers belongs to a requirement that
+    another task implements, so that requirement gets its test task anyway.
+    A QA task without criteria (a strategy, a performance check) stays."""
+    implemented = {
+        requirement_of[c]["id"]
+        for t in tasks
+        if str(t.get("assignee") or "").strip().upper() != QA_ROLE
+        for c in t.get("covers") or []
+        if c in requirement_of
+    }
+    duplicates = {}
+    for position, task in enumerate(tasks):
+        covers = task.get("covers") or []
+        if (
+            str(task.get("assignee") or "").strip().upper() == QA_ROLE
+            and covers
+            and all(
+                c in requirement_of and requirement_of[c]["id"] in implemented
+                for c in covers
+            )
+        ):
+            duplicates[position] = list(
+                dict.fromkeys(requirement_of[c]["id"] for c in covers)
+            )
+    if duplicates:
+        logger.info(
+            "Plan: %d QA task(s) left out, their criteria's acceptance tests "
+            "are planned already: %s",
+            len(duplicates),
+            ", ".join(str(tasks[p].get("title", "")) for p in duplicates),
+        )
+    return duplicates
 
 
 def section(session: Session, sprint: Sprint, item: Any) -> str:
