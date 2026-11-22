@@ -32,7 +32,13 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.evidence import acceptance, delivery_gate
-from services.loop import refuted_undo, replicas, run_window_gate, sprint_control
+from services.loop import (
+    refuted_undo,
+    repeat_delivery,
+    replicas,
+    run_window_gate,
+    sprint_control,
+)
 from services.loop.worker import close, messages, qa_review, record
 from services.models import model_routing
 from services.platform import locks
@@ -309,7 +315,14 @@ async def _send_back_from_delivery_gate(
     problem, observation = gate
     previous_gate_reworks = task_record.reworks()
     limit = qa_review.rework_limit(session, sprint.company_id)
-    rework = previous_gate_reworks < limit
+    # The same bytes as the refuted attempt before get the same verdict
+    # (``repeat_delivery``): a person looks instead of another attempt.
+    same = (
+        repeat_delivery.repeated(session, sprint.company_id, item.id)
+        if problem in delivery_gate.CODE_PROBLEMS
+        else None
+    )
+    rework = previous_gate_reworks < limit and same is None
     instruction = _code_instruction(item, problem) + (
         refuted_undo.UNDONE_INSTRUCTION
         if refuted_undo.undone(session, sprint.company_id, item.id)
@@ -325,6 +338,8 @@ async def _send_back_from_delivery_gate(
         text=(
             f"NEEDS WORK: {problem} — {observation}. {instruction}"
             if rework
+            else repeat_delivery.blocked_text(problem, same, observation)
+            if same
             else f"{problem.capitalize()} after {previous_gate_reworks} "
             f"rework(s) — blocked for manual triage: {observation}"
         ),

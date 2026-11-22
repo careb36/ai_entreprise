@@ -1118,6 +1118,9 @@
       "test_release_notes.py": [
         "repo"
       ],
+      "test_repeat_delivery.py": [
+        "loop"
+      ],
       "test_replicas.py": [
         "management"
       ],
