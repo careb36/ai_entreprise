@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
+import { companyLabel } from '../lib/companyLabel'
 
 export default function ProtectedRoute() {
   const location = useLocation()
@@ -16,6 +17,7 @@ export default function ProtectedRoute() {
   const loadMe = useAuthStore(state => state.loadMe)
   const logout = useAuthStore(state => state.logout)
   const companyId = useAppStore(state => state.companyId)
+  const companyName = useAppStore(state => state.companyName)
   const setCompany = useAppStore(state => state.setCompany)
   const authenticated = Boolean(expiresAt && expiresAt > Date.now())
 
@@ -28,16 +30,18 @@ export default function ProtectedRoute() {
     if (meLoaded && !loadingMe && !profileError && memberships.length === 1) {
       const membership = memberships[0]
       if (companyId !== membership.company_id) {
-        setCompany(
-          membership.company_id,
-          t('auth.companyPlaceholder', {
-            id: membership.company_id,
-            defaultValue: 'Company {{id}}',
-          }),
-        )
+        setCompany(membership.company_id, companyLabel(memberships, membership.company_id, t))
       }
     }
   }, [companyId, loadingMe, memberships, meLoaded, profileError, setCompany, t])
+
+  // The selected company's name as the backend sends it: a name kept from
+  // before (the "Company <id>" placeholder, or a renamed company) is replaced.
+  useEffect(() => {
+    if (!meLoaded || companyId === null) return
+    const name = memberships.find(m => m.company_id === companyId)?.company_name?.trim()
+    if (name && name !== companyName) setCompany(companyId, name)
+  }, [companyId, companyName, memberships, meLoaded, setCompany])
 
   if (!authenticated) {
     const from = `${location.pathname}${location.search}${location.hash}`

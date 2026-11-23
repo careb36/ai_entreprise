@@ -5,6 +5,7 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
+import { companyLabel } from '../lib/companyLabel'
 import { CountPill, EmptyState, PageHeader, Panel } from '../components/ui'
 
 export default function CompanySelect() {
@@ -16,10 +17,7 @@ export default function CompanySelect() {
 
   function selectCompany(companyId: number) {
     queryClient.removeQueries()
-    setCompany(
-      companyId,
-      t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' }),
-    )
+    setCompany(companyId, companyLabel(memberships, companyId, t))
     navigate(safeReturnPath(searchParams.get('from')), { replace: true })
   }
 
@@ -44,7 +42,7 @@ export default function CompanySelect() {
                 >
                   <Building2 size={15} aria-hidden="true" className="flex-shrink-0 text-gray-400" />
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-gray-100">
-                    {t('auth.companyPlaceholder', { id: company_id, defaultValue: 'Company {{id}}' })}
+                    {companyLabel(memberships, company_id, t)}
                   </span>
                   <span className="chip">{human_role}</span>
                   <ChevronRight size={14} aria-hidden="true" className="flex-shrink-0 text-gray-400 group-hover:text-brand-300" />

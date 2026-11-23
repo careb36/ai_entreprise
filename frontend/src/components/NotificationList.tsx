@@ -11,6 +11,7 @@ import {
 import { errorDetail, type NotificationState, type PersonalNotification } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { useAppStore } from '../store/useAppStore'
+import { companyLabel } from '../lib/companyLabel'
 import { EmptyState, Panel } from './ui'
 import { SegmentedFilter } from './ui/SegmentedFilter'
 
@@ -112,7 +113,7 @@ export function NotificationList() {
                         {notice.snoozed_until && ` · ${t('personalNotifications.snoozedUntil', { date: when(notice.snoozed_until) })}`}
                       </p>
                       <Link to={notificationLink(notice)} className="text-xs text-brand-300 underline"
-                        onClick={() => { if (notice.company_id !== companyId) setCompany(notice.company_id, null) }}>
+                        onClick={() => { if (notice.company_id !== companyId) setCompany(notice.company_id, companyLabel(memberships, notice.company_id, t)) }}>
                         {t('personalNotifications.open')}
                       </Link>
                     </div>

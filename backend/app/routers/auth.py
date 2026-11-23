@@ -33,7 +33,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from logging_config import logger
-from models import CompanyMember, User
+from models import Company, CompanyMember, User
 from passwords import (
     burn_verify,
     hash_password,
@@ -277,6 +277,18 @@ async def get_me(
     memberships = session.exec(
         select(CompanyMember).where(CompanyMember.user_id == user.id)
     ).all()
+    ids = {membership.company_id for membership in memberships}
+    # The company's name with each membership, so the app names the company
+    # it switches to instead of "Company <id>".
+    names = (
+        dict(
+            session.exec(
+                select(Company.id, Company.company_name).where(Company.id.in_(ids))
+            ).all()
+        )
+        if ids
+        else {}
+    )
     return {
         "user_id": user.id,
         "email": user.email,
@@ -285,6 +297,7 @@ async def get_me(
         "memberships": [
             {
                 "company_id": membership.company_id,
+                "company_name": names.get(membership.company_id),
                 "human_role": membership.human_role,
                 # Raised by the member's teams (never to Owner); what the
                 # routes check (auth_policy.require_company_role).
