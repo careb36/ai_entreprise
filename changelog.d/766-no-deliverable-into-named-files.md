@@ -1,0 +1,3 @@
+Fixed
+
+* **An answer without a `path=` block no longer overwrites the files its task names.** A deliverable that declared no files was written, whole, into every file named in its task's title or description: a fallback from before the file manifest. In sprints 4 and 5 (2026-11-23) it put plans in prose into `backend/tests/test_browser_image.py`, `docs/architecture/contexts.json`, `scripts/check_file_sizes.py` and `scripts/check_architecture.py`, because their tasks mentioned them. Files now come only from the `path=` manifest and the agent's tool edits; an answer without them is text for QA to read.
