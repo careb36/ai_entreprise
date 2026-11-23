@@ -48,6 +48,16 @@ describe('ProjectSettings', () => {
     queryClient.clear()
   })
 
+  it('offers the export to the Owner only', async () => {
+    vi.stubGlobal('fetch', routed())
+    const { unmount } = renderAs('Manager')
+    await screen.findByRole('form', { name: 'Stack profile' })
+    expect(screen.queryByRole('button', { name: 'Export to a file' })).not.toBeInTheDocument()
+    unmount()
+    renderAs('Owner')
+    expect(await screen.findByRole('button', { name: 'Export to a file' })).toBeInTheDocument()
+  })
+
   it('shows a viewer the settings read-only', async () => {
     vi.stubGlobal('fetch', routed())
     renderAs('Viewer')

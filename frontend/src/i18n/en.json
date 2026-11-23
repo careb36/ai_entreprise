@@ -5087,5 +5087,17 @@
       "credential": "Project credential: {{type}}, {{access}} access.",
       "environment": "Environment variable {{name}} for the {{scope}}."
     }
+  },
+  "companyExport": {
+    "title": "Export the company",
+    "hint": "Save this company's configuration as a file that another La Fabrique can import: settings, agents, business units, routines and provider connections. Secrets are left out and named, so whoever imports it knows what to supply; lines that look like a key or a password are replaced. Members, sprints, tasks and the audit log are not in the file. The export is recorded in the audit log.",
+    "submit": "Export to a file",
+    "exporting": "Exporting…",
+    "failed": "The export failed: {{message}}",
+    "saved": "Saved as {{name}}.",
+    "leftOut_one": "{{count}} secret was left out and is named in the file.",
+    "leftOut_other": "{{count}} secrets were left out and are named in the file.",
+    "redacted_one": "{{count}} line that looked like a secret was replaced.",
+    "redacted_other": "{{count}} lines that looked like secrets were replaced."
   }
 }

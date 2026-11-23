@@ -5087,5 +5087,17 @@
       "credential": "Credencial de proyecto: {{type}}, acceso {{access}}.",
       "environment": "Variable de entorno {{name}} para {{scope}}."
     }
+  },
+  "companyExport": {
+    "title": "Exportar la empresa",
+    "hint": "Guarda la configuración de esta empresa en un archivo que otra La Fabrique puede importar: ajustes, agentes, unidades de negocio, rutinas y conexiones de proveedores. Los secretos quedan fuera y se nombran, para que quien lo importe sepa qué cargar; las líneas que parecen una clave o una contraseña se reemplazan. Los miembros, sprints, tareas y el registro de auditoría no van en el archivo. La exportación queda en el registro de auditoría.",
+    "submit": "Exportar a un archivo",
+    "exporting": "Exportando…",
+    "failed": "La exportación falló: {{message}}",
+    "saved": "Guardado como {{name}}.",
+    "leftOut_one": "{{count}} secreto quedó fuera y está nombrado en el archivo.",
+    "leftOut_other": "{{count}} secretos quedaron fuera y están nombrados en el archivo.",
+    "redacted_one": "Se reemplazó {{count}} línea que parecía un secreto.",
+    "redacted_other": "Se reemplazaron {{count}} líneas que parecían secretos."
   }
 }

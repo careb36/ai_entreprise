@@ -116,7 +116,7 @@ component is named.
 | `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` |
 | `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
 | `/company/usage`, `/company/quotas`, `/company/models`, `/company/model-catalog` | `Usage`, `components/QuotaPanel`, `Models`, `ModelCatalog` |
-| `/company/project`, `/company/execution`, `/company/mcp` | `ProjectSettings`, `ExecutionSettings`, `McpServers` |
+| `/company/project`, `/company/execution`, `/company/mcp` | `ProjectSettings` (with the Owner's company export), `ExecutionSettings`, `McpServers` |
 | `/company/routines` | `Routines` (with `pages/routines/`): the company's scheduled tasks, run now with values, revisions and restore |
 | `/company/notifications`, `/company/api-tokens` | `Notifications` (the webhook), `ApiTokens` |
 | `/company/audit-trail`, `/company/audit-anchors` | `AuditTrail`, `AuditAnchors` |

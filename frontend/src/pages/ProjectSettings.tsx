@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Layers, Users } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
+import CompanyExportPanel from '../components/CompanyExportPanel'
 import { errorDetail } from '../services/api'
 import {
   COMMAND_FIELDS, TEAM_SELECTIONS, useSetStackProfile, useSetTeamSelection, useStackProfile, useTeamSelection,
@@ -42,10 +43,12 @@ export function overridesFrom(
  * Project settings (`/company/project`): how the factory builds and tests the
  * project (the stack profile's overrides of the detection) and how a
  * sprint's team is chosen. Every member reads them; a Manager changes them.
+ * The Owner also exports the company's configuration as a file here.
  */
 export default function ProjectSettings() {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
+  const companyName = useAppStore(state => state.companyName)
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
   const stack = useStackProfile(companyId)
@@ -57,6 +60,7 @@ export default function ProjectSettings() {
       {stack.isLoading ? <LoadingRows rows={2} label={t('projectSettings.stack.loading')} />
         : stack.isError ? <LoadError onRetry={() => stack.refetch()}>{errorDetail(stack.error)}</LoadError>
           : stack.data && <StackPanel key={JSON.stringify(stack.data.overrides)} setting={stack.data} canManage={canManage} />}
+      {role === 'Owner' && <CompanyExportPanel companyId={companyId} companyName={companyName} />}
     </div>
   )
 }
