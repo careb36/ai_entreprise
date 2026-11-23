@@ -275,3 +275,24 @@ def test_the_tools_look_at_the_task_s_worktree_once_it_delivered_there(
         )
     finally:
         developer_tools.unbind()
+
+
+def test_the_toolbox_passes_the_window_a_read_asks_for(project):
+    """A Developer reads 400 lines in one call, within its result budget."""
+    daemon = _load_daemon()
+    (project / "src" / "long.py").write_text(
+        "".join(f"v{i} = {i}\n" for i in range(642))
+    )
+    requester = _Requester(daemon)
+    box = developer_tools.WorkspaceToolbox(requester, str(project))
+    box.result_max_chars = 16000
+    _observation, text = box.call(
+        _call("workspace__read", path="src/long.py", lines=400), 1
+    )
+    assert requester.calls[-1][1]["lines"] == 400
+    assert "[src/long.py: lines 1–400 of 642]" in text
+    assert "read on with start_line=401" in text
+    _rest, text = box.call(
+        _call("workspace__read", path="src/long.py", start_line=401, lines=400), 1
+    )
+    assert "[src/long.py: lines 401–642 of 642]" in text and "v641 = 641" in text
