@@ -89,15 +89,28 @@ def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
             [tr("section.all")],
         )
     verified, merged = latest_verification(snapshot), integrated_at(snapshot)
+    rows: list[dict[str, Any]] = []
     if len(listed) == 1:
-        body = _trace_of(snapshot, listed[0], src, missing, verified, merged)
+        body = _trace_of(snapshot, listed[0], src, missing, verified, merged, rows)
     else:
         body = specs.intro(snapshot, src)
         for spec in listed:
             body += [specs.heading(spec, src.cite(spec_ref(spec, lang)), lang), ""]
-            body += [*_trace_of(snapshot, spec, src, missing, verified, merged), ""]
+            body += [
+                *_trace_of(snapshot, spec, src, missing, verified, merged, rows),
+                "",
+            ]
     inputs = specs.inputs(snapshot, TRACE_INPUTS)
-    return build("traceability", PMBOK, body, src, snapshot, inputs, missing)
+    return build(
+        "traceability",
+        PMBOK,
+        body,
+        src,
+        snapshot,
+        inputs,
+        missing,
+        data={"trace": rows},
+    )
 
 
 def _trace_of(
@@ -107,7 +120,10 @@ def _trace_of(
     missing: list,
     verified: dict,
     merged: dict,
+    rows: list[dict[str, Any]],
 ) -> list[str]:
+    """The matrix of *spec*; each requirement's links also go to *rows*, as
+    data (a requirement with no task has an empty ``tasks``)."""
     lang, tr = src.lang, texts.translator(src.lang)
     body = [
         tr(
@@ -124,6 +140,10 @@ def _trace_of(
         req_id = str(req.get("id"))
         rmark = src.cite(requirement_ref(spec, req, lang))
         tasks = covering(snapshot, req_id, spec)
+        links: list[dict[str, Any]] = []
+        rows.append(
+            {"specification": spec.get("id"), "requirement": req_id, "tasks": links}
+        )
         if not tasks:
             body.append(
                 f"| {md_id(req_id)} | - | {tr('dash_none')} | - | - | - | {rmark} |"
@@ -156,6 +176,22 @@ def _trace_of(
                         )
                     )
                 )
+            links.append(
+                {
+                    "task_id": task.get("id"),
+                    "status": task.get("status"),
+                    "covers": [
+                        str(c)
+                        for c in task.get("covers") or []
+                        if str(c) == req_id or str(c).startswith(f"{req_id}.")
+                    ],
+                    "verdict": check.get("verdict") if check else None,
+                    "integrated": task.get("id") in merged,
+                    "commit": merged[task.get("id")][1]
+                    if task.get("id") in merged
+                    else None,
+                }
+            )
             body.append(
                 f"| {md_id(req_id)} | {', '.join(criteria) or '-'} | T-{md_id(task.get('id'))} "
                 f"{cell(task.get('title'), 60)} | {cell(texts.status(lang, task.get('status')))} | "

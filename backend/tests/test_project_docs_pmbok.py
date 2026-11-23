@@ -108,3 +108,23 @@ def test_the_check_results_compute_what_the_records_answer_and_leave_the_rest():
         "Stakeholders outside the company are engaged",
     ]
     assert {r["domain"] for r in checks.run(_snapshot())} == set(layout.DOMAINS)
+
+
+def test_the_matrix_and_the_checks_carry_their_records_as_data():
+    """What a grader reads without parsing the Markdown (issue #698)."""
+    docs, _ = _docs(_snapshot())
+    trace = {row["requirement"]: row for row in docs["traceability"]["data"]["trace"]}
+    assert trace["REQ-2"]["tasks"] == []
+    link = next(t for t in trace["REQ-1"]["tasks"] if t["task_id"] == 41)
+    assert link["verdict"] == "verified" and link["integrated"] is True
+    assert link["commit"].startswith("cccccccccccc") and "REQ-1.1" in link["covers"]
+    results = {c["id"]: c["result"] for c in docs["checks"]["data"]["checks"]}
+    assert results and set(results.values()) <= {
+        checks.MET,
+        checks.NOT_MET,
+        checks.MEASURED,
+        checks.NOT_COMPUTABLE,
+        checks.PERSON,
+    }
+    # A document with nothing to read as data carries none.
+    assert "data" not in docs["charter"]

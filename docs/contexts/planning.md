@@ -143,7 +143,10 @@ the PMBOK Guide (8th edition). Design and threat model:
   (`write_prose`). `layout.py` places documents by domain, `refs.py` cites
   records with digests, `sanitize.py` escapes record text, `specs.py` groups by
   specification, `statements.py` holds the person sections (append-only,
-  claims).
+  claims). A document may carry `data`: the same records its body renders,
+  in no language, for a reader that grades the pack (the traceability rows,
+  `data.trace`; the checks' results, `data.checks`; issue #698,
+  `scripts/bench/docs_pack_grade.py`).
 - **Builders** (pure, from the snapshot): `scope_docs`, `control_docs`,
   `log_docs`, `c4` and `c4_code` (claim beside observed files),
   `status_docs` with `performance`, `release_docs` with `iterations`,

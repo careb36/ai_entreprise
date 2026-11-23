@@ -562,4 +562,10 @@ def document(snapshot: dict[str, Any]) -> dict[str, Any]:
         missing,
         persons=persons,
         statements=filled,
+        data={
+            "checks": [
+                {"id": r["id"], "domain": r["domain"], "result": r["result"]}
+                for r in results
+            ]
+        },
     )

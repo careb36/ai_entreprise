@@ -343,6 +343,33 @@ revision.
    `tests/test_bench_specs.py`, `tests/test_bench_grading.py` and
    `tests/test_bench_prompt_weight.py`.
 
+## Grading a documentation pack
+
+`scripts/bench/docs_pack_grade.py` (issue #698) compares a project's
+documentation pack with expectations a person wrote for that project's
+reference specification, and writes a card of what held:
+
+```bash
+curl -s .../v1/documentation/<pack_id> -H "Authorization: Bearer ..." > pack.json
+scripts/bench/docs_pack_grade.py pack.json bench/docs_packs/<nn>-<name>.json --out card.json
+```
+
+The expectations (`la-fabrique.docs-pack-expectations/1`, the format is in
+the script's docstring) name the documents the pack must hold, headings and
+texts in them, whether a document may list sections with no record, the
+requirements the traceability matrix must list (and whether each has a task,
+a verified delivery, an integration) and the result each named check must
+compute. Traceability and checks are read from the data the matrix and the
+checks document carry (`data.trace`, `data.checks`), not from the Markdown,
+so a pack in either language grades the same; a pack compiled before that
+data is `unmeasured`, never failed.
+
+The expectations are a person's, written from the specification and what the
+run should have produced, never from the pack being graded: expectations
+copied from a pack measure nothing. None are committed yet; they go under
+`bench/docs_packs/`, one file per reference specification. Exit 0 on a pass,
+1 on a fail, 3 when something is unmeasured, 2 on a file it cannot read.
+
 ## The Verifier benchmark
 
 `bench/verifier/` is a separate measurement. It feeds deliveries whose
