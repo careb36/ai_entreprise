@@ -52,6 +52,8 @@ export interface AgentNodeEndEvent extends AgentEventBase {
   kind: 'nodeEnd'
   agentRole: string
   nodeName: string
+  /** The event's own (localized) message, when it carries one. */
+  summary?: string
 }
 
 export interface AgentNodeErrorEvent extends AgentEventBase {
@@ -218,6 +220,7 @@ export function normalizeSSEEvent(raw: Record<string, unknown>): AgentEvent | nu
       kind: 'nodeEnd',
       agentRole: role,
       nodeName: task || 'task',
+      summary: message || undefined,
     }
   }
 

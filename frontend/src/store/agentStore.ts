@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../services/api'
 import { type GlassroomStream, openGlassroomStream } from '../services/api/stream'
+import i18n from '../i18n'
 import {
   type AgentEvent,
   type AgentFsmState,
@@ -187,7 +188,12 @@ export const useAgentStore = create<AgentStore>((set, get) => {
               agent: normalized.agentRole || 'System',
               role: normalized.agentRole || 'System',
               task: normalized.task?.title || normalized.nodeName,
-              content: `${normalized.agentRole || 'System'} finished ${normalized.nodeName}`,
+              content:
+                normalized.summary ||
+                i18n.t('glassroom.events.agent_complete', {
+                  agent: normalized.agentRole || 'System',
+                  task: normalized.nodeName,
+                }),
               type: 'agent_complete',
             })
           } else if (normalized.kind === 'agentMessage') {

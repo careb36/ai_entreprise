@@ -84,9 +84,9 @@ describe('Glassroom stream connection', () => {
 describe('Glassroom replayed history', () => {
   // What the backend replays on every connection: a past comment of task 3.
   const replayed = {
-    type: 'agent_complete', semantic_type: 'task.history_comment', source: 'history', semantic_version: 1,
+    type: 'message', semantic_type: 'task.history_comment', source: 'history', semantic_version: 1,
     event_id: 'history-3-0', agent: 'Developer', role: 'Developer', task_id: 3, task: 'Login form',
-    message: '✅ Developer delivered: Login form', timestamp: '2026-10-01T10:00:00',
+    message: 'Summary', timestamp: '2026-10-01T10:00:00',
   }
 
   function deliver(source: FakeEventSource, event: Record<string, unknown>) {
@@ -122,9 +122,34 @@ describe('Glassroom replayed history', () => {
     vi.useRealTimers()
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(2))
     deliver(FakeEventSource.opened[1], replayed)
-    deliver(FakeEventSource.opened[1], { ...replayed, event_id: 'history-3-1', message: '✅ QA delivered: Login form' })
+    deliver(FakeEventSource.opened[1], { ...replayed, event_id: 'history-3-1', agent: 'QA', role: 'QA', message: 'NEEDS WORK: no test' })
 
     expect(useAgentStore.getState().messages.map(m => m.eventId)).toEqual(['history-3-0', 'history-3-1'])
+  })
+
+  it('shows each replayed comment with its own author and words, not as the assignee finishing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { ticket: 't', expires_in: 300 })))
+    useAgentStore.getState().connect('7')
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    deliver(FakeEventSource.opened[0], replayed)
+    deliver(FakeEventSource.opened[0], { ...replayed, event_id: 'history-3-1', agent: 'QA', role: 'QA', message: 'NEEDS WORK: no test' })
+
+    const shown = useAgentStore.getState().messages.map(m => [m.agent, m.content])
+    expect(shown).toEqual([['Developer', 'Summary'], ['QA', 'NEEDS WORK: no test']])
+  })
+
+  it('shows a live completion with its own message, and a localized one without', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { ticket: 't', expires_in: 300 })))
+    useAgentStore.getState().connect('7')
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    const live = { type: 'agent_complete', agent: 'Dev', role: 'Dev', task_id: 3, task: 'Login form' }
+    deliver(FakeEventSource.opened[0], { ...live, event_id: 'live-1', message: 'Dev completed it' })
+    deliver(FakeEventSource.opened[0], { ...live, event_id: 'live-2' })
+
+    const contents = useAgentStore.getState().messages.map(m => m.content)
+    expect(contents[0]).toBe('Dev completed it')
+    expect(contents[1]).toContain('Login form')
+    expect(contents[1]).not.toContain('finished')
   })
 
   it('keeps every event without an id, and shows a replay again after a fresh connection', () => {

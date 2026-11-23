@@ -160,3 +160,49 @@ def test_the_replayed_history_carries_the_same_event_ids_every_time(
         "task.status_snapshot",
     ]
     assert [event["event_id"] for event in second] == ids
+
+
+def test_a_replayed_comment_names_its_own_author_and_words(sqlite_session, monkeypatch):
+    """Sprint 6 (2026-11-23): an Architect's advice, a QA rejection and a retry
+    note were all replayed as "Dev finished <task>", the same line eight times."""
+    from models import BacklogItem, Company, Sprint
+
+    from app.routers import agents
+
+    monkeypatch.setattr(agents, "engine", sqlite_session.get_bind())
+    company = Company(company_name="Authors")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sprint = Sprint(company_id=company.id, sprint_name="S")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    notes = [
+        ("Architect", "ARCHITECT_CONSULTED: ## Advice\n- read the file"),
+        ("Dev", "## Summary\n\nSplit done."),
+        ("QA", "NEEDS WORK: no test ran"),
+        ("System", "Autopilot rework scheduled after QA feedback (1/3)."),
+        (None, "**Unsigned**"),
+    ]
+    item = BacklogItem(
+        sprint_id=sprint.id,
+        title="Split",
+        status="in_progress",
+        assignee="Dev",
+        comments=[{"author": a, "text": t} for a, t in notes],
+    )
+    sqlite_session.add(item)
+    sqlite_session.commit()
+
+    events = agents.load_sprint_history(str(sprint.id))
+
+    assert [(e["agent"], e["role"], e["message"]) for e in events] == [
+        ("Architect", "Architect", "ARCHITECT_CONSULTED: ## Advice"),
+        ("Dev", "Dev", "Summary"),
+        ("QA", "QA", "NEEDS WORK: no test ran"),
+        ("System", "System", "Autopilot rework scheduled after QA feedback (1/3)."),
+        ("Dev", "Dev", "Unsigned"),
+    ]
+    assert {e["type"] for e in events} == {"message"}
+    assert all(e["task"] == "Split" for e in events)
+    assert len(agents.comment_line("x" * 500)) == 200
+    assert agents.comment_line("") == ""
