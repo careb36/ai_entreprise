@@ -387,3 +387,47 @@ def _move_as(client, item, headers):
     return client.patch(
         f"/v1/backlog/{item.id}", json={"status": "todo"}, headers=headers
     )
+
+
+# ── Who made the change (issue #767) ─────────────────────────────────────────
+
+
+def _person_event(session, item):
+    return session.exec(
+        select(TaskEvent)
+        .where(TaskEvent.task_id == item.id, TaskEvent.actor == "person")
+        .order_by(TaskEvent.id.desc())
+    ).first()
+
+
+def test_a_change_with_no_signed_in_person_is_marked_unidentified(test_client, db):
+    item = _item(db, _sprint(db, _company(db), status="active"), status="todo")
+
+    response = test_client.patch(f"/v1/backlog/{item.id}", json={"comment": "Retry"})
+
+    assert response.status_code == 200
+    event = _person_event(db, item)
+    assert event.payload["identified"] is False and event.payload["by"] is None
+    assert event.payload["user_id"] is None
+    comment = response.json()["comments"][-1]
+    assert comment["author"] == "user" and comment["identified"] is False
+    assert comment["by"] is None
+
+
+def test_a_signed_in_persons_change_records_who_from_the_session(
+    test_client, db, auth_on
+):
+    company = _company(db)
+    item = _item(db, _sprint(db, company, status="active"), status="todo")
+    manager = _member(db, auth_on, company.id, "Manager")
+
+    response = test_client.patch(
+        f"/v1/backlog/{item.id}", json={"comment": "Looks fine"}, headers=manager
+    )
+
+    assert response.status_code == 200, response.text
+    event = _person_event(db, item)
+    user = db.exec(select(User).where(User.full_name == "Manager")).first()
+    who = {"by": "Manager", "user_id": user.id, "token_id": None, "identified": True}
+    assert {k: event.payload[k] for k in who} == who
+    assert {k: response.json()["comments"][-1][k] for k in who} == who

@@ -9,7 +9,8 @@ export interface BacklogItem {
   status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked' | 'discarded'
   priority: 'low' | 'medium' | 'high' | 'critical'
   assignee?: string
-  comments: { author: string; text: string; created_at: string }[]
+  /** `by`/`identified`: who made a person's change, from the signed-in session (issue #767). */
+  comments: { author: string; text: string; created_at: string; by?: string | null; identified?: boolean }[]
   created_at: string
   updated_at: string
   covers?: string[]; kind?: 'acceptance_tests' | null // Criteria ids the task covers; QA's test-writing task of a requirement.

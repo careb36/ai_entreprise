@@ -36,6 +36,10 @@ pending rework, the block reason, whether it waits for a person.
   so a stale writer never drops a comment committed meanwhile.
 - A person's text is kept whole; text the platform writes is capped at
   `TEXT_LIMIT` (4000).
+- A person's change carries who made it (`PERSON_FIELDS`: `by`, `user_id`,
+  `token_id`, `identified`) on the event and its comment, read from the
+  signed-in session (issue #767). With no signed-in person `identified` is
+  false: the board shows "Unidentified", never someone's name or `user`.
 - Advice (a console-advice note, the Architect's brief) is never a verdict.
   The phrases that keep a task blocked count only from the system, a gate or a
   person (`BLOCK_VERDICT_AUTHORS`), never from a deliverable.

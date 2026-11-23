@@ -1,0 +1,3 @@
+Fixed
+
+* **A board change records who made it (issue #767).** A person's change on the board (a move, a comment, a discard, or a send-back from the board or from chat) was recorded only as `user`: nothing said which person, and a script calling the same path with no one signed in looked exactly like the owner. The event and its comment now carry `by`, `user_id`, `token_id` and `identified`, read from the signed-in session, never from the request; an API token is named as itself. A change with no signed-in person is `identified: false`, and the task page shows it as "Unidentified (no signed-in person)" instead of a name. Comments recorded before this show "A person (name not recorded)".

@@ -61,7 +61,7 @@ from sqlmodel import Session, func, select
 from services.evidence import acceptance
 from services.loop import carry_over, sprint_archive, sprint_control
 from services.planning import sprint_team
-from services.platform import locks
+from services.platform import locks, sod
 from services.platform.agent_service import AgentService
 from services.tasks import dependencies, task_events
 from services.tasks.board import SEND_BACK_MARKER
@@ -210,6 +210,26 @@ def start_moved_task(
     return answer
 
 
+def person_fields(session: Session, user: Any) -> dict[str, Any]:
+    """Who made a person's change, as the signed-in session shows it (#767).
+
+    ``by`` is the person's name or the API token's label, with the account's
+    ``user_id`` and the token's ``token_id``: read from the authenticated
+    session, never from the request body. With no signed-in person (a script,
+    or a stack with ``AUTH_REQUIRED`` off) ``identified`` is false and ``by``
+    is empty: the change is never shown as someone's.
+    """
+    who = sod.actor_of(session, user)
+    if who is None:
+        return {"by": None, "user_id": None, "token_id": None, "identified": False}
+    return {
+        "by": who.label or who.email or None,
+        "user_id": who.user_id,
+        "token_id": who.token_id,
+        "identified": True,
+    }
+
+
 def record_person_change(
     session: Session,
     item: BacklogItem,
@@ -227,7 +247,8 @@ def record_person_change(
     ``SEND_BACK_MARKER`` is a ``sent_back``). ``PATCH /v1/backlog/{id}`` and a
     send-back from chat (``send_back``) both write it here. Returns the event
     (``None`` for a change without status or comment) and ``start_moved_task``'s
-    answer. The caller commits.
+    answer. The event and its comment carry who made the change
+    (``person_fields``). The caller commits.
     """
     event = None
     if status or comment:
@@ -238,6 +259,7 @@ def record_person_change(
             task_events.PERSON,
             status=status or None,
             text=comment or None,
+            payload=person_fields(session, user),
             created_at=str(datetime.now(UTC).replace(tzinfo=None)),
         )
     item.updated_at = datetime.now(UTC).replace(tzinfo=None)

@@ -5099,5 +5099,9 @@
     "leftOut_other": "{{count}} secrets were left out and are named in the file.",
     "redacted_one": "{{count}} line that looked like a secret was replaced.",
     "redacted_other": "{{count}} lines that looked like secrets were replaced."
+  },
+  "commentAuthor": {
+    "unidentified": "Unidentified (no signed-in person)",
+    "unrecorded": "A person (name not recorded)"
   }
 }

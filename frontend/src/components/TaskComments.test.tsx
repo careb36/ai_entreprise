@@ -57,6 +57,15 @@ describe('TaskComments', () => {
     expect(screen.queryByRole('form', { name: 'Add a comment' })).not.toBeInTheDocument()
   })
 
+  it('names who wrote each comment, and an unidentified one as such', () => {
+    renderAs('Viewer', task('blocked', [
+      { author: 'user', text: 'Signed in', created_at: '2026-11-20T02:00:00', by: 'Ada Owner', identified: true },
+      { author: 'user', text: 'From a script', created_at: '2026-11-20T03:00:00', by: null, identified: false },
+    ]))
+    expect(screen.getByText(/Ada Owner · 2026-11-20 02:00/)).toBeInTheDocument()
+    expect(screen.getByText(/Unidentified \(no signed-in person\) · 2026-11-20 03:00/)).toBeInTheDocument()
+  })
+
   it('adds a comment', async () => {
     const fetch = patched()
     vi.stubGlobal('fetch', fetch)
