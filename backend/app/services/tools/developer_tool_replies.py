@@ -132,8 +132,22 @@ def find_text(pattern: str, reply: dict[str, Any]) -> str:
     return "\n".join(files + tail)
 
 
-def tests_text(exit_code: Any, output: str, max_chars: int) -> str:
-    return f"exit status {exit_code}\n{output[-max_chars:] if output else NO_OUTPUT}"
+def tests_text(
+    exit_code: Any, output: str, max_chars: int, asked: Any = None, ran: str = ""
+) -> str:
+    """The run's status and output's end; first, when the command asked for was
+    not the one run, which one ran instead. In sprint 6 (2026-11-23) a QA asked
+    for `python scripts/check_file_sizes.py`, was answered the full suite's
+    output under "exit status 0", and reported a traceback nothing produced."""
+    body = f"exit status {exit_code}\n{output[-max_chars:] if output else NO_OUTPUT}"
+    wanted = str(asked or "").strip()
+    if not wanted or wanted == ran:
+        return body
+    return (
+        f"[`{wanted}` was not run: this tool runs only the folder's test runner, "
+        f"so it ran `{ran}` instead. The output below is that run's. The checks "
+        "every delivery gets are run by the platform after you deliver.]\n" + body
+    )
 
 
 def edit_text(reply: dict[str, Any]) -> str:

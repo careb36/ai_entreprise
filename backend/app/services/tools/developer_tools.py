@@ -312,7 +312,11 @@ class WorkspaceToolbox:
             if reply.get("error") and exit_code is None:
                 raise RuntimeError(str(reply["error"]))
             return developer_tool_replies.tests_text(
-                exit_code, output, self.result_max_chars
+                exit_code,
+                output,
+                self.result_max_chars,
+                arguments.get("command"),
+                command,
             )
         raise RuntimeError("unknown tool")
 
