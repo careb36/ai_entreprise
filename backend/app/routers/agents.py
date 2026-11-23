@@ -150,6 +150,12 @@ def _merge_sse_history(
     return merged
 
 
+def comment_line(text: str, limit: int = 200) -> str:
+    """A history comment's first line (Markdown marks left out), shown with its author."""
+    line = next((s.strip(" #*>-") for s in text.splitlines() if s.strip(" #*>-")), "")
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
 def load_sprint_history(sprint_id: str) -> list[dict]:
     """
     A sprint's past agent comments as Glassroom messages, replayed to every
@@ -200,19 +206,20 @@ def load_sprint_history(sprint_id: str) -> list[dict]:
                             }
                         )
                         continue
+                    author = c.get("author") or item.assignee or "Agent"
                     events.append(
                         {
-                            "type": "agent_complete",
+                            "type": "message",
                             "semantic_type": "task.history_comment",
                             "source": "history",
                             "semantic_version": 1,
                             "event_id": f"history-{item.id}-{index}",
-                            "agent": c.get("author", item.assignee or "Agent"),
-                            "role": item.assignee or "Agent",
+                            "agent": author,
+                            "role": author,
                             "task_id": item.id,
                             "task_status": item.status,
                             "task": item.title,
-                            "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
+                            "message": comment_line(text),
                             "preview": text[:300],
                             "timestamp": c.get("created_at", ""),
                             "status": item.status,
