@@ -27,7 +27,9 @@ Also:
 - Serve the frontend and API over https on one site (sessions use
   `Secure; SameSite=Strict` cookies). List the frontend's origins in
   `CORS_ORIGINS`, never `*`.
-- The backend container runs `alembic upgrade head` on start. By hand, run
+- The backend container runs `alembic upgrade head` on start, over the
+  migrations `docker-compose.yml` mounts from `backend/alembic/` (a new one
+  needs no rebuild of the image). By hand, run
   it yourself or set `DB_AUTO_UPGRADE=true`.
 - Set `API_DOCS_ENABLED=false` on a stack that faces users.
 

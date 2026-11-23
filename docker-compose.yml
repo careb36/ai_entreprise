@@ -261,6 +261,10 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/telemetry.py:/app/telemetry.py
+      # The migrations, so `alembic upgrade head` on start sees a new one
+      # without rebuilding the image (the image copies them at build time).
+      - ./backend/alembic:/app/alembic:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
       - factory-logs:/app/.factory
       # The CA that signed the broker's certificate, read when NATS_TLS=true.
       - ./nats/certs:/etc/fabrique-nats/certs:ro

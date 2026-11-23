@@ -33,15 +33,17 @@ describe("exporting the company's configuration", () => {
     vi.mocked(saveJson).mockClear()
   })
 
-  it('names the file after the company and the day', () => {
-    expect(exportFileName('Acme Ñandú', EXPORT)).toBe('acme-nandu-export-2026-11-22.json')
-    expect(exportFileName(null, EXPORT)).toBe('company-4-export-2026-11-22.json')
-    expect(exportFileName('***', EXPORT)).toBe('company-4-export-2026-11-22.json')
+  it("names the file after the company the export holds, and the day", () => {
+    const named = (company: unknown) => exportFileName({ ...EXPORT, content: { company } })
+    expect(exportFileName(EXPORT)).toBe('acme-nandu-export-2026-11-22.json')
+    expect(named({ company_name: '***' })).toBe('company-4-export-2026-11-22.json')
+    expect(named({})).toBe('company-4-export-2026-11-22.json')
+    expect(named(undefined)).toBe('company-4-export-2026-11-22.json')
   })
 
   it('saves what the backend returned and says what was left out', async () => {
     const exportCompany = vi.spyOn(api, 'exportCompany').mockResolvedValue(EXPORT)
-    wrap(<CompanyExportPanel companyId={4} companyName="Acme Ñandú" />)
+    wrap(<CompanyExportPanel companyId={4} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Export to a file' }))
 
@@ -54,7 +56,7 @@ describe("exporting the company's configuration", () => {
 
   it("shows the server's reason and saves nothing when the export is refused", async () => {
     vi.spyOn(api, 'exportCompany').mockRejectedValue(new Error('Owner role required'))
-    wrap(<CompanyExportPanel companyId={4} companyName="Acme" />)
+    wrap(<CompanyExportPanel companyId={4} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Export to a file' }))
 
