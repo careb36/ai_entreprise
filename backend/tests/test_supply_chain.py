@@ -11,6 +11,7 @@ Releasing).
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -261,36 +262,52 @@ def test_the_browser_sandbox_is_built_once_per_playwright_release():
 # --- the browser image's manual probe (issue #529) ----------------------------------
 
 
+SELF_HOSTED = ["self-hosted", "linux", "x64", "lafabrique"]
+# The probe's jobs and the runner each one may use. Only the native arm64 run
+# is off the self-hosted runner: under QEMU there the browser's GPU process
+# cannot start (run 45209969211), so only arm64 hardware observes the image.
+PROBE_RUNNERS = {"probe": SELF_HOSTED, "probe-arm64": "ubuntu-24.04-arm"}
+SANDBOX_FLAGS = (
+    "--platform linux/arm64",
+    "--network none",
+    "--cap-drop ALL",
+    "--security-opt no-new-privileges",
+    "--user 4321:4321",
+    "node /opt/fabrique/probe-browser.js",
+)
+
+
 def _probe_problems(data: dict) -> list[str]:
     """What breaks the probe's promise: run by hand only, with a read-only
-    token, pushing nowhere, and running the arm64 image the way the daemon
-    runs it (network off, capabilities dropped, an unprivileged uid)."""
+    token, pushing nowhere, building both architectures on the self-hosted
+    runner and running the arm64 image natively the way the daemon runs it
+    (network off, capabilities dropped, an unprivileged uid)."""
     problems = []
     if set(data.get("on") or {}) != {"workflow_dispatch"}:
         problems.append("triggered by something other than workflow_dispatch")
     if data.get("permissions") != {"contents": "read"}:
         problems.append("the workflow token is not contents: read")
-    for name, job in (data.get("jobs") or {}).items():
+    jobs = data.get("jobs") or {}
+    if set(jobs) != set(PROBE_RUNNERS):
+        problems.append(f"the jobs are {sorted(jobs)}, not {sorted(PROBE_RUNNERS)}")
+    for name, job in jobs.items():
         if "permissions" in job:
             problems.append(f"job {name} widens its permissions")
-        if job.get("runs-on") != ["self-hosted", "linux", "x64", "lafabrique"]:
-            problems.append(f"job {name} is not on the lafabrique runner")
+        if name in PROBE_RUNNERS and job.get("runs-on") != PROBE_RUNNERS[name]:
+            problems.append(f"job {name} is not on its runner {PROBE_RUNNERS[name]}")
+        if "secrets." in json.dumps(job):
+            problems.append(f"job {name} reads a secret")
         text = _run(job)
         for forbidden in ("--push", "docker login", "docker push", "type=registry"):
             if forbidden in text:
                 problems.append(f"job {name} runs {forbidden}")
-        if "--platform linux/amd64,linux/arm64" not in text:
-            problems.append(f"job {name} does not build both architectures")
-        for flag in (
-            "--platform linux/arm64",
-            "--network none",
-            "--cap-drop ALL",
-            "--security-opt no-new-privileges",
-            "--user 4321:4321",
-            "node /opt/fabrique/probe-browser.js",
-        ):
-            if flag not in text:
-                problems.append(f"job {name} runs the probe without {flag}")
+    build = _run(jobs.get("probe") or {})
+    if "--platform linux/amd64,linux/arm64" not in build:
+        problems.append("job probe does not build both architectures")
+    native = _run(jobs.get("probe-arm64") or {})
+    for flag in SANDBOX_FLAGS:
+        if flag not in native:
+            problems.append(f"job probe-arm64 runs the probe without {flag}")
     return problems
 
 
@@ -321,6 +338,22 @@ def _probe() -> dict:
             "runs docker login",
         ),
         (lambda d: d["jobs"]["probe"].update({"runs-on": "ubuntu-latest"}), "runner"),
+        (
+            lambda d: d["jobs"]["probe-arm64"].update({"runs-on": "ubuntu-latest"}),
+            "runner",
+        ),
+        (
+            lambda d: d["jobs"].update(
+                {"extra": {"runs-on": "ubuntu-latest", "steps": []}}
+            ),
+            "the jobs are",
+        ),
+        (
+            lambda d: d["jobs"]["probe-arm64"]["steps"].append(
+                {"run": "echo", "env": {"T": "${{ secrets.GHCR_TOKEN }}"}}
+            ),
+            "reads a secret",
+        ),
     ],
 )
 def test_the_browser_probe_check_refuses_a_probe_that_could_publish(mutate, expected):
@@ -331,7 +364,7 @@ def test_the_browser_probe_check_refuses_a_probe_that_could_publish(mutate, expe
 
 def test_the_browser_probe_check_refuses_a_probe_run_without_the_sandbox_flags():
     data = _probe()
-    for step in data["jobs"]["probe"]["steps"]:
+    for step in data["jobs"]["probe-arm64"]["steps"]:
         if "run" in step:
             step["run"] = step["run"].replace("--network none", "")
     assert any("--network none" in p for p in _probe_problems(data))
@@ -339,15 +372,21 @@ def test_the_browser_probe_check_refuses_a_probe_run_without_the_sandbox_flags()
 
 def test_the_browser_probe_is_manual_read_only_and_pushes_nowhere():
     """browser-image-probe.yml is the gate for an arm64 browser-sandbox: it
-    builds both architectures with buildx under QEMU and runs the arm64 image
-    once with its probe, without ever holding a token that can publish."""
+    builds both architectures with buildx under QEMU, as the publish job
+    will, and runs the arm64 image once with its probe on arm64 hardware,
+    without ever holding a token that can publish."""
     data = _probe()
     assert _probe_problems(data) == []
     uses = [s["uses"] for s in data["jobs"]["probe"]["steps"] if "uses" in s]
     assert any(u.startswith("docker/setup-qemu-action@") for u in uses)
     assert any(u.startswith("docker/setup-buildx-action@") for u in uses)
-    assert all(SHA40.match(u.split("@")[1].split()[0]) for u in uses)
+    native = [s for s in data["jobs"]["probe-arm64"]["steps"] if "uses" in s]
+    assert [s["with"] for s in native] == [{"persist-credentials": False}]
+    for u in uses + [s["uses"] for s in native]:
+        assert SHA40.match(u.split("@")[1].split()[0])
     assert "--output type=cacheonly" in _run(data["jobs"]["probe"])
+    # Native, not emulated: the job checks the kernel it runs on.
+    assert 'test "$(uname -m)" = aarch64' in _run(data["jobs"]["probe-arm64"])
 
 
 def test_the_signing_is_documented_with_its_verification():

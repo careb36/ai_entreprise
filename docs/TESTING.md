@@ -128,7 +128,12 @@ must come back `refuted` or `unverifiable`, every control `verified`
 ## CI
 
 All jobs run on the self-hosted runners (`[self-hosted, linux, x64,
-lafabrique]`), which share one machine, so a pull request runs only the jobs
+lafabrique]`), with one exception: the `probe-arm64` job of
+`browser-image-probe.yml`, run only by hand, builds and probes the browser
+sandbox image on GitHub's arm64 runner (`ubuntu-24.04-arm`), because under
+QEMU on the x64 runner the browser exits before it opens a page (issue #529).
+It holds no secret and a read-only token. The self-hosted runners share one
+machine, so a pull request runs only the jobs
 its files can affect. `.github/workflows/changes.yml` computes that once
 through `scripts/changed_paths.py`; the filters live in that workflow and
 `test_ci_paths.py` tests them.
