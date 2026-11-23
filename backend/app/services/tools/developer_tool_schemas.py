@@ -137,7 +137,7 @@ SCHEMAS: list[dict[str, Any]] = [
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "A narrower test command with the project's runner (optional).",
+                        "description": "A narrower test command with the project's runner (optional); any other command is not run, the folder's own test command runs instead.",
                     },
                 },
             },

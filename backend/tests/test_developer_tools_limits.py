@@ -60,6 +60,33 @@ def test_a_narrower_test_command_must_be_the_same_runner_exactly(project):
     assert not developer_tools._runs_with("npx vitest-custom run", "npx vitest")
 
 
+def test_a_command_not_run_is_named_with_the_one_that_ran_instead(project):
+    """Sprint 6 (2026-11-23): a QA asked for a check script, was answered the
+    suite's output, and reported a traceback nothing produced."""
+    daemon = _load_daemon()
+    suite = {"exit_code": 0, "stdout": "3 passed\n", "stderr": ""}
+    requester = _Requester(daemon, {"python -m pytest -q": suite})
+    box = developer_tools.WorkspaceToolbox(
+        requester, str(project), test_command="python -m pytest -q"
+    )
+    observation, text = box.call(
+        _call("workspace__run_tests", command="python scripts/check_file_sizes.py"), 1
+    )
+    assert observation["command"] == "python -m pytest -q"
+    assert text.startswith(
+        "[`python scripts/check_file_sizes.py` was not run: this tool runs only the "
+        "folder's test runner, so it ran `python -m pytest -q` instead."
+    )
+    assert text.endswith("exit status 0\n3 passed\n")
+    # The command it asked for, or none: no note.
+    _same, text = box.call(
+        _call("workspace__run_tests", command="python -m pytest -q"), 1
+    )
+    assert text == "exit status 0\n3 passed\n"
+    _none, text = box.call(_call("workspace__run_tests"), 1)
+    assert text == "exit status 0\n3 passed\n"
+
+
 def test_files_that_may_hold_secrets_are_never_read_nor_searched(project):
     daemon = _load_daemon()
     (project / ".env").write_text(
