@@ -8,7 +8,8 @@ workspace daemon, offered beside the company's MCP tools in the same loop
 agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
-- ``workspace__read``: a window of 100 numbered lines, paged with ``start_line``;
+- ``workspace__read``: a window of 100 numbered lines (``lines`` asks for up
+  to 400), paged with ``start_line``;
 - ``workspace__search``: the lines matching a pattern; past the bound, how many;
 - ``workspace__find_file``: files by name or glob; past the bound, how many;
 - ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
@@ -238,6 +239,7 @@ class WorkspaceToolbox:
                     "workspace_root": root,
                     "path": arguments.get("path"),
                     "start_line": arguments.get("start_line"),
+                    "lines": arguments.get("lines"),
                 },
                 READ_TIMEOUT_SECONDS,
             )

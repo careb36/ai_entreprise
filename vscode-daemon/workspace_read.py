@@ -16,7 +16,10 @@ at ``SEARCH_TIMEOUT_SECONDS``, so a pattern that backtracks forever costs
 that much and no more.
 
 From SWE-agent's agent-computer interface (MIT): a read is a window of
-``READ_MAX_LINES`` numbered lines the model pages through with ``start_line``;
+``READ_MAX_LINES`` numbered lines the model pages through with ``start_line``
+(a request may ask for up to ``READ_LINES_CEILING`` with ``lines``: with
+100-line windows and five tool rounds a Developer saw at most 500 lines of a
+file, and in sprint 6 of 2026-11-23 could not move the tests of a 642-line one);
 a search over the bound answers how many matches there are and in which files
 instead of cutting the list silently, and ``workspace.find`` finds files by
 name or glob with the same rule.
@@ -54,6 +57,8 @@ LIST_MAX_DEPTH = 6
 READ_MAX_BYTES = 64 * 1024
 # The window a read shows; the model pages with ``start_line``.
 READ_MAX_LINES = 100
+# The most a request may ask for with ``lines``; READ_MAX_BYTES still bounds it.
+READ_LINES_CEILING = 400
 # How much of a file is read into memory to index its lines; the rest is only hashed.
 READ_SCAN_BYTES = 1024 * 1024
 SEARCH_MAX_MATCHES = 60
@@ -193,9 +198,19 @@ def _hash_and_head(target: Path) -> tuple:
     return digest.hexdigest(), head, size
 
 
-def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[str, Any]:
+def window_lines(lines: Any) -> int:
+    """The window a read asked for: ``READ_MAX_LINES`` by default, between 1
+    and ``READ_LINES_CEILING``."""
+    try:
+        asked = int(lines) if lines is not None and not isinstance(lines, bool) else READ_MAX_LINES
+    except (TypeError, ValueError):
+        asked = READ_MAX_LINES
+    return min(max(asked, 1), READ_LINES_CEILING)
+
+
+def read_file(workspace_path: str, path: Any, start_line: Any, resolve, lines: Any = None) -> Dict[str, Any]:
     """A text file as it is on disk: its lines numbered from ``start_line``
-    (default 1), at most ``READ_MAX_LINES`` lines and ``READ_MAX_BYTES`` bytes,
+    (default 1), at most *lines* lines (``window_lines``) and ``READ_MAX_BYTES`` bytes,
     with the sha256 and size of the whole file (hashed in chunks; only the
     first ``READ_SCAN_BYTES`` are read into memory)."""
     root = _root(workspace_path)
@@ -207,6 +222,7 @@ def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[
     digest, head, size = _hash_and_head(target)
     if b"\0" in head[:8192]:
         return {"path": path, "sha256": digest, "bytes": size, "binary": True, "text": "", "lines": 0, "truncated": False}
+    window = window_lines(lines)
     lines = head.decode("utf-8", errors="replace").splitlines()
     beyond_scan = size > len(head)
     try:
@@ -215,7 +231,7 @@ def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[
         first = 1
     if first > max(len(lines), 1) and not beyond_scan:
         raise ReadError(400, f"start_line {first} is past the end of {path}, which has {len(lines)} lines.")
-    chosen = lines[first - 1 : first - 1 + READ_MAX_LINES]
+    chosen = lines[first - 1 : first - 1 + window]
     numbered: List[str] = []
     out = 0
     truncated = beyond_scan or len(lines) > first - 1 + len(chosen)
@@ -429,7 +445,7 @@ async def handle_list(nc, msg, reply, request_body, resolve) -> None:
 
 async def handle_read(nc, msg, reply, request_body, resolve) -> None:
     """``workspace.read`` → the numbered text, its sha256 and size."""
-    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: read_file(r, d.get("path"), d.get("start_line"), s))
+    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: read_file(r, d.get("path"), d.get("start_line"), s, d.get("lines")))
 
 
 async def handle_search(nc, msg, reply, request_body, resolve) -> None:

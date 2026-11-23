@@ -69,7 +69,11 @@ class _Requester:
                 )
             if subject == "workspace.read":
                 return workspace_read.read_file(
-                    root, payload.get("path"), payload.get("start_line"), resolve
+                    root,
+                    payload.get("path"),
+                    payload.get("start_line"),
+                    resolve,
+                    payload.get("lines"),
                 )
             if subject == "workspace.search":
                 return workspace_read.search(

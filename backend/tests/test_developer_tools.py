@@ -113,6 +113,41 @@ def test_a_long_file_is_cut_and_the_reply_says_how_long_it_is(project):
     assert len(read["text"].splitlines()) == workspace_read.READ_MAX_LINES
 
 
+def test_a_read_may_ask_for_up_to_400_lines(project):
+    """Sprint 6 (2026-11-23): with 100-line windows and five rounds the
+    Developer saw at most 500 lines and could not split a 642-line file."""
+    daemon = _load_daemon()
+    (project / "src" / "big.py").write_text("".join(f"x = {i}\n" for i in range(1000)))
+
+    def read(lines, start=None):
+        return workspace_read.read_file(
+            str(project), "src/big.py", start, daemon._resolve_target_path, lines
+        )
+
+    assert len(read(None)["text"].splitlines()) == workspace_read.READ_MAX_LINES
+    wide = read(400)
+    assert len(wide["text"].splitlines()) == 400 == workspace_read.READ_LINES_CEILING
+    assert (wide["first_line"], wide["last_line"]) == (1, 400)
+    assert read(400, 401)["last_line"] == 800
+    # Past the ceiling, zero, negative or not a number: bounded, never refused.
+    assert len(read(5000)["text"].splitlines()) == 400
+    assert len(read(0)["text"].splitlines()) == 1
+    assert len(read("many")["text"].splitlines()) == workspace_read.READ_MAX_LINES
+    assert len(read(True)["text"].splitlines()) == workspace_read.READ_MAX_LINES
+
+
+def test_the_read_tool_offers_and_passes_lines():
+    from services.tools import developer_tool_schemas
+
+    read = next(
+        t
+        for t in developer_tool_schemas.SCHEMAS
+        if t["function"]["name"].endswith("read")
+    )
+    assert read["function"]["parameters"]["properties"]["lines"]["type"] == "integer"
+    assert "up to 400" in read["function"]["description"]
+
+
 def test_the_daemon_searches_the_project_and_refuses_a_bad_pattern(project):
     daemon = _load_daemon()
     found = workspace_read.search(
