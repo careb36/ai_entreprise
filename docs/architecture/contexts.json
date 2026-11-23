@@ -640,6 +640,7 @@
       "test_command_policy.py": [
         "workspace"
       ],
+      "test_command_runs_rewritten_check.py": ["evidence"],
       "test_company_architecture.py": [
         "loop"
       ],

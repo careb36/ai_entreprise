@@ -13,16 +13,25 @@ claim, and it is not read here.
 - one that could not run (a runtime that is not installed, a refusal by the
   command policy, no exit status) leaves the delivery unverifiable;
 - a suite whose only failures are the acceptance tests of criteria not
-  implemented yet passes, as ``tests_run`` excuses them.
+  implemented yet passes, as ``tests_run`` excuses them;
+- an every-delivery command whose own file the delivery changed refutes,
+  whatever it exited: a check the delivery rewrote is not evidence about
+  that delivery (POSITIONING: the party being recorded does not supply the
+  measure). On 2026-11-23 a QA task in sprint 4 rewrote
+  ``scripts/check_file_sizes.py`` and ``scripts/check_architecture.py``, the
+  two checks that judged it. The changed paths are the daemon's report of
+  what it wrote (``protected_check.observed_paths``), never the agent's.
 """
 
 from __future__ import annotations
 
+import posixpath
 import re
+import shlex
 from typing import Any
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
-from services.evidence import criteria_tests
+from services.evidence import criteria_tests, protected_check
 
 CHECK_NAME = "required_commands"
 # What a shell or an interpreter prints when the program itself is missing.
@@ -36,6 +45,46 @@ _UNAVAILABLE = (
     re.compile(r"^\S*python[\d.]*(?:\.exe)?: No module named [\w.]+\s*$", re.MULTILINE),
 )
 _KINDS = {"install": "install", "suite": "suite", "every_delivery": "check"}
+# The files a command runs, by how they are named on its command line.
+_SCRIPT_SUFFIXES = (".py", ".sh", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl", ".ps1")
+
+
+def _normal(path: str) -> str:
+    return posixpath.normpath(path.replace("\\", "/"))
+
+
+def command_files(command: str, folder: str = "") -> list[str]:
+    """The repository paths *command* names as files it runs: a token with a
+    script suffix, resolved from *folder* (the repository root when empty)."""
+    try:
+        tokens = shlex.split(command or "")
+    except ValueError:
+        tokens = (command or "").split()
+    found: list[str] = []
+    for token in tokens:
+        token = token.strip("'\"")
+        if not token.lower().endswith(_SCRIPT_SUFFIXES) or token.startswith(("-", "/")):
+            continue
+        path = _normal(posixpath.join(folder, token) if folder else token)
+        if not path.startswith("../") and path not in found:
+            found.append(path)
+    return found
+
+
+def rewritten_by_delivery(
+    record: dict[str, Any], evidence: dict[str, Any] | None
+) -> list[str]:
+    """The files of an every-delivery command that this delivery changed."""
+    if record.get("kind") != "every_delivery":
+        return []
+    changed = {_normal(p) for p in protected_check.observed_paths(evidence) or []}
+    return [
+        path
+        for path in command_files(
+            str(record.get("command") or ""), record.get("folder") or ""
+        )
+        if path in changed
+    ]
 
 
 def unavailable(record: dict[str, Any]) -> bool:
@@ -55,6 +104,13 @@ def outcome_of(
     """``(outcome, observation)`` of one recorded run."""
     where = f" in {record['folder']}/" if record.get("folder") else ""
     target = f"`{record.get('command')}`{where}"
+    rewritten = rewritten_by_delivery(record, evidence)
+    if rewritten:
+        return VERDICT_REFUTED, (
+            f"{target} checks this delivery, and the delivery changed "
+            f"{', '.join(rewritten)}: a check the delivery rewrote is not evidence "
+            "about it. Restore the file, or a person decides on the change"
+        )
     if record.get("refused"):
         reason = record.get("reason") or "refused"
         return VERDICT_UNVERIFIABLE, f"{target} refused by the command policy: {reason}"
