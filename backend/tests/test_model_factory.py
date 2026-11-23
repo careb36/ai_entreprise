@@ -187,3 +187,16 @@ def test_compose_passes_every_role_model_variable_to_the_backend():
     for role in AgentRole:
         name = f"AGENT_MODEL_{role.name}"
         assert env.get(name) == f"${{{name}:-}}", name
+
+
+def test_compose_passes_the_model_profiles_to_the_backend():
+    """MODEL_PROFILES set in .env reached no container until 2026-11-23: the
+    backend's environment did not name it. Unset, it is ``{}``, the default
+    config.py parses (an empty string fails startup)."""
+    from pathlib import Path
+
+    import yaml
+
+    compose = Path(__file__).resolve().parents[2] / "docker-compose.yml"
+    env = yaml.safe_load(compose.read_text())["services"]["backend"]["environment"]
+    assert env.get("MODEL_PROFILES") == "${MODEL_PROFILES:-{}}"
