@@ -167,7 +167,7 @@ slowapi limits, per client address unless noted, stored in `RATE_LIMIT_STORAGE_U
 | `AGENT_MODEL_<ROLE>` | `""` | One role's model: `PO`, `ARCHITECT`, `SCRUM_MASTER`, `DEVELOPER`, `QA`, `SECOPS`, `TECH_WRITER`, `BACKEND_DEVELOPER`, `FRONTEND_DEVELOPER`, `DEVOPS`, `DESIGNER`, `DATA_ENGINEER`, `ENGRAM_PROCESSOR`. Coding roles fall back to `AGENT_MODEL_DEVELOPER`; the Reviewer reads `AGENT_MODEL_QA`. Compose forwards only the first seven and `ENGRAM_PROCESSOR`. |
 | `AGENT_MODEL_POLICY` | `""` | Routing by task difficulty, JSON: `{"bands": {"low": "<model>", "high": "<model>"}, "label": "..."}`. A company's own policy replaces it. |
 | `EDIT_FORMAT_BY_MODEL` | `""` | Edit format per model, JSON: `{"<model>": "auto" \| "whole" \| "search_replace", "*": ...}`. Empty: `auto`. |
-| `MODEL_PROFILES` | `{}` | Per-model overrides of the profile, JSON by model name (`context`, `output`, `tool_call`, `reasoning`, `tool_rounds`, `result_max_chars`, `max_output_tokens`). Invalid JSON stops startup. See [models](contexts/models.md#a-models-profile). |
+| `MODEL_PROFILES` | `{}` | Per-model overrides of the profile, JSON by model name (`context`, `output`, `tool_call`, `reasoning`, `tool_rounds`, `result_max_chars`, `max_output_tokens`). Invalid JSON stops startup. Passed to the backend by `docker-compose.yml`. See [models](contexts/models.md#a-models-profile). |
 | `MODELS_CATALOG_URL` | `https://models.dev/api.json` | Model catalogue source. |
 | `MODELS_CATALOG_REFRESH_HOURS` | `24` | Catalogue refresh interval. `0` keeps the shipped snapshot and never calls out. |
 
