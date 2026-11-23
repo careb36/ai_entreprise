@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -463,3 +465,63 @@ def test_the_matrix_refuses_a_list_that_could_build_something_else(
         (tmp_path / name).write_text((IMAGE_DIR / name).read_text())
     run = _matrix(bad)
     assert run.returncode != 0 and words in run.stderr
+
+
+# ---------------------------------------------------------------------------
+# The probe's reason keeps the cause (issue #529)
+# ---------------------------------------------------------------------------
+
+PROBE = IMAGE_DIR / "probe-browser.js"
+
+
+def _condense(reason: str) -> dict:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = (
+        f"const p = require({json.dumps(str(PROBE))});"
+        "const r = require('fs').readFileSync(0, 'utf8');"
+        "process.stdout.write(JSON.stringify({c: p.condense(r), max: p.REASON_MAX}));"
+    )
+    out = subprocess.run(
+        [node, "-e", script],
+        input=reason,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "FABRIQUE_PROBE_LIBRARY": "1"},
+        timeout=30,
+    )
+    return json.loads(out.stdout)
+
+
+def test_the_probe_reason_drops_the_launch_flags_and_keeps_why_it_closed():
+    """The arm64 probe of 2026-11-15 failed with only Chrome's launch line in
+    its reason: the first 500 characters were the flags, and the cause was cut."""
+    reason = (
+        "browser.newPage: Target page, context or browser has been closed\n"
+        "Browser logs:\n\n<launching> /opt/chrome-headless-shell "
+        + "--disable-some-feature "
+        * 60
+        + "\n<launched> pid=7\n"
+        "[pid=7][err] qemu: uncaught target signal 11 (Segmentation fault)\n"
+        "[pid=7] <process did exit: exitCode=null, signal=SIGSEGV>"
+    )
+    seen = _condense(reason)
+    assert "--disable-some-feature" not in seen["c"]
+    assert "<launching> (its flags left out)" in seen["c"]
+    assert "signal=SIGSEGV" in seen["c"] and "has been closed" in seen["c"]
+    assert len(seen["c"]) <= seen["max"]
+
+
+def test_a_long_reason_keeps_its_start_and_its_end_within_the_limit():
+    reason = "START " + "x" * 2000 + " THE-CAUSE"
+    seen = _condense(reason)
+    assert seen["c"].startswith("START ") and seen["c"].endswith(" THE-CAUSE")
+    assert len(seen["c"]) == seen["max"] and "\n...\n" in seen["c"]
+
+
+def test_the_probe_still_runs_as_a_script_without_the_library_flag():
+    text = PROBE.read_text()
+    assert "process.env.FABRIQUE_PROBE_LIBRARY === '1'" in text
+    assert "probe().catch(" in text

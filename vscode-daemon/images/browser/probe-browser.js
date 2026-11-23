@@ -43,17 +43,30 @@ const report = (outcome) => {
   process.stdout.write(MARK + JSON.stringify({ from, ...outcome }) + '\n');
 };
 
+// The reason kept on the line. Playwright's error opens with the browser's
+// launch command and its flags (several hundred characters) and ends with what
+// the browser said before it closed: the launch line is shortened and, past
+// the limit, the start and the end are kept, so the cause is not cut off.
+const REASON_MAX = 500;
+const REASON_HEAD = 160;
+const GAP = '\n...\n';
+const condense = (reason) => {
+  const text = String(reason)
+    .split('\n')
+    .map((line) => (line.startsWith('<launching>') ? '<launching> (its flags left out)' : line))
+    .join('\n');
+  if (text.length <= REASON_MAX) return text;
+  return text.slice(0, REASON_HEAD) + GAP + text.slice(-(REASON_MAX - REASON_HEAD - GAP.length));
+};
+
 const fail = (reason) => {
-  report({ available: false, reason: String(reason).slice(0, 500) });
+  report({ available: false, reason: condense(reason) });
   const done = () => process.exit(1);
   if (browser) browser.close().then(done, done);
   else done();
 };
 
-const watchdog = setTimeout(
-  () => fail(`the browser did not answer within ${OVERALL_TIMEOUT_MS} ms`),
-  OVERALL_TIMEOUT_MS,
-);
+let watchdog = null;
 
 const load = () => {
   for (const name of ['playwright', '@playwright/test', 'playwright-core']) {
@@ -75,7 +88,11 @@ const load = () => {
   return null;
 };
 
-(async () => {
+const probe = async () => {
+  watchdog = setTimeout(
+    () => fail(`the browser did not answer within ${OVERALL_TIMEOUT_MS} ms`),
+    OVERALL_TIMEOUT_MS,
+  );
   const found = load();
   if (!found) {
     fail(
@@ -107,4 +124,12 @@ const load = () => {
     browser: `chromium ${version}`,
   });
   process.exit(0);
-})().catch((e) => fail((e && e.message) || e));
+};
+
+// FABRIQUE_PROBE_LIBRARY=1 loads the helpers without probing (the tests); the
+// daemon and the image run the file as a script (`node -e`, `node file`).
+if (process.env.FABRIQUE_PROBE_LIBRARY === '1') {
+  module.exports = { condense, REASON_MAX };
+} else {
+  probe().catch((e) => fail((e && e.message) || e));
+}
