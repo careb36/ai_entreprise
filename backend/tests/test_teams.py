@@ -129,7 +129,12 @@ def test_a_manager_team_grants_manager_routes_until_the_person_leaves_it(
     )
     me = test_client.get("/v1/auth/me", headers=headers).json()
     assert me["memberships"] == [
-        {"company_id": acme.id, "human_role": "Viewer", "effective_role": "Manager"}
+        {
+            "company_id": acme.id,
+            "company_name": acme.company_name,
+            "human_role": "Viewer",
+            "effective_role": "Manager",
+        }
     ]
     member = sqlite_session.exec(
         select(TeamMember).where(TeamMember.team_id == team.id)

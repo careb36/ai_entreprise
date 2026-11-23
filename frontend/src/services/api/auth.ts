@@ -10,6 +10,8 @@ export interface AuthUser {
 
 export interface CompanyMembership {
   company_id: number
+  /** The company's name, sent with the membership; absent from an older backend. */
+  company_name?: string | null
   human_role: 'Owner' | 'Manager' | 'Viewer'
   /** The role the routes check: the own role raised by the member's teams (never to Owner). */
   effective_role?: 'Owner' | 'Manager' | 'Viewer' | null

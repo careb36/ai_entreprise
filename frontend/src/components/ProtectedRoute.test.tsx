@@ -29,7 +29,7 @@ function renderRoutes(path: string) {
   )
 }
 
-function authenticate(memberships: { company_id: number; human_role: 'Owner' | 'Manager' | 'Viewer' }[]) {
+function authenticate(memberships: { company_id: number; company_name?: string | null; human_role: 'Owner' | 'Manager' | 'Viewer' }[]) {
   useAuthStore.setState({
     expiresAt: Date.now() + 60_000,
     user: { user_id: 1, email: 'user@example.com', full_name: 'User' },
@@ -61,6 +61,36 @@ describe('ProtectedRoute company access', () => {
     expect(await screen.findByTestId('current-path')).toHaveTextContent('/dashboard')
     await waitFor(() => expect(useAppStore.getState().companyId).toBe(14))
     expect(useAppStore.getState().companyName).toBe('Company 14')
+  })
+
+  it("names the selected company with the name the backend sends", async () => {
+    authenticate([{ company_id: 14, company_name: 'Acme Corp', human_role: 'Owner' }])
+    renderRoutes('/dashboard')
+
+    await waitFor(() => expect(useAppStore.getState().companyId).toBe(14))
+    expect(useAppStore.getState().companyName).toBe('Acme Corp')
+  })
+
+  it('replaces a placeholder kept from before with the company name', async () => {
+    useAppStore.getState().setCompany(14, 'Company 14')
+    authenticate([{ company_id: 14, company_name: 'Acme Corp', human_role: 'Owner' }])
+    renderRoutes('/dashboard')
+
+    await waitFor(() => expect(useAppStore.getState().companyName).toBe('Acme Corp'))
+    expect(useAppStore.getState().companyId).toBe(14)
+  })
+
+  it('lists each company by its name when the backend sends one', async () => {
+    authenticate([
+      { company_id: 14, company_name: 'Acme Corp', human_role: 'Owner' },
+      { company_id: 28, human_role: 'Viewer' },
+    ])
+    renderRoutes('/dashboard')
+
+    expect(await screen.findByRole('button', { name: /Acme Corp.*Owner/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Company 28.*Viewer/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Acme Corp.*Owner/ }))
+    await waitFor(() => expect(useAppStore.getState().companyName).toBe('Acme Corp'))
   })
 
   it('shows each membership and role when the user has multiple companies', async () => {
