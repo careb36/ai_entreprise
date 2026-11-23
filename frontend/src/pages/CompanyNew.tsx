@@ -30,6 +30,7 @@ import { AutonomyStep } from './companyNew/AutonomyStep'
 import { PermissionsStep } from './companyNew/PermissionsStep'
 import { TeamStep } from './companyNew/TeamStep'
 import { ReviewStep } from './companyNew/ReviewStep'
+import { ImportCompany } from './companyNew/ImportCompany'
 import { PageHeader } from '../components/ui'
 
 export default function CompanyNew() {
@@ -233,6 +234,13 @@ export default function CompanyNew() {
 
       {/* Invited to a company already? Join it instead of creating one. */}
       <PendingInvitations />
+
+      {/* Or start from a file made by another company's export (issue #774). */}
+      <ImportCompany onOpen={(companyId, name) => {
+        setCompany(companyId, name)
+        useAuthStore.getState().loadMe().catch(() => {})
+        navigate('/agents')
+      }} />
 
       <div className="panel">
         <div className="border-b border-surface-700 px-4 py-3">

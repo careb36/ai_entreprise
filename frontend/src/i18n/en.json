@@ -5060,5 +5060,32 @@
       "confirmRestore": "Confirm restore",
       "show": "Description in this revision"
     }
+  },
+  "companyImport": {
+    "start": "Start from an exported file",
+    "title": "Start from an exported file",
+    "hint": "Pick a file made by a company's export. Its agents, business units and routines are created in a new company you own. Each value is checked as it would be when set by hand, and nothing that runs on this machine is taken from the file: you set those yourself.",
+    "file": "Export file (.json)",
+    "name": "Name of the new company",
+    "submit": "Import",
+    "importing": "Importing…",
+    "cancel": "Cancel",
+    "tooLarge": "The file is larger than 5 MB.",
+    "notJson": "The file is not valid JSON.",
+    "notAnExport": "The file is not a company export: it has no content section.",
+    "failed": "The import failed: {{message}}",
+    "created": "{{name}} was created with {{agents}} agents, {{units}} business units and {{routines}} routines.",
+    "routinesOff": "The routines arrived turned off; turn each on when it is ready.",
+    "digestMismatch": "The file's content does not match the digest it claims: it was edited after the export. It was imported anyway; check what it set.",
+    "toSetUp": "Still to set up",
+    "skipped": "Not applied from the file",
+    "open": "Open the company",
+    "setUp": {
+      "connection": "Provider connection {{name}} ({{provider}}): give it its API key.",
+      "apiKey": "API key for the connection {{name}} ({{provider}}).",
+      "headers": "Headers for the connection {{name}} ({{provider}}).",
+      "credential": "Project credential: {{type}}, {{access}} access.",
+      "environment": "Environment variable {{name}} for the {{scope}}."
+    }
   }
 }

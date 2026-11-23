@@ -10,6 +10,7 @@ import { authEndpoints } from './api/auth'
 import { chatEndpoints } from './api/chat'
 import { boardNoteEndpoints } from './api/boardNotes'
 import { companyEndpoints } from './api/companies'
+import { companyImportEndpoints } from './api/companyImport'
 import { evidenceEndpoints } from './api/evidence'
 import { findingEndpoints } from './api/findings'
 import { githubEndpoints } from './api/github'
@@ -44,6 +45,7 @@ export * from './api/auth'
 export * from './api/chat'
 export * from './api/boardNotes'
 export * from './api/companies'
+export * from './api/companyImport'
 export * from './api/evidence'
 export * from './api/findings'
 export * from './api/github'
@@ -80,6 +82,7 @@ const endpoints = {
   ...authEndpoints(),
   ...systemEndpoints(http),
   ...companyEndpoints(http),
+  ...companyImportEndpoints(http),
   ...invitationEndpoints(http),
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
