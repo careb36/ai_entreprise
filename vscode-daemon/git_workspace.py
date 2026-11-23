@@ -239,7 +239,8 @@ def deliver(
     merged = merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
     parent = _out(["rev-parse", "HEAD"], worktree)
     results = write_files(str(worktree), files)
-    written = [r["path"] for r in results if r.get("status") == "written"]
+    # A deleted file is staged like a written one: ``git add`` records the removal.
+    written = [r["path"] for r in results if r.get("status") in ("written", "deleted")]
     commit = None
     if written:
         run_git(["add", "--", *written], worktree)
@@ -266,7 +267,7 @@ def deliver(
             )
             commit = _out(["rev-parse", "HEAD"], worktree)
     return {
-        "ok": all(r.get("status") == "written" for r in results),
+        "ok": all(r.get("status") in ("written", "deleted") for r in results),
         "workspace_root": str(worktree),
         "files": results,
         "git": {

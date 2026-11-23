@@ -66,6 +66,7 @@ from services.tools import (
     test_runs,
     workspace_edits,
 )
+from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
 
 logger = logging.getLogger("fabrique-task-worker")
@@ -152,7 +153,7 @@ class WorkspaceToolbox:
         self.can_edit = can_edit
         self.edit_suffixes = edit_suffixes
         self.edit_session = uuid.uuid4().hex
-        self.edits_made = False
+        self.edits_made, self.can_move = False, False
         self.edited_files: list[dict[str, Any]] = []
         self.finish_error: str | None = None
 
@@ -161,7 +162,7 @@ class WorkspaceToolbox:
         return {
             s["function"]["name"]: {
                 "server": SERVER,
-                "read_only": not s["function"]["name"].endswith(EDIT),
+                "read_only": not s["function"]["name"].endswith(WRITE_NAMES),
             }
             for s in self.schemas()
         }
@@ -174,6 +175,7 @@ class WorkspaceToolbox:
         ]
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
+            schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
         return schemas
 
     def call(
@@ -212,7 +214,7 @@ class WorkspaceToolbox:
         observation = self._observation(
             tool, arguments, round_no, is_error, elapsed_ms, text
         )
-        observation["read_only"] = tool != EDIT
+        observation["read_only"] = tool not in WRITES
         observation.update(extra)
         if len(text) > self.result_max_chars:
             observation["truncated"] = True
@@ -276,6 +278,8 @@ class WorkspaceToolbox:
             return developer_tool_replies.find_text(str(pattern), reply)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
+        if tool in (MOVE, DELETE) and self.can_move:
+            return workspace_edits.structure(self, tool, arguments, extra)
         if tool == RUN_TESTS:
             folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
             command = self._test_command(arguments.get("command"), plan.get("test"))
@@ -554,6 +558,7 @@ def toolbox_for(
                 can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
+            workspace.can_move = workspace_edits.can_move(workspace.can_edit)
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine

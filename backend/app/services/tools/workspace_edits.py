@@ -26,11 +26,13 @@ from typing import Any
 
 from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 from services.tools import developer_tool_replies, edit_lint
+from services.workspace import daemon_liveness
 
 logger = logging.getLogger("fabrique-task-worker")
 
 EDIT_TIMEOUT_SECONDS = 30.0
 EDIT_FIELDS = ("path", "start_line", "end_line", "new_text", "search", "replace")
+MOVE_FIELDS = ("path", "start_line", "end_line", "to_path", "to_line")
 
 
 def allowed(bridge: dict[str, Any], company_id: int, root: str, engine: Any) -> bool:
@@ -56,9 +58,8 @@ def delivery_suffixes() -> set[str]:
     return set(ALLOWED_ARTIFACT_EXTENSIONS)
 
 
-def edit(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
-    """One edit through the daemon; *extra* gets the observation's fields."""
-    path = str(arguments.get("path") or "")
+def _deliverable(box: Any, path: str) -> None:
+    """Refuse a file a delivery would not write: the change would be dropped."""
     suffix = (
         "." + path.rsplit(".", 1)[-1].lower() if "." in path.rsplit("/", 1)[-1] else ""
     )
@@ -66,6 +67,77 @@ def edit(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
         raise RuntimeError(
             f"a delivery does not write {suffix or 'such'} files: {path}"
         )
+
+
+def can_move(can_edit: bool) -> bool:
+    """Whether to offer move and delete: where edits may go, and only when every
+    daemon announces both operations, so an older one never misreads them."""
+    if not can_edit:
+        return False
+    return bool(
+        daemon_liveness.announces("workspace.edit", "move")
+        and daemon_liveness.announces("workspace.edit", "delete")
+        and daemon_liveness.announces("workspace.generate", "delete")
+    )
+
+
+def structure(
+    box: Any, tool: str, arguments: dict[str, Any], extra: dict[str, Any]
+) -> str:
+    """A move of lines or the deletion of an emptied file through the daemon
+    (``vscode-daemon/workspace_move.py``); *extra* gets the daemon's observation:
+    the moved bytes' sha256 and both files' hashes, or the deleted file's."""
+    fields = MOVE_FIELDS if tool == "move" else ("path",)
+    request = {k: arguments[k] for k in fields if k in arguments}
+    for key in ("path", "to_path"):
+        if key in request:
+            _deliverable(box, str(request[key] or ""))
+    box.edits_made = True
+    reply = box.requester(
+        "workspace.edit",
+        {"workspace_root": box.workspace_root, "session": box.edit_session, "op": tool}
+        | request,
+        EDIT_TIMEOUT_SECONDS,
+    )
+    keys = (
+        ("path", "to_path", "moved_lines", "moved_sha256", "source", "target")
+        if tool == "move"
+        else ("path", "deleted", "sha256_before")
+    )
+    extra.update({key: reply.get(key) for key in keys})
+    if tool == "delete":
+        return (
+            f"Deleted {reply.get('path')}; the deletion is delivered when you finish."
+        )
+    target = reply.get("target") or {}
+    return (
+        f"Moved {reply.get('moved_lines')} lines from {reply.get('path')} to "
+        f"{reply.get('to_path')}{' (a new file)' if target.get('created') else ''}; "
+        f"{reply.get('path')} has {(reply.get('source') or {}).get('lines')} lines now. "
+        f"Lines {reply.get('first_line')}–{reply.get('last_line')} of {reply.get('to_path')}:\n"
+        + str(reply.get("text") or "")
+    )
+
+
+def deletions(edited: Any) -> list[dict[str, Any]]:
+    """The files the session deleted, as delivery entries. ``sha256_expected``
+    is the original's sha256 the daemon itself reported at finish, never the
+    model's: the delivery deletes the file only while it still holds those bytes."""
+    return [
+        {"path": f["path"], "delete": True, "sha256_expected": f["sha256_original"]}
+        for f in edited or []
+        if isinstance(f, dict)
+        and f.get("deleted")
+        and not f.get("error")
+        and isinstance(f.get("path"), str)
+        and isinstance(f.get("sha256_original"), str)
+    ]
+
+
+def edit(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
+    """One edit through the daemon; *extra* gets the observation's fields."""
+    path = str(arguments.get("path") or "")
+    _deliverable(box, path)
     request = {k: arguments[k] for k in EDIT_FIELDS if k in arguments}
     box.edits_made = True
     reply = box.requester(
@@ -116,7 +188,8 @@ def finish(box: Any) -> None:
     box.edited_files = [
         f
         for f in reply.get("files") or []
-        if isinstance(f, dict) and (f.get("changed") or f.get("error"))
+        if isinstance(f, dict)
+        and (f.get("changed") or f.get("error") or f.get("deleted"))
     ]
     for f in box.edited_files:
         if f.get("error"):
@@ -165,6 +238,10 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         {"path": f["path"], "content": f["content"], "sha256": f.get("sha256")}
         for f in delivered(edits)
     ]
+    deleted = [
+        {"path": d["path"], "sha256_original": d["sha256_expected"]}
+        for d in deletions(edits)
+    ]
     conflicts = [
         {
             "path": f.get("path"),
@@ -175,7 +252,14 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         if isinstance(f, dict) and f.get("error")
     ]
     console = agent.get("console_run")  # A console producer's run (console_producer).
-    if not (calls or files or conflicts or console or agent.get("console_skipped")):
+    if not (
+        calls
+        or files
+        or deleted
+        or conflicts
+        or console
+        or agent.get("console_skipped")
+    ):
         return evidence
     evidence = evidence if isinstance(evidence, dict) else {}
     if console:
@@ -185,6 +269,7 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     for key, value in (
         ("tool_calls", calls),
         ("tool_edit_files", files),
+        ("tool_edit_deletions", deleted),
         ("tool_edit_conflicts", conflicts),
     ):
         if value:

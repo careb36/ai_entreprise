@@ -963,6 +963,10 @@
       "test_migrations.py": [
         "platform"
       ],
+      "test_move_tool.py": [
+        "evidence",
+        "loop"
+      ],
       "test_model_catalog.py": [
         "models"
       ],
@@ -1574,10 +1578,17 @@
       "test_workflow_pinning.py": [
         "repo"
       ],
+      "test_workspace_delete_delivery.py": [
+        "workspace"
+      ],
       "test_workspace_host.py": [
         "release"
       ],
       "test_workspace_isolation.py": [
+        "workspace"
+      ],
+      "test_workspace_move.py": [
+        "tools",
         "workspace"
       ],
       "test_wstg_plan.py": [

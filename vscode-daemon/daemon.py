@@ -53,7 +53,7 @@ import nats_scope
 import run_logs
 import git_diff, local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
-import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, stack_image, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
+import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, stack_image, workspace_edit, workspace_move, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command  # noqa: F401 - re-exported
 _build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -105,7 +105,8 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     """
     Write *files* (``path`` with ``content``, or ``edits``: ``file_edits.py``) under the workspace.
 
-    One report per file: ``status`` (``written``, ``skipped_protected``,
+    One report per file: ``status`` (``written``, ``deleted`` for a ``delete``
+    entry, ``rejected_delete``, ``skipped_protected``,
     ``rejected``, ``rejected_edit`` or ``rejected_syntax`` with ``error``) and,
     when written, ``bytes`` and the ``sha256`` read back from disk: an observation.
     """
@@ -125,6 +126,13 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         if not target_path or target_path == workspace_root:
             results.append({"path": requested, "status": "rejected"})
             logger.warning("Rejected unsafe file path: %s", requested)
+            continue
+
+        if file_info.get("delete") is True:  # workspace_move.py: an emptied file.
+            if _is_protected_existing_doc(workspace_root, target_path):
+                results.append({"path": requested, "status": "skipped_protected", "absolute_path": str(target_path)})
+            else:
+                results.append(workspace_move.deliver_delete(workspace_root, target_path, file_info, requested))
             continue
 
         if _is_protected_existing_doc(workspace_root, target_path) and not overwrite_existing:

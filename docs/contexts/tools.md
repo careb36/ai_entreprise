@@ -88,7 +88,11 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
   count instead of a silent cut).
 - `workspace_edits.py`: `workspace__edit`, a line range or one SEARCH/REPLACE
   block, applied by the daemon as a working copy and delivered at the end with
-  the answer's files (`tool_edit_files` on the evidence).
+  the answer's files (`tool_edit_files` on the evidence). Beside it, when
+  every daemon announces them, `workspace__move` (the same bytes from one file
+  to another, `moved_sha256` from the daemon) and `workspace__delete` (only an
+  emptied file; delivered as a deletion, `tool_edit_deletions`). Design:
+  [`move-and-delete-files.md`](../design/move-and-delete-files.md).
 - `edit_lint.py`: the stack profile's lint command after an edit, in the
   sandbox, its result shown to the model in the same turn.
 - `test_runs.py`: what `workspace__run_tests` may run, per folder, installing

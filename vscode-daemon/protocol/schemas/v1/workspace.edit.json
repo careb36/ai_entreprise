@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.edit",
   "title": "workspace.edit",
-  "description": "One checked edit of an existing file in the task's working copy (workspace_edit.py).",
+  "description": "One checked edit, move of lines or deletion of an emptied file in the task's working copy (workspace_edit.py, workspace_move.py, §5.1.4).",
   "x-protocol-version": 1,
   "x-subject": "workspace.edit",
   "x-kind": "request",
@@ -31,7 +31,19 @@
         },
         "replace": {
           "type": "string"
-        }
+        },
+        "op": {
+          "enum": [
+            "edit",
+            "move",
+            "delete"
+          ],
+          "description": "edit (the default), move or delete (§5.1.4)."
+        },
+        "to_path": {
+          "type": "string"
+        },
+        "to_line": {}
       },
       "required": [
         "workspace_root",
@@ -110,7 +122,151 @@
         },
         {
           "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/move"
+        },
+        {
+          "$ref": "#/$defs/delete"
         }
+      ]
+    },
+    "move": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "move"
+        },
+        "path": {
+          "type": "string"
+        },
+        "to_path": {
+          "type": "string"
+        },
+        "moved_lines": {
+          "type": "integer"
+        },
+        "moved_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256_before": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sha256_after": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "lines": {
+              "type": "integer"
+            },
+            "created": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "sha256_after"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256_before": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sha256_after": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "lines": {
+              "type": "integer"
+            },
+            "created": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "sha256_after"
+          ]
+        },
+        "first_line": {
+          "type": "integer"
+        },
+        "last_line": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "path",
+        "to_path",
+        "moved_lines",
+        "moved_sha256",
+        "source",
+        "target"
+      ]
+    },
+    "delete": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "delete"
+        },
+        "path": {
+          "type": "string"
+        },
+        "deleted": {
+          "const": true
+        },
+        "sha256_before": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_by_session": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "op",
+        "path",
+        "deleted"
       ]
     }
   }

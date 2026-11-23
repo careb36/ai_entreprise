@@ -32,6 +32,15 @@
               },
               "safe_replace": {
                 "type": "boolean"
+              },
+              "delete": {
+                "type": "boolean",
+                "description": "Remove the file, an emptied one from the edit session (§5.1.4)."
+              },
+              "sha256_expected": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The bytes the file must still hold to be removed: the daemon's own finish report."
               }
             },
             "required": [
@@ -110,7 +119,9 @@
                   "rejected",
                   "rejected_edit",
                   "rejected_syntax",
-                  "workspace_missing"
+                  "workspace_missing",
+                  "deleted",
+                  "rejected_delete"
                 ]
               },
               "absolute_path": {
@@ -128,6 +139,10 @@
               },
               "edits_applied": {
                 "type": "integer"
+              },
+              "sha256_before": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
               }
             },
             "required": [

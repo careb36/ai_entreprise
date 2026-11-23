@@ -59,6 +59,10 @@
         "workspace.console.prepare": [
           "forge_policy"
         ],
+        "workspace.edit": [
+          "delete",
+          "move"
+        ],
         "workspace.execute": [
           "full_log",
           "purpose_assistant",
@@ -66,7 +70,8 @@
           "sandbox_floor"
         ],
         "workspace.generate": [
-          "forge_policy"
+          "forge_policy",
+          "delete"
         ],
         "workspace.git.base_status": [
           "forge_policy"

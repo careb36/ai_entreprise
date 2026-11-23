@@ -171,8 +171,9 @@ def _changed(entries: Dict[str, Dict[str, Any]], keys: Dict[str, str], results: 
     after: Dict[str, Any] = {}
     for result in results:
         key = keys.get(result.get("path"))
-        if result.get("status") == "written" and key is not None:
-            after[key] = result.get("sha256")
+        if result.get("status") in ("written", "deleted") and key is not None:
+            # ``None``: the delivery deleted the file (``workspace_move.py``).
+            after[key] = result.get("sha256") if result["status"] == "written" else None
     return [
         {**entries[key], "after_sha256": sha}
         for key, sha in after.items()
@@ -216,7 +217,7 @@ def _deliver(workspace_path: str, files: list, write_files: Callable[[str, list]
             snapshot_error = f"no snapshot was taken, this delivery cannot be undone: {exc}"
     results = write_files(workspace_path, files)
     reply: Dict[str, Any] = {
-        "ok": all(r["status"] == "written" for r in results),
+        "ok": all(r["status"] in ("written", "deleted") for r in results),
         "workspace_root": workspace_path,
         "files": results,
     }
@@ -288,8 +289,14 @@ def _undo_locked(root: Path, snapshot_id: Any, resolve) -> Dict[str, Any]:
     for n, entry in enumerate(entries):
         target = _safe_target(root, entry.get("path"), resolve)
         current = target.read_bytes() if target is not None and target.is_file() else None
+        deleted = entry.get("existed") and entry.get("after_sha256") is None
         if target is None:
             conflicts.append(f"{entry.get('path')} (no longer leads to the file written)")
+        elif deleted:  # The delivery deleted it: undone only while it is still gone.
+            if current is not None or target.exists():
+                conflicts.append(f"{entry['path']} (created again since the delivery deleted it)")
+            elif not _writable(target.parent if target.parent.is_dir() else root):
+                conflicts.append(f"{entry['path']} (its folder cannot be written)")
         elif current is None:
             conflicts.append(f"{entry['path']} (deleted since the delivery)")
         elif _sha256(current) != entry.get("after_sha256"):
@@ -307,7 +314,11 @@ def _undo_locked(root: Path, snapshot_id: Any, resolve) -> Dict[str, Any]:
     restored, removed = [], []
     try:
         for entry, target, current, n in staged:
-            if entry.get("existed"):
+            if entry.get("existed") and current is None:  # Deleted by the delivery.
+                _put_back(target, originals[n])
+                done.append((target, None))
+                restored.append({"path": entry["path"], "sha256": _sha256(target.read_bytes())})
+            elif entry.get("existed"):
                 workspace_edit._write_atomically(target, originals[n])
                 done.append((target, current))
                 restored.append({"path": entry["path"], "sha256": _sha256(target.read_bytes())})
@@ -320,7 +331,10 @@ def _undo_locked(root: Path, snapshot_id: Any, resolve) -> Dict[str, Any]:
         unrecovered = []
         for target, data in reversed(done):
             try:
-                _put_back(target, data)
+                if data is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    _put_back(target, data)
             except OSError:
                 unrecovered.append(target.relative_to(root).as_posix())
         if unrecovered:
