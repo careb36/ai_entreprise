@@ -55,3 +55,20 @@ def test_a_documentation_task_without_headings_is_still_sent_back():
         {"title": "Write the architecture document"}, PROSE + "."
     )
     assert not ok and "structured sections" in reason
+
+
+def test_a_task_delivering_the_non_document_file_it_names_is_not_documentation():
+    """Sprint 6 (2026-11-23): "architecture" in the title sent back a
+    one-line JSON change for lacking two Markdown headings."""
+    task = {
+        "title": "Register the new split test files in architecture contexts",
+        "description": "Update docs/architecture/contexts.json so both files appear.",
+    }
+    change = (
+        "Registered them.\n\n```json path=docs/architecture/contexts.json\n{}\n```\n\n"
+        + PROSE
+    )
+    assert _reads_as_documentation(task, change) is False
+    assert quality_gate._validate_minimum_deliverable(task, change) == (True, "ok")
+    # A file the task does not name still leaves the wording to decide.
+    assert _reads_as_documentation(task, _code("src/contexts.py")) is True
