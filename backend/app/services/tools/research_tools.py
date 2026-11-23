@@ -37,6 +37,7 @@ from urllib.parse import urlsplit
 
 from config import settings
 
+from services.contracts import roles as catalogue
 from services.evidence.sources import (  # noqa: F401 - re-exported
     check_sources,
     packages_in,
@@ -112,14 +113,20 @@ _BLANKS = re.compile(r"\n\s*\n+")
 
 
 def research_roles() -> set[str]:
-    return {r.strip().lower() for r in settings.RESEARCH_ROLES.split(",") if r.strip()}
+    """``RESEARCH_ROLES`` by catalogue name, normalised (``roles.canonical``)."""
+    return {
+        catalogue.normalise(catalogue.canonical(r))
+        for r in settings.RESEARCH_ROLES.split(",")
+        if r.strip()
+    }
 
 
 def offered_to(role: str | None) -> bool:
-    """Whether a role gets the research tools."""
+    """Whether a role gets the research tools. A stored alias counts as its
+    catalogue role: an agent stored as ``Security`` is the SecOps."""
     return (
         settings.RESEARCH_TOOLS_ENABLED
-        and str(role or "").strip().lower() in research_roles()
+        and catalogue.normalise(catalogue.canonical(role)) in research_roles()
     )
 
 

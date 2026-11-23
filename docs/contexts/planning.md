@@ -78,7 +78,11 @@ is shared with the Manager agent ([management](management.md)).
 `sprint_team.py`: the PO suggests a team within the hired roles; the
 company's `team_selection` is `suggested` (a Manager confirms or adjusts) or
 `automatic`. `team_source` records who chose. A person never picks a team
-from scratch.
+from scratch. The planning prompt also says what each role can do
+(`capabilities_section`, issue #766): only the roles with the workspace tools
+(`roles.FILE_ROLES`) read the code and run the tests; the others write whole
+files in their answer but cannot read the project or run anything, so a task
+that runs scripts or a validation goes to the first kind.
 
 ### The intake queue
 
