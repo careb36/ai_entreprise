@@ -302,7 +302,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | Variable | Default | What it does |
 |---|---|---|
 | `RESEARCH_TOOLS_ENABLED` | `true` | Research tools: documentation, registries and OSV, fetched by the backend. |
-| `RESEARCH_ROLES` | `Architect,PO,SecOps,TechWriter,Designer` | Roles that get them. |
+| `RESEARCH_ROLES` | `Architect,PO,SecOps,TechWriter,Designer` | Roles that get them, by catalogue name: a stored alias counts (`Security` is SecOps). |
 | `RESEARCH_ALLOWED_HOSTS` | `""` | Extra hosts; only these may resolve to a private address (a mirror). |
 | `RESEARCH_TOOL_ROUNDS` | `6` | Research rounds per task. |
 | `RESEARCH_TIMEOUT_SECONDS` | `20` | One fetch. |

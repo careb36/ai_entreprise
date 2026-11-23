@@ -470,3 +470,16 @@ def test_the_po_consults_a_source_and_the_draft_keeps_it(
         ]
         == spec["sources"]
     )
+
+
+def test_a_stored_alias_gets_the_research_tools_of_its_catalogue_role(monkeypatch):
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", True)
+    monkeypatch.setattr(settings, "RESEARCH_ROLES", "Architect,SecOps,TechWriter")
+
+    # An agent stored as "Security" is the SecOps (roles.ALIASES).
+    assert research_tools.offered_to("Security")
+    assert research_tools.offered_to("secops") and research_tools.offered_to(
+        "Tech Writer"
+    )
+    assert not research_tools.offered_to("Developer")
+    assert not research_tools.offered_to(None)

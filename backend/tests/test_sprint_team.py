@@ -546,3 +546,32 @@ def test_start_sprint_refuses_a_carried_task_off_its_team_before_marking_it(
     assert "not on sprint" in response.json()["detail"]
     sqlite_session.expire_all()
     assert not carry_over.carried_over(sqlite_session.get(BacklogItem, item.id))
+
+
+# ── What each role can do, in the planning prompt (issue #766) ───────────────
+
+
+def test_the_plan_prompt_says_which_roles_can_read_the_code_and_run_tests():
+    section = sprint_team.prompt_section(["PO", "Architect", "Dev", "QA"], None)
+
+    assert "## What each role can do" in section
+    assert "read the project's files, edit them and run its tests: Dev, QA." in section
+    assert "cannot read the project's files nor run a command" in section
+    assert ": PO, Architect." in section
+    assert "runs anything (tests, scripts, a validation, a build)" in section
+
+
+def test_a_chosen_team_is_described_rather_than_the_whole_company():
+    section = sprint_team.capabilities_section(["Architect", "Security"])
+
+    assert "Dev" not in section and "read the project's files, edit" not in section
+    assert ": Architect, Security." in section
+    assert "No role here can read the project or run anything" in section
+    assert sprint_team.capabilities_section([]) == ""
+
+
+def test_an_alias_is_described_as_its_catalogue_role():
+    section = sprint_team.capabilities_section(["Data", "Tester", "TechWriter"])
+
+    assert "edit them and run its tests: Data, Tester." in section
+    assert "a test: TechWriter." in section

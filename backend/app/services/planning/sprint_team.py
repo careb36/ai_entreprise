@@ -118,8 +118,50 @@ def team_agents(
     return [a for a in agents if catalogue.canonical(a.get("role")) in keys]
 
 
+def capabilities_section(roles: list[str]) -> str:
+    """What each of *roles* can do with the project, for the planning prompt.
+
+    Only the roles given the workspace tools (``roles.FILE_ROLES``: read,
+    search, edit, run the project's tests) can look at the project or run
+    anything; the others can still deliver whole files in their answer (the
+    ``path=`` manifest) but see only what the prompt shows them. The plan used
+    to give the Architect a task that ran validation scripts it had no tool to
+    run (issue #766). Empty for no roles.
+    """
+    names = list(dict.fromkeys(r for r in roles if r))
+    files = [r for r in names if catalogue.delivers_files(r)]
+    text = [r for r in names if not catalogue.delivers_files(r)]
+    if not names:
+        return ""
+    lines = ["## What each role can do"]
+    if files:
+        lines.append(
+            f"These roles read the project's files, edit them and run its tests: "
+            f"{', '.join(files)}."
+        )
+    if text:
+        lines.append(
+            f"These roles can write whole new files in their answer, but cannot "
+            f"read the project's files nor run a command, a script, a build or "
+            f"a test: {', '.join(text)}."
+        )
+    if files and text:
+        lines.append(
+            "Give a task that needs the existing code or runs anything (tests, "
+            "scripts, a validation, a build) to a role of the first list; give "
+            "the others writing and decisions."
+        )
+    elif text:
+        lines.append(
+            "No role here can read the project or run anything: plan only "
+            "writing and decisions."
+        )
+    return "\n".join(lines) + "\n"
+
+
 def prompt_section(hired: list[str], team: list[str] | None) -> str:
-    """What the planning prompt says about the team and the answer's shape."""
+    """What the planning prompt says about the team, what each of its roles
+    can do (``capabilities_section``) and the answer's shape."""
     if team:
         head = (
             f"## Sprint team\nThe Manager chose this sprint's team: {', '.join(team)}. "
@@ -133,7 +175,7 @@ def prompt_section(hired: list[str], team: list[str] | None) -> str:
             f"{', '.join(hired)}.\n"
         )
     return (
-        f"\n\n{head}Add to your JSON object the keys "
+        f"\n\n{head}\n{capabilities_section(team or hired)}\nAdd to your JSON object the keys "
         '"team": ["<role>", ...] (the roles this sprint needs) and '
         '"team_reasons": {"<role>": "why, in one sentence"}.\n'
     )
