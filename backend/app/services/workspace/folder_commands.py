@@ -15,7 +15,7 @@ import asyncio
 import hashlib
 from typing import Any
 
-from services.workspace import sandbox, stack_roots
+from services.workspace import sandbox, stack_roots, workspace_daemon
 from services.workspace.project_profile import Context
 from services.workspace.workspace_daemon import TEST_OUTPUT_TAIL_CHARS
 
@@ -34,7 +34,9 @@ def command_record(
         "required": True,
         "exit_code": reply.get("exit_code"),
         "timed_out": bool(reply.get("timed_out")),
-        "output_tail": output[-TEST_OUTPUT_TAIL_CHARS:],
+        "output_tail": workspace_daemon.output_tail(
+            reply.get("stdout"), reply.get("stderr"), TEST_OUTPUT_TAIL_CHARS
+        ),
         "output_bytes": len(output.encode("utf-8", errors="replace")),
         "output_truncated": len(output) > TEST_OUTPUT_TAIL_CHARS,
         # Computed here over what the daemon sent, never taken from a reply.

@@ -1010,6 +1010,7 @@
       "test_orchestration_metrics.py": [
         "release"
       ],
+      "test_output_tail.py": ["evidence", "workspace"],
       "test_password_rule.py": [
         "platform"
       ],

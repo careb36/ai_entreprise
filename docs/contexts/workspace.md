@@ -63,6 +63,8 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
 
 - `workspace_daemon.py`: NATS requests about the person's machine (status,
   browse, inspect, the test-run record), behind `routers/workspace.py`.
+  `output_tail` keeps the end of a command's output with the end of stdout
+  last and most of the room, so stderr's warnings never hide the result.
 - `daemon_liveness.py`: heartbeats to `online`, `stale` or `offline`, the
   protocol range check, and `announces(subject, feature)`.
 - `daemon_abilities.py`: parses the subjects and fields a daemon announces.
