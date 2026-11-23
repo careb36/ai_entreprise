@@ -1,21 +1,27 @@
 # A manual probe of the browser sandbox image's multi-arch build (issue #529).
 #
-# `images.yml` builds with plain `docker build` on this self-hosted runner,
-# linux/amd64 only; publishing `vscode-daemon/images/browser` for amd64 and
-# arm64 needs buildx with QEMU binfmt, which the runner has not been shown to
-# have, and it must not be discovered during a real release. This workflow is
-# the answer, and it only ever runs by hand (`workflow_dispatch`): the host's
-# Docker socket never runs anything a pull request controls, and this job
-# pushes nowhere.
+# `images.yml` publishes `vscode-daemon/images/browser` for amd64 and arm64
+# with buildx and QEMU binfmt on the self-hosted runner, which must not be
+# discovered broken during a real release. This workflow is the check, and it
+# only ever runs by hand (`workflow_dispatch`): the host's Docker socket never
+# runs anything a pull request controls, and no job pushes anywhere.
 #
-# It builds the image for linux/amd64,linux/arm64 without pushing, then runs
-# the arm64 image once under QEMU with its probe (probe-browser.js), the way
-# the daemon runs it in production (network off, capabilities dropped, an
-# unprivileged uid). The Dockerfile skips its build-time probe on arm64
-# because Flow found the browser aborts under emulation; this run tells
-# whether that still holds on this runner, either way, in the run's log and
-# summary. A green run is the gate for the browser-sandbox publish job in
-# `images.yml` (issue #529, step 2).
+# Two jobs:
+#
+# - `probe`, on the self-hosted runner, builds the image for
+#   linux/amd64,linux/arm64 without pushing, as the publish job will (the
+#   amd64 build runs the Dockerfile's build-time probe natively).
+# - `probe-arm64`, on GitHub's arm64 runner (`ubuntu-24.04-arm`), builds the
+#   image natively and runs it once with its probe (probe-browser.js), the way
+#   the daemon runs it in production (network off, capabilities dropped, an
+#   unprivileged uid). Under QEMU on the x64 runner the browser exits because
+#   its GPU process cannot start (run 45209969211, 2026-11-23), which says
+#   nothing about arm64 hardware; only a native run observes the image.
+#   This is the one job off the self-hosted runner: it holds no secret, a
+#   read-only token, and never touches the host.
+#
+# A green run is the gate for the browser-sandbox publish job in `images.yml`
+# (issue #529).
 name: Browser Image Probe
 
 on:
@@ -32,11 +38,9 @@ concurrency:
 
 jobs:
   probe:
-    name: Build amd64+arm64, probe arm64 under QEMU
+    name: Build amd64+arm64 (arm64 under QEMU)
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 120
-    env:
-      IMAGE: fabrique-browser-sandbox:probe-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -70,28 +74,44 @@ jobs:
             --provenance=false \
             ./vscode-daemon/images/browser
 
-      - name: Load the arm64 image into the daemon
+      - name: Clean up
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/docker-config-browser-probe"
+
+  probe-arm64:
+    name: Build and probe arm64 natively
+    # GitHub's arm64 runner: a native arm64 kernel, no emulation. Free for a
+    # public repository.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      IMAGE: fabrique-browser-sandbox:probe-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build linux/arm64 natively
         run: |
           set -euo pipefail
-          export DOCKER_CONFIG="$RUNNER_TEMP/docker-config-browser-probe"
-          # One platform, so --load can export it to the Docker daemon; every
-          # layer comes from the cache the build above left.
-          docker buildx build \
+          {
+            echo "Docker $(docker version --format '{{.Server.Version}}') on $(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$(uname -m)" = aarch64
+          docker build \
             --platform linux/arm64 \
-            --load \
-            --provenance=false \
             --tag "$IMAGE" \
             ./vscode-daemon/images/browser
 
-      - name: Run the arm64 image once, with its probe, under QEMU
+      - name: Run the arm64 image once, with its probe
         run: |
           set -euo pipefail
           # The flags are the daemon's production ones for this image
           # (vscode-daemon/sandbox.py): network off, capabilities dropped,
           # no-new-privileges, a tmpfs /tmp and an unprivileged uid (the same
           # 4321 #315 was exercised with); HOME=/tmp as the Dockerfile's own
-          # unprivileged probe run sets it. Emulation is slow, so the probe's
-          # watchdog gets ten minutes instead of its default one.
+          # unprivileged probe run sets it.
           out="$RUNNER_TEMP/probe-arm64.txt"
           status=0
           docker run --rm \
@@ -104,20 +124,14 @@ jobs:
             --user 4321:4321 \
             -w /tmp \
             -e HOME=/tmp \
-            -e PROBE_TIMEOUT_MS=600000 \
+            -e PROBE_TIMEOUT_MS=120000 \
             "$IMAGE" \
             node /opt/fabrique/probe-browser.js > "$out" 2>&1 || status=$?
           cat "$out"
           {
-            echo "The arm64 probe under QEMU (exit ${status}):"
+            echo "The arm64 probe on native arm64 (exit ${status}):"
             echo '```'
             cat "$out"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
-
-      - name: Clean up
-        if: always()
-        run: |
-          rm -rf "$RUNNER_TEMP/docker-config-browser-probe"
-          docker rmi -f "$IMAGE" 2>/dev/null || true
