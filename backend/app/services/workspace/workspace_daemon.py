@@ -206,6 +206,31 @@ def without_snapshot(project: dict[str, Any]) -> dict[str, Any]:
 # can leave a long log; the tail is what explains a failure, and the byte count
 # lets the verifier say the tail is a tail.
 TEST_OUTPUT_TAIL_CHARS = 2000
+STDERR_HEADING = "[the end of stderr]\n"
+STDOUT_HEADING = "\n[the end of stdout]\n"
+
+
+def output_tail(stdout: str | None, stderr: str | None, limit: int) -> str:
+    """The end of a command's output in at most *limit* characters, the end of
+    stdout last and given most of the room.
+
+    A test runner prints its result on stdout (pytest's failed tests and
+    count) and its warnings on stderr. The tail of ``stdout + stderr`` was
+    stderr alone whenever stderr was long: in sprint 4 (2026-11-23) every
+    refuted run showed pytest-asyncio's deprecation warning and never which
+    test failed. Output that fits is kept whole, as before; otherwise stderr
+    keeps up to a quarter of the room and stdout the rest."""
+    stdout, stderr = stdout or "", stderr or ""
+    if len(stdout) + len(stderr) <= limit:
+        return stdout + stderr
+    if not stderr.strip():
+        return stdout[-limit:]
+    if not stdout.strip():
+        return stderr[-limit:]
+    room = limit - len(STDERR_HEADING) - len(STDOUT_HEADING)
+    out_room = min(len(stdout), room - min(len(stderr), room // 4))
+    err_room = room - out_room
+    return f"{STDERR_HEADING}{stderr[-err_room:]}{STDOUT_HEADING}{stdout[-out_room:]}"
 
 
 def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None:
@@ -226,7 +251,9 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
     test_run: dict[str, Any] = {
         "command": command,
         "exit_code": exit_code,
-        "output_tail": output[-TEST_OUTPUT_TAIL_CHARS:],
+        "output_tail": output_tail(
+            reply.get("stdout"), reply.get("stderr"), TEST_OUTPUT_TAIL_CHARS
+        ),
         "output_bytes": len(output),
         "output_truncated": len(output) > TEST_OUTPUT_TAIL_CHARS,
         "timed_out": timed_out,
