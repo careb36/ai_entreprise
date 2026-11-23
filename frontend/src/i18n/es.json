@@ -5060,5 +5060,32 @@
       "confirmRestore": "Confirmar restauración",
       "show": "Descripción en esta revisión"
     }
+  },
+  "companyImport": {
+    "start": "Empezar desde un archivo exportado",
+    "title": "Empezar desde un archivo exportado",
+    "hint": "Elegí un archivo hecho con la exportación de una empresa. Sus agentes, unidades de negocio y rutinas se crean en una empresa nueva que queda a tu nombre. Cada valor se comprueba como si lo cargaras a mano, y nada de lo que corre en esta máquina se toma del archivo: eso lo configurás vos.",
+    "file": "Archivo exportado (.json)",
+    "name": "Nombre de la empresa nueva",
+    "submit": "Importar",
+    "importing": "Importando…",
+    "cancel": "Cancelar",
+    "tooLarge": "El archivo pesa más de 5 MB.",
+    "notJson": "El archivo no es JSON válido.",
+    "notAnExport": "El archivo no es una exportación de empresa: no tiene sección de contenido.",
+    "failed": "La importación falló: {{message}}",
+    "created": "Se creó {{name}} con {{agents}} agentes, {{units}} unidades de negocio y {{routines}} rutinas.",
+    "routinesOff": "Las rutinas llegaron apagadas; encendé cada una cuando esté lista.",
+    "digestMismatch": "El contenido del archivo no coincide con el resumen que declara: se editó después de la exportación. Se importó igual; revisá lo que configuró.",
+    "toSetUp": "Falta configurar",
+    "skipped": "No se aplicó del archivo",
+    "open": "Abrir la empresa",
+    "setUp": {
+      "connection": "Conexión de proveedor {{name}} ({{provider}}): cargale su clave de API.",
+      "apiKey": "Clave de API de la conexión {{name}} ({{provider}}).",
+      "headers": "Encabezados de la conexión {{name}} ({{provider}}).",
+      "credential": "Credencial de proyecto: {{type}}, acceso {{access}}.",
+      "environment": "Variable de entorno {{name}} para {{scope}}."
+    }
   }
 }

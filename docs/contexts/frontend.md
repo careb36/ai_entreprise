@@ -111,7 +111,7 @@ component is named.
 | `/sprints`, `/sprints/:id/:tab?` | `Sprints`, `SprintWorkspace` (its tabs; the Overview through `Dashboard`) |
 | `/sprints/:sprintId/tasks/:taskId`, `/task/:taskId` | `TaskDetails` (run secrets, event log, edit task) |
 | `/dashboard`, `/analytics`, `/workspace/…`, `/sprint-ops/:id` | redirect to the active sprint's tab |
-| `/companies/new`, `/companies/select` | `CompanyNew`, `CompanySelect` |
+| `/companies/new`, `/companies/select` | `CompanyNew` (the wizard, or start from an exported file), `CompanySelect` |
 | `/invitations`, `/account`, `/notifications` | `Invitations`, `Account`, `MyNotifications` |
 | `/company/members`, `/company/teams`, `/company/duties` | `CompanyMembers`, `CompanyTeams`, `CompanyDuties` |
 | `/company/sso`, `/company/chat`, `/company/github` | `CompanySso`, `ChatApprovals`, `GitHubIntegration` |
