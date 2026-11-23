@@ -5099,5 +5099,9 @@
     "leftOut_other": "{{count}} secretos quedaron fuera y están nombrados en el archivo.",
     "redacted_one": "Se reemplazó {{count}} línea que parecía un secreto.",
     "redacted_other": "Se reemplazaron {{count}} líneas que parecían secretos."
+  },
+  "commentAuthor": {
+    "unidentified": "Sin identificar (nadie con sesión iniciada)",
+    "unrecorded": "Una persona (nombre no registrado)"
   }
 }

@@ -507,7 +507,8 @@ async def update_backlog_item(
 
     Supports updating ``status``, ``priority``, ``assignee``, or appending a
     new comment.  All fields are optional; only provided fields are changed.
-    A comment is a person's note (author ``user``), never a deliverable; one
+    A comment is a person's note (author ``user``, with who wrote it from the
+    signed-in session: ``board_moves.person_fields``), never a deliverable; one
     starting with ``board.SEND_BACK_MARKER`` restarts the rework budgets. A
     move to ``todo`` starts the task (``services/loop/board_moves.py``).
     """

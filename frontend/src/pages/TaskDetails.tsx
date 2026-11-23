@@ -21,6 +21,7 @@ import { TaskComments } from '../components/TaskComments'
 import { TaskEditForm } from '../components/TaskEditForm'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { CountPill, EmptyState, PageHeader, Panel, StatusBadge, type StatusTone } from '../components/ui'
+import { commentAuthor } from '../lib/commentAuthor'
 import { lineagePath } from './Lineage'
 
 /** Each status and priority as an icon, a word and a tone: never the colour alone. */
@@ -339,11 +340,11 @@ export default function TaskDetails() {
             {task.comments.map((c, i) => (
               <li key={i} className="data-row flex gap-3">
                 <div aria-hidden="true" className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-brand-600/40 bg-brand-600/30 text-[10px] font-bold text-brand-300">
-                  {c.author.slice(0, 1).toUpperCase()}
+                  {commentAuthor(c, t).slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-gray-200">{c.author}</span>
+                    <span className="text-xs font-medium text-gray-200">{commentAuthor(c, t)}</span>
                     <span className="text-meta tabular-nums">{formatDate(c.created_at)}</span>
                   </div>
                   <p className="text-xs leading-relaxed text-gray-300">{c.text}</p>

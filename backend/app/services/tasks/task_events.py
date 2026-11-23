@@ -109,6 +109,8 @@ GATE = "gate"
 PERSON = "person"
 # The comment author each actor's comments carry on the board.
 _DEFAULT_AUTHORS = {SYSTEM: "System", PERSON: "user"}
+# Who made a person's change (issue #767), copied from the event to its comment.
+PERSON_FIELDS = ("by", "user_id", "token_id", "identified")
 FLAG_NAMES = ("explicit_block", "needs_person", "retryable", "retry", "frozen")
 # The cap on text the platform writes; a person's text is kept whole.
 TEXT_LIMIT = 4000
@@ -345,6 +347,8 @@ def record(
                 "text": rendered,
                 "created_at": created_at or datetime.now(UTC).isoformat(),
                 "event_id": event.id,
+                # Who, for a person's comment (board_moves.person_fields).
+                **{k: body[k] for k in PERSON_FIELDS if k in body},
             },
         ]
     item.updated_at = datetime.now(UTC)

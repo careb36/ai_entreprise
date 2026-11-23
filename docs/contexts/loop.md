@@ -143,6 +143,9 @@ follow-ups and procedures also run on their own.
   person's reason as the comment (422) and a task in To do or Blocked (409);
   the task is settled, never dispatched or carried over, and a task waiting
   on it is held for a person. Moving it to To do reopens it.
+  `person_fields` records who made each change from the signed-in session
+  (`sod.actor_of`): an API token is named as itself with its creator's
+  account; no signed-in person is `identified: false` (issue #767).
 - `sprint_close.py`: a second close after a reopening answers
   `reclosed_after_reopen` and skips what happens once.
 - `carry_over.py`: moves a task blocked for a person into another open sprint

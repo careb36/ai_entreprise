@@ -4,6 +4,7 @@ import { CircleX, MessageSquarePlus, RotateCcw } from 'lucide-react'
 import { useCurrentRole, useUpdateBacklogItem } from '../hooks/useQueries'
 import { errorDetail, type BacklogItem } from '../services/api'
 import { CountPill, Panel } from './ui'
+import { commentAuthor } from '../lib/commentAuthor'
 
 /** The thread's comments a person wrote (author ``user``), newest last. */
 export function personComments(task: BacklogItem) {
@@ -47,7 +48,10 @@ export function TaskComments({ task }: { task: BacklogItem }) {
           {comments.map((comment, index) => (
             <li key={`${comment.created_at}-${index}`} className="px-3 py-2">
               <p className="whitespace-pre-wrap text-[13px] text-gray-200">{comment.text}</p>
-              {comment.created_at && <p className="text-meta mt-0.5 tabular-nums">{comment.created_at.replace('T', ' ').slice(0, 16)}</p>}
+              <p className="text-meta mt-0.5 tabular-nums">
+                {commentAuthor(comment, t)}
+                {comment.created_at && ` · ${comment.created_at.replace('T', ' ').slice(0, 16)}`}
+              </p>
             </li>
           ))}
         </ul>
