@@ -12,7 +12,6 @@ re-exports these names.
 
 import asyncio
 import os
-import re
 from typing import Any
 from uuid import uuid4
 
@@ -24,14 +23,7 @@ from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from nats_client import NATSClient
 from sqlmodel import Session, select, text
 
-from services.contracts.manifest import (
-    ALLOWED_ARTIFACT_EXTENSIONS,
-    expected_hashes,
-    parse_file_manifest,
-)
-from services.contracts.manifest import (
-    sanitize_relative_path as _sanitize_relative_path,
-)
+from services.contracts.manifest import expected_hashes, parse_file_manifest
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
 from services.loop import delivery_checks, folder_baseline, refuted_undo, review_digest
@@ -64,56 +56,6 @@ def _resolve_workspace_root(company_id: int) -> str | None:
             return discovery.project_path
 
     return os.getenv("AGENT_WORKSPACE_ROOT") or None
-
-
-def _normalize_artifact_content(path: str, deliverable: str) -> str:
-    """Trim wrapper text so persisted files contain only final artifact content."""
-    text_content = (deliverable or "").strip().replace("\r\n", "\n")
-
-    fenced = re.search(
-        r"```(?:[a-zA-Z0-9_+-]+)?\s*(.*?)```", text_content, flags=re.DOTALL
-    )
-    if fenced and len(fenced.group(1).strip()) > 40:
-        text_content = fenced.group(1).strip()
-
-    if path.lower().endswith(".md"):
-        text_content = re.sub(r"(?m)^\*\*\*\s*$", "", text_content).strip()
-        heading = re.search(r"(?m)^#\s+", text_content)
-        if heading and heading.start() > 0:
-            text_content = text_content[heading.start() :].strip()
-
-    return text_content
-
-
-def _extract_artifact_targets(
-    item: dict[str, Any], deliverable: str
-) -> list[dict[str, str]]:
-    """Infer concrete file targets from task metadata and generated content."""
-    title_desc = f"{item.get('title', '')} {item.get('description', '')}"
-    candidates = re.findall(r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)", title_desc)
-
-    artifacts: list[dict[str, str]] = []
-    for c in candidates:
-        rel = _sanitize_relative_path(c)
-        if not rel:
-            continue
-        _, ext = os.path.splitext(rel)
-        if ext.lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
-            continue
-        artifacts.append(
-            {"path": rel, "content": _normalize_artifact_content(rel, deliverable)}
-        )
-
-    # Remove duplicates while preserving order.
-    dedup: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for a in artifacts:
-        if a["path"] in seen:
-            continue
-        seen.add(a["path"])
-        dedup.append(a)
-
-    return dedup
 
 
 def _build_review_payload(
@@ -389,15 +331,18 @@ async def _deliver_artifacts(
     """
     Write the agent's files into the company's project and record the outcome.
 
-    Files come from the agent's ``path=`` manifest, or — when it declared none —
-    from file names in the task text.  The daemon is asked with a NATS request
+    Files come only from the agent's ``path=`` manifest and its tool edits. A
+    deliverable that declares none writes nothing: it is text for QA to read.
+    Until 2026-11-23 a deliverable without a manifest was written, whole, into
+    every file the task's title or description named; in sprints 4 and 5 that
+    put a plan in prose into ``backend/tests/test_browser_image.py``,
+    ``docs/architecture/contexts.json`` and two check scripts, because their
+    tasks mentioned them.  The daemon is asked with a NATS request
     and reports, per file, the sha256 of the bytes it read back from disk; the
     worker compares that with the sha256 of the content it sent.  Returns the
     payload for QA review.
     """
     targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
-    if not targets:
-        targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
     review_payload = _build_review_payload(deliverable, targets)
 
     evidence: dict[str, Any] | None = None

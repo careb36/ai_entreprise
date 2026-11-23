@@ -39,8 +39,6 @@ from services.loop.worker.deliver import (  # noqa: F401 - re-exported
     _delivery_comment,
     _detect_project_test_command,
     _detect_test_command,
-    _extract_artifact_targets,
-    _normalize_artifact_content,
     _on_delivery_result,
     _plan_queued_delivery,
     _publish_queued_delivery,

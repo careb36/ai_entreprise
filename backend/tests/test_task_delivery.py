@@ -448,6 +448,39 @@ def test_answer_without_files_is_still_recorded(db, tmp_path, monkeypatch):
     assert verification is not None
 
 
+def test_an_answer_without_a_manifest_never_overwrites_a_file_the_task_names(
+    db, tmp_path, monkeypatch
+):
+    """Sprint 5 (2026-11-23): a plan in prose, delivered without a ``path=``
+    block, was written whole into the test file its task description named."""
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
+    project = tmp_path / "project-named"
+    (project / "backend" / "tests").mkdir(parents=True)
+    named = project / "backend" / "tests" / "test_browser_image.py"
+    named.write_text("def test_kept():\n    assert True\n")
+    item, agent, sprint = _task_fixture(db, str(project))
+    item = {
+        **item,
+        "title": "Analyze tests and create split plan",
+        "description": "Review backend/tests/test_browser_image.py and "
+        "docs/architecture/contexts.json; propose the split.",
+    }
+    nats = _DaemonOverNATS(_load_daemon())
+
+    review = asyncio.run(
+        worker_deliver._deliver_artifacts(
+            nats, item, agent, sprint, "## Split plan\n\nMove the probe tests."
+        )
+    )
+
+    assert nats.requests == []
+    assert named.read_text() == "def test_kept():\n    assert True\n"
+    assert not (project / "docs").exists()
+    run, _verification, _comments = _latest(db, item["id"])
+    assert run.claims["files"] == []
+    assert "Split plan" in review
+
+
 def test_unreported_served_model_is_left_empty_not_defaulted(db, tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     item, agent, sprint = _task_fixture(db, str(tmp_path))

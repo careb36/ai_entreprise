@@ -67,7 +67,7 @@ the LangGraph graph is only an optional kickoff conversation.
    what the Verifier's records observed beside the files it names, and how
    to write a note (`services/loop/worker/sprint_notes.py`,
    [design](archive/design/SPRINT_BOARD.md)).
-3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files (a block marked `edit`
+3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files, and only those (an answer without `path=` blocks or tool edits writes nothing and is text for QA; a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
    parses, `vscode-daemon/file_edits.py`). The worker sends them to the
