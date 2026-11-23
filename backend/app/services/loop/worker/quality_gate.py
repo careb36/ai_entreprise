@@ -42,13 +42,19 @@ DOC_SUFFIXES = (".md", ".mdx", ".rst", ".txt", ".adoc")
 def _reads_as_documentation(item: dict[str, Any], text: str) -> bool:
     """Whether the deliverable is held to the documentation rules (more words,
     two headings): a delivery whose files are all documents, or a task whose
-    title or description names documentation by whole words (#508). A task
-    that asks for a document stays one whatever files it delivers, so code
-    in place of the document is still sent back."""
+    title or description names documentation by whole words (#508), unless
+    every file delivered is one the task names. A task that asks for a
+    document stays one whatever other files it delivers, so code in place of
+    the document is still sent back."""
     paths = [entry["path"] for entry in parse_file_manifest(text)]
     if paths and all(path.lower().endswith(DOC_SUFFIXES) for path in paths):
         return True
     title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
+    # Files the task itself names are what it asks for: "update
+    # docs/architecture/contexts.json" is a JSON change, not a document
+    # (sprint 6, 2026-11-23), whatever word of the title matches.
+    if paths and all(path.lower() in title_desc for path in paths):
+        return False
     return bool(DOC_KEYWORDS.search(title_desc))
 
 
