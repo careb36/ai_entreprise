@@ -43,6 +43,7 @@
     "backend/tests/test_browser_image.py",
     "backend/tests/test_browser_smoke.py",
     "backend/tests/test_code_graph.py",
+    "backend/tests/test_command_runs_rewritten_check.py",
     "backend/tests/test_daemon_protocol_client.py",
     "backend/tests/test_delivery_tests.py",
     "backend/tests/test_developer_tools_evidence.py",

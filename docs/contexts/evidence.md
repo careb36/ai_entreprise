@@ -88,7 +88,9 @@ implementation task is judged on the same tests with no such excuse.
 
 - `command_runs.py`: the `required_commands` check. A non-zero exit or a
   timeout refutes; a command that could not run (126/127, not found, a policy
-  refusal, no exit status) is unverifiable.
+  refusal, no exit status) is unverifiable. An every-delivery check whose own
+  file the delivery changed (the daemon's report of its writes) refutes
+  whatever it exited: a check the delivery rewrote is not evidence about it.
 - `app_check.py`: the `dependencies_installed`, `application_started` and
   `e2e_run` checks, from the daemon's install and application run.
 - `security_probe.py`: the running application's answers to the daemon's probe
