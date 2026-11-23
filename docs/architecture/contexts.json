@@ -506,6 +506,9 @@
       "test_bench_compare.py": [
         "planning"
       ],
+      "test_bench_docs_pack.py": [
+        "planning"
+      ],
       "test_bench_edit_formats.py": [
         "repo"
       ],

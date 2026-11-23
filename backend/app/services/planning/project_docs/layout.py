@@ -138,7 +138,11 @@ def build(
     claims: list[dict[str, Any]] | None = None,
     persons: list[str] | None = None,
     statements: list[dict[str, Any]] | None = None,
+    data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """One document. *data* is what a reader checks without parsing the
+    Markdown (the traceability rows, the checks' results; issue #698): the
+    same records the body renders, in no language."""
     lang, tr = tr_of(snapshot)
     title = tr(f"title.{key}")
     if framework == PMBOK:
@@ -146,7 +150,7 @@ def build(
     domain, focus = PLACEMENT.get(key, ("", ""))
     lines = [f"# {title}", "", f"_{tr('generated_note')} {framework}_", "", *body, ""]
     markdown = "\n".join(lines) + "\n" + sources.section()
-    return {
+    doc = {
         "key": key,
         "title": title,
         "framework": framework,
@@ -161,3 +165,6 @@ def build(
         "inputs": list(inputs),
         "input_sha256": input_sha256(snapshot, inputs),
     }
+    if data is not None:
+        doc["data"] = data
+    return doc
