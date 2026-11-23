@@ -239,11 +239,16 @@ def deliver(
     merged = merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
     parent = _out(["rev-parse", "HEAD"], worktree)
     results = write_files(str(worktree), files)
-    # A deleted file is staged like a written one: ``git add`` records the removal.
-    written = [r["path"] for r in results if r.get("status") in ("written", "deleted")]
+    written = [r["path"] for r in results if r.get("status") == "written"]
+    deleted = [r["path"] for r in results if r.get("status") == "deleted"]
     commit = None
-    if written:
-        run_git(["add", "--", *written], worktree)
+    if written or deleted:
+        if written:
+            run_git(["add", "--", *written], worktree)
+        if deleted:
+            # ``git add`` of a path Git never tracked fails; ``rm --cached
+            # --ignore-unmatch`` records a tracked file's removal, skips the rest.
+            run_git(["rm", "-q", "--cached", "--ignore-unmatch", "--", *deleted], worktree)
         if (
             run_git(["diff", "--cached", "--quiet"], worktree, check=False).returncode
             != 0

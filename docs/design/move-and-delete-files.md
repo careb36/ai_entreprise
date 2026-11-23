@@ -110,9 +110,10 @@ back at finish. For each file, `finish` answers with one of three outcomes:
 
    Its status is then `deleted`, with `sha256_before`. Otherwise the status is
    `rejected_delete`, with the reason.
-3. **Git (`git_workspace.deliver`).** Deleted paths are staged with the
-   written ones (`git add -- <path>` records a removal), so the task's commit
-   holds the deletion.
+3. **Git (`git_workspace.deliver`).** Deleted paths are staged with
+   `git rm --cached --ignore-unmatch`, so the task's commit holds the
+   deletion. (`git add` of a path Git never tracked, such as an ignored file,
+   fails and would fail the whole delivery.)
 4. **Undo without Git (`delivery_snapshot`).** The snapshot already keeps the
    bytes of every path it is asked to write. A deleted file is recorded as
    changed with `after_sha256: null`, and undo writes it back if the path is
@@ -129,8 +130,14 @@ back at finish. For each file, `finish` answers with one of three outcomes:
   workflow) is therefore held for a person, exactly like changing it.
 - `rewritten_by_delivery` (a check the delivery rewrote is not evidence) also
   counts a deleted check script as rewritten.
-- The tests still run after the delivery. A split that loses a test shows up
-  as a lower count or a failure, which the platform observes.
+- QA's acceptance test files are checked before the tests run
+  (`delivery_checks.guard_test_files`): one that is missing is restored and the
+  delivery refuted, so deleting one gains nothing.
+- **Residual risk.** No check counts the project's other tests between
+  deliveries. A Developer could already empty an unprotected test file with
+  edits before this change; `delete` adds no new way to lose tests (a deleted
+  file was emptied first, and every line that left it is recorded), but a
+  count of collected tests per delivery would close the gap. Not built.
 
 ## Older daemons
 
@@ -144,7 +151,7 @@ sees an operation it would misread.
 
 | Threat | Example | Mitigation |
 |---|---|---|
-| Tampering: make failing tests vanish | Delete `test_x.py` | `delete` only removes an empty file. Emptying a file needs moves (bytes kept elsewhere, hash checked) or edits (each recorded). A deleted protected path is held for a person. The suite runs after the delivery. |
+| Tampering: make failing tests vanish | Delete `test_x.py` | `delete` only removes an empty file. Emptying a file needs moves (bytes kept elsewhere, hash checked) or edits (each recorded). A deleted protected path is held for a person; a missing acceptance test is restored and refutes the delivery. Residual: an unprotected test emptied with edits is not counted (as before this change). |
 | Tampering: hollow out a check | Delete `scripts/check_file_sizes.py` | Same as above. A check script the delivery rewrote or deleted is not evidence about it (`rewritten_by_delivery`). |
 | Tampering: write outside the project | `to_path: ../../etc/x` | The daemon's resolver, as for every edit: no `..`, no symlink escape, no VCS metadata. |
 | Information disclosure | Move lines from `.env` into a tracked file | `is_sensitive` refuses both ends of a move, as for read and edit. |

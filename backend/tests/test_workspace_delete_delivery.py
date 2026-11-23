@@ -144,3 +144,33 @@ def test_on_a_task_branch_the_deletion_is_in_the_commit(tmp_path):
     assert reply["ok"] is True
     # The person's checkout is untouched: the deletion is on the task's branch.
     assert (root / "tests" / "test_old.py").exists()
+
+
+def test_on_a_task_branch_an_untracked_file_deleted_does_not_break_the_commit(tmp_path):
+    """``git add`` of a path Git never tracked fails ("pathspec did not match"):
+    a deleted ignored file must not fail the whole delivery (sdl-review)."""
+    root = tmp_path / "app"
+    root.mkdir()
+    (root / ".gitignore").write_text("local_*.py\n")
+    (root / "a.py").write_text("a = 1\n")
+    git(root, "init", "-q", "-b", "main")
+    git(root, "add", ".")
+    git(root, "commit", "-q", "-m", "first")
+    worktree_file = "local_notes.py"
+    first = daemon.deliver_files(
+        str(root), [{"path": "b.py", "content": "b = 1\n"}], SPEC
+    )
+    worktree = Path(first["git"]["worktree"])
+    (worktree / worktree_file).write_text("")
+
+    reply = daemon.deliver_files(
+        str(root),
+        [{"path": "c.py", "content": "c = 1\n"}, _delete(worktree_file, "")],
+        SPEC,
+    )
+
+    assert {f["path"]: f["status"] for f in reply["files"]} == {
+        "c.py": "written",
+        worktree_file: "deleted",
+    }
+    assert reply["git"]["commit"] and not (worktree / worktree_file).exists()
