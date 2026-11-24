@@ -1416,6 +1416,9 @@
       "test_sod_policy.py": [
         "management"
       ],
+      "test_spec_authors_read.py": [
+        "planning"
+      ],
       "test_specifications.py": [
         "loop"
       ],

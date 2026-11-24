@@ -56,6 +56,8 @@ written by a model.
 `spec_check.py` normalises ids and is the deterministic gate (a requirement
 without a criterion, a quality target without a number, an open question).
 `spec_author.py` asks the PO for a draft in a fixed JSON shape.
+While it writes, the PO may read the project (see "The authors read the
+project" below).
 `spec_planning.py` has the PO split an approved specification into tasks
 (`uncovered` lists what no task covers) and reads coverage from the boards.
 `spec_diff.py` diffs two versions by id; `spec_impact.py` lists the tasks and
@@ -138,8 +140,32 @@ plan endpoints record both under the plan's ref (`plan:<company>:<plan_id>`,
 action `already_done_claim`: the claim in `result`, the observations in
 `details`), sharing the `plan_id` of a fallback record; `start_sprint` with
 that `plan_id` copies the row to `sprint:<id>:planning`, which records no
-work. The `Sprint` row has no column for plan metadata. The specification
-plan (`spec_planning`) has no reads, so it is not asked.
+work. The `Sprint` row has no column for plan metadata. The plan from an
+approved specification (`spec_planning.plan_from`) goes through the same
+reads and check (`planning_reads.spec_answer`, with the PO's system prompt
+and billing unit; `plan_read` audit turns; the plan's `planning_reads`):
+its claim and observed fields are the same, and a plan whose every part is
+claimed done is one QA task, "Verify that the specification "<title>" is
+already met", covering every criterion, without the test-writing tasks.
+Without reads it is today's single call (`spec_author.ask`) and a claim is
+ignored.
+
+### The authors read the project
+
+The PO writing a specification (`spec_author.draft_from`) and the Architect
+writing or revising an architecture (`arch_author.draft_from`) have families R
+and S (`tool_steps.SPEC_AUTHOR`, `ARCH_AUTHOR`). `planning_reads.author_turn`
+gives them the read-only workspace tools on the company's project
+(`review_tools.for_step`: list, read, search, find_file, read-only Git and a
+document's text when announced, navigation when announced; never an edit, a
+move, a delete, a lint or a test run) beside their research tools, as one
+`CombinedToolbox` whose round limit is the larger of the reads'
+(`PLANNING_TOOL_ROUNDS` for the PO, `ARCHITECT_TOOL_ROUNDS` for the
+Architect) and the research tools' own. Each round is an audit turn
+(`spec_author_read`, `arch_author_read`) and the final one carries every
+call's observation (`tool_calls`); the draft's `sources` stay the research
+calls only. No daemon, no root, 0 rounds or a call on an event loop: the
+research tools alone, as before.
 
 ### The intake queue
 
