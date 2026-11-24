@@ -91,6 +91,8 @@ implementation task is judged on the same tests with no such excuse.
   refusal, no exit status) is unverifiable. An every-delivery check whose own
   file the delivery changed (the daemon's report of its writes) refutes
   whatever it exited: a check the delivery rewrote is not evidence about it.
+  Before a delivery, the same rule keeps `workspace__run_tests` from running a
+  check script the task changed (`services/tools/check_scripts.py`).
 - `app_check.py`: the `dependencies_installed`, `application_started` and
   `e2e_run` checks, from the daemon's install and application run.
 - `security_probe.py`: the running application's answers to the daemon's probe

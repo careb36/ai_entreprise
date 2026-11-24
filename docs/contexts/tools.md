@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `signature_lookup`, `workspace_edits`.
-- **Modules:** `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_runs`, `tool_history`, `workspace_edits`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -96,7 +96,20 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 - `edit_lint.py`: the stack profile's lint command after an edit, in the
   sandbox, its result shown to the model in the same turn.
 - `test_runs.py`: what `workspace__run_tests` may run, per folder, installing
-  first in an isolated sandbox. The delivery's own test run is the evidence.
+  first in an isolated sandbox, and the one `workspace.execute` request every
+  run goes through. The delivery's own test run is the evidence.
+- `check_scripts.py`: `workspace__run_tests` with exactly `python3
+  scripts/<name>.py [args]` (or `python`) runs that check at the project root,
+  in the sandbox and under the daemon's command policy, when the script is
+  committed on the default branch (`workspace.git.read_at`) and its bytes on
+  disk are those bytes (the sha256 computed here against the daemon's
+  `workspace.hash`). A script this task edited, moved or delivered over is not
+  run: a check the task rewrote is not evidence about it. The arguments take
+  plain characters only (no shell operator, quote, variable, glob, `..` or
+  absolute path), so no shell reads more than one simple command. Anything
+  else keeps the substitution: the folder's test command runs and the reply
+  says why. The observation carries `check_script` (path, commit, both
+  sha256, or `refused` and why).
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole.
 

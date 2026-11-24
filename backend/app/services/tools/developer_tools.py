@@ -17,7 +17,8 @@ agent-computer interface (``developer_tool_replies``):
   (``vscode-daemon/workspace_edit.py``); offered only where the task's files
   may be touched (its worktree, or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
-  within the same runner), bounded output.
+  within the same runner), or a check script committed under ``scripts/``
+  that the task did not change (``check_scripts``), bounded output.
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
@@ -57,6 +58,7 @@ from config import settings
 
 from services.contracts import roles
 from services.tools import (
+    check_scripts,
     developer_tool_replies,
     developer_tool_schemas,
     edit_lint,
@@ -281,6 +283,10 @@ class WorkspaceToolbox:
         if tool in (MOVE, DELETE) and self.can_move:
             return workspace_edits.structure(self, tool, arguments, extra)
         if tool == RUN_TESTS:
+            # A committed check script runs as asked (``check_scripts``).
+            checked, why = check_scripts.attempt(self, arguments, extra)
+            if checked is not None:
+                return checked
             folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
             command = self._test_command(arguments.get("command"), plan.get("test"))
             extra["command"] = command
@@ -297,30 +303,18 @@ class WorkspaceToolbox:
                 if failed:
                     return failed
                 self.installed.add(folder)
-            request: dict[str, Any] = {
-                "workspace_root": root,
-                "command": test_runs.in_folder(command, folder),
-                "timeout_seconds": sandbox.test_seconds(),
-            }
-            if self.sandbox is not None:
-                request["sandbox"] = self.sandbox
-            reply = self.requester("workspace.execute", request, sandbox.test_wait())
-            exit_code = reply.get("exit_code")
-            extra["exit_code"] = exit_code
-            if isinstance(reply.get("sandbox"), dict):
-                extra["sandbox"] = reply["sandbox"]
-            extra["timed_out"] = bool(reply.get("timed_out"))
-            output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
-            if reply.get("timed_out"):
+            exit_code, output, timed_out = test_runs.execute(
+                self, test_runs.in_folder(command, folder), extra
+            )
+            if timed_out:
                 return f"The tests ran past the time limit and were stopped.\n{output[-2000:]}"
-            if reply.get("error") and exit_code is None:
-                raise RuntimeError(str(reply["error"]))
             return developer_tool_replies.tests_text(
                 exit_code,
                 output,
                 self.result_max_chars,
                 arguments.get("command"),
                 command,
+                why,
             )
         raise RuntimeError("unknown tool")
 

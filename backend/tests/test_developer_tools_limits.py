@@ -70,12 +70,13 @@ def test_a_command_not_run_is_named_with_the_one_that_ran_instead(project):
         requester, str(project), test_command="python -m pytest -q"
     )
     observation, text = box.call(
-        _call("workspace__run_tests", command="python scripts/check_file_sizes.py"), 1
+        _call("workspace__run_tests", command="make check-sizes"), 1
     )
     assert observation["command"] == "python -m pytest -q"
     assert text.startswith(
-        "[`python scripts/check_file_sizes.py` was not run: this tool runs only the "
-        "folder's test runner, so it ran `python -m pytest -q` instead."
+        "[`make check-sizes` was not run: this tool runs only the folder's test "
+        "runner or a check script committed under scripts/ (`python3 "
+        "scripts/<name>.py [args]`), so it ran `python -m pytest -q` instead."
     )
     assert text.endswith("exit status 0\n3 passed\n")
     # The command it asked for, or none: no note.
