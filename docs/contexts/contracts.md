@@ -7,7 +7,7 @@ docstring has the detail.
 - **Folder:** `backend/app/services/contracts/`
 - **May import:** no other context.
 - **Interface:** every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `tool_steps`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Rules
 
@@ -28,8 +28,22 @@ docstring has the detail.
 `roles.py`: `ROLES` (CamelCase, such as `ScrumMaster`), `canonical` for older
 stored spellings (nothing stored is rewritten), `DEVELOPER_ROLES` (the
 Developer and the four coding roles, which take the Developer's path),
-`FILE_ROLES` (adds QA and the Designer) and `RESEARCH_ROLES`. Agent roles
-stay free text on `POST /v1/agents`.
+`FILE_ROLES` (adds QA and the Designer; no longer the tool gate) and
+`RESEARCH_ROLES` (the deciding turns that research). `delivers_files` says
+whether a role executing a task reads and runs, from `tool_steps`. Agent
+roles stay free text on `POST /v1/agents`.
+
+### The tool ceiling of each step
+
+`tool_steps.py` (owner, 2026-11-24): the step sets which tool families a turn
+may be offered and the role may only narrow them. `CEILING` maps each step to
+its families, `R` read, `W` write, `X` run, `S` research: `execute` R, W, X, S;
+`architect_brief` R, S; `qa_review` R; `plan` R; `spec_author` and
+`arch_author` R, S; `scrum_decision` R. `ROLE_DENY` drops families for a role
+by catalogue name and is empty by default; `families(step, role)` is the
+ceiling minus the deny set, so a role never goes above its step. `record`
+gives the step and its families for a run's `tools_offered`. What a family
+turns into is the [tools](tools.md) context's decision.
 
 ### The protected paths
 

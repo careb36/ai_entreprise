@@ -13,9 +13,16 @@ code and the research tools. Read this before changing
 
 ## How it works
 
-The task worker builds a toolbox for the role (`developer_tools.toolbox_for`,
-a `CombinedToolbox` of the workspace, research and MCP boxes) and runs
-`mcp_tools.chat_with_tools`: at most a bounded number of rounds, then one
+The task worker builds a toolbox for the turn's step
+(`developer_tools.toolbox_for`, a `CombinedToolbox` of the workspace, research
+and MCP boxes). The step sets the families and the role only narrows them
+(`contracts/tool_steps`): an execution turn of any role gets the reads (R),
+`run_tests` with the folder's commands and committed scripts (X), the edit,
+move and delete tools where edits may go (W, `workspace_edits.allowed`) and
+the research tools (S, allowed hosts only); a step without X or W never gets
+those tools, whatever the role. The run's `tools_offered` names the tools,
+those withheld and why, and the `step` and its `families`. The worker then
+runs `mcp_tools.chat_with_tools`: at most a bounded number of rounds, then one
 request without tools, so a task always ends in a deliverable. Tools are
 offered as `<server>__<tool>`; `workspace` and `research` are reserved server
 names. Each call is recorded on the Verifier's evidence as `tool_calls`.
@@ -86,7 +93,9 @@ call written as text; the tool budget had run out" if it happens again.
 ### The research tools
 
 - `research_tools.py`: `research__fetch`, `research__package`,
-  `research__advisories`, offered to the roles that decide. The evidence's
+  `research__advisories`, offered to the roles that decide
+  (`RESEARCH_ROLES`, `toolbox_for`) and, whatever the role, to a step that
+  allows research such as a task's execution (`company_toolbox`). The evidence's
   `sources.sources_of` keeps the observations on the specification and the
   architecture; `sources.check_sources` is the Verifier's `sources` check.
 - `research_registries.py`: PyPI, npm, crates.io, the Go proxy, OSV.
@@ -102,15 +111,19 @@ call written as text; the tool budget had run out" if it happens again.
 ### The Developer's workspace tools
 
 - `developer_tools.py`: `workspace__list`, `read`, `search`, `find_file`,
-  `edit` and `run_tests`, offered to the roles that deliver files.
+  `edit` and `run_tests`, offered by the step (`toolbox_for(..., step=)`,
+  `offered_to(role, step)`): every role executing a task gets them.
   `repository_section` puts the tree and the map into the task prompt.
-  `read_tools` offers the four read tools alone, to any role (the Architect's
-  brief, `loop/worker/architect_brief`).
+  `read_tools` offers the four read tools alone, to any role.
 - `review_tools.py`: QA's read-only toolbox (`list`, `read`, `search`,
   `find_file`; never `edit`, `move`, `delete` or `run_tests`) on the
   `workspace_root` the task's latest verification recorded, for
   `QA_REVIEW_TOOL_ROUNDS` rounds before the verdict. No recorded delivery or
-  no daemon: no toolbox.
+  no daemon: no toolbox. `for_step` gives the same read-only toolbox on the
+  task's root (the project without a task) to the steps that only read: the
+  Architect's brief, the PO's planning (`PLANNING_TOOL_ROUNDS`) and the
+  ScrumMaster's decision (`SCRUM_TRIAGE_TOOL_ROUNDS`); `None` for a step or
+  role that keeps no reading, 0 rounds, or no daemon or root.
 - `developer_tool_schemas.py`: the schemas. `developer_tool_replies.py`: what
   the model sees, after SWE-agent's interface (a numbered window per read, a
   count instead of a silent cut). A read without `lines` asks the daemon for

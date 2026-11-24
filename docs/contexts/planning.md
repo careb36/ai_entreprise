@@ -9,7 +9,7 @@ it never runs a task. Read this before changing
 - **Folder:** `backend/app/services/planning/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md).
 - **Interface:** `arch_author`, `arch_check`, `document_approval`, `spec_check`, `spec_planning`, `sprint_planner`, `sprint_team`, `stack_detection`.
-- **Modules:** `adr_docs`, `arch_author`, `arch_check`, `arch_versions`, `company_standards_import`, `discovery_service`, `discovery_team`, `document_approval`, `intake_queue`, `intake_records`, `objective_text`, `planner_fallback`, `project_docs/`, `project_docs/c4`, `project_docs/c4_code`, `project_docs/checks`, `project_docs/closure`, `project_docs/collect`, `project_docs/collect_checks`, `project_docs/collect_code`, `project_docs/collect_plans`, `project_docs/collect_release`, `project_docs/collect_stakeholders`, `project_docs/collect_status`, `project_docs/collect_transition`, `project_docs/comms_docs`, `project_docs/control_docs`, `project_docs/domain_checks`, `project_docs/export`, `project_docs/export_docx`, `project_docs/export_markdown`, `project_docs/export_pdf`, `project_docs/final_docs`, `project_docs/iterations`, `project_docs/layout`, `project_docs/log_docs`, `project_docs/pack`, `project_docs/pack_manifest`, `project_docs/performance`, `project_docs/plan_checks`, `project_docs/quality_docs`, `project_docs/refs`, `project_docs/release_docs`, `project_docs/sanitize`, `project_docs/scope_docs`, `project_docs/security_docs`, `project_docs/specs`, `project_docs/stakeholder_docs`, `project_docs/statements`, `project_docs/status_docs`, `project_docs/texts`, `project_docs/texts_checks_en`, `project_docs/texts_checks_es`, `project_docs/texts_en`, `project_docs/texts_es`, `project_docs/texts_final_en`, `project_docs/texts_final_es`, `project_docs/texts_plans_en`, `project_docs/texts_plans_es`, `project_docs/texts_release_en`, `project_docs/texts_release_es`, `project_docs/texts_stakeholders_en`, `project_docs/texts_stakeholders_es`, `project_docs/texts_status_en`, `project_docs/texts_status_es`, `project_docs/texts_transition_en`, `project_docs/texts_transition_es`, `project_docs/texts_wstg_en`, `project_docs/texts_wstg_es`, `project_docs/transition`, `project_docs/transition_docs`, `project_docs/wstg_status`, `spec_author`, `spec_check`, `spec_diff`, `spec_impact`, `spec_planning`, `sprint_context`, `sprint_fallbacks`, `sprint_planner`, `sprint_prompts`, `sprint_team`, `stack_detection`, `wstg_plan`
+- **Modules:** `adr_docs`, `arch_author`, `arch_check`, `arch_versions`, `company_standards_import`, `discovery_service`, `discovery_team`, `document_approval`, `intake_queue`, `intake_records`, `objective_text`, `planner_fallback`, `planning_reads`, `project_docs/`, `project_docs/c4`, `project_docs/c4_code`, `project_docs/checks`, `project_docs/closure`, `project_docs/collect`, `project_docs/collect_checks`, `project_docs/collect_code`, `project_docs/collect_plans`, `project_docs/collect_release`, `project_docs/collect_stakeholders`, `project_docs/collect_status`, `project_docs/collect_transition`, `project_docs/comms_docs`, `project_docs/control_docs`, `project_docs/domain_checks`, `project_docs/export`, `project_docs/export_docx`, `project_docs/export_markdown`, `project_docs/export_pdf`, `project_docs/final_docs`, `project_docs/iterations`, `project_docs/layout`, `project_docs/log_docs`, `project_docs/pack`, `project_docs/pack_manifest`, `project_docs/performance`, `project_docs/plan_checks`, `project_docs/quality_docs`, `project_docs/refs`, `project_docs/release_docs`, `project_docs/sanitize`, `project_docs/scope_docs`, `project_docs/security_docs`, `project_docs/specs`, `project_docs/stakeholder_docs`, `project_docs/statements`, `project_docs/status_docs`, `project_docs/texts`, `project_docs/texts_checks_en`, `project_docs/texts_checks_es`, `project_docs/texts_en`, `project_docs/texts_es`, `project_docs/texts_final_en`, `project_docs/texts_final_es`, `project_docs/texts_plans_en`, `project_docs/texts_plans_es`, `project_docs/texts_release_en`, `project_docs/texts_release_es`, `project_docs/texts_stakeholders_en`, `project_docs/texts_stakeholders_es`, `project_docs/texts_status_en`, `project_docs/texts_status_es`, `project_docs/texts_transition_en`, `project_docs/texts_transition_es`, `project_docs/texts_wstg_en`, `project_docs/texts_wstg_es`, `project_docs/transition`, `project_docs/transition_docs`, `project_docs/wstg_status`, `spec_author`, `spec_check`, `spec_diff`, `spec_impact`, `spec_planning`, `sprint_context`, `sprint_fallbacks`, `sprint_planner`, `sprint_prompts`, `sprint_team`, `stack_detection`, `wstg_plan`
 
 ## How it works
 
@@ -79,10 +79,12 @@ is shared with the Manager agent ([management](management.md)).
 company's `team_selection` is `suggested` (a Manager confirms or adjusts) or
 `automatic`. `team_source` records who chose. A person never picks a team
 from scratch. The planning prompt also says what each role can do
-(`capabilities_section`, issue #766): only the roles with the workspace tools
-(`roles.FILE_ROLES`) read the code and run the tests; the others write whole
-files in their answer but cannot read the project or run anything, so a task
-that runs scripts or a validation goes to the first kind.
+(`capabilities_section`, issue #766): the roles that read the code and run
+the tests when they execute a task (`roles.delivers_files`, from
+`contracts/tool_steps`: since 2026-11-24 every role, unless its profile
+denies reading or running); the others write whole files in their answer but
+cannot read the project or run anything, so a task that runs scripts or a
+validation goes to the first kind.
 `fit_tasks`, which every plan passes through (from a prompt, self-improvement,
 from a specification), enforces it without a model: a task whose title runs,
 checks or changes the code, given to a role without the tools, moves to the
@@ -92,7 +94,22 @@ and a note in its description. Only the title is read, since a description
 may quote the objective whole. A TechWriter's task moves only when the
 title's first word runs or checks something (its documents are whole files in
 its answer); an acceptance-test task, or a team without a file role, is left
-alone.
+alone. With every role's execution turn holding the tools, this move is the
+fallback for a role whose profile denies them, not the rule.
+
+### The PO reads before it plans
+
+`planning_reads.py`: the planning step's ceiling is reading
+(`tool_steps.PLAN`). Where the daemon answers and the company's project path
+is known, `sprint_planner._plan_with_po` asks through the tool loop with the
+read-only workspace tools (`review_tools.for_step`: list, read, search,
+find_file) for at most `PLANNING_TOOL_ROUNDS` rounds; the daemon's listing
+stays in the prompt. Each reading round is a `plan_read` audit turn and the
+final one carries the calls' observations (`tool_calls`); the plan carries
+them as `planning_reads`. The answer keeps today's form and parser. No
+daemon, no root, 0 rounds, a call made on an event loop (the planning
+endpoints run the planner in a thread for that reason), or an empty answer
+after the reads: today's single call.
 
 ### The intake queue
 

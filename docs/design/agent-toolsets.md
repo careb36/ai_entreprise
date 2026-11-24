@@ -109,11 +109,11 @@ What stays with the role, and is not a matter of tools:
 | Reads lost to history compression, 100-line window | 16% re-reads | `fix/reads-stay-and-widen` |
 | Tool errors and spent rounds not recorded | sha256 only | `fix/tool-observability` |
 | Tasks given to roles without tools; PO blind to the repo | role list | `fix/plans-see-repo-and-tools` |
-| **TechWriter, SecOps, Architect, PO executing a task get no R/W/X** | `FILE_ROLES` gate | **next: tools follow the step** |
+| TechWriter, SecOps, Architect, PO executing a task get no R/W/X | `FILE_ROLES` gate | `feat/tools-follow-the-step` (`contracts/tool_steps`: the step sets the ceiling, a role deny narrows) |
 | **No tool to read a task's record or a run's evidence** | prompt summaries | **next: `board__task`, `board__evidence`** |
-| **Developer roles cannot query registries or advisories** | research only for deciding roles | **next: S for execution turns** |
-| **PO plans without R** | one daemon listing | **next: R for planning** |
-| **ScrumMaster decides without R or E** | plain chat | **next** |
+| Developer roles cannot query registries or advisories | research only for deciding roles | `feat/tools-follow-the-step` (S in every execution turn) |
+| PO plans without R | one daemon listing | `feat/tools-follow-the-step` (`planning_reads`, `PLANNING_TOOL_ROUNDS`) |
+| **ScrumMaster decides without E** | R since `feat/tools-follow-the-step` (`triage_reads`) | **next: `board__task`** |
 | **Missing tools are not counted** | nowhere | **next: tool demand per sprint** |
 
 ## Next changes
