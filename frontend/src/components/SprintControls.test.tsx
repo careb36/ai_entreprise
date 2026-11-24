@@ -59,6 +59,14 @@ describe('sprint work controls', () => {
     expect(screen.getByText(`Recorded reason: ${reason}`)).toBeInTheDocument()
   })
 
+  it('says a sprint paused because its test command found no tests', () => {
+    const reason = 'No delivery of this sprint could run its tests: the test command found no tests at tests (file or directory not found).'
+    wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_kind: 'tests_not_found', pause_reason: reason }} />)
+    expect(screen.getByText('Paused: the test command found no tests')).toBeInTheDocument()
+    expect(screen.getByText(/Fix the company's test command/)).toBeInTheDocument()
+    expect(screen.getByText(`Recorded reason: ${reason}`)).toBeInTheDocument()
+  })
+
   it('says a person paused a sprint with no recorded reason', () => {
     wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_kind: 'person', pause_reason: null }} />)
     expect(screen.getByText('Paused by a person')).toBeInTheDocument()

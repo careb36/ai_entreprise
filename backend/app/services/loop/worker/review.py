@@ -8,7 +8,9 @@ replica's tasks go back to ``todo`` first (``replicas.recover_stale``), then
   through ``_review_task``: its reviewer (``_reviewer_of``), a frozen task kept
   blocked, the review retries (``_block_exhausted_reviews``) and a missing
   deliverable (``_block_missing_deliverable``), the delivery gate, evidence
-  before opinion (``_send_back_from_delivery_gate``), then QA's review
+  before opinion (``_send_back_from_delivery_gate``; a platform problem such
+  as a test command that found no tests is held for a person instead,
+  ``platform_hold``), then QA's review
   (``qa_review._qa_review``);
 - ``_retry_blocked``: a blocked task with a deliverable and no block reason
   goes back to QA (``_recover_to_review``), and one the worker retries is
@@ -35,6 +37,7 @@ from sqlmodel import Session, select
 from services.evidence import acceptance, delivery_gate
 from services.loop import (
     in_flight,
+    platform_hold,
     refuted_undo,
     repeat_delivery,
     replicas,
@@ -155,6 +158,12 @@ async def _review_task(
     gate = await asyncio.to_thread(record._delivery_gate, sprint.company_id, item.id)
     if gate is not None and gate[0] == delivery_gate.DELIVERY_QUEUED:
         # Files are written when the daemon connects; review then.
+        return
+    if gate is not None and platform_hold.is_platform_problem(gate[0]):
+        # The platform's configuration, not the code: held, no rework spent.
+        paused = platform_hold.hold(session, item, sprint, *gate)
+        quality_gate_blocked_ids.add(item.id)
+        await platform_hold.publish(nats_client, sprint, item, gate[0], paused)
         return
     if gate is not None:
         await _send_back_from_delivery_gate(

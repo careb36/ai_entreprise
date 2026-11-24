@@ -5,14 +5,20 @@ its report could have said so: the report's ``company.sandbox`` is the mode the
 harness *asked* the company for, which is configuration, not what ran
 (retrospective F8). This module keeps the two apart.
 
-- ``--container-mode`` configures a run the way the e2e's ``e2e (container)``
-  job does (``scripts/e2e/run.sh`` with ``E2E_SANDBOX=container``): the
-  company's sandbox ``container``, one root command run with the image's own
-  ``python`` (``--profile sprint-tests``, unless ``--profile`` says otherwise),
-  and the ``sandbox`` step after ``wait``. The stack's side, which the harness
-  cannot set, is in ``README.md`` (``DELIVERY_SANDBOX=container`` and
-  ``DELIVERY_SANDBOX_IMAGE`` on the backend, the image on the daemon's
-  computer).
+- ``--container-mode`` runs the company's code in the container sandbox and
+  adds the ``sandbox`` step after ``wait``, as the e2e's ``e2e (container)``
+  job does (``scripts/e2e/run.sh`` with ``E2E_SANDBOX=container``). It keeps
+  the stack profile ``--profile`` names, ``folders`` by default: La
+  Fabrique's suites per folder, each delivery running the suite of the folder
+  the daemon saw it write in, so the tests the plan puts in ``backend/tests``
+  are the tests the Verifier runs. Until 2026-11-24 it switched to
+  ``sprint-tests``, one root command over ``tests/`` at the root: right for
+  the e2e's fake model, whose plan writes there (the e2e passes
+  ``--profile sprint-tests`` itself), and wrong for a real plan of La
+  Fabrique: in the owner action's run 2 every delivery found no tests and the
+  run spent its budget on reworks. The stack's side, which the harness
+  cannot set, is in ``README.md`` (``DELIVERY_SANDBOX=container`` on the
+  backend, the daemon's stack image on its computer).
 - The ``sandbox`` step reads, for every run of the sprint, the sandbox the
   daemon's reply to its test run reported (``evidence.test_run.sandbox``, the
   reply ``vscode-daemon/sandbox.py`` writes and the backend records as it
@@ -38,8 +44,9 @@ from typing import Any
 NOT_OBSERVED = "not observed"
 MIXED = "mixed"
 EXIT_NOT_CONTAINER = 5
-# The e2e container job's command: the sandbox image's python, never a path
-# on the harness's machine (scripts/e2e/run.sh, TEST_COMMAND for container).
+# ``--profile sprint-tests``'s default command (the e2e container job's): the
+# sandbox image's python, never a path on the harness's machine
+# (scripts/e2e/run.sh, TEST_COMMAND for container).
 TEST_COMMAND = "python -m pytest -q -p no:cacheprovider tests"
 RUNS_LIMIT = 500
 
@@ -66,7 +73,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--container-mode",
         action="store_true",
-        help="run as the e2e container job does: sandbox container, --profile sprint-tests, and the sandbox step; exit 5 unless the daemon reported a container",
+        help="run in the container sandbox with the sandbox step, keeping --profile (folders by default); exit 5 unless the daemon reported a container",
     )
 
 
@@ -82,7 +89,6 @@ def apply(
                 f"--container-mode runs in the container sandbox, not --sandbox {args.sandbox}"
             )
         args.sandbox = "container"
-        args.profile = args.profile or "sprint-tests"
     args.sandbox = args.sandbox or "container"
     args.profile = args.profile or "folders"
     args.test_command = args.test_command or TEST_COMMAND

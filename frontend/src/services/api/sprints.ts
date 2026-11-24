@@ -48,7 +48,7 @@ export interface TaskHold {
 }
 
 /** Why a paused sprint is paused, from the reason the code that paused it wrote (`services/loop/live_state.py`). */
-export type PauseKind = 'person' | 'no_credit' | 'nothing_done' | 'budget' | 'acknowledgement' | 'daemon' | 'other'
+export type PauseKind = 'person' | 'no_credit' | 'nothing_done' | 'budget' | 'acknowledgement' | 'daemon' | 'tests_not_found' | 'other'
 
 /** One agent run in flight now: an assignee's run of a claimed task, or QA's review of a delivery. */
 export interface LiveRun {

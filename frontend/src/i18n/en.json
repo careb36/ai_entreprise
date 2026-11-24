@@ -2323,6 +2323,10 @@
         "title": "Paused: the workspace daemon is not answering",
         "action": "Start the daemon on the computer that holds the projects, then resume the sprint."
       },
+      "tests_not_found": {
+        "title": "Paused: the test command found no tests",
+        "action": "Fix the company's test command (stack profile) or where the tests are, send the held tasks back to work, then resume the sprint."
+      },
       "other": {
         "title": "This sprint is paused",
         "action": "Read the recorded reason below, then resume the sprint."

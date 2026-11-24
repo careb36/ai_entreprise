@@ -29,6 +29,7 @@ from services.evidence import (
     sources,
     standards,
     test_baseline,
+    test_collection,
     tests_removed,
     unwritten_code,
     wstg_tests,
@@ -239,7 +240,8 @@ def check_tests_run(evidence: dict) -> dict:
     Exit 0 passes, any other exit code refutes. A command that hung refutes too,
     and says so: it was asked to finish and did not. Only a run that never
     happened (no test command, daemon silent, command error) is unverifiable —
-    the code was not shown to work, which is different from it failing.
+    the code was not shown to work, which is different from it failing; so is
+    one that found no tests (``test_collection``, ``cause: no_tests``).
 
     When the daemon had to cut the output, the observation says it, so a
     truncated tail is never read as the whole story. When the output named
@@ -274,6 +276,8 @@ def check_tests_run(evidence: dict) -> dict:
             "outcome": VERDICT_REFUTED,
             "observation": f"{target} timed out and was killed{truncated}",
         }
+    if found := test_collection.no_tests_in(evidence):  # configuration, not code
+        return test_collection.check(target, found, truncated)
     exit_code = run.get("exit_code")
     if isinstance(exit_code, int) and not isinstance(exit_code, bool):
         if exit_code == 0:

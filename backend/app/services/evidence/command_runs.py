@@ -11,7 +11,8 @@ claim, and it is not read here.
 
 - any required command that failed (a non-zero exit, a timeout) refutes;
 - one that could not run (a runtime that is not installed, a refusal by the
-  command policy, no exit status) leaves the delivery unverifiable;
+  command policy, no exit status) leaves the delivery unverifiable, and so
+  does a suite that found no tests (``test_collection``);
 - a suite whose only failures are the acceptance tests of criteria not
   implemented yet passes, as ``tests_run`` excuses them;
 - an every-delivery command whose own file the delivery changed refutes,
@@ -31,7 +32,7 @@ import shlex
 from typing import Any
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
-from services.evidence import criteria_tests, protected_check
+from services.evidence import criteria_tests, protected_check, test_collection
 
 CHECK_NAME = "required_commands"
 # What a shell or an interpreter prints when the program itself is missing.
@@ -135,6 +136,9 @@ def outcome_of(
             VERDICT_UNVERIFIABLE,
             f"{target} could not run (exit {code}): {first or 'not installed'}",
         )
+    if record.get("kind") == "suite" and (why := test_collection.no_tests(record)):
+        # Configuration, not code: the suite's command found nothing to run.
+        return VERDICT_UNVERIFIABLE, f"{target}: {why}"
     if record.get("kind") == "suite":
         excused_all, excused = criteria_tests.excused_among(
             record.get("failing_tests") or [], (evidence or {}).get("acceptance") or {}
