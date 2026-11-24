@@ -1,0 +1,163 @@
+{
+  "account": {
+    "git_user_name": "Carolina Pereira",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "2330bc49fdbaf1a42ba0deeb0a68b73106335386",
+    "name": "feat/run-program"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "1080ed0756ae74c81ddb54cdbb4316d2a13495c5",
+  "duration_seconds": 428.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-24T19:48:54Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-44-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/1080ed0756ae74c81ddb54cdbb4316d2a13495c5.20261124T194146Z.log",
+    "sha256": "48a74c7639516b7a6fb8445c2955bf428cbd621f90c60bd05bc3fa2864102c68"
+  },
+  "main_before": "317d35b25cb860f58fc917d054a10c470791222c",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "317d35b25cb860f58fc917d054a10c470791222c",
+    "2330bc49fdbaf1a42ba0deeb0a68b73106335386"
+  ],
+  "protected_paths": [
+    {
+      "path": ".github/CODEOWNERS",
+      "pattern": ".github/CODEOWNERS"
+    },
+    {
+      "path": "backend/app/services/evidence/delivery_gate.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/metric_matches.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/protected_list.json",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "backend/app/services/evidence/verification.py",
+      "pattern": "backend/app/services/evidence/**"
+    },
+    {
+      "path": "docs/architecture/contexts.json",
+      "pattern": "docs/architecture/contexts.json"
+    },
+    {
+      "path": "vscode-daemon/sandbox.py",
+      "pattern": "vscode-daemon/sandbox.py"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "6d008938b8feed1fca74aad30ec28bb227d8e0ef",
+  "started_at": "2026-11-24T19:41:46Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n auto)",
+      "seconds": 255.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 22.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 4.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 97.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 33.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 4.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "8713029c0d3afff4a543d0509613681b1abd9eea"
+}
