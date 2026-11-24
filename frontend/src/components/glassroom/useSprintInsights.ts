@@ -1,11 +1,9 @@
 import { useMemo } from 'react'
 import type { TFunction } from 'i18next'
-import type { AgentLiveState, AgentMessage, SprintRetro } from '../../store/agentStore'
+import type { AgentMessage } from '../../store/agentStore'
 import type { BacklogItem, SprintBoard } from '../../services/api'
-import { extractBlockedReason, formatAgeShort, hasDeliverableComment, phaseLabel } from './format'
-import type {
-  HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
-} from './types'
+import { extractBlockedReason, hasDeliverableComment, phaseLabel } from './format'
+import type { QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry } from './types'
 
 /** The sprint's tasks, in progress first. */
 export function useSprintTasks(board: SprintBoard | undefined) {
@@ -22,6 +20,7 @@ export function useSprintTasks(board: SprintBoard | undefined) {
         priority: task.priority,
         assignee: task.assignee,
         comments: task.comments,
+        hold: task.observed?.hold ?? null,
       }))
 
     return entries.sort((left, right) => {
@@ -46,44 +45,6 @@ export function useQuotaTelemetry(quotas: unknown) {
       ratio: Math.max(0, Math.min(1, used / quota)),
     }
   }, [quotas])
-}
-
-/** The operational health tiles of the right panel. */
-export function useHealthEntries({ agentStates, clockTick, isConnected, messages, sprintTasks, memoryHits, lastRetro, t }: {
-  agentStates: Record<string, AgentLiveState>
-  clockTick: number
-  isConnected: boolean
-  messages: AgentMessage[]
-  sprintTasks: SprintTaskEntry[]
-  memoryHits: number
-  lastRetro: SprintRetro | null
-  t: TFunction
-}) {
-  return useMemo<HealthPanelEntry[]>(() => {
-    const now = clockTick
-    const liveRoles = Object.values(agentStates)
-    const activeCount = liveRoles.filter(entry => entry.fsmState === 'active').length
-    const errorCount = liveRoles.filter(entry => entry.fsmState === 'error').length
-    const staleMs = liveRoles.length > 0
-      ? Math.min(...liveRoles.map(entry => Math.max(0, now - Date.parse(entry.lastSeen || ''))))
-      : 0
-    const blockedCount = sprintTasks.filter(task => task.status === 'blocked').length
-    const reworkOpen = messages.filter(msg => msg.semanticType === 'task.rework_scheduled').length
-
-    const retroRate = lastRetro?.completionRate ?? null
-    const retroTone: HealthPanelEntry['tone'] = retroRate === null ? 'neutral' : retroRate >= 80 ? 'good' : retroRate >= 50 ? 'warn' : 'danger'
-
-    return [
-      { label: t('glassroom.healthLabels.stream'), value: isConnected ? t('glassroom.streamStatus.live', 'Live') : t('glassroom.streamStatus.offline', 'Offline'), tone: isConnected ? 'good' : 'danger' },
-      { label: t('glassroom.healthLabels.activeAgents'), value: String(activeCount), tone: activeCount > 0 ? 'good' : 'warn' },
-      { label: t('glassroom.healthLabels.agentErrors'), value: String(errorCount), tone: errorCount > 0 ? 'danger' : 'good' },
-      { label: t('glassroom.healthLabels.blockedTasks'), value: String(blockedCount), tone: blockedCount > 0 ? 'warn' : 'good' },
-      { label: t('glassroom.healthLabels.openReworks'), value: String(reworkOpen), tone: reworkOpen > 0 ? 'warn' : 'neutral' },
-      { label: t('glassroom.healthLabels.freshestHeartbeat'), value: liveRoles.length > 0 ? t('glassroom.agoWithValue', '{{value}} ago').replace('{{value}}', formatAgeShort(staleMs)) : t('glassroom.notAvailable', 'n/a'), tone: staleMs <= 30000 ? 'good' : 'warn' },
-      { label: t('glassroom.healthLabels.memoryHits', 'Memory hits'), value: String(memoryHits), tone: memoryHits > 0 ? 'good' : 'neutral' },
-      ...(retroRate !== null ? [{ label: t('glassroom.healthLabels.lastSprintCompletion', 'Last sprint'), value: `${retroRate}%`, tone: retroTone }] : []),
-    ]
-  }, [agentStates, clockTick, isConnected, messages, sprintTasks, memoryHits, lastRetro, t])
 }
 
 /** Each task's path through queue, execution, review, rework and done. */

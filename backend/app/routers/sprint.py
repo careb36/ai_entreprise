@@ -30,11 +30,12 @@ from schemas import (
     SprintStartRequest,
 )
 from services.evidence import acceptance
-from services.loop import board_moves, run_window_gate, sprint_archive
+from services.loop import board_moves, live_state, run_window_gate, sprint_archive
 from services.loop.carry_over import CarryOverError, carry_over
 from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
 from services.planning import (
+    already_done,
     arch_author,
     planner_fallback,
     spec_check,
@@ -161,6 +162,7 @@ async def start_sprint(
 
     # A plan made without the model: the sprint's event, from the backend's record.
     planner_fallback.carry_to_sprint(session, sprint, req.plan_id)
+    already_done.carry_to_sprint(session, sprint, req.plan_id)  # The PO's claim too.
     positions = _refused(dependencies.check_positions, backlog_items)
     item_ids = []
     rows: list[BacklogItem] = []
@@ -442,6 +444,7 @@ async def get_sprint_board(
         "status": sprint.status,
         **integration_state.of_sprint(session, sprint.id),
         "pause_reason": sprint.pause_reason,
+        "pause_kind": live_state.pause_kind(sprint.status, sprint.pause_reason),
         "urgent": sprint.urgent,
         "run_window": run_window_gate.view(session, sprint),
         "goal": sprint.goal,

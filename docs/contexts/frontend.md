@@ -91,12 +91,56 @@ in `backend/tests/test_check_frontend_architecture.py`).
 - **The sprint board:** `components/KanbanBoard.tsx` and `components/board/`;
   saved views and filters in `SprintTaskViews`. A card's signals keep
   **Observed** and **Reported** apart.
+- **The sprint planner:** `components/QuickLaunch.tsx` (the plan preview),
+  with `PlannerFallback` (a plan made without the model) and `AlreadyDoneNote`
+  (what the PO says is already done, labelled as its claim, beside the files
+  the platform saw it read, a claimed path it did not read flagged "not read").
 - **The live view:** `components/GlassRoom.tsx` and `components/glassroom/`,
   over SSE (`services/api/stream.ts`).
 - **The desktop app:** `frontend/electron/`, outside the layers. The packaged
   app serves `dist/` on `127.0.0.1` and forwards `/v1/*` to the backend, so the
   page and the API share an origin; the main window stays on that origin and
   other links open in the system browser.
+
+## Statuses on the Live page and the board
+
+Every status comes from a backend record; the event stream only animates it
+(issue #766). `GET /v1/sprints/{id}/live_state` ([loop](loop.md#what-the-live-page-reads))
+and the board's `observed.hold` ([tasks](tasks.md#what-holds-a-task-back)) are
+the sources; the logic is in `components/glassroom/liveStatus.ts` and
+`components/board/HoldBadge.tsx`.
+
+**Live page** (`components/GlassRoom.tsx`, `components/glassroom/`):
+
+| Status | Source | Definition |
+|---|---|---|
+| working (sidebar spinner, typing row, roster, "N working") | `live_state.working` | A run in flight for that agent now: an assignee's run of a claimed task or QA's review. Empty unless the sprint is `active` or `needs_split`. |
+| a message group's badge | the group's messages | Its latest message that says a state: approved, rework requested, blocked, delivered, error, update; a start reads "working" only while the agent is in `working`, else "started". |
+| Agents | the feed's authors | Each company role once (aliases folded: `Dev` is Developer, `Security` is SecOps); the system, the Verifier, the quality gate and a person are not agents. An unknown name shows as itself. |
+| feed order | each event's `timestamp` | Events are placed by their own time; after `closed_at` a separator says "After the sprint closed". |
+| sprint status | board `status`, `integration_state`, `pause_kind` | `SprintStatusBadge` (a completed sprint still integrating shows integrating); a paused one says why. |
+| Agents with a run in flight | `tiles.active_agents` | Distinct roles in `working`. |
+| Failed agent calls | `tiles.agent_failures` | The sprint's `review_failed` and `retried` task events. |
+| Blocked tasks | `tiles.blocked_tasks` | Tasks whose status is `blocked`. |
+| Tasks with an unanswered rework request | `tiles.open_reworks` | Tasks not done or discarded with a rework request no delivery answered. |
+| Last event an agent recorded | `tiles.last_agent_event_at` | The newest task event whose actor is a role (not the system, a gate or a person). It is not a heartbeat. |
+| Workspace daemon heartbeat | `tiles.daemon` | The daemon's liveness as the backend observed its heartbeats: online, late, offline or none seen, and how long ago. |
+| Memory retrievals seen on this stream | the stream | `*.memory_retrieved` events received since the page opened, each once; no record keeps them. |
+| Previous sprint (name) | `tiles.previous_sprint` | The company's latest completed sprint before this one: done of total. |
+
+**Board** (`components/KanbanBoard.tsx`, `components/board/`, `SprintControls`):
+
+| Status | Source | Definition |
+|---|---|---|
+| column, status select | `status` | The task's status. |
+| hold chip | `observed.hold.kind` | `person` waits for a person; `dependency` waits for the tasks listed (`#30`); `retry_pending` and `review_pending` the worker runs on its own; `frozen`; `risk_hold` waits for a person to accept the risk; `run_window` ready, held until the window opens. |
+| Needs a person | `observed.waits_for_person` | Only a person releases the hold (person, risk hold, frozen); a dependency wait is not one. |
+| left edge | `status` and the hold | Red for blocked, amber for blocked by a dependency, sky for a pending retry or review. |
+| paused banner | `pause_kind`, `pause_reason` | The kind's title and what to do, then the reason as recorded. |
+| `x / y done`, blocked, rework requests (Sprints list) | `GET /v1/sprints` | Done and total tasks, tasks blocked now, and every rework request made over the sprint. |
+
+`reassigned_from` is not a record field: the planner writes the reassignment
+into the task's description, which the task page shows.
 
 ## Routes and the page that serves each
 

@@ -108,6 +108,9 @@ def test_when_the_daemon_reports_a_container_the_run_is_recorded_as_container_mo
     assert code == 0
     assert seen["observed"] == "container" and seen["container_mode"] is True
     assert seen["observed_by"] == "daemon" and seen["asked"] == "container"
+    # --container-mode's request reached the report: the one field that keeps
+    # the intent ("container_mode_asked") apart from the evidence ("container_mode").
+    assert seen["container_mode_asked"] is True
     assert seen["replies"] == 2 and seen["runs_looked_at"] == 2
     assert seen["images"] == ["sha256:" + "ab" * 32]
     assert [r["run_id"] for r in seen["runs"]] == [1, 2]
@@ -129,6 +132,7 @@ def test_when_the_daemon_reports_the_host_the_run_is_labelled_host_and_the_harne
     assert code == sandbox_mode.EXIT_NOT_CONTAINER == 5
     assert seen["asked"] == "container" and seen["observed"] == "host"
     assert seen["container_mode"] is False
+    assert seen["container_mode_asked"] is True
     assert "labelled host, not container mode" in seen["note"]
     assert any("not a container-mode run" in n for n in report["notes"])
 

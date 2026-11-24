@@ -830,13 +830,14 @@
     "noAgentActivity": "No agent activity yet.",
     "healthLabels": {
       "stream": "Stream",
-      "activeAgents": "Active agents",
-      "agentErrors": "Agent errors",
+      "activeAgents": "Agents with a run in flight",
       "blockedTasks": "Blocked tasks",
-      "openReworks": "Open reworks",
-      "freshestHeartbeat": "Freshest heartbeat",
-      "memoryHits": "Memory hits",
-      "lastSprintCompletion": "Last sprint"
+      "openReworks": "Tasks with an unanswered rework request",
+      "memoryHits": "Memory retrievals seen on this stream",
+      "agentFailures": "Failed agent calls (review or model)",
+      "lastAgentEvent": "Last event an agent recorded",
+      "daemonHeartbeat": "Workspace daemon heartbeat",
+      "previousSprint": "Previous sprint ({{name}})"
     },
     "streamStatus": {
       "live": "Live",
@@ -853,7 +854,11 @@
     },
     "badgeLabels": {
       "working": "working",
+      "started": "started",
+      "approved": "approved",
       "delivered": "delivered",
+      "refused": "rework requested",
+      "blocked": "blocked",
       "error": "error",
       "update": "update",
       "split": "split"
@@ -865,7 +870,7 @@
       "rework": "Rework",
       "done": "Done"
     },
-    "retroTitle": "Last Sprint Retro",
+    "retroTitle": "This sprint's retrospective",
     "retroCompletion": "Completion",
     "retroDone": "Done",
     "retroBlocked": "Blocked",
@@ -957,7 +962,22 @@
       "retrying": "🔄 Retrying blocked task: {{task}}",
       "gate_rework": "↩️ Sent back for rework: {{task}} ({{detail}}).",
       "gate_blocked": "❌ The pre-review gate blocked the deliverable for: {{task}} ({{detail}})."
-    }
+    },
+    "previousSprintValue": "{{done}}/{{total}} done ({{rate}}%)",
+    "daemonState": {
+      "online": "online",
+      "stale": "late",
+      "offline": "offline",
+      "not_observed": "no heartbeat seen"
+    },
+    "agentState": {
+      "working": "working",
+      "reviewing": "reviewing",
+      "idle": "not working"
+    },
+    "agentReviewing": "reviewing the delivery",
+    "lastActivity": "Last activity: {{text}}",
+    "afterClose": "After the sprint closed"
   },
   "governance": {
     "title": "Governance",
@@ -2255,8 +2275,6 @@
   "workControl": {
     "plannedTitle": "This sprint has not started",
     "plannedHint": "The agents start working when you start it.",
-    "pausedTitle": "This sprint is paused",
-    "pausedHint": "Nothing is dispatched, reviewed or retried until it is resumed.",
     "start": "Start",
     "stop": "Stop",
     "stopConfirm": "Stop this sprint for good? Unfinished tasks are blocked and no follow-up sprint opens.",
@@ -2278,7 +2296,38 @@
     "gitError": "Git settings unavailable",
     "loading": "Loading…",
     "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
-    "autonomySaved": "Autonomy level saved"
+    "autonomySaved": "Autonomy level saved",
+    "pauseRecorded": "Recorded reason: {{reason}}",
+    "pauseKind": {
+      "person": {
+        "title": "Paused by a person",
+        "action": "Nothing is dispatched, reviewed or retried until someone resumes it."
+      },
+      "no_credit": {
+        "title": "Paused: a model provider has no credit",
+        "action": "Top up the provider's account, then resume the sprint."
+      },
+      "nothing_done": {
+        "title": "Paused: no task is done and the rest wait for a person",
+        "action": "Unblock, finish or discard the blocked tasks, then resume the sprint."
+      },
+      "budget": {
+        "title": "Paused: the sprint budget",
+        "action": "An Owner raises the sprint budget (or adds the model's price), then resumes the sprint."
+      },
+      "acknowledgement": {
+        "title": "Paused: an Owner's acknowledgement is missing",
+        "action": "An Owner acknowledges the company's settings, then resumes the sprint."
+      },
+      "daemon": {
+        "title": "Paused: the workspace daemon is not answering",
+        "action": "Start the daemon on the computer that holds the projects, then resume the sprint."
+      },
+      "other": {
+        "title": "This sprint is paused",
+        "action": "Read the recorded reason below, then resume the sprint."
+      }
+    }
   },
   "execution": {
     "title": "Execution",
@@ -2963,6 +3012,16 @@
       "automatic": "Chosen automatically from the PO's suggestion.",
       "all": "No team chosen: every role the company hired."
     }
+  },
+  "alreadyDone": {
+    "title": "The PO says part of this objective is already done",
+    "claimLabel": "The PO's claim (its words, not verified):",
+    "evidence": "— {{evidence}}",
+    "sha256": "sha256 {{sha256}}",
+    "notRead": "not read",
+    "observedLabel_one": "Read by the platform in this planning turn ({{count}} file, with the sha256 the daemon reported):",
+    "observedLabel_other": "Read by the platform in this planning turn ({{count}} files, with the sha256 the daemon reported):",
+    "verify": "A claim is not a check: a path marked \"not read\" was not opened by the PO while planning. When nothing is left to build, the plan is one QA task that runs the tests to confirm it."
   },
   "plannerFallback": {
     "title": "The planner's model did not answer; this is a generic plan.",
@@ -5104,6 +5163,25 @@
   "commentAuthor": {
     "unidentified": "Unidentified (no signed-in person)",
     "unrecorded": "A person (name not recorded)"
+  },
+  "taskHold": {
+    "person": "Waits for a person",
+    "dependency": "Waits for another task",
+    "dependencyOn": "Waits for {{ids}}",
+    "retry_pending": "Retry pending",
+    "review_pending": "Review pending",
+    "frozen": "Frozen",
+    "risk_hold": "Risk hold",
+    "run_window": "Held for the run window",
+    "hint": {
+      "person": "Blocked: nothing moves it until a person acts.",
+      "dependency": "Not started or held until the tasks it depends on are done; the worker moves it then.",
+      "retry_pending": "Blocked by a failure the worker retries on its own.",
+      "review_pending": "Blocked with a delivery the worker reviews again on its own.",
+      "frozen": "Frozen out of automation by an operator; a person unfreezes it.",
+      "risk_hold": "Approved, held for a person to accept the risk.",
+      "run_window": "Ready, held until the company's run window opens."
+    }
   },
   "ownerActions": {
     "title": "Owner actions",

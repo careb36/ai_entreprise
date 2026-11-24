@@ -153,7 +153,12 @@ async def detect_profile(nats_client: Any, workspace_root: str) -> dict | None:
 def _detect_both(root: str) -> tuple[dict | None, dict]:
     profile = stack_profiles.detect(root)
     # Sub-folders are searched only for a root without a stack of its own.
-    return profile, ({} if profile else stack_roots.detect_folders(root))
+    folders = {} if profile else stack_roots.detect_folders(root)
+    # A documentation build, with or without a stack (issue #766).
+    docs = stack_profiles.docs_build(root)
+    if docs:
+        profile = {**(profile or {"stack": None}), "docs_build": docs}
+    return profile, folders
 
 
 async def detect_project(

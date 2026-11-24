@@ -1,0 +1,3 @@
+Changed
+
+* **The self-hosting harness's container mode is tested and documented more precisely (issue #701).** `--container-mode` already existed (`scripts/self_host/sandbox_mode.py`). `backend/tests/test_self_host_sandbox_mode.py` now also checks that the report keeps the request (`container_mode_asked`) apart from what the daemon observed (`container_mode`), whether the daemon reported a container or the host. `scripts/self_host/README.md` names the `sandbox` step's full query and lists the observed modes that are never labelled container mode (`host`, `bwrap`, `(not isolated)`, `mixed`, `not observed`), which exit with status 5. The run itself, and its run ids, are still to be recorded.

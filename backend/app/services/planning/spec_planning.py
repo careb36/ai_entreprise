@@ -7,7 +7,9 @@ covers, so nothing is forgotten silently. Each task's prompt then carries
 only the requirements it covers (``requirements_context``), and QA judges
 the deliverable against the same criteria. ``coverage`` reads the boards
 of the sprints planned from a specification and says, per criterion,
-whether a task got done, is blocked, is planned or does not exist.
+whether a task got done, is blocked, is planned or does not exist. The PO
+may read the project first and check what is already done, as for the plan
+from a prompt (``planning_reads.spec_answer``, ``already_done``).
 """
 
 from __future__ import annotations
@@ -24,7 +26,14 @@ from sqlmodel import Session, select, text
 
 from services.contracts import roles as catalogue
 from services.evidence import acceptance, standards
-from services.planning import spec_author, spec_check, sprint_team
+from services.planning import (
+    already_done,
+    changelog_order,
+    planning_reads,
+    spec_author,
+    spec_check,
+    sprint_team,
+)
 from services.planning.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -239,7 +248,8 @@ def _with_tests(
     """QA's test tasks before *tasks*, unless a sprint team leaves QA out."""
     if allowed and acceptance.QA_ROLE not in {catalogue.canonical(r) for r in allowed}:
         return tasks
-    return acceptance.with_test_tasks(tasks, spec, item_limit)
+    # The changelog task still comes after every task, QA's included.
+    return changelog_order.last(acceptance.with_test_tasks(tasks, spec, item_limit))
 
 
 def prepare_plan(
@@ -299,24 +309,21 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
     request, and what stays uncovered; no database. A failed or unusable
     answer falls back to one task per requirement."""
     content, item_limit = request["content"], request["item_limit"]
+    title = request["title"]
     # The sprint's team, else every hired role: a fallback or a QA test task
     # never goes to a role the company does not have.
     allowed = request["roles"]
     parsed: Any = None
     # Why the backend saw no usable answer, as observed; None when it did.
     fallback: dict[str, str] | None = None
+    reads: list[dict[str, Any]] = []  # The PO's reads, as the backend observed them.
+    claim: list[dict[str, Any]] = []  # What the PO says is already done: a claim.
     try:
-        answer = spec_author.ask(
-            request["model"],
-            request["system_prompt"],
-            request["prompt"],
-            max_tokens=PLAN_MAX_TOKENS,
-            bu_id=request["bu_id"],
-            company_id=request.get("company_id"),
-        )
+        answer, reads, offered = planning_reads.spec_answer(request, PLAN_MAX_TOKENS)
         parsed = json.loads(spec_author._strip_fences(answer))
         if not isinstance(parsed, dict):
             raise TypeError("not an object")
+        claim = already_done.claim_of(parsed) if offered else []
     except (spec_author.SpecAuthorError, ValueError, TypeError) as exc:
         reason = (
             "model_error"
@@ -339,6 +346,10 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
         if isinstance(parsed, dict)
         else []
     )
+    verify = bool(claim) and not tasks  # Every part claimed done: tests confirm it.
+    if verify:
+        task = already_done.verification_task(f'the specification "{title}"', claim)
+        tasks = [{**task, "covers": spec_check.criterion_ids(content)}]
     if not tasks:
         plan = plan_fallback(content, item_limit, allowed)
         fallback = fallback or {
@@ -347,8 +358,7 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
         }
     else:
         tasks = sprint_team.fit_tasks(tasks, allowed or [])
-        tasks = _with_tests(tasks, content, item_limit, allowed)
-        title = request["title"]
+        tasks = tasks if verify else _with_tests(tasks, content, item_limit, allowed)
         plan = {
             "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {title[:40]}")[
                 :70
@@ -362,12 +372,14 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
         request.get("team") or request.get("hired") or request["roles"],
         plan["tasks"],
     )
+    seen = already_done.observed(reads, claim) if claim else None
     return {
         **plan,
         "planner_fallback": fallback if not tasks else None,
         "suggested_team": team,
         "team_reasons": reasons,
-    }
+        "planning_reads": reads,
+    } | ({"already_done_claim": claim, "already_done_observed": seen} if claim else {})
 
 
 def plan(

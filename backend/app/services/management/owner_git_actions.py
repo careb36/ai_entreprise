@@ -3,7 +3,7 @@ and ``close_issue`` (``docs/design/owner-actions.md``, threats L1-L3, P1-P3, C1-
 
 Each has typed parameters (never a free command, path or git argument) and
 *facts*: what the platform observes before the confirmation, from the daemon
-(``workspace.self_host.git``, PROTOCOL.md §5.10) and GitHub (the reviewed
+(``workspace.self_host.git``, PROTOCOL.md §5.11) and GitHub (the reviewed
 adapter ``producers.github_adapter``). The facts are part of the preview, so
 the confirmation digest covers them: a branch that moved, a ``main`` that
 moved or an edited comment after the preview is a 409 at the start.

@@ -106,12 +106,15 @@
 /backend/tests/test_browser_image.py             @careb36
 /backend/tests/test_browser_image_backend.py     @careb36
 /backend/tests/test_browser_smoke.py             @careb36
+/backend/tests/test_changelog_matches_diff.py   @careb36
+/backend/tests/test_changelog_observe.py         @careb36
 /backend/tests/test_code_graph.py                @careb36
 /backend/tests/test_command_runs_rewritten_check.py @careb36
 /backend/tests/test_daemon_protocol_client.py    @careb36
 /backend/tests/test_delivery_tests.py            @careb36
 /backend/tests/test_developer_tools_evidence.py  @careb36
 /backend/tests/test_developer_tools_limits.py    @careb36
+/backend/tests/test_doc_build_snippets.py        @careb36
 /backend/tests/test_doc_links.py                 @careb36
 /backend/tests/test_edit_blocks.py               @careb36
 /backend/tests/test_folder_baseline.py          @careb36

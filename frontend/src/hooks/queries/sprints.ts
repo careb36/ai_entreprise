@@ -64,6 +64,19 @@ export function useSprintBoard(sprintId: number | null) {
   return query
 }
 
+/**
+ * Who works on the sprint now and its health tiles, from the backend's records
+ * (the Live page). Polled every 5 s while the sprint runs, every 30 s otherwise.
+ */
+export function useSprintLiveState(sprintId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.sprintLiveState(sprintId || 0),
+    queryFn: () => api.getSprintLiveState(sprintId!),
+    enabled: !!sprintId,
+    refetchInterval: query => isClientError(query.state.error) ? false : query.state.data?.running ? 5_000 : 30_000,
+  })
+}
+
 export function useUpdateBacklogItem() {
   const queryClient = useQueryClient()
   

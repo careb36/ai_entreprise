@@ -31,8 +31,55 @@ export interface ObservedFacts {
   risk_areas: string[]
   /** The protected paths the daemon saw the delivery write. */
   protected_paths: string[]
-  /** Blocked and only a person moves it: the pending hold, whatever its cause. */
+  /** Only a person releases what holds the task (a person, a risk hold or a freeze); a dependency wait is not one. */
   waits_for_person: boolean
+  /** What holds the task back, from its record (`services/tasks/task_hold.py`); null when nothing does. */
+  hold?: TaskHold | null
+}
+
+/** What holds a task back, read from its record by the backend. */
+export type TaskHoldKind = 'person' | 'dependency' | 'retry_pending' | 'review_pending' | 'frozen' | 'risk_hold' | 'run_window'
+export interface TaskHold {
+  kind: TaskHoldKind
+  /** The latest verdict's text (person, retry_pending) or the hold's note (risk_hold). */
+  reason?: string
+  /** The dependencies not done yet (dependency). */
+  waiting_for?: number[]
+}
+
+/** Why a paused sprint is paused, from the reason the code that paused it wrote (`services/loop/live_state.py`). */
+export type PauseKind = 'person' | 'no_credit' | 'nothing_done' | 'budget' | 'acknowledgement' | 'daemon' | 'other'
+
+/** One agent run in flight now: an assignee's run of a claimed task, or QA's review of a delivery. */
+export interface LiveRun {
+  role: string
+  task_id: number
+  task_title: string | null
+  kind: 'task' | 'review'
+  /** When this process started it; null for a run seen only through the task's lock (another replica). */
+  since: string | null
+}
+
+/** The Live page's state of a sprint, read from the records (`GET /v1/sprints/{id}/live_state`). */
+export interface SprintLiveState {
+  sprint_id: number
+  status: string
+  /** Active or needs_split: only then can anyone be working. */
+  running: boolean
+  pause_reason: string | null
+  pause_kind: PauseKind | null
+  /** When a completed or cancelled sprint closed (its sealed progress snapshot); naive UTC. */
+  closed_at: string | null
+  working: LiveRun[]
+  tiles: {
+    active_agents: number
+    agent_failures: number
+    blocked_tasks: number
+    open_reworks: number
+    last_agent_event_at: string | null
+    daemon: { state: 'online' | 'stale' | 'offline' | 'not_observed'; seconds_since_heartbeat: number | null }
+    previous_sprint: { id: number; name: string; done: number; total: number } | null
+  }
 }
 
 /** The board's reported facts of a task: what the producer declared. */
@@ -51,6 +98,7 @@ export interface SprintBoard {
     sprint_name: string
     status: string
     integration_state?: IntegrationState; integration_status?: string | null
+    pause_reason?: string | null; pause_kind?: PauseKind | null // Why it is paused, as written and as a kind.
     goal?: string
     start_date: string
     scope_size: string
@@ -119,6 +167,20 @@ export interface PlannerFallback {
   recorded_at?: string | null
 }
 
+/** What the PO says is already done: its claim, in its words (`already_done.claim_of`). */
+export interface AlreadyDonePart {
+  part: string
+  evidence: string
+  paths: string[]
+}
+
+/** What the backend observed of the PO's planning reads: never the PO's word. */
+export interface AlreadyDoneObserved {
+  files_read: { path: string; sha256: string; bytes?: number | null; tool: string; round?: number | null }[]
+  searches: { tool: string; pattern?: string | null; path?: string | null; match_count?: number | null }[]
+  claimed_paths: { path: string; read: boolean; files: { path: string; sha256: string }[] }[]
+}
+
 export interface SprintPlanResponse {
   sprint_name: string
   goal: string
@@ -129,6 +191,8 @@ export interface SprintPlanResponse {
   uncovered?: string[]; suggested_team?: string[]; team_reasons?: Record<string, string>; hired_roles?: string[]; team_selection?: 'suggested' | 'automatic'
   /** The person's objective, whole; a fallback plan's reason and the id of the backend's record of it; items the scope left out. */
   objective?: string | null; planner_fallback?: PlannerFallback | null; plan_id?: string | null; unplanned_items?: string[]
+  /** The PO's claim of what is already done, apart from the platform's observations of its reads. */
+  already_done_claim?: AlreadyDonePart[] | null; already_done_observed?: AlreadyDoneObserved | null
 }
 
 export const sprintEndpoints = (api: Http) => ({
@@ -148,6 +212,10 @@ export const sprintEndpoints = (api: Http) => ({
 
   getSprintBoard: (sprintId: number) =>
     api.get<SprintBoard>(`/v1/sprints/${sprintId}/board`),
+
+  /** Who works on the sprint now and its health tiles, from the records. */
+  getSprintLiveState: (sprintId: number) =>
+    api.get<SprintLiveState>(`/v1/sprints/${sprintId}/live_state`),
 
   /** A short-lived ticket for the sprint's Glassroom stream; null when no login is required. */
   getStreamTicket: (sprintId: string) =>

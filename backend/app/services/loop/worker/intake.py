@@ -40,6 +40,7 @@ from sqlmodel import Session, select
 from services.evidence import delivery_gate
 from services.loop import (
     daemon_gate,
+    in_flight,
     preconditions,
     replicas,
     run_window_gate,
@@ -169,7 +170,13 @@ async def _on_task_assign(
         ctx = await _claim(data, nats_client)
         if not ctx:
             return
-        await task_run._run_claimed_task(nats_client, data.get("backlog_item_id"), ctx)
+        # In flight while it runs: what the Live page's "working" reads.
+        with in_flight.running(
+            ctx["sprint"].get("id"), ctx["item"].get("id"), ctx["agent"].get("role")
+        ):
+            await task_run._run_claimed_task(
+                nats_client, data.get("backlog_item_id"), ctx
+            )
     except Exception as e:  # noqa: BLE001 - _record_failure logs it with its traceback and records it on the board.
         await _record_failure(nats_client, data, e)
 

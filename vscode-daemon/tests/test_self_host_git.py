@@ -1,5 +1,5 @@
 """Landing and mirroring the self-hosting source (``self_host_git.py``,
-PROTOCOL.md §5.10), on real repositories in a temporary folder.
+PROTOCOL.md §5.11), on real repositories in a temporary folder.
 
 Nothing here runs land.sh or pushes, not even in the setup: the land's process is a recorded fake,
 and a push is refused before git is asked to push, or recorded instead. The

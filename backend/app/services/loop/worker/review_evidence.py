@@ -10,7 +10,10 @@ and of each folder's suite, all as the platform recorded them.
 
 They are observations, not the reviewer's to overrule: the text says a
 refuted or unverifiable check is not settled by the review, so QA reviews
-what the tests do not check (scope, the criteria, the design).
+what the tests do not check (scope, the criteria, the design). The
+``changelog_matches_diff`` check (``evidence/changelog_diff.py``) comes first
+and whole, so a fragment that claims work the diff did not do is never cut
+out of the reviewer's view.
 """
 
 from __future__ import annotations
@@ -20,7 +23,12 @@ from typing import Any
 from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from sqlmodel import Session, select
 
+from services.evidence import changelog_diff
+
 OBSERVATION_CHARS = 300
+# Shown first and at length, so neither the count nor the cut hides them: a
+# changelog fragment's comparison with the diff lists each claim it refutes.
+FIRST_CHECKS = {changelog_diff.CHECK_NAME: 2000}
 TAIL_CHARS = 1500
 MAX_CHECKS = 20
 
@@ -61,11 +69,13 @@ def _tail(text: Any) -> str:
 def render(verdict: str | None, checks: list[Any], evidence: dict[str, Any]) -> str:
     """The section's text from a verification's parts; empty without checks."""
     rows = [c for c in checks or [] if isinstance(c, dict)]
+    rows.sort(key=lambda c: c.get("name") not in FIRST_CHECKS)
     if not rows and not evidence.get("test_run"):
         return ""
     lines = [HEADER, f"Verdict: {verdict or 'none'}"]
     for check in rows[:MAX_CHECKS]:
-        observation = str(check.get("observation") or "")[:OBSERVATION_CHARS]
+        limit = FIRST_CHECKS.get(str(check.get("name")), OBSERVATION_CHARS)
+        observation = str(check.get("observation") or "")[:limit]
         lines.append(
             f"- {check.get('name')}: {check.get('outcome')}"
             + (f" — {observation}" if observation else "")

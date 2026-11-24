@@ -8,6 +8,8 @@ Endpoints (Manager):
 - ``POST /v1/sprints/{id}/resume``   — resume a paused sprint (also one the worker
   paused for lack of credit) and dispatch its waiting tasks.
 - ``POST /v1/sprints/{id}/stop``     — stop for good; no follow-up sprint opens.
+- ``GET /v1/sprints/{id}/live_state`` — who works now and the health tiles,
+  from the records (Viewer; ``services/loop/live_state.py``).
 - ``GET/PUT /v1/companies/{id}/autonomy`` — read (Viewer) or change the autonomy level.
 - ``GET/PUT /v1/companies/{id}/stack_profile`` — read (Viewer) or replace the
   company's overrides of the detected stack profile (``services/stack_profiles.py``),
@@ -28,7 +30,7 @@ from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import Field
 from schemas import RequestModel
-from services.loop import preconditions, run_window_gate, sprint_control
+from services.loop import live_state, preconditions, run_window_gate, sprint_control
 from services.release import git_setup
 from services.tools import research_tools
 from services.workspace import sandbox, stack_profiles, stack_roots
@@ -157,6 +159,20 @@ async def resume_sprint(
     outcome = run_window_gate.dispatch_or_defer(session, sprint)
     session.commit()
     return {"status": "active", **outcome}
+
+
+@router.get("/sprints/{sprint_id}/live_state")
+async def sprint_live_state(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Who is working on the sprint now and its health tiles, from the records."""
+    sprint = session.get(Sprint, sprint_id)
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    require_company_role(session, user, sprint.company_id, "Viewer")
+    return live_state.of_sprint(session, session.get_bind(), sprint)
 
 
 class AutonomyRequest(RequestModel):

@@ -1,4 +1,4 @@
-"""Stack profiles: how to install, test, lint and start a project, per stack.
+"""Stack profiles: how to install, test, lint, start a project and build its docs, per stack.
 
 A profile is the per-repository setup a run performs before checking the
 work, taken from GitHub Copilot coding agent's ``copilot-setup-steps.yml``,
@@ -24,7 +24,7 @@ from typing import Any
 from config import settings
 
 # The fields a profile carries, and the ones a company may override.
-COMMAND_FIELDS = ("install", "test", "lint", "start", "e2e")
+COMMAND_FIELDS = ("install", "test", "lint", "start", "e2e", "docs_build")
 FIELDS = ("stack", *COMMAND_FIELDS, "port", "probe_path", "web")
 # The keys of a stored profile beyond the root's own fields (``stack_roots``).
 EXTENSION_KEYS = ("folders", "every_delivery")
@@ -188,6 +188,17 @@ WEB_PACKAGES = frozenset(
         "astro",
         "@remix-run/react",
     }
+)
+# The documentation build a detected docs configuration names (issue #766):
+# the site goes to ``/tmp`` (a tmpfs in every sandbox), never into the project,
+# and warnings do not fail it: a project's existing warnings are not the
+# delivery's (broken links are the ``docs_links`` check's).
+DOCS_OUT = "/tmp/fabrique-docs-site"
+_DOCUSAURUS = (
+    "docusaurus.config.js",
+    "docusaurus.config.ts",
+    "docusaurus.config.mjs",
+    "docusaurus.config.cjs",
 )
 # The ``test`` script ``npm init`` writes: it fails on purpose, no suite.
 NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
@@ -387,6 +398,25 @@ def detect(root: str) -> dict[str, Any] | None:
             profile["probe_path"] = "/"
             profile["web"] = serves_pages(root, names)
             return _refine(profile, root, names)
+    return None
+
+
+def docs_build(root: str) -> str | None:
+    """The build command of the documentation configured in *root*: MkDocs
+    (``mkdocs.yml``), Sphinx (``docs/conf.py``, ``doc/conf.py`` or their
+    ``source/``) or Docusaurus (``docusaurus.config.*`` at the root, in
+    ``website/`` or in ``docs/``); ``None`` when none is."""
+    names = set(_root_files(root))
+    if names & {"mkdocs.yml", "mkdocs.yaml"}:
+        config = "mkdocs.yml" if "mkdocs.yml" in names else "mkdocs.yaml"
+        return f"python -m mkdocs build -f {config} --site-dir {DOCS_OUT}"
+    for source in ("docs", "doc", "docs/source", "doc/source"):
+        if os.path.isfile(os.path.join(root, source, "conf.py")):
+            return f"python -m sphinx -b html -q {source} {DOCS_OUT}"
+    for folder in ("", "website", "docs"):
+        if any(os.path.isfile(os.path.join(root, folder, n)) for n in _DOCUSAURUS):
+            build = f"npx --no-install docusaurus build --out-dir {DOCS_OUT}"
+            return f"cd {folder} && {build}" if folder else build
     return None
 
 

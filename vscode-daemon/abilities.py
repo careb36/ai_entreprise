@@ -92,8 +92,9 @@ FEATURES = {
     "workspace.read": ("document_text",),
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
     # Where a name is defined and who uses it (code_lookup.py, §5.7), for
-    # the agents' navigation tools.
-    "workspace.related": ("lookup",),
+    # the agents' navigation tools; what the project declares (project_facts.py,
+    # §5.10), each kind announced apart.
+    "workspace.related": ("lookup", "api_surface", "config_vars", "dependencies"),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }
 

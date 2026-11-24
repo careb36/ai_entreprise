@@ -51,7 +51,7 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
 | `issue` | Posts and approves the #535 specification (with `--spec FILE`, that file instead, see below); opens the next version of La Fabrique's architecture for it (`POST /v1/companies/{id}/architecture/revisions`, which keeps each module's #469 covers), writes the fixture's change into it and approves it, so both specifications share one architecture record; asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`), and reports its `integration_state`. |
-| `sandbox` | Reads the sandbox the daemon reported in its reply to each test run of the sprint (`GET /v1/agent_runs?sprint_id=…`, then each run's verifications, `evidence.test_run.sandbox`) and labels the run with it, apart from what was asked (below). |
+| `sandbox` | Reads the sandbox the daemon reported in its reply to each test run of the sprint (`GET /v1/agent_runs?company_id=…&sprint_id=…&limit=500`, then each run's verifications, `evidence.test_run.sandbox`) and labels the run with it, apart from what was asked (below); a `--container-mode` run the daemon did not report in an isolated container exits 5. |
 | `review` | Waits while the sprint's `integration_state` reads `integrating` (completed is not finished before that), then lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` records an approving review of the integration (its text the `--accept` comment, else a default; reported under `integration_review`, refused like any approval by the person who started the sprint) and then merges the integration into `main` locally (refused while its suite fails, and, when the company requires an approval, without one). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
 | `measure` | Asked by name only, never part of `all`, and only with `--spec`. Runs the file's `target_measure` (this repository's copy) with pytest on the `backend/` of `--build` (the snapshot by default), in the workspace daemon's container sandbox (below), from the image `--grading-image` names (default `FABRIQUE_GRADING_IMAGE`). The report keeps the exit status, `result` (`pass`, `fail` or `unmeasured`, with `reason`), `passed`, `isolation`, the sandbox applied and the sha256 of the output, computed by the harness. The exit status is 3 when the measure fails and 4 when it is unmeasured. No API call. |
@@ -79,10 +79,13 @@ carried a sandbox (an older daemon, or no test ran). `container_mode` is true
 only when every reply reported an isolated container; `modes` counts the
 replies per mode and `images` lists the content IDs the daemon observed. When
 `observed` differs from `asked`, `note` says the run is labelled with the
-observed mode, not the asked one. A `--container-mode` run that is not
-container mode exits with status 5 and adds the reason to `notes`. The
-daemon's announced abilities (`workspace.status`) are a claim about what it
-can honour and never label a run.
+observed mode, not the asked one. `container_mode_asked` records whether the
+run was started with `--container-mode`. A `--container-mode` run the
+`sandbox` step observed as anything but `container` — `host`, `bwrap`, a mode
+reported `(not isolated)`, `mixed`, or `not observed` — is never labelled
+container mode: the harness exits with status 5 and adds the reason to
+`notes`. The daemon's announced abilities (`workspace.status`) are a claim
+about what it can honour and never label a run.
 
 ```bash
 python3 scripts/self_host/self_host.py --api http://localhost:8000 \

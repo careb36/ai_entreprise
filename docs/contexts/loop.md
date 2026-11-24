@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `changelog_observe`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `docs_checks`, `edit_plan`, `folder_baseline`, `foundation_setup`, `in_flight`, `live_state`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/changelog_prompt`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
@@ -140,6 +140,30 @@ a new attempt with a fresh tool budget), then blocks it. Autonomy (Manager to ch
 at 1 every QA-approved task waits for a person, at 2 only high-risk ones, at 3
 follow-ups and procedures also run on their own.
 
+### What the Live page reads
+
+`live_state.py`, `GET /v1/sprints/{id}/live_state` (Viewer): the Live page's
+statuses from the records (issue #766).
+
+- `working`: the runs in flight now, only while the sprint is `active` or
+  `needs_split`. `in_flight.py` registers an assignee's run of a claimed task
+  (`kind: task`, around `task_run._run_claimed_task`) and QA's review
+  (`kind: review`, around `qa_review._qa_review`) for as long as the call is on
+  this process's stack; an `in_progress` task whose lock another replica holds
+  (`locks.is_held`, read from `pg_locks`) counts too, with `since: null`.
+- `pause_kind`: why a paused sprint is paused, read from the reason its pauser
+  wrote: `person` (none, or "Paused by"), `no_credit`, `nothing_done`,
+  `budget`, `acknowledgement`, `daemon`, else `other`. The board's sprint has
+  it too.
+- `closed_at`: a completed or cancelled sprint's latest sealed progress
+  snapshot (naive UTC).
+- `tiles`: `active_agents` (distinct roles in `working`), `agent_failures`
+  (the sprint's `review_failed` and `retried` events), `blocked_tasks`,
+  `open_reworks` (tasks not done or discarded with an unanswered rework
+  request), `last_agent_event_at` (newest event whose actor is a role),
+  `daemon` (heartbeat liveness, `services/workspace/daemon_liveness`) and
+  `previous_sprint` (the company's latest completed sprint before this one).
+
 ### The run window
 
 - `preconditions.py`: the Owner's acknowledgements a sprint needs before it runs
@@ -256,9 +280,24 @@ instead, stays readable by id, and an Owner may unarchive it.
   again. From Paperclip's rewake throttle (MIT).
 - `delivery_checks.py`: guards the acceptance tests on a task branch; a test
   written on a sibling branch is not run against this task.
+- `changelog_observe.py`: after a delivery that writes a changelog fragment,
+  records what the Verifier's `changelog_matches_diff` check reads
+  (`evidence["changelog_diff"]`): the daemon's diff of the delivery's commit
+  against the merge base, the fragment at that commit and the cited and
+  changed files at the merge base (`workspace.git.read_at`, sha256 computed
+  here), and the issue the sprint's objective names.
+- `worker/changelog_prompt`: a task whose title or description names the
+  changelog or a fragment gets the `changelog_diff` prompt section: describe
+  only what the diff shows, calling `workspace__git` `changed` and `diff`
+  first. Off with `PROMPT_SECTIONS_OFF=changelog_diff`.
 - `delivery_suites.py`: runs the suites of the folders the delivery wrote in and
   the company's every-delivery commands in the sandbox, for the Verifier's
   `required_commands` check.
+- `docs_checks.py`: for a delivery that writes documentation, runs the stack
+  profile's `docs_build` in the sandbox and looks up the project names its
+  fenced snippets use in the daemon's code graph, for the Verifier's
+  `docs_build` and `docs_snippet_names` checks (`worker/deliver` calls it
+  after the signatures; never blocks the delivery).
 - `worker/board_writes`: every board transition as a task event; a `verified`
   event names the run's latest verification.
 - `worker/quality_gate`: the form check before QA.
@@ -266,6 +305,7 @@ instead, stays readable by id, and an Owner may unarchive it.
 - `review_digest.py`, `worker/review_prompt`, `worker/review_evidence`: what QA
   sees: every file within a fixed size, the agent's message labelled as a
   claim, the platform's observations marked as ones a review does not settle.
+  The `changelog_matches_diff` check is listed first and whole.
 - `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold
   for a person, and the one rework budget per task (`MAX_REWORKS`, or the
   company's `max_reworks`).

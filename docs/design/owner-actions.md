@@ -146,7 +146,7 @@ refuse a start and keep the dialog's Confirm disabled: `nothing_to_land`,
 observation.
 
 The daemon serves them on a read-only subject, `workspace.self_host.git`,
-with a `view` (PROTOCOL.md §5.10): `branches`, `land_preview`, `origin`,
+with a `view` (PROTOCOL.md §5.11): `branches`, `land_preview`, `origin`,
 `push_preview` (after a fetch of origin's `main`) and `fix_commit` (after
 that fetch). The repository is always the daemon's own
 `FABRIQUE_SELF_HOST_SOURCE`, never one the request names. The broker's

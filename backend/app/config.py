@@ -243,8 +243,8 @@ class Settings(BaseSettings):
     DEVELOPER_TOOL_ROUNDS: int = 5
     QA_REVIEW_TOOL_ROUNDS: int = 3  # QA's read-only rounds before its verdict
     # The read-only rounds of the steps that only read (contracts/tool_steps):
-    # the PO's sprint planning and the ScrumMaster's decision on a blocked
-    # task. 0: one call without tools, as before.
+    # the PO's sprint planning (and its specification drafts, beside research)
+    # and the ScrumMaster's decision on a blocked task. 0: no reads, as before.
     PLANNING_TOOL_ROUNDS: int = 3
     SCRUM_TRIAGE_TOOL_ROUNDS: int = 3
     # The record tools (services/tools/board_tools.py): board__task and
@@ -334,7 +334,8 @@ class Settings(BaseSettings):
     # design-sensitive or reworked task of a coding role, QA, PO or ScrumMaster
     # (issue #750; ``ARCHITECT_CONSULTED:`` comments). It may read the project
     # first with the read-only workspace tools for at most ARCHITECT_TOOL_ROUNDS
-    # rounds (services/loop/worker/architect_brief.py); 0 asks in one call.
+    # rounds (services/loop/worker/architect_brief.py), and while it drafts an
+    # architecture (services/planning/planning_reads.py); 0: no reads.
     ARCHITECT_CONSULT_ENABLED: bool = True
     ARCHITECT_TOOL_ROUNDS: int = 6
     # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.

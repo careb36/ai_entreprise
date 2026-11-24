@@ -208,7 +208,7 @@ Model choice, most specific first: an agent's own model, the company's model for
 | `RUN_WINDOW_RECHECK_SECONDS` | `300` | Longest sleep of the run-window worker (at least 60). The window itself is a company setting. |
 | `WORKSPACE_WRITE_TIMEOUT_SECONDS` | `30` | How long the task worker waits for the daemon to confirm writes. |
 | `ARCHITECT_CONSULT_ENABLED` | `true` | Consult the Architect before high-priority, design-sensitive or reworked tasks. |
-| `ARCHITECT_TOOL_ROUNDS` | `6` | Rounds of read-only workspace tools (list, read, search, find_file; read-only Git and a document's text when announced) the Architect may use before its brief, with the research tools (when `RESEARCH_TOOLS_ENABLED`) and the task's record tools beside them. `0` asks in one call without tools. |
+| `ARCHITECT_TOOL_ROUNDS` | `6` | Rounds of read-only workspace tools (list, read, search, find_file; read-only Git and a document's text when announced) the Architect may use before its brief, with the research tools (when `RESEARCH_TOOLS_ENABLED`) and the task's record tools beside them. `0` asks in one call without tools. Also the reading rounds of the Architect writing or revising an architecture (step `arch_author`), beside its research tools, which keep their own `RESEARCH_TOOL_ROUNDS`; `0`, or no daemon or project path: the research tools alone. |
 | `ARCHITECT_EDITOR_MODE` | `false` | A hard Developer task gets a numbered edit plan from the Architect. Needs `ARCHITECT_CONSULT_ENABLED`. |
 | `ARCHITECT_EDITOR_MIN_DIFFICULTY` | `4` | Lowest difficulty (1–5) for editor mode. |
 | `AGENT_GRAPH_ENABLED` | `false` | The internal LangGraph producer. Off, `POST /v1/generate` answers 409. Compose default `false`. |
@@ -271,7 +271,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `DEVELOPER_TOOLS_ENABLED` | `true` | The Developer's workspace tools (list, read, search, run tests). |
 | `DEVELOPER_TOOL_ROUNDS` | `5` | Tool rounds before delivering. Ceiling 50. |
 | `QA_REVIEW_TOOL_ROUNDS` | `3` | QA's read-only tool rounds (list, read, search, find_file) on the delivery before its verdict. `0`: one call without tools. |
-| `PLANNING_TOOL_ROUNDS` | `3` | The PO's read-only tool rounds (list, read, search, find_file) on the project before its sprint plan (`contracts/tool_steps`, step `plan`). `0`, or no daemon or project path: one call without tools. |
+| `PLANNING_TOOL_ROUNDS` | `3` | The PO's read-only tool rounds (list, read, search, find_file) on the project before its sprint plan (`contracts/tool_steps`, step `plan`), the plan from an approved specification included. `0`, or no daemon or project path: one call without tools. Also the reading rounds of the PO writing a specification (step `spec_author`), beside its research tools, which keep their own `RESEARCH_TOOL_ROUNDS`; `0`, or no daemon or project path: the research tools alone. |
 | `SCRUM_TRIAGE_TOOL_ROUNDS` | `3` | The ScrumMaster's read-only tool rounds (list, read, search, find_file) on the blocked task's root before its decision (`contracts/tool_steps`, step `scrum_decision`). `0`, or no daemon or project path: one call without tools. |
 | `BOARD_TOOLS_ENABLED` | `true` | The record tools `board__task` (a task's history) and `board__evidence` (a run's checks, files and tools offered), read-only and scoped to the turn's task and its dependencies (the QA review, the Architect's brief, a rework), the blocked task's sprint (the ScrumMaster's triage) or the company's board (the PO's sprint plan). They share the turn's rounds and are never offered to a turn without its reads. |
 | `DEVELOPER_MAX_OUTPUT_TOKENS` | `0` | Cap on the Developer's answer. `0`: the provider's default. Never above the model's limit. |
@@ -294,7 +294,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `WIKI_COMPILE_MAX_PAGES` | `5` | Pages compiled per sprint close. |
 | `WIKI_PAGE_MAX_CHARS` | `6000` | Longest accepted compiled page. |
 | `PROMPT_BUDGET`, `PROMPT_BUDGET_<ROLE>` | unset | Developer prompt budget in estimated tokens; over it, the least needed sections are dropped. Unset or `0`: nothing is cut. |
-| `PROMPT_SECTIONS_OFF` | `""` | Comma-separated prompt sections to leave out, for bench comparisons. |
+| `PROMPT_SECTIONS_OFF` | `""` | Comma-separated prompt sections to leave out, for bench comparisons (for example `changelog_diff`, the changelog writer's "read the diff first" section). |
 | `WORKSPACE_SNAPSHOT_ENABLED` | `true` | The workspace snapshot in the Developer's prompt. |
 | `WORKSPACE_SNAPSHOT_CACHE_TTL` | `60` | Snapshot cache life in seconds (at least 10). |
 | `WORKSPACE_SNAPSHOT_MAX_FILES` | `4000` | Files scanned (at least 20). |
@@ -386,7 +386,7 @@ Read by `vscode-daemon/` on the computer that holds the projects. Protocol: [`vs
 | `FABRIQUE_COMMAND_DENY` | unset | Comma-separated command patterns the daemon always refuses; a request cannot relax it. |
 | `FABRIQUE_SELF_HOST_SOURCE` | the La Fabrique repository the daemon runs from | The repository `workspace.self_host.checkout` copies for an owner action (PROTOCOL.md §5.9). The request never names it. |
 | `FABRIQUE_SELF_HOST_ROOT` | `~/fabrique-self-host` | The folder the self-hosting snapshots go under; the request names only a folder inside it. |
-| `FABRIQUE_SELF_HOST_LAND_TIMEOUT` | `5400` | Seconds the owner action `land_branch` lets `scripts/land.sh` run on `FABRIQUE_SELF_HOST_SOURCE` (its `check.sh full` included) before the daemon kills its process group (PROTOCOL.md §5.10). land.sh runs without this daemon's own `LAND_*` variables, with `LAND_OWNER=1` only when the request asks, and with `PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring` unless the daemon's environment sets another, so the proxy's Poetry install in `check.sh full` never waits on a desktop keyring. `push_main` uses this machine's own git credentials for `origin` (an ssh key without a passphrase, an agent or a credential helper; nothing prompts). |
+| `FABRIQUE_SELF_HOST_LAND_TIMEOUT` | `5400` | Seconds the owner action `land_branch` lets `scripts/land.sh` run on `FABRIQUE_SELF_HOST_SOURCE` (its `check.sh full` included) before the daemon kills its process group (PROTOCOL.md §5.11). land.sh runs without this daemon's own `LAND_*` variables, with `LAND_OWNER=1` only when the request asks, and with `PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring` unless the daemon's environment sets another, so the proxy's Poetry install in `check.sh full` never waits on a desktop keyring. `push_main` uses this machine's own git credentials for `origin` (an ssh key without a passphrase, an agent or a credential helper; nothing prompts). |
 | `FABRIQUE_EXEC_SHELL` | unset | Shell for host commands. Unset: `/bin/zsh` if present, else `/bin/sh`; on Windows `COMSPEC`. |
 | `FABRIQUE_DAEMON_STATE` | `~/.fabrique-daemon` (journal in `deliveries/`) | Queued delivery results, replayed on redelivery. |
 | `FABRIQUE_SNAPSHOT_STATE` | `~/.fabrique-daemon/snapshots` | Pre-delivery snapshots used to undo a delivery. |

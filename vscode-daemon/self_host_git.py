@@ -1,4 +1,4 @@
-"""Landing and mirroring the self-hosting source, on this computer (PROTOCOL.md §5.10).
+"""Landing and mirroring the self-hosting source, on this computer (PROTOCOL.md §5.11).
 
 The owner actions ``land_branch`` and ``push_main``, and the observations
 ``close_issue`` needs (``docs/design/owner-actions.md``), run here because this

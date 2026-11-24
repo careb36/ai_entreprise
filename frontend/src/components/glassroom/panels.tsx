@@ -4,6 +4,7 @@ import type { SprintRetro } from '../../store/agentStore'
 import { GitBranch, HeartPulse, ShieldAlert } from 'lucide-react'
 import { taskPath } from './identity'
 import { phaseLabel } from './format'
+import { HoldBadge } from '../board/HoldBadge'
 import type {
   HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
 } from './types'
@@ -54,6 +55,7 @@ export function SprintTaskPanel({ tasks, sprintId }: { tasks: SprintTaskEntry[];
                   <span className={`rounded-full px-1.5 py-0.5 font-medium ${statusTone[task.status]}`}>
                     {t(`glassroom.taskStatus.${task.status}`)}
                   </span>
+                  <HoldBadge hold={task.hold} />
                   <span className={priorityTone[task.priority]}>
                     {t('glassroom.taskPriority')}: {t(`glassroom.taskPriorityValue.${task.priority}`)}
                   </span>
@@ -210,7 +212,7 @@ export function SprintRetroPanel({ retro }: { retro: SprintRetro | null }) {
       <div className="flex items-center gap-2 mb-2">
         <HeartPulse size={11} className="text-fuchsia-400" />
         <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-          {t('glassroom.retroTitle', 'Last Sprint Retro')}
+          {t('glassroom.retroTitle')}
         </p>
       </div>
       <div className="space-y-1.5">
