@@ -51,10 +51,10 @@ shell on the server.
 
 ```
 Browser ──B1 (HTTPS, cookie + CSRF)──▶ POST /v1/auth/password ──▶ users, session_families, audit_log
-Operator shell on the server ──B15──▶ docker exec reset_password ──▶ same tables
+Operator shell on the server ──B17──▶ docker exec reset_password ──▶ same tables
 ```
 
-**B15 (new): a shell on the backend's computer.** Whoever can `docker exec`
+**B17 (new): a shell on the backend's computer** (B15 is the owner actions' in-process principal, B16 the evaluation scorer's sandbox). Whoever can `docker exec`
 into the backend container already holds the database password and every key
 in its environment; the reset adds no power they lack, but it does the
 change through the audited path instead of a bare SQL write.
@@ -70,8 +70,8 @@ change through the audited path instead of a bare SQL write.
 | P5 | B1 | S | An attacker already signed in elsewhere keeps their session after the person changes the password | M | H | High | New: every family revoked; the asking browser gets a new one (`test_success_switches_the_password_and_ends_the_other_sessions`) |
 | P6 | B1 | I | The answer or the audit row leaks the password or the hash | L | H | High | New: rows carry ids and counts only; refusals carry a code and a fixed message (`test_the_change_is_audited_without_any_secret`); 422 bodies never echo input (existing `exception_handlers`) |
 | P7 | — | R | A password changed with no record (today: a bare SQL write) | H | M | Medium | New: `password_changed` and `password_reset_by_operator` through `AgentService`, in each company's chain, in the same commit as the change |
-| P8 | B15 | I | The operator's new password left in shell history, `ps` or the environment | M | M | Medium | New: read only with `getpass`, twice; never argv or env; never printed (`test_the_operator_reset_changes_the_hash_ends_sessions_and_audits`) |
-| P9 | B15 | E | The reset gives a password to an SSO-only account, bypassing the identity provider | L | M | Low | New: the reset refuses an account with no password (`no_password`) |
+| P8 | B17 | I | The operator's new password left in shell history, `ps` or the environment | M | M | Medium | New: read only with `getpass`, twice; never argv or env; never printed (`test_the_operator_reset_changes_the_hash_ends_sessions_and_audits`) |
+| P9 | B17 | E | The reset gives a password to an SSO-only account, bypassing the identity provider | L | M | Low | New: the reset refuses an account with no password (`no_password`) |
 | P10 | B1 | D | A huge body makes bcrypt or the hash path costly | L | L | Low | New: both fields at most 1024 characters (422); bcrypt reads 72 bytes |
 | P11 | B1 | I | The answer tells whether an email exists | — | — | — | Not applicable: the route acts only on the caller's own account |
 
