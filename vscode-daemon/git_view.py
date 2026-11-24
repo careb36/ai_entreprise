@@ -14,7 +14,13 @@ views, carried by ``workspace.git.diff`` with a ``view`` field (PROTOCOL.md
   task changed, committed or not (the branches of the tasks it depends on,
   merged into its worktree, count as its base's side only once merged there);
 - ``diff``: one path's diff against that merge base, bounded;
-- ``log``: the last ``limit`` (at most 20) commits of ``HEAD``, one line each.
+- ``log``: the last ``limit`` (at most 20) commits of ``HEAD``, one line each;
+- ``blame``: who-less blame of one path's line range (at most 200 lines):
+  for each group of consecutive lines last changed by the same commit, the
+  commit, its author date and its subject. Authors' and committers' names and
+  e-mail addresses are never returned (the porcelain carries them; they are
+  dropped while parsing): the repositories may be public and the date and
+  subject say when and why. Announced as its own ``blame`` feature.
 
 The base is the request's ``base`` (a local branch), else the default branch
 ``git_read_at.default_branch`` names (origin's HEAD, ``main``, ``master``).
@@ -30,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import git_base
@@ -38,12 +45,15 @@ import git_read_at
 from git_workspace import GIT_TIMEOUT_SECONDS, GitError, valid_branch
 from workspace_read import is_sensitive
 
-VIEWS = ("status", "changed", "diff", "log")
+VIEWS = ("status", "changed", "diff", "log", "blame")
 MAX_ENTRIES = 300
 MAX_DIFF_CHARS = 60_000
 MAX_LOG = 20
 DEFAULT_LOG = 10
 MAX_SUBJECT_CHARS = 200
+MAX_BLAME_LINES = 200
+DEFAULT_BLAME_LINES = 100
+UNCOMMITTED = "0" * 40
 _CHANGE = {"A": "added", "M": "modified", "D": "deleted", "T": "modified"}
 
 
@@ -172,6 +182,66 @@ def log(folder: Path, limit: Any) -> Dict[str, Any]:
     return {"branch": _branch(folder), "commits": commits, "limit": count}
 
 
+def _line_number(value: Any, default: int) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
+def _blame_groups(out: str) -> List[Dict[str, Any]]:
+    """``git blame --porcelain`` as line groups: commit, date, subject; never a name or e-mail."""
+    seen: Dict[str, Dict[str, Any]] = {}
+    groups: List[Dict[str, Any]] = []
+    current: Optional[str] = None
+    line_no = 0
+    for raw in out.split("\n"):
+        if raw.startswith("\t"):  # The line's content: not returned.
+            if current is None:
+                continue
+            last = groups[-1] if groups else None
+            if last and last["commit"] == current and last["end_line"] == line_no - 1:
+                last["end_line"] = line_no
+            else:
+                groups.append({"commit": current, "start_line": line_no, "end_line": line_no})
+            continue
+        head = raw.split(" ")
+        if len(head) >= 3 and len(head[0]) == 40 and all(c in "0123456789abcdef" for c in head[0]):
+            current, line_no = head[0], int(head[2])
+            seen.setdefault(current, {})
+        elif current is not None and raw.startswith("author-time "):
+            seen[current]["time"] = raw[len("author-time "):].strip()
+        elif current is not None and raw.startswith("summary "):
+            seen[current]["summary"] = raw[len("summary "):][:MAX_SUBJECT_CHARS]
+        # author, author-mail, committer, committer-mail…: dropped on purpose.
+    for group in groups:
+        info = seen.get(group["commit"], {})
+        stamp = info.get("time", "")
+        group["date"] = (
+            datetime.fromtimestamp(int(stamp), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if stamp.isdigit() else None
+        )
+        group["uncommitted"] = group["commit"] == UNCOMMITTED
+        group["subject"] = "" if group["uncommitted"] else info.get("summary", "")
+    return groups
+
+
+def blame(folder: Path, path: Any, start_line: Any, end_line: Any) -> Dict[str, Any]:
+    """One path's line range, at most ``MAX_BLAME_LINES``, as line groups (``_blame_groups``)."""
+    relative = relative_path(folder, path)
+    target = folder.joinpath(*relative.split("/"))
+    if not target.is_file():
+        raise FileNotFoundError(f"no such file: {relative}")
+    with target.open("rb") as handle:
+        total = sum(1 for _ in handle)
+    start = max(1, _line_number(start_line, 1))
+    if start > max(total, 1):
+        raise ValueError(f"start_line {start} is past the end of {relative}, which has {total} lines")
+    asked = _line_number(end_line, start + DEFAULT_BLAME_LINES - 1)
+    end = max(start, min(asked, start + MAX_BLAME_LINES - 1, total))
+    _, out = _git(["-c", "core.quotePath=false", "blame", "--porcelain", "-L", f"{start},{end}",
+                   "--", relative], folder)
+    return {"path": relative, "start_line": start, "end_line": end, "file_lines": total,
+            "groups": _blame_groups(out), "truncated": min(asked, total) > end}
+
+
 def view(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """The answer to a ``view`` request (module docstring); ValueError (400), FileNotFoundError (404), GitError (409)."""
     which = spec.get("view")
@@ -185,6 +255,8 @@ def view(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         body = changed(folder, base)
     elif which == "diff":
         body = diff(folder, base, spec.get("path"))
+    elif which == "blame":
+        body = blame(folder, spec.get("path"), spec.get("start_line"), spec.get("end_line"))
     else:
         body = log(folder, spec.get("limit"))
     return {"ok": True, "view": which, **body}

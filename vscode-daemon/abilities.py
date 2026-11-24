@@ -76,8 +76,9 @@ FEATURES = {
     "workspace.generate": _FORGE + ("delete",),
     "workspace.edit": ("delete", "move"),
     "workspace.git.base_status": _FORGE,
-    # The agents' read-only views of a task's repository (git_view.py, §5.6).
-    "workspace.git.diff": _FORGE + ("view",),
+    # The agents' read-only views of a task's repository (git_view.py, §5.6),
+    # and the blame view, announced apart so an older daemon is never asked it.
+    "workspace.git.diff": _FORGE + ("view", "blame"),
     "workspace.git.integrate": _FORGE,
     "workspace.git.merge": _FORGE,
     "workspace.git.publish": _FORGE,
