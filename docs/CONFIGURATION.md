@@ -272,6 +272,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `QA_REVIEW_TOOL_ROUNDS` | `3` | QA's read-only tool rounds (list, read, search, find_file) on the delivery before its verdict. `0`: one call without tools. |
 | `PLANNING_TOOL_ROUNDS` | `3` | The PO's read-only tool rounds (list, read, search, find_file) on the project before its sprint plan (`contracts/tool_steps`, step `plan`). `0`, or no daemon or project path: one call without tools. |
 | `SCRUM_TRIAGE_TOOL_ROUNDS` | `3` | The ScrumMaster's read-only tool rounds (list, read, search, find_file) on the blocked task's root before its decision (`contracts/tool_steps`, step `scrum_decision`). `0`, or no daemon or project path: one call without tools. |
+| `BOARD_TOOLS_ENABLED` | `true` | The record tools `board__task` (a task's history) and `board__evidence` (a run's checks, files and tools offered), read-only and scoped to the turn's task and its dependencies, for the QA review, the Architect's brief and a rework. They share the turn's rounds. |
 | `DEVELOPER_MAX_OUTPUT_TOKENS` | `0` | Cap on the Developer's answer. `0`: the provider's default. Never above the model's limit. |
 | `MCP_MAX_TOOL_ROUNDS` | `6` | MCP tool rounds before the model must answer. |
 | `MCP_TOOL_TIMEOUT_SECONDS` | `60` | One MCP call. |

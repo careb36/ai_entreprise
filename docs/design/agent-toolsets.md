@@ -110,11 +110,11 @@ What stays with the role, and is not a matter of tools:
 | Tool errors and spent rounds not recorded | sha256 only | `fix/tool-observability` |
 | Tasks given to roles without tools; PO blind to the repo | role list | `fix/plans-see-repo-and-tools` |
 | TechWriter, SecOps, Architect, PO executing a task get no R/W/X | `FILE_ROLES` gate | `feat/tools-follow-the-step` (`contracts/tool_steps`: the step sets the ceiling, a role deny narrows) |
-| **No tool to read a task's record or a run's evidence** | prompt summaries | **next: `board__task`, `board__evidence`** |
+| No tool to read a task's record or a run's evidence | prompt summaries | `feat/board-record-tools` (QA review, Architect brief, rework; ScrumMaster and PO planning: see the wiring below) |
 | Developer roles cannot query registries or advisories | research only for deciding roles | `feat/tools-follow-the-step` (S in every execution turn) |
 | PO plans without R | one daemon listing | `feat/tools-follow-the-step` (`planning_reads`, `PLANNING_TOOL_ROUNDS`) |
-| **ScrumMaster decides without E** | R since `feat/tools-follow-the-step` (`triage_reads`) | **next: `board__task`** |
-| **Missing tools are not counted** | nowhere | **next: tool demand per sprint** |
+| ScrumMaster decides without E | R since `feat/tools-follow-the-step` (`triage_reads`) | see the wiring below |
+| Missing tools are not counted | nowhere | `feat/board-record-tools` (the retrospective's tool demand line) |
 
 ## Next changes
 
@@ -127,6 +127,11 @@ What stays with the role, and is not a matter of tools:
    company and, for task turns, to the task and its dependencies. Bounded,
    redacted like reads. Offered to the reviewer, the ScrumMaster, the
    Architect brief and the PO's planning.
+   Built in `feat/board-record-tools` for the reviewer, the Architect brief
+   and an execution turn on a rework (`services/tools/board_tools.py`, the
+   readers in `services/loop/worker/board_record.py`), beside the tools the
+   turn already has; the ScrumMaster and the PO's planning come with their
+   read tools (4).
 3. **Research in execution turns.** `research__package` and `advisories`
    for the developer roles and DevOps (dependency versions, pinned actions
    and images). `fetch` stays limited to allowed hosts.
@@ -135,6 +140,11 @@ What stays with the role, and is not a matter of tools:
 5. **Tool demand.** Count, per sprint, unknown tool names, typed tool calls
    and refused commands from the observations, and show them beside the
    retrospective's other numbers.
+   Built in `feat/board-record-tools`: `services/contracts/tool_demand.py`
+   counts, `services/learning/retrospective.demand_of` reads the records
+   (runs' latest verifications, audit turns, the system's retry and block
+   texts); the Architect's brief typed as text is only logged today, so it is
+   not counted yet.
 
 6. **Code navigation as tools.** The daemon already keeps the reference
    graph (`workspace.related`) and the signatures (`workspace.signatures`),

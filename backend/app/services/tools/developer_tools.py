@@ -86,6 +86,8 @@ SERVER = developer_tool_schemas.SERVER
 READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
 RUN_TESTS = developer_tool_schemas.RUN_TESTS
 EDIT = developer_tool_schemas.EDIT
+# A run_tests command that was not run as asked (not the folder's runner).
+NOT_RUN = "not the folder's test runner or a committed check script"
 LIST_TIMEOUT_SECONDS = 20.0
 READ_TIMEOUT_SECONDS = 20.0
 SEARCH_TIMEOUT_SECONDS = 40.0
@@ -280,6 +282,9 @@ class WorkspaceToolbox:
             )
             extra["command"] = command
             extra["folder"] = folder
+            asked = str(arguments.get("command") or "").strip()
+            if not why and asked and asked != command and (refused or not notes):
+                extra["refused"] = refused or NOT_RUN  # Asked, not run: demand.
             if self.sandbox_error:
                 raise RuntimeError(f"tests not run: {self.sandbox_error}")
             if folder not in self.installed:

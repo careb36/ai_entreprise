@@ -65,7 +65,11 @@ the LangGraph graph is only an optional kickoff conversation.
    `ARCHITECT_TOOL_ROUNDS` rounds, each call an observation on its turn in
    `audit_log`, then answers within `BRIEF_MAX_TOKENS`. A tool call typed as
    text is no brief; without the daemon it is one plain call
-   (`services/loop/worker/architect_brief.py`).
+   (`services/loop/worker/architect_brief.py`). Beside those tools it gets the
+   record tools, `board__task` and `board__evidence` (the task's history and
+   its runs' checks, read-only, scoped to the task and its dependencies;
+   `services/loop/worker/board_record.py`), and so does the Developer's turn
+   on a rework, beside its own tools.
    With the company's Git workflow on, before the first turn the worker asks
    the daemon for the task's worktree (`workspace.console.prepare` with
    `private_git: false`: branch `fabrique/task-<id>` from the base, the done
@@ -205,7 +209,7 @@ the LangGraph graph is only an optional kickoff conversation.
    delivery itself: the read-only workspace tools (list, read, search,
    find_file) on the folder the verification recorded, for
    `QA_REVIEW_TOOL_ROUNDS` rounds (default 3), each call an observation on its
-   turn (`worker/qa_review_reads`). The verdict's form and parser do not
+   turn (`worker/qa_review_reads`), and the record tools beside them. The verdict's form and parser do not
    change; without a recorded delivery or a daemon the review is one call. A sprint closes when every task is settled: done, or blocked
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
@@ -264,7 +268,9 @@ the LangGraph graph is only an optional kickoff conversation.
    - the handoff to QA, listing the declared files;
    - QA's decision or rework request, and the Verifier's;
    - escalations to the ScrumMaster when a task is blocked;
-   - the ScrumMaster's retrospective to the team when a sprint closes.
+   - the ScrumMaster's retrospective to the team when a sprint closes, with
+     the sprint's tool demand (unknown tool names, tool calls typed as text,
+     refused calls, spent rounds) counted from the platform's records.
 
    Messages are claims: comments still drive the review loop, and the evidence
    decides. So are the **sprint board's notes**: after a delivery is recorded,
