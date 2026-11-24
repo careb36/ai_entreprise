@@ -1272,6 +1272,9 @@
       "test_run_cost.py": [
         "loop"
       ],
+      "test_run_tests_narrows.py": [
+        "tools"
+      ],
       "test_run_window.py": [
         "management"
       ],

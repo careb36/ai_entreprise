@@ -24,6 +24,16 @@ run when the command asks for exactly that and nothing else:
   the project root, in the task's sandbox and under the daemon's command
   policy; no install runs first.
 
+Three forms models asked for are read as that command, each said in the
+reply (``normalize``): a ``poetry run``/``uv run``/``pipenv run`` wrapper is
+dropped (a check runs at the project root, where no install ran); a
+``../scripts/<name>.py`` asked from a ``folder`` is the root's
+``scripts/<name>.py`` when the path resolves there from that folder (from the
+root it leaves the project and is refused); and a trailing ``| tail -n N``,
+``2>&1`` or ``; echo ...$?`` is dropped (``test_commands.strip_noise``: they
+only change what is printed, and the reply gives the exit status and the
+output's end).
+
 Any other command (or a script that fails a condition: the reason goes on the
 observation and before the reply) keeps today's answer: the folder's test
 command runs instead, and the reply says so (``developer_tool_replies.tests_text``).
@@ -36,10 +46,11 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import posixpath
 import re
 from typing import Any
 
-from services.tools import developer_tool_replies, test_runs
+from services.tools import developer_tool_replies, test_commands, test_runs
 from services.workspace import daemon_liveness
 
 READ_AT = "workspace.git.read_at"
@@ -68,6 +79,27 @@ def parse(command: Any) -> tuple[str, str, list[str]] | None:
         if not _ARGUMENT.fullmatch(word) or any(b in word for b in _BANNED):
             return None
     return words[0], script, arguments
+
+
+def normalize(command: Any, folder: Any = None) -> tuple[str, list[str]]:
+    """*command* with the three accepted forms rewritten (the module's
+    docstring), and a note for each; ``parse`` still judges the result."""
+    text, notes = test_commands.strip_noise(str(command or "").strip(" "))
+    wrapper = next((w for w in test_commands.WRAPPERS if text.startswith(w)), "")
+    if wrapper:
+        text = text[len(wrapper) :]
+        notes.append(
+            f"`{wrapper.strip()}` was dropped: a check runs at the project root, "
+            "with no install"
+        )
+    words = text.split(" ")
+    if len(words) > 1 and words[0] in INTERPRETERS and words[1].startswith("../"):
+        where = str(folder or "").strip().strip("/")
+        path = posixpath.normpath(posixpath.join(where, words[1]))
+        if where and _SCRIPT.fullmatch(path):
+            notes.append(f"`{words[1]}` from `{where}/` is the root's `{path}`")
+            text = " ".join([words[0], path, *words[2:]])
+    return text, notes
 
 
 def _entry(reply: Any, script: str) -> dict[str, Any]:
@@ -129,7 +161,8 @@ def attempt(
     """``(reply, None)`` when the command was a check script and it ran;
     ``(None, why)`` when it was one that may not run; ``(None, None)`` when
     it was not one. *extra* gets the observation's fields."""
-    parsed = parse(arguments.get("command"))
+    asked, notes = normalize(arguments.get("command"), arguments.get("folder"))
+    parsed = parse(asked)
     if parsed is None:
         return None, None
     interpreter, script, words = parsed
@@ -152,7 +185,10 @@ def attempt(
     where = (
         f" at {str(record.get('commit') or '')[:12]}" if record.get("commit") else ""
     )
-    head = f"[ran `{command}`, the committed {script}{where}, unchanged on disk]\n"
+    said = "".join(f"; {note}" for note in notes)
+    head = (
+        f"[ran `{command}`, the committed {script}{where}, unchanged on disk{said}]\n"
+    )
     return head + developer_tool_replies.tests_text(
         exit_code, output, box.result_max_chars
     ), None
