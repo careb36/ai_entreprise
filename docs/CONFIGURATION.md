@@ -152,6 +152,7 @@ slowapi limits, per client address unless noted, stored in `RATE_LIMIT_STORAGE_U
 | `OPENPROJECT_URL` | `http://localhost:8080` | OpenProject server for the PO's backlog tool. |
 | `AUDIT_LOG_PATH` | `/app/.factory/logs` | Folder of the append-only `audit.jsonl`. The hash chain lives in Postgres. |
 | `BENCH_REPOSITORY_DIR` | `""` | Checkout whose `bench/scorecards` the /bench page reads. Empty: the backend's own checkout, if any. |
+| `SELF_HOST_REPOSITORY_DIR` | `""` | Checkout whose `scripts/self_host` the owner action `self_host_container_run` imports (read-only; `docs/design/owner-actions.md`). Empty: the backend's own checkout, else the repository at `AGENT_WORKSPACE_ROOT` (the compose file mounts it there). Neither found: the action is unavailable. |
 
 ## Models and the LLM proxy
 
@@ -383,6 +384,8 @@ Read by `vscode-daemon/` on the computer that holds the projects. Protocol: [`vs
 | `FABRIQUE_SANDBOX_CACHE_STATE` | `~/.fabrique-daemon/sandbox-cache` | Failed installs and quarantine per project. |
 | `FABRIQUE_FULL_LOG_MAX_MB` | `50` | Largest uploaded output per stream. Range 1–1024. |
 | `FABRIQUE_COMMAND_DENY` | unset | Comma-separated command patterns the daemon always refuses; a request cannot relax it. |
+| `FABRIQUE_SELF_HOST_SOURCE` | the La Fabrique repository the daemon runs from | The repository `workspace.self_host.checkout` copies for an owner action (PROTOCOL.md §5.9). The request never names it. |
+| `FABRIQUE_SELF_HOST_ROOT` | `~/fabrique-self-host` | The folder the self-hosting snapshots go under; the request names only a folder inside it. |
 | `FABRIQUE_EXEC_SHELL` | unset | Shell for host commands. Unset: `/bin/zsh` if present, else `/bin/sh`; on Windows `COMSPEC`. |
 | `FABRIQUE_DAEMON_STATE` | `~/.fabrique-daemon` (journal in `deliveries/`) | Queued delivery results, replayed on redelivery. |
 | `FABRIQUE_SNAPSHOT_STATE` | `~/.fabrique-daemon/snapshots` | Pre-delivery snapshots used to undo a delivery. |

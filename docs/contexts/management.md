@@ -2,13 +2,13 @@
 
 The owner as a client: the Manager agent (inbox, policy, rules, observations,
 actions, record), the client's brief, the self-improvement cycle's record, the
-Reviewer and Support agents. Read this before changing
+owner actions run from the app, the Reviewer and Support agents. Read this before changing
 `backend/app/services/management/`; each module's docstring has the detail.
 
 - **Folder:** `backend/app/services/management/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md). Nothing imports it.
 - **Interface:** none.
-- **Modules:** `brief_mail`, `company_export`, `company_import`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `company_export`, `company_import`, `in_process_api`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `owner_action_runner`, `owner_actions`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `self_host_snapshot`, `sod_report`, `support_agent`.
 
 ## How it works
 
@@ -44,6 +44,11 @@ a person decides.
   every step fails closed.
 - Suggestions from the Reviewer, Support and intake agents never move the
   record; the text they read is data and they have no tools.
+- An owner action runs only catalogue code with schema-checked parameters,
+  started by a signed-in Owner (never a Manager or an API token) after a
+  confirmation whose digest the start echoes; one run of an action at a time;
+  start, cancel and finish are audited; its observations are what the
+  platform created or measured.
 
 ## Components
 
@@ -95,6 +100,28 @@ beside the quotas, and the refused suggestions with their `refusal_reason`.
 - `rsi_cycle_import.import_record` validates a runner's record and hashes each
   kept file it can read; a claimed sha256 that differs is refused, an absolute
   path is never read, and an unreadable file keeps its hash as a claim only.
+
+### Owner actions
+
+[Design and threat model](../design/owner-actions.md), issue #701.
+
+- `owner_actions.py`: the catalogue (one action today,
+  `self_host_container_run`), parameter validation, the confirmation digest,
+  one run at a time (`locks.in_transaction`), and the run's record: start,
+  cancel request and finish audited `owner_action_<step>` as `human:<id>`.
+- `owner_action_runner.py`: the job. The checkout goes through the daemon
+  (`workspace.self_host.checkout`, a folder name only); the harness's other
+  steps (`scripts/self_host`) run in a worker thread with `in_process_api.py`,
+  ASGI requests to the running application carrying the Owner's
+  `InProcessPrincipal` ([platform](platform.md)), no token minted. Before
+  each call it checks the cancel request and the tokens the platform recorded
+  for the self-hosting company against the run's budget; over it, or on
+  cancel, it stops the sprint.
+- `self_host_snapshot.py`: finds and imports the harness
+  (`SELF_HOST_REPOSITORY_DIR`), and reads the snapshot for the `records` step
+  through `workspace.git.read_at` and `workspace.git.diff`'s `status` view.
+- Routes: `routers/owner_actions.py`; the inbox lists the catalogue for an
+  Owner (`owner_actions`) and marks a blocked task that names an action.
 
 ### The segregation-of-duties report
 
