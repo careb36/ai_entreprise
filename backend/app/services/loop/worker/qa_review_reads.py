@@ -20,6 +20,10 @@ Each reading round is an audit turn of its own (``ACTION_QA_REVIEW_READ``:
 priced, never counted in the QA rate), and every tool call's observation goes
 on the verdict's turn (``tool_calls``); what the reviewer says it read stays a
 claim, the observations are the backend's.
+
+The record tools (``board_record``: ``board__task``, ``board__evidence``) go
+beside the reads, scoped to the task and the tasks it depends on, within the
+same rounds; never without them.
 """
 
 from __future__ import annotations
@@ -31,12 +35,13 @@ from database import engine
 from logging_config import setup_logger
 
 from services.loop.answers import llm_content, llm_failure
+from services.loop.worker import board_record
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW_READ,
     classify_review_result,
     record_agent_turn,
 )
-from services.tools import mcp_tools, review_tools
+from services.tools import board_tools, mcp_tools, review_tools
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -54,13 +59,16 @@ EXHAUSTED_NOTE = (
 
 
 def _toolbox(company_id: int | None, item_id: int | None) -> Any:
+    rounds = settings.QA_REVIEW_TOOL_ROUNDS
     try:
-        return review_tools.read_only_toolbox(
-            company_id, item_id, engine=engine, rounds=settings.QA_REVIEW_TOOL_ROUNDS
+        box = review_tools.read_only_toolbox(
+            company_id, item_id, engine=engine, rounds=rounds
         )
     except Exception as exc:  # noqa: BLE001 - Without tools, today's single call.
         logger.warning("QA review tools unavailable for item=%s: %s", item_id, exc)
-        return None
+        box = None
+    # The task's record and the Verifier's evidence (``board_record``).
+    return board_record.offer(box, company_id, item_id, rounds=rounds, engine=engine)
 
 
 def answer(
@@ -90,7 +98,10 @@ def answer(
                 result_preview="tool calls: " + mcp_tools.summarize(calls),
             )
 
-    note = {"role": "user", "content": LOOK_NOTE.format(rounds=toolbox.max_rounds)}
+    look = LOOK_NOTE
+    if board_tools.has_board(toolbox):  # The record tools, said once.
+        look += " " + board_tools.NOTE
+    note = {"role": "user", "content": look.format(rounds=toolbox.max_rounds)}
     try:
         result, reads = mcp_tools.chat_with_tools(
             client,

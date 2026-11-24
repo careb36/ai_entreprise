@@ -236,6 +236,9 @@ class Settings(BaseSettings):
     # passed, and spec 01 cost a third less (DeepSeek) to three fifths less (Qwen).
     DEVELOPER_TOOL_ROUNDS: int = 5
     QA_REVIEW_TOOL_ROUNDS: int = 3  # QA's read-only rounds before its verdict
+    # The record tools (services/tools/board_tools.py): board__task and
+    # board__evidence, read-only, for the QA review, the Architect's brief and a rework.
+    BOARD_TOOLS_ENABLED: bool = True
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's
     # output limit (services/models/model_profile.py).

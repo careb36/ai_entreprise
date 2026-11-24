@@ -9,6 +9,12 @@ The sprint board (issue #439) adds its numbers and the notes worth keeping:
 the active decisions, interface and schema changes and gotchas nobody marked
 wrong (``promotable_notes``). The summary lists them as claims, so the memory
 engram keeps them and the ScrumMaster sees them when it proposes procedures.
+
+The tool demand (``contracts.tool_demand``, issue #766) counts what the
+sprint's agents asked of their tools and did not get: unknown tool names, final
+answers that were a tool call written as text, refused calls and runs that
+spent their rounds, all from the platform's own records (``demand_of``), and
+the summary shows them beside the other numbers, as observations.
 """
 
 from __future__ import annotations
@@ -17,11 +23,12 @@ import json
 import logging
 from typing import Any
 
-from models import BacklogItem, Sprint
+from models import AgentRun, AuditLog, BacklogItem, Sprint, Verification
+from models.agent_run import TASK_WORKER_PRODUCER
 from sqlmodel import Session, select
 
-from services.contracts import board_notes
-from services.tasks import sprint_board, task_projection
+from services.contracts import board_notes, tool_demand
+from services.tasks import sprint_board, task_events, task_projection
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -58,6 +65,61 @@ def board_summary(session: Session, sprint_id: int, items: list[Any]) -> dict[st
         ),
         "promotable_notes": promotable,
     }
+
+
+# The task events whose system text may say a final answer was a tool call
+# written as text (``loop/worker/intake``: the retry, then the block).
+DEMAND_EVENT_KINDS = ("retried", "blocked")
+
+
+def demand_of(session: Session, company_id: int, items: list[Any]) -> dict[str, Any]:
+    """The sprint's tool demand (``contracts.tool_demand``), from the records
+    the platform kept: each task run's latest verification (its tool calls and
+    loop record), the audit turns' tool calls (the QA review's reads, the
+    Architect's brief) and the system's retry and block texts."""
+    ids = [i.id for i in items if i.id is not None]
+    refs = [f"task-{i}" for i in ids]
+    run_ids = session.exec(
+        select(AgentRun.id).where(
+            AgentRun.company_id == company_id,
+            AgentRun.external_ref.in_(refs),  # type: ignore[attr-defined]
+            AgentRun.producer == TASK_WORKER_PRODUCER,
+        )
+    ).all()
+    latest: dict[int, Any] = {}  # The latest verification of each run.
+    for row in session.exec(
+        select(Verification)
+        .where(Verification.agent_run_id.in_(list(run_ids)))  # type: ignore[attr-defined]
+        .order_by(Verification.id)  # type: ignore[arg-type]
+    ).all():
+        latest[row.agent_run_id] = row.evidence or {}
+    observations = [c for e in latest.values() for c in e.get("tool_calls") or []]
+    for details in session.exec(
+        select(AuditLog.details).where(
+            AuditLog.company_id == company_id,
+            AuditLog.interaction_id.in_(refs),  # type: ignore[union-attr]
+        )
+    ).all():
+        observations += (details or {}).get("tool_calls") or []
+    notes = [
+        (e.payload or {}).get("text")
+        for events in task_events.for_tasks(session, ids).values()
+        for e in events
+        if e.actor == task_events.SYSTEM and e.event_type in DEMAND_EVENT_KINDS
+    ]
+    return tool_demand.count(observations, list(latest.values()), notes)
+
+
+def demand_summary(session: Session, sprint: Any, items: list[Any]) -> dict[str, Any]:
+    """``tool_demand`` for the metrics; nothing when it cannot be read."""
+    if sprint is None:
+        return {}
+    try:
+        return {"tool_demand": demand_of(session, sprint.company_id, items)}
+    except Exception as exc:  # noqa: BLE001 - An addition, best-effort like the board.
+        logger.warning("Tool demand unreadable for sprint=%s: %s", sprint.id, exc)
+        session.rollback()
+        return {}
 
 
 def build(engine: Any, sprint_id: int) -> dict[str, Any]:
@@ -122,6 +184,7 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
                 "qa_failures": qa_fail_count,
                 "blocked_reasons": blocked_reasons[:5],
                 **board_summary(session, sprint_id, list(items)),
+                **demand_summary(session, sprint, list(items)),
             }
     except Exception as exc:  # noqa: BLE001 - Retrospective context is best-effort.
         logger.warning(
@@ -140,6 +203,8 @@ def summary(metrics: dict[str, Any]) -> str:
     ]
     for reason in metrics.get("blocked_reasons") or []:
         lines.append(f"  • {reason}")
+    if metrics.get("tool_demand") is not None:  # Observations, beside the counts.
+        lines.append(tool_demand.summary_line(metrics["tool_demand"]))
     notes = (metrics.get("board_notes") or {}).get("total", 0)
     if notes:
         lines.append(

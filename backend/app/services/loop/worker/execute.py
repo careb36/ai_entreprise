@@ -32,6 +32,7 @@ from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
     architect_brief,
+    board_record,
     board_writes,
     messages,
     prompt,
@@ -331,6 +332,8 @@ def _execute_task(
         rounds=limits["tool_rounds"],
         result_max_chars=limits["result_max_chars"],
     )
+    if _rework_feedback:  # A rework reads its own record (``board_record``).
+        toolbox = board_record.on_rework(toolbox, company_id, item, limits, engine)
     # The tools offered (and withheld, with why) go on the evidence; a split
     # is pointed to the move tool when it is offered.
     agent["tools_offered"] = workspace_edits.offered(toolbox)

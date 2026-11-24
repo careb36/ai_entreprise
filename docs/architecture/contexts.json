@@ -141,6 +141,7 @@
         "workspace"
       ],
       "public": [
+        "board_tools",
         "code_graph",
         "code_level",
         "developer_tools",
@@ -564,6 +565,12 @@
       "test_board_observed.py": [
         "evidence",
         "loop"
+      ],
+      "test_board_record.py": [
+        "loop"
+      ],
+      "test_board_tools.py": [
+        "tools"
       ],
       "test_brief_mail.py": [
         "management"
@@ -1579,6 +1586,10 @@
       ],
       "test_token_diet.py": [
         "management"
+      ],
+      "test_tool_demand.py": [
+        "learning",
+        "tools"
       ],
       "test_tool_history.py": [
         "tools"

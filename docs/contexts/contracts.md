@@ -7,7 +7,7 @@ docstring has the detail.
 - **Folder:** `backend/app/services/contracts/`
 - **May import:** no other context.
 - **Interface:** every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `tool_demand`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Rules
 
@@ -96,6 +96,10 @@ written.
   step 3 of [the sprint loop](../SPRINT_LOOP.md).
 - `verdicts.py`, `tool_calls.py`, `sandbox_report.py`,
   `task_dependencies.py`: shared shapes of a run and a task.
+- `tool_demand.py`: the sprint's tool demand counted from tool-call
+  observations, runs' loop records and the system's texts (unknown tools,
+  tool calls typed as text, refused calls, spent rounds), pure, for the
+  retrospective ([learning](learning.md)).
 - `sandbox_schemas.py`: the pydantic shapes `workspace/sandbox_manager.py`
   exchanges with the sandbox.
 - `standards_catalogue.py`: the quality standards ([evidence](evidence.md)).

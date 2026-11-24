@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
 
 ## How it works
 
@@ -207,6 +207,17 @@ instead, stays readable by id, and an Owner may unarchive it.
   typed as text is no brief. Without the daemon it is one plain call. It also
   builds the Architect's agent and system prompt from its row
   (`architect_agent`, `system_prompt`).
+- `worker/board_record`: the record tools' scope and readers
+  (`tools/board_tools`: `board__task`, `board__evidence`). The scope is the
+  turn's company and its task plus the tasks it depends on, read from the
+  database; the readers split each record into observations (events' kinds,
+  actors, statuses and times, the system's and gates' own text, the
+  Verifier's checks, the files' sha256, `tools_offered`, the round count) and
+  claims (comments, verdicts, rework requests, the plan's words, the
+  producer's model, claims and deliverable). `offer` puts them beside the QA
+  review's reads and the Architect's brief tools, and `on_rework` beside an
+  execution turn's tools on a rework, within the turn's rounds; a turn
+  offered no tools gets none.
 
 ### Delivery and QA
 
@@ -248,7 +259,8 @@ instead, stays readable by id, and an Owner may unarchive it.
   single tool-less call unchanged, and so does a review with no recorded
   delivery or no daemon. Each reading round is a `qa_review_read` audit turn,
   priced but outside the QA rate; the calls' observations go on the verdict's
-  turn (`tool_calls`).
+  turn (`tool_calls`). The record tools (`worker/board_record`) go beside the
+  reads.
 - `worker/messages`: hand-over messages (claims) and the ScrumMaster's triage of
   an escalation.
 

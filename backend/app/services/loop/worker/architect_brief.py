@@ -13,6 +13,10 @@ Each call is the backend's observation (the file's sha256 for a read),
 recorded on the Architect's turns; the final text stays a claim, and a tool
 call typed as text is still no brief. Without the daemon, a project path or
 rounds (``ARCHITECT_TOOL_ROUNDS=0``) it is one plain call, as before.
+
+The record tools (``board_record``: ``board__task``, ``board__evidence``) go
+beside the reads, scoped to the task and the tasks it depends on, so a brief
+on a rework reads what was asked and what the Verifier observed.
 """
 
 from collections.abc import Callable
@@ -21,9 +25,10 @@ from typing import Any
 from config import settings
 from logging_config import setup_logger
 
+from services.loop.worker import board_record
 from services.models import model_routing
 from services.platform.orchestration_metrics import KPI_ROLE_ARCHITECT
-from services.tools import developer_tools, mcp_tools
+from services.tools import board_tools, developer_tools, mcp_tools
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -70,10 +75,21 @@ def read_tools(company_id: int | None, item_id: int | None, engine: Any) -> Any:
         box = developer_tools.read_tools(company_id, item_id, engine)
     except Exception as exc:  # noqa: BLE001 - The brief is asked without tools.
         logger.warning("No read tools for the Architect on item=%s: %s", item_id, exc)
-        return None
+        box = None
     if box is not None:
         box.max_rounds = rounds
-    return box
+    # The task's record and its runs' evidence (``board_record``), own task.
+    return board_record.offer(box, company_id, item_id, rounds=rounds, engine=engine)
+
+
+def note_for(toolbox: Any) -> str:
+    """What the request says the tools may do: the workspace reads, and the
+    record tools beside them when offered; nothing without a toolbox."""
+    if toolbox is None:
+        return ""
+    if not board_tools.has_board(toolbox):
+        return READ_NOTE
+    return READ_NOTE + " " + board_tools.NOTE
 
 
 def ask(
@@ -89,7 +105,7 @@ def ask(
     Without a toolbox this is the one plain call it always was; with one, the
     request says what the tools may do, the loop answers each call and
     *record* gets each round that made calls, as the Developer's turns."""
-    request += READ_NOTE if toolbox is not None else ""
+    request += note_for(toolbox)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": request},

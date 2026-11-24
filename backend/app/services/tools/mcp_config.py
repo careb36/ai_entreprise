@@ -35,7 +35,7 @@ from services.tools import mcp_policy
 
 NAME_LIMIT = 64
 # Names the built-in toolboxes use for their tools (``<name>__<tool>``).
-RESERVED_SERVER_NAMES = {"workspace", "research"}
+RESERVED_SERVER_NAMES = {"workspace", "research", "board"}
 _TRANSPORT_ALIASES = {
     "streamable-http": "http",
     "streamable_http": "http",

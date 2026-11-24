@@ -7,8 +7,8 @@ code and the research tools. Read this before changing
 
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
-- **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`.
+- **Interface:** `board_tools`, `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
+- **Modules:** `board_tools`, `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -17,8 +17,8 @@ The task worker builds a toolbox for the role (`developer_tools.toolbox_for`,
 a `CombinedToolbox` of the workspace, research and MCP boxes) and runs
 `mcp_tools.chat_with_tools`: at most a bounded number of rounds, then one
 request without tools, so a task always ends in a deliverable. Tools are
-offered as `<server>__<tool>`; `workspace` and `research` are reserved server
-names. Each call is recorded on the Verifier's evidence as `tool_calls`.
+offered as `<server>__<tool>`; `workspace`, `research` and `board` are reserved
+server names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 
 The loop counts its own rounds: the answer carries `tool_loop`, and the run's
 evidence `rounds_used` (rounds in which the model called tools), `rounds_max`
@@ -70,6 +70,10 @@ call written as text; the tool budget had run out" if it happens again.
   with no credential. A refused fetch sends nothing; the reply to the model
   starts `Refused: host not allowed` with why, and the observation carries
   `refused: host not allowed` and `allowed: false`.
+- A `run_tests` command that was not run as asked (a shell operator, a `cd`
+  to another folder, not the folder's runner) carries `refused` with why on
+  its observation, as a check script that may not run does on its
+  `check_script`; the retrospective counts both as tool demand.
 
 ## Components
 
@@ -91,6 +95,25 @@ call written as text; the tool budget had run out" if it happens again.
   architecture; `sources.check_sources` is the Verifier's `sources` check.
 - `research_registries.py`: PyPI, npm, crates.io, the Go proxy, OSV.
 - `research_schemas.py`: the tool schemas. `research_http.py`: the fetch.
+
+### The record tools (family E)
+
+- `board_tools.py`: `board__task` (a task's history: status moves, comments,
+  attempts, rework requests, dependencies) and `board__evidence` (a run's
+  Verifier checks and their observations, the delivered files with the
+  sha256 the backend sent and the daemon read back, `tools_offered`, the
+  loop's rounds, and the producer's claims). Read-only. The scope (`Scope`)
+  is the backend's: the turn's company and, for a task turn, the task and the
+  tasks it depends on; a task outside it is refused (`Refused: task N is
+  outside the turn's scope`, `refused` on the observation) and the arguments
+  never widen it. The reply prints the platform's observations and the
+  agents' and people's claims under two headings, never in one entry, is
+  redacted like a read (`context_read.redact_secrets`) and cut at the result
+  budget. This context may not read the tasks context, so the readers come
+  from the caller (`loop/worker/board_record.py`). `attach` puts the tools
+  beside a turn's toolbox (a `CombinedToolbox`) without raising its rounds.
+  Offered with `BOARD_TOOLS_ENABLED` to the QA review, the Architect's brief
+  and an execution turn on a rework, only beside tools the turn already has.
 
 ### Answers for the `grounded` check
 
