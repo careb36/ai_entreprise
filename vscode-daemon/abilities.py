@@ -84,6 +84,8 @@ FEATURES = {
     "workspace.git.publish": _FORGE,
     "workspace.git.reviews": _FORGE,
     "workspace.git.sync_base": _FORGE,
+    # A document's text instead of its bytes (document_text.py, §5.7).
+    "workspace.read": ("document_text",),
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }

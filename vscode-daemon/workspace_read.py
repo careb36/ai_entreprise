@@ -444,8 +444,15 @@ async def handle_list(nc, msg, reply, request_body, resolve) -> None:
 
 
 async def handle_read(nc, msg, reply, request_body, resolve) -> None:
-    """``workspace.read`` → the numbered text, its sha256 and size."""
-    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: read_file(r, d.get("path"), d.get("start_line"), s, d.get("lines")))
+    """``workspace.read`` → the numbered text, its sha256 and size; with
+    ``extract: "text"``, a document's text (``document_text``, PROTOCOL.md §5.7)."""
+    import document_text  # Imports this module: loaded when first asked.
+
+    def read(r, d, s):
+        reader = document_text.read_document if d.get("extract") == "text" else read_file
+        return reader(r, d.get("path"), d.get("start_line"), s, d.get("lines"))
+
+    await _serve(nc, msg, reply, request_body, resolve, read)
 
 
 async def handle_search(nc, msg, reply, request_body, resolve) -> None:

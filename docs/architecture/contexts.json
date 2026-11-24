@@ -1641,6 +1641,10 @@
         "tools",
         "workspace"
       ],
+      "test_workspace_read_document.py": [
+        "tools",
+        "workspace"
+      ],
       "test_wstg_plan.py": [
         "evidence",
         "planning"

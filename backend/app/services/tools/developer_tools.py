@@ -66,6 +66,7 @@ from services.tools import (
     task_worktree,
     test_commands,
     test_runs,
+    workspace_documents,
     workspace_edits,
     workspace_git,
 )
@@ -158,7 +159,8 @@ class WorkspaceToolbox:
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
             schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
-        return schemas + workspace_git.schemas(self)  # Read-only git, when offered.
+        # Read-only git and a document's text, when offered.
+        return schemas + workspace_git.schemas(self) + workspace_documents.schemas(self)
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -253,6 +255,8 @@ class WorkspaceToolbox:
             return developer_tool_replies.find_text(str(pattern), reply)
         if tool == workspace_git.TOOL:
             return workspace_git.run(self, arguments, extra)
+        if tool == workspace_documents.TOOL:
+            return workspace_documents.run(self, arguments, extra)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool in (MOVE, DELETE) and self.can_move:
@@ -532,6 +536,7 @@ def toolbox_for(
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
             workspace_git.offer(workspace, company_id, engine)  # Read-only git.
+            workspace_documents.offer(workspace)  # A DOCX's text, when announced.
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine
