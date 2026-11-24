@@ -483,10 +483,14 @@ def tool_root(
 
 
 def read_tools(company_id: int, item_id: Any = None, engine: Any = None) -> Any:
-    """List, read, search and find_file alone on the task's root (``tool_root``):
-    no edit, move, delete or test run; ``None`` without the daemon or a root."""
+    """Family R alone on the task's root (``tool_root``): list, read, search,
+    find_file, and read-only git and a document's text when announced
+    (``workspace_reads``); no edit, move, delete, lint or test run; ``None``
+    without the daemon or a root."""
     root = tool_root(company_id, item_id, engine=engine) if "nats" in _bridge else None
-    return WorkspaceToolbox(_request_from_thread, root) if root else None
+    box = WorkspaceToolbox(_request_from_thread, root) if root else None
+    workspace_reads.offer(box, company_id, engine)  # Nothing without a box.
+    return box
 
 
 def enter_task_worktree(company_id: Any, item_id: Any, *, engine: Any = None) -> Any:

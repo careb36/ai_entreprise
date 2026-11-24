@@ -110,10 +110,12 @@ What stays with the role, and is not a matter of tools:
 | Tool errors and spent rounds not recorded | sha256 only | `fix/tool-observability` |
 | Tasks given to roles without tools; PO blind to the repo | role list | `fix/plans-see-repo-and-tools` |
 | TechWriter, SecOps, Architect, PO executing a task get no R/W/X | `FILE_ROLES` gate | `feat/tools-follow-the-step` (`contracts/tool_steps`: the step sets the ceiling, a role deny narrows) |
-| No tool to read a task's record or a run's evidence | prompt summaries | `feat/board-record-tools` (QA review, Architect brief, rework; ScrumMaster and PO planning: see the wiring below) |
+| No tool to read a task's record or a run's evidence | prompt summaries | `feat/board-record-tools` (QA review, Architect brief, rework); `integrate/agent-tools-2` (the ScrumMaster's triage over the sprint, the PO's planning over the company's board) |
 | Developer roles cannot query registries or advisories | research only for deciding roles | `feat/tools-follow-the-step` (S in every execution turn) |
 | PO plans without R | one daemon listing | `feat/tools-follow-the-step` (`planning_reads`, `PLANNING_TOOL_ROUNDS`) |
-| ScrumMaster decides without E | R since `feat/tools-follow-the-step` (`triage_reads`) | see the wiring below |
+| ScrumMaster decides without E | R since `feat/tools-follow-the-step` (`triage_reads`) | `integrate/agent-tools-2` (`board_record.sprint_scope`) |
+| Read-only steps see no Git history or documents | list, read, search, find_file | `integrate/agent-tools-2` (`workspace_reads`: `workspace__git` with `blame` and `workspace__read_document`, when announced, in every read-only toolbox) |
+| Architect brief cannot research though its step allows S | R and E only | `integrate/agent-tools-2` (`research_tools.company_toolbox` beside the reads) |
 | Missing tools are not counted | nowhere | `feat/board-record-tools` (the retrospective's tool demand line) |
 
 ## Next changes
@@ -159,7 +161,8 @@ What stays with the role, and is not a matter of tools:
    edited file. Offer `workspace__lint` (the stack profile's lint and type
    check, narrowed to given paths, in the sandbox) to every turn with X.
    *Built* (`feat/navigation-and-lint-tools`): `services/tools/workspace_lint.py`,
-   in execution turns only; the model gives paths, never command text.
+   where the step allows X (family X in `contracts/tool_steps`; a role's X
+   deny drops it); the model gives paths, never command text.
 8. **Run the project's own programs.** Since the scope directive
    (2026-11-19) projects include data science and ML: a turn with X can run a
    committed entry point declared in the project's plan (a training or
@@ -200,8 +203,14 @@ What stays with the role, and is not a matter of tools:
     `docs_links` and `docs_code_paths` checks (links, anchors and cited paths
     against the daemon's listing and read-back texts); and the docs-only write
     policy for the edit tools (`services/tools/docs_write_policy.py`).
-    **Still to do:** PDF text; the policy on an answer's own file blocks and
-    wired to the step; anchors into documents the delivery did not change
+    **Wired (`integrate/agent-tools-2`):** the policy follows the step
+    table (`tool_steps.write_scope`: the `documentation` step, and the
+    TechWriter as a role's narrowing within W, write documentation only; a
+    task whose kind is documentation is executed as that step), and an
+    answer's own file blocks follow it too (`loop/worker/deliver.docs_scope`:
+    a non-documentation path is not delivered and the run's evidence records
+    `docs_write`).
+    **Still to do:** PDF text; anchors into documents the delivery did not change
     (a daemon read-back of their headings); code names in fenced snippets
     and through navigation; runnable examples; the docs build; the API
     surface, configuration and licence extraction; per-statement citations

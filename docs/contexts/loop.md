@@ -200,9 +200,14 @@ instead, stays readable by id, and an Owner may unarchive it.
   default; [models](models.md)).
 - `worker/architect_brief`: the Architect's brief (`worker/execute`,
   `_consult_architect`) runs through the tool loop with the workspace's read
-  tools alone (`review_tools.for_step` for the `architect_brief` step: list,
-  read, search, find_file on the task's root; no edit, move, delete or test
-  run), for at most
+  tools (`review_tools.for_step` for the `architect_brief` step: list,
+  read, search, find_file, read-only Git and a document's text when
+  announced, on the task's root; no edit, move, delete, lint or test run)
+  and, since the step allows research (R and S), the research tools beside
+  them (`research__package`, `research__advisories`, a fetch of the allowed
+  hosts: `research_tools.company_toolbox`, attached with
+  `board_tools.attach` within the same rounds; never without the reads),
+  for at most
   `ARCHITECT_TOOL_ROUNDS` rounds. Each call is an observation on its turns in
   `audit_log` (`details.tool_calls`); the brief is a claim, and a tool call
   typed as text is no brief. Without the daemon it is one plain call. It also
@@ -213,10 +218,12 @@ instead, stays readable by id, and an Owner may unarchive it.
   documentation task is the `documentation` step), `toolbox_for` for that
   step and the role within the model's limits, the record tools on a rework,
   and `tools_offered` with the step, its families and its write scope.
-- `worker/board_record`: the record tools' scope and readers
-  (`tools/board_tools`: `board__task`, `board__evidence`). The scope is the
-  turn's company and its task plus the tasks it depends on, read from the
-  database; the readers split each record into observations (events' kinds,
+- `worker/board_record`: the record tools' scopes and offer
+  (`tools/board_tools`: `board__task`, `board__evidence`; the readers moved
+  to `tasks/task_records`, so planning reads them too). The scope is the
+  turn's company and its task plus the tasks it depends on (`task_scope`), or
+  for the ScrumMaster's triage the task's sprint (`sprint_scope`), read from
+  the database; the readers split each record into observations (events' kinds,
   actors, statuses and times, the system's and gates' own text, the
   Verifier's checks, the files' sha256, `tools_offered`, the round count) and
   claims (comments, verdicts, rework requests, the plan's words, the
@@ -280,7 +287,9 @@ instead, stays readable by id, and an Owner may unarchive it.
   `scrum_triage_read` audit turn and the final one carries the calls'
   observations (`tool_calls`); the decision stays a claim, parsed as before.
   No daemon or root, 0 rounds, or no decision after the reads: today's single
-  call (`scrum_master.ask_triage`).
+  call (`scrum_master.ask_triage`). The record tools go beside the reads
+  (`board_record.offer(..., sprint=True)`), scoped to the blocked task's
+  sprint (`sprint_scope`); never without the reads.
 
 ### Closing a sprint
 

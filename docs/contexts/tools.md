@@ -113,7 +113,8 @@ call written as text; the tool budget had run out" if it happens again.
   sha256 the backend sent and the daemon read back, `tools_offered`, the
   loop's rounds, and the producer's claims). Read-only. The scope (`Scope`)
   is the backend's: the turn's company and, for a task turn, the task and the
-  tasks it depends on; a task outside it is refused (`Refused: task N is
+  tasks it depends on (the ScrumMaster's triage: the task's sprint; the PO's
+  plan: the company's board); a task outside it is refused (`Refused: task N is
   outside the turn's scope`, `refused` on the observation) and the arguments
   never widen it. The reply prints the platform's observations and the
   agents' and people's claims under two headings, never in one entry, is
@@ -139,14 +140,20 @@ call written as text; the tool budget had run out" if it happens again.
   `repository_section` puts the tree and the map into the task prompt.
   `read_tools` offers the four read tools alone, to any role.
 - `review_tools.py`: QA's read-only toolbox (`list`, `read`, `search`,
-  `find_file`; never `edit`, `move`, `delete` or `run_tests`) on the
+  `find_file`, and `workspace__git` with `blame` and
+  `workspace__read_document` when announced: `workspace_reads.offer`; never
+  `edit`, `move`, `delete`, `lint` or `run_tests`) on the
   `workspace_root` the task's latest verification recorded, for
   `QA_REVIEW_TOOL_ROUNDS` rounds before the verdict. No recorded delivery or
   no daemon: no toolbox. `for_step` gives the same read-only toolbox on the
   task's root (the project without a task) to the steps that only read: the
   Architect's brief, the PO's planning (`PLANNING_TOOL_ROUNDS`) and the
-  ScrumMaster's decision (`SCRUM_TRIAGE_TOOL_ROUNDS`); `None` for a step or
-  role that keeps no reading, 0 rounds, or no daemon or root.
+  ScrumMaster's decision (`SCRUM_TRIAGE_TOOL_ROUNDS`), through
+  `developer_tools.read_tools`, which offers the same family R
+  (`workspace_reads.offer`); `None` for a step or role that keeps no reading,
+  0 rounds, or no daemon or root. `board_tools.attach` puts another built-in
+  box beside such a toolbox (the record tools, the brief's research tools)
+  within its rounds.
 - `developer_tool_schemas.py`: the schemas. `developer_tool_replies.py`: what
   the model sees, after SWE-agent's interface (a numbered window per read, a
   count instead of a silent cut). A read without `lines` asks the daemon for

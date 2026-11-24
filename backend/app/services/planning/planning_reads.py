@@ -8,6 +8,13 @@ read-only workspace tools (``review_tools.for_step``: list, read, search,
 find_file; never edit, move, delete or run_tests), for at most
 ``PLANNING_TOOL_ROUNDS`` rounds. The listing stays in the prompt.
 
+The record tools (``board_tools``: ``board__task``, ``board__evidence``) go
+beside the reads, scoped to the company's board (``Scope`` without task ids:
+any task of the company, never another's), read by
+``services/tasks/task_records.py``, so the PO can read what earlier tasks
+asked, attempted and what the Verifier observed; never without the reads, and
+off with ``BOARD_TOOLS_ENABLED``.
+
 Each reading round is an audit turn (``ACTION_PLAN_READ``) and the final
 answer's turn carries every call's observation (``tool_calls``): what the
 PO says it read is a claim, the observations are the backend's. The answer
@@ -23,11 +30,13 @@ import asyncio
 from typing import Any
 
 from config import settings
+from database import engine
 from logging_config import logger
 
 from services.contracts import roles, tool_steps
 from services.platform.orchestration_metrics import ACTION_PLAN_READ, record_agent_turn
-from services.tools import mcp_tools, review_tools
+from services.tasks import task_records
+from services.tools import board_tools, mcp_tools, review_tools
 
 READ_NOTE = (
     "\n\n## Reading the project\n"
@@ -52,11 +61,20 @@ def toolbox(company_id: int | None) -> Any:
         pass  # A worker thread: the daemon is reached on the worker's loop.
     else:
         return None
-    return review_tools.for_step(
-        tool_steps.PLAN,
-        roles.PO,
-        company_id,
-        rounds=settings.PLANNING_TOOL_ROUNDS,
+    rounds = settings.PLANNING_TOOL_ROUNDS
+    box = review_tools.for_step(tool_steps.PLAN, roles.PO, company_id, rounds=rounds)
+    return board_tools.attach(box, board(company_id, rounds) if box else None)
+
+
+def board(company_id: int, rounds: int) -> board_tools.BoardToolbox | None:
+    """The record tools over the company's board, or ``None`` when off."""
+    if not settings.BOARD_TOOLS_ENABLED or rounds <= 0:
+        return None
+    return board_tools.BoardToolbox(
+        board_tools.Scope(company_id),
+        lambda c, t, a: task_records.read_task(engine, c, t, a),
+        lambda c, t, a: task_records.read_evidence(engine, c, t, a),
+        rounds=rounds,
     )
 
 
@@ -90,6 +108,8 @@ def answer(
         )
 
     note = READ_NOTE.format(rounds=box.max_rounds)
+    if board_tools.has_board(box):  # The record tools, said once.
+        note += " " + board_tools.NOTE
     try:
         result, reads = mcp_tools.chat_with_tools(
             client,

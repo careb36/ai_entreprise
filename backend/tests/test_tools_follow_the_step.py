@@ -238,7 +238,7 @@ def test_the_po_reads_the_project_before_its_plan(daemon, monkeypatch):
     assert [(r["tool"], r["path"]) for r in reads] == [("read", "src/greet.py")]
     assert reads[0]["sha256"] and reads[0]["read_only"] is True
     offered = {t["function"]["name"] for t in model.requests[0]["tools"]}
-    assert offered == READS
+    assert offered == READS | {"board__task", "board__evidence"}  # The board too.
     assert "Reading the project" in model.requests[0]["messages"][-1]["content"]
     # Each reading round is a turn; the final one carries the observations.
     assert [t["action"] for t in turns] == ["plan_read", "plan_read"]

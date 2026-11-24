@@ -28,7 +28,7 @@ import logging
 from typing import Any
 
 from services.contracts import roles, tool_steps
-from services.tools import developer_tools
+from services.tools import developer_tools, workspace_reads
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -73,6 +73,8 @@ def read_only_toolbox(
     box = developer_tools.WorkspaceToolbox(
         developer_tools._request_from_thread, root, can_edit=False
     )
+    # Read-only git (blame included) and a document's text, when announced.
+    workspace_reads.offer(box, company_id, engine)
     box.max_rounds = rounds
     return box
 

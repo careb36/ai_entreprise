@@ -109,7 +109,12 @@ final one carries the calls' observations (`tool_calls`); the plan carries
 them as `planning_reads`. The answer keeps today's form and parser. No
 daemon, no root, 0 rounds, a call made on an event loop (the planning
 endpoints run the planner in a thread for that reason), or an empty answer
-after the reads: today's single call.
+after the reads: today's single call. The reads also offer read-only Git
+(`blame` included) and a document's text when the daemons announce them
+(`tools/workspace_reads`), and the record tools beside them (`board__task`,
+`board__evidence`, `board`): scoped to the company's board (any task of the
+company, never another's), read by `tasks/task_records`, off with
+`BOARD_TOOLS_ENABLED`, and never without the reads.
 
 ### The intake queue
 

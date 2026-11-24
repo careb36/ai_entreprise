@@ -108,7 +108,14 @@ def test_a_documentation_task_is_executed_as_the_documentation_step(monkeypatch)
     assert agent["tools_offered"]["step"] == "documentation"
     assert agent["tools_offered"]["write_scope"] == "docs"
     execute_tools.task_toolbox(
-        1, "Developer", {"id": 8}, agent, limits, rework=False, prepared=None, engine=None
+        1,
+        "Developer",
+        {"id": 8},
+        agent,
+        limits,
+        rework=False,
+        prepared=None,
+        engine=None,
     )
     assert asked["step"] == tool_steps.EXECUTE
     assert "write_scope" not in agent["tools_offered"]

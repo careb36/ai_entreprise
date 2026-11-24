@@ -242,7 +242,8 @@ class Settings(BaseSettings):
     PLANNING_TOOL_ROUNDS: int = 3
     SCRUM_TRIAGE_TOOL_ROUNDS: int = 3
     # The record tools (services/tools/board_tools.py): board__task and
-    # board__evidence, read-only, for the QA review, the Architect's brief and a rework.
+    # board__evidence, read-only, for the QA review, the Architect's brief, a
+    # rework, the ScrumMaster's triage (the sprint) and the PO's plan (the board).
     BOARD_TOOLS_ENABLED: bool = True
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's

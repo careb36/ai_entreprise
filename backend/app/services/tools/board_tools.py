@@ -269,10 +269,10 @@ def has_board(toolbox: Any) -> bool:
     return any(isinstance(box, BoardToolbox) for box in boxes)
 
 
-def attach(toolbox: Any, board: BoardToolbox | None) -> Any:
-    """*toolbox* with the record tools beside its own, as one toolbox; the
-    record tools never raise the turn's round limit. Either alone when the
-    other is ``None``."""
+def attach(toolbox: Any, board: Any) -> Any:
+    """*toolbox* with *board* (the record tools, or another built-in box such
+    as the research one) beside its own, as one toolbox; the added box never
+    raises the turn's round limit. Either alone when the other is ``None``."""
     if board is None:
         return toolbox
     if toolbox is None:

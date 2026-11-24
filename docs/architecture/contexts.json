@@ -57,7 +57,8 @@
         "relations",
         "sprint_board",
         "task_events",
-        "task_projection"
+        "task_projection",
+        "task_records"
       ],
       "modules": []
     },
@@ -771,6 +772,12 @@
       "test_docs_write_scope.py": [
         "contracts",
         "loop",
+        "tools"
+      ],
+      "test_read_steps_tools.py": [
+        "loop",
+        "planning",
+        "tasks",
         "tools"
       ],
       "test_documentation_export_router.py": [
