@@ -1,0 +1,56 @@
+{
+  "description": "Where a name is defined: the file, line, sha256 and signature, with the parameters of a top-level Python function (lookup, code_lookup.py).",
+  "subject": "workspace.related",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name, punctuation=None):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "seeds": [],
+    "lookup": {
+      "kind": "definition",
+      "name": "greet"
+    },
+    "max_files": 10
+  },
+  "reply": {
+    "files": [],
+    "partial": false,
+    "seeds_matched": [],
+    "seeds_unmatched": [],
+    "lookup": {
+      "kind": "definition",
+      "name": "greet",
+      "path": null,
+      "path_found": null,
+      "definitions": [
+        {
+          "path": "src/greeting.py",
+          "sha256": "4a2c8a2d1b7a7bd37df009f30f60995aad4cbf92814fd9150b6467bfcca1653f",
+          "line": 1,
+          "depth": 0,
+          "signature": "def greet(name, punctuation=None)",
+          "parameters": {
+            "kind": "function",
+            "positional_only": [],
+            "positional": [
+              "name",
+              "punctuation"
+            ],
+            "positional_defaults": 1,
+            "varargs": false,
+            "keyword_only": [],
+            "varkw": false
+          }
+        }
+      ],
+      "references": [],
+      "more": 0,
+      "common_name": false
+    }
+  }
+}

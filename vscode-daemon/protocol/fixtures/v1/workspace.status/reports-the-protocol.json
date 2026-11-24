@@ -105,6 +105,9 @@
         ],
         "workspace.git.sync_base": [
           "forge_policy"
+        ],
+        "workspace.related": [
+          "lookup"
         ]
       }
     }

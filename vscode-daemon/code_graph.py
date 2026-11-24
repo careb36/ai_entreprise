@@ -22,7 +22,8 @@ MAX_SEEDS], "hops": 1 | 2 (default 1), "max_files": default 30, at most 60}``.
 
 Reply: ``{"files": [{"path", "sha256", "hop", "seed", "uses": [{"path",
 "names"}], "used_by": [...], "more_uses", "more_used_by"}], "partial",
-"seeds_matched", "seeds_unmatched"}``. At most ``MAX_NAMES`` names per edge
+"seeds_matched", "seeds_unmatched"}``. With the optional ``lookup`` field, where a name is
+defined or which files use a name or a module (``code_lookup``). At most ``MAX_NAMES`` names per edge
 and ``MAX_EDGES`` edges per file (the ones tied by most names first); the
 ``more_*`` counts say how many edges were left out. ``partial`` says the
 project was larger than the walk reads (files, bytes), ``max_files`` cut the
@@ -168,7 +169,12 @@ def _listed(edges: Dict[str, Set[str]]) -> Tuple[List[Dict[str, Any]], int]:
 
 
 def related(workspace_path: str, data: Dict[str, Any], resolve=None) -> Dict[str, Any]:
-    """The reply to ``workspace.related`` for the project in *workspace_path*."""
+    """The reply to ``workspace.related`` for the project in *workspace_path*;
+    with ``lookup``, where a name is defined or who uses it (``code_lookup``)."""
+    if data.get("lookup") is not None:
+        import code_lookup  # Imports this module.
+
+        return code_lookup.lookup(workspace_path, data)
     root = workspace_read._root(workspace_path)
     seeds, hops, max_files = _request(data)
     started = time.monotonic()
