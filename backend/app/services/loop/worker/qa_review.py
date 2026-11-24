@@ -2,7 +2,7 @@
 
 The review cycle (``review``) hands ``_qa_review`` each ``in_review`` task that
 passed its checks and the delivery gate: the review prompt (``review_prompt.build``),
-the QA model's answer (``_call_llm_for_review``; only an explicit ``APPROVED:``
+the QA model's answer after its reads (``_call_llm_for_review``; only ``APPROVED:``
 or ``NEEDS WORK:`` is a verdict), the hold for a person on an approved delivery
 (``_person_hold``: a high risk tier, or the company's autonomy level), the
 rework budget (``_rework_budget``), the verdict's events, messages and
@@ -34,6 +34,7 @@ from services.loop.answers import REVIEW_MAX_TOKENS
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.worker import close, execute, messages, record, review_prompt
+from services.loop.worker.qa_review_reads import answer as review_answer
 from services.models import model_routing
 from services.platform import company_limits_setting, protected_paths_setting
 from services.platform.glassroom import publish_glassroom
@@ -108,7 +109,6 @@ async def _qa_review(
     quality_gate_blocked_ids: set[int],
 ) -> None:
     """QA reviews one delivery; a task QA leaves blocked joins ``quality_gate_blocked_ids``."""
-    # Build review prompt
     # The task branch as the daemon reads it: every attempt, not only this one.
     branch = await review_prompt.task_branch(session, nats_client, item, sprint)
     prompt_text = review_prompt.build(
@@ -574,10 +574,9 @@ def _call_llm_for_review(
     if agent.get("system_prompt"):
         request.insert(0, {"role": "system", "content": agent["system_prompt"]})
     model = model_routing.resolve_agent_model(agent, default_role="QA")
-    result = client.chat(
-        model=model,
-        messages=request,
-        role=agent.get("role", "QA"),
+    # A look at the delivery first, where it can be read (``qa_review_reads``).
+    result, reads = review_answer(
+        client, request, model, agent, company_id, sprint_id, backlog_item_id
     )
 
     failure = _llm_failure(result, model)
@@ -596,5 +595,6 @@ def _call_llm_for_review(
             llm_result=result,
             result_type=classify_review_result(content),
             result_preview=content,
+            tool_calls=reads,
         )
     return content

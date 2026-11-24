@@ -162,7 +162,12 @@ the LangGraph graph is only an optional kickoff conversation.
    ScrumMaster. A rework asks the agent to change only what the problem
    needs on the task branch, never every file in full. QA is shown the
    Verifier's checks and the end of the test output beside the branch
-   (`worker/review_evidence`). A sprint closes when every task is settled: done, or blocked
+   (`worker/review_evidence`), and before its verdict it may read the
+   delivery itself: the read-only workspace tools (list, read, search,
+   find_file) on the folder the verification recorded, for
+   `QA_REVIEW_TOOL_ROUNDS` rounds (default 3), each call an observation on its
+   turn (`worker/qa_review_reads`). The verdict's form and parser do not
+   change; without a recorded delivery or a daemon the review is one call. A sprint closes when every task is settled: done, or blocked
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the

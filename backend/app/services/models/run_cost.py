@@ -38,7 +38,7 @@ from sqlmodel import Session, select
 
 from services.models import model_prices
 
-TURN_ACTIONS = ("execute_task", "qa_review", "architect_consult")
+TURN_ACTIONS = ("execute_task", "qa_review", "qa_review_read", "architect_consult")
 NO_TURNS = "no_turns"
 NO_REPORTED_USAGE = "no_reported_usage"
 SPLIT_UNKNOWN = "token_split_unknown"

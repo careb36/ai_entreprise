@@ -235,6 +235,7 @@ class Settings(BaseSettings):
     # and 02 did not fit a million tokens; with 5 both did, every criterion
     # passed, and spec 01 cost a third less (DeepSeek) to three fifths less (Qwen).
     DEVELOPER_TOOL_ROUNDS: int = 5
+    QA_REVIEW_TOOL_ROUNDS: int = 3  # QA's read-only rounds before its verdict
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's
     # output limit (services/models/model_profile.py).
