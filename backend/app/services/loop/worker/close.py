@@ -28,7 +28,8 @@ from sqlmodel import Session, select
 from services.learning import retrospective
 from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
-from services.loop.sprint_close import PROTECTED_PATHS_ON, RECLOSED
+from services.loop.sprint_close import NOTHING_DONE, PROTECTED_PATHS_ON, RECLOSED
+from services.loop.sprint_close import nothing_done_reason
 from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
@@ -273,6 +274,16 @@ def _complete_sprint_and_plan_follow_up(
         if not dependencies.sprint_settled(session, completed_sprint_id):
             session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
+
+        statuses = session.exec(
+            select(BacklogItem.status).where(
+                BacklogItem.sprint_id == completed_sprint_id
+            )
+        ).all()
+        why = nothing_done_reason(list(statuses))
+        if why and sprint_control.pause(session, sprint, why):
+            session.commit()
+            return {"completed": False, "auto_opened": False, "reason": NOTHING_DONE}
 
         if not replicas.mark_completed(session, sprint):
             return {"completed": False, "auto_opened": False, "reason": "not_active"}
