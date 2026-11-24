@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CompanyDuties from './CompanyDuties'
 import { queryClient } from '../lib/queryClient'
@@ -91,15 +92,17 @@ function api(url: string, init?: RequestInit) {
   return response(404)
 }
 
-function renderAs(role: 'Owner' | 'Manager' | 'Viewer') {
+function renderAs(role: 'Owner' | 'Manager' | 'Viewer', path = '/company/duties') {
   useAuthStore.setState({
     expiresAt: Date.now() + 60_000,
     memberships: [{ company_id: 4, human_role: role, effective_role: role }],
   })
   return render(
-    <QueryClientProvider client={queryClient}>
-      <CompanyDuties />
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <QueryClientProvider client={queryClient}>
+        <CompanyDuties />
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -269,5 +272,17 @@ describe('CompanyDuties', () => {
     expect(within(section).getByText('API token')).toBeInTheDocument()
     expect(within(section).getByText('3 days')).toBeInTheDocument()
     expect(within(section).getByText('LLM proxy internal token: set')).toBeInTheDocument()
+  })
+
+  it("opens another company's policy from an owner action's link, and only that panel", async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => api(url, init))
+    vi.stubGlobal('fetch', fetch)
+    renderAs('Owner', '/company/duties?company=3')
+    expect(await screen.findByText(/policy of company 3, opened from an owner action/)).toBeInTheDocument()
+    await screen.findByRole('form', { name: 'Single-person exception' })
+    const asked = fetch.mock.calls.map(c => String(c[0]))
+    expect(asked.some(u => u.includes('/v1/companies/3/sod/policy'))).toBe(true)
+    // Nothing of the company she works in: the other panels are not shown.
+    expect(asked.some(u => u.includes('/companies/4/'))).toBe(false)
   })
 })

@@ -15,6 +15,11 @@ Owner who started it, and records what the platform observed:
   self-hosting company since the run began (audit rows' ``cost_tokens``, the
   proxy's usage, never an agent's report). Over ``token_budget``, or on
   cancel, it stops the sprint it started and finishes the run.
+- Right after ``company``, before any approval or model call, it reads the
+  company's segregation-of-duties policy (``owner_action_sod.py``): when the
+  rule would refuse an approval the harness performs as the Owner, the run
+  stops ``blocked_by_sod`` with the facts in ``observations.sod``. It never
+  grants, changes or bypasses the policy.
 
 The run's observations are ids the platform's API returned, the daemon's
 replies, the backend's clock and the exit status computed here: never a
@@ -37,7 +42,7 @@ from models import AuditLog, OwnerActionRun
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from services.management import owner_actions, self_host_snapshot
+from services.management import owner_action_sod, owner_actions, self_host_snapshot
 from services.management.in_process_api import InProcessApi
 from services.platform.in_process_principal import InProcessPrincipal
 from services.workspace import workspace_daemon
@@ -158,6 +163,8 @@ class Job:
             "steps_done": [s for s in r.get("steps_done", [])],
             "state": dict(self.state),
         }
+        if "sod" in r:
+            out["sod"] = r["sod"]
         if "agent_run_ids" in r:
             out["agent_run_ids"] = r["agent_run_ids"]
         return out
@@ -182,11 +189,26 @@ class Job:
                 )
                 self.report["urgent"] = True
             self.save()
+            if step == "company":
+                self.check_duties()
         sid, cid = self.state.get("sprint_id"), self.state.get("company_id")
         if sid and cid:
             runs = api.get(f"/v1/agent_runs?company_id={cid}&sprint_id={sid}&limit=500")
             self.report["agent_run_ids"] = sorted(r["id"] for r in runs["agent_runs"])
             self.save()
+
+    def check_duties(self) -> None:
+        """Right after the run has its company, before any approval or model
+        call: stop ``blocked_by_sod`` when the company's policy would refuse
+        an approval the harness performs as the Owner. Reads the policy only;
+        never grants, changes or bypasses it."""
+        with self.session_factory() as session:
+            seen = owner_action_sod.situation(
+                session, self.state.get("company_id"), self.user_id
+            )
+        self.report["sod"] = seen
+        if seen["refused"]:
+            raise owner_action_sod.Blocked(seen)
 
     def stop_sprint(self, api: Any) -> None:
         sid = self.state.get("sprint_id")
@@ -199,20 +221,8 @@ class Job:
             self.report["sprint_stop_error"] = str(exc)[:300]
 
 
-def previous_state(session: Session, name: str, checkout_name: str) -> dict[str, Any]:
-    """The harness state of the last run on the same snapshot (the CLI's
-    ``<checkout>.self_host.json``): the company is found again, not remade."""
-    rows = session.exec(
-        select(OwnerActionRun)
-        .where(OwnerActionRun.action == name)
-        .order_by(OwnerActionRun.id.desc())  # type: ignore[union-attr]
-    ).all()
-    for row in rows:
-        if (row.params or {}).get("checkout_name") == checkout_name:
-            state = (row.observations or {}).get("state")
-            if isinstance(state, dict) and state.get("company_id"):
-                return {"company_id": state["company_id"]}
-    return {}
+# The company a run with the same checkout name created (kept here by name).
+previous_state = owner_action_sod.previous_state
 
 
 async def run(job: Job) -> OwnerActionRun | None:
@@ -237,6 +247,8 @@ async def run(job: Job) -> OwnerActionRun | None:
         exit_status = job.harness.sandbox_mode.exit_status(job.report, True)
         status = "succeeded" if exit_status == 0 else "failed"
         reason = None if exit_status == 0 else "not_container_mode"
+    except owner_action_sod.Blocked:
+        reason = owner_action_sod.BLOCKED  # the facts are in ``observations.sod``
     except Stop as stop:
         status = "cancelled" if stop.reason == "cancelled" else "failed"
         reason, tokens = stop.reason, stop.tokens

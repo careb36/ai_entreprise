@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 import audit_signing
 import pytest
-from models import Company, OwnerActionRun, User
+from models import Company, CompanyMember, OwnerActionRun, SodPolicy, User
 from services.management import owner_action_runner as runner
 from services.management import owner_actions, self_host_snapshot
 from services.management.in_process_api import asgi_request
@@ -93,6 +93,12 @@ def _harness(session, world):
         company = Company(company_name="La Fabrique")
         session.add(company)
         session.commit()
+        # The Owner's own choice, made in the duties page: one approver, the
+        # single-person exception granted (``test_owner_action_sod.py`` runs
+        # without it).
+        world.get("after_company", lambda cid: solo_company(session, cid, world))(
+            company.id
+        )
         state["company_id"] = company.id
         report["company"] = {"id": company.id, "created": True, "sandbox": args.sandbox}
         world["company_id"] = company.id
@@ -135,6 +141,16 @@ def _harness(session, world):
         step_wait=HARNESS.step_wait,
         step_sandbox=HARNESS.step_sandbox,
     )
+
+
+def solo_company(session, company_id, world, granted=True):
+    session.add(
+        CompanyMember(
+            company_id=company_id, user_id=world["owner_id"], human_role="Owner"
+        )
+    )
+    session.add(SodPolicy(company_id=company_id, solo_exception=granted))
+    session.commit()
 
 
 async def _daemon(world, subject, payload, timeout):
@@ -201,6 +217,7 @@ def _job(session, monkeypatch, **params):
         "daemon": [],
         "sprint_status": "completed",
         "sandbox_reply": CONTAINER_REPLY,
+        "owner_id": owner.id,
     }
     ticks = itertools.count(0, 20)
     job = runner.Job(

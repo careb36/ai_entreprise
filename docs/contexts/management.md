@@ -8,7 +8,7 @@ owner actions run from the app, the Reviewer and Support agents. Read this befor
 - **Folder:** `backend/app/services/management/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md). Nothing imports it.
 - **Interface:** none.
-- **Modules:** `brief_mail`, `company_export`, `company_import`, `in_process_api`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `owner_action_runner`, `owner_actions`, `owner_git_actions`, `owner_git_runner`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `self_host_snapshot`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `company_export`, `company_import`, `in_process_api`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `owner_action_runner`, `owner_action_sod`, `owner_actions`, `owner_git_actions`, `owner_git_runner`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `self_host_snapshot`, `sod_report`, `support_agent`.
 
 ## How it works
 
@@ -49,6 +49,8 @@ a person decides.
   confirmation whose digest the start echoes; one run of an action at a time;
   start, cancel and finish are audited; its observations are what the
   platform created or measured.
+- An owner action never grants, changes or bypasses the segregation-of-duties
+  policy; the self-hosting run stops `blocked_by_sod` instead.
 
 ## Components
 
@@ -117,6 +119,14 @@ beside the quotas, and the refused suggestions with their `refusal_reason`.
   each call it checks the cancel request and the tokens the platform recorded
   for the self-hosting company against the run's budget; over it, or on
   cancel, it stops the sprint.
+- `owner_action_sod.py`: the segregation-of-duties situation of the company
+  a self-hosting run uses (reused by `checkout_name`, else new): what
+  `sod.decide` says of the Owner approving the specification and the
+  architectures she drafted, under the company's mode and exception. The
+  preview's facts and digest cover it; a reused company that would refuse is
+  the `sod_refused` blocker; the runner checks again right after `company`
+  and stops `blocked_by_sod` before any approval or model call. It only reads
+  the policy, never grants or changes it.
 - `self_host_snapshot.py`: finds and imports the harness
   (`SELF_HOST_REPOSITORY_DIR`), and reads the snapshot for the `records` step
   through `workspace.git.read_at` and `workspace.git.diff`'s `status` view.

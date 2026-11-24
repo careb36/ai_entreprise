@@ -7,6 +7,9 @@
 - ``POST /v1/owner_actions/{name}/runs/{run_id}/cancel``     ask it to stop
 - ``GET  /v1/owner_actions/{name}/options?company_id=``      what the Owner picks from (branches, open issues)
 
+``self_host_container_run`` observes the segregation-of-duties policy of
+the company it will use (``owner_action_sod.py``): the digest covers it, and
+a reused company that would refuse the harness's approvals is a blocker.
 ``land_branch``, ``push_main`` and ``close_issue`` observe before they show
 (the daemon's view of the repository, GitHub's open issues): the preview's
 digest covers those facts, and the start reads them again, so a branch or a
@@ -156,10 +159,15 @@ async def preview_owner_action(
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """What a run would do and cost, what it observed, and the digest its start must echo."""
-    require_human_owner(session, user, payload.company_id)
+    owner = require_human_owner(session, user, payload.company_id)
     try:
         spec = catalogue.action(name)
         params = catalogue.validate(spec, payload.params)
+        if spec.local_facts is not None:
+            _, shown = catalogue.observe_locally(
+                spec, params, session, int(owner.id or 0)
+            )
+            return shown
         if spec.facts is None:
             return catalogue.preview(spec, params)
         _, shown = await catalogue.observe_and_preview(spec, params, _context(request))
@@ -238,6 +246,16 @@ async def start_owner_action(
         available = _availability(spec.name)
         if not available["available"]:
             raise catalogue.RunRefused(503, available)
+        facts = None
+        if spec.local_facts is not None:
+            # Read again: a policy changed since the preview is a 409 (digest).
+            facts, shown = catalogue.observe_locally(
+                spec, params, session, int(owner.id or 0)
+            )
+            if shown["blockers"]:
+                raise catalogue.RunRefused(
+                    409, {"blockers": shown["blockers"], "facts": facts}
+                )
         run = catalogue.start(
             session,
             payload.company_id,
@@ -245,6 +263,7 @@ async def start_owner_action(
             spec,
             params,
             payload.confirmation,
+            facts=facts,
         )
     except catalogue.RunRefused as exc:
         raise _refused(exc) from exc

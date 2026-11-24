@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OwnerActions from './OwnerActions'
 import { queryClient } from '../lib/queryClient'
@@ -58,7 +59,7 @@ const preview = {
 
 function renderAs(role: 'Owner' | 'Manager') {
   useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role, effective_role: role }] })
-  return render(<QueryClientProvider client={queryClient}><OwnerActions /></QueryClientProvider>)
+  return render(<MemoryRouter><QueryClientProvider client={queryClient}><OwnerActions /></QueryClientProvider></MemoryRouter>)
 }
 
 describe('OwnerActions', () => {
@@ -162,5 +163,56 @@ describe('OwnerActions', () => {
     await waitFor(() => expect(fetch.mock.calls.some(c => String(c[0]).includes('/runs/7/cancel'))).toBe(true))
     const cancel = fetch.mock.calls.find(c => String(c[0]).includes('/cancel'))!
     expect(JSON.parse(String((cancel[1] as RequestInit).body))).toEqual({ company_id: 4 })
+  })
+
+  const sod = {
+    company_id: 3, new_company: false, mode: 'high_risk', solo_exception: false, solo_eligible: true,
+    solo_in_force: false, approvals: ['approve_specification', 'approve_architecture'], refused: ['approve_specification'],
+  }
+
+  async function openDialog(shown: unknown) {
+    const fetch = vi.fn(async (url: string) => (url.includes('/preview') ? response(200, shown) : response(200, catalogue())))
+    vi.stubGlobal('fetch', fetch)
+    renderAs('Owner')
+    fireEvent.change(await screen.findByLabelText('Snapshot folder'), { target: { value: 'lf-701' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review cost and effect' }))
+    return { dialog: await screen.findByRole('dialog'), fetch }
+  }
+
+  it('shows a segregation-of-duties blocker with a link to that company\'s policy, and does not start', async () => {
+    const { dialog, fetch } = await openDialog({ ...preview, facts: { sod }, blockers: ['sod_refused'] })
+    expect(within(dialog).getByText(/would refuse this run's approvals in the company it reuses/)).toBeInTheDocument()
+    expect(within(dialog).getByText(
+      'Company 3 (High-risk work (default)) refuses approving the specification by the person who drafted it, and this run drafts and approves as you.',
+    )).toBeInTheDocument()
+    expect(within(dialog).getByText(/You are the company's only approver, so you can grant it/)).toBeInTheDocument()
+    const link = within(dialog).getByRole('link', { name: "Open company 3's segregation-of-duties policy" })
+    expect(link).toHaveAttribute('href', '/company/duties?company=3')
+    const run = within(dialog).getByRole('button', { name: 'Confirm and run' })
+    expect(run).toBeDisabled()
+    fireEvent.click(run)
+    expect(fetch.mock.calls.some(c => String(c[0]).endsWith('/runs'))).toBe(false)
+  })
+
+  it('says a new company is created first, then the exception is granted, then the run is repeated', async () => {
+    const { dialog } = await openDialog({ ...preview, facts: { sod: { ...sod, company_id: null, new_company: true, solo_eligible: null } }, blockers: [] })
+    expect(within(dialog).getByText(/This run creates a new company, which starts with the default mode/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/run again with the same snapshot folder name/)).toBeInTheDocument()
+    expect(within(dialog).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Confirm and run' })).toBeEnabled()
+  })
+
+  it('a run stopped blocked_by_sod shows the same guidance and the link', async () => {
+    const blocked = {
+      ...finishedRun, status: 'failed', reason: 'blocked_by_sod', exit_status: null,
+      observations: { company_id: 3, steps_done: ['checkout', 'company'], tokens_observed: 0, sod },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('/runs/7') ? response(200, blocked) : response(200, catalogue([blocked])))))
+    renderAs('Owner')
+    const run = await screen.findByRole('article', { name: 'Run 7' })
+    expect(await within(run).findByText('Stopped by segregation of duties, before any approval or model call.')).toBeInTheDocument()
+    expect(within(run).getByText('Then run again with the same snapshot folder name: the run reuses company 3.')).toBeInTheDocument()
+    expect(within(run).getByRole('link', { name: "Open company 3's segregation-of-duties policy" }))
+      .toHaveAttribute('href', '/company/duties?company=3')
   })
 })

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Ban, CheckCircle2, Copy, Loader2, ShieldCheck, XCircle } from 'lucide-react'
 import type { OwnerActionRun } from '../../services/api'
+import { SodNotice, sodOf } from './SodNotice'
 
 /** The ids a run recorded, as the platform observed them, in the order an issue cites them. */
 export function recordedIds(run: OwnerActionRun): [string, string][] {
@@ -70,6 +71,7 @@ export function RunPanel({ run, canCancel, cancelling, onCancel }: {
   }
   const steps = run.observations.steps_done ?? []
   const sandbox = run.observations.sandbox
+  const sod = run.reason === 'blocked_by_sod' ? sodOf(run.observations.sod) : null
 
   return (
     <article className="card space-y-3 p-4" aria-label={t('ownerActions.run.label', { id: run.id })}>
@@ -85,6 +87,7 @@ export function RunPanel({ run, canCancel, cancelling, onCancel }: {
         {t('ownerActions.run.started', { at: run.started_at ?? '' })}
         {run.finished_at && ` · ${t('ownerActions.run.finished', { at: run.finished_at })}`}
       </p>
+      {sod && <SodNotice sod={sod} stopped />}
       {steps.length > 0 && <p className="text-xs text-gray-400">{t('ownerActions.run.steps', { steps: steps.join(' → ') })}</p>}
       {sandbox && (
         <p className="text-xs text-gray-300">
