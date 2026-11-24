@@ -14,6 +14,11 @@ company's sandbox and command policy, so this module only prepares and reads.
   repository's metadata a hook or a config could hide in (``config``,
   ``hooks``, ``info``, of the common git dir and of the worktree's own), as
   they were before the run.
+  With ``private_git: false`` (announced as the ``private_git`` feature) the
+  worktree keeps git's own pointer and gets no private repository: the
+  Developer's tools run in it from a task's first attempt
+  (``docs/design/first-attempt-in-task-worktree.md``), and the delivery
+  commits there as always.
 - ``workspace.console.collect`` ``{workspace_root: <worktree>, head, guard}``:
   each file changed since ``head`` (committed by the CLI or not, tracked or
   new) with its ``change``, ``bytes``, the ``sha256`` read back and its text,
@@ -236,11 +241,14 @@ def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str
             head = git(worktree, admin, ["rev-parse", "HEAD"]).stdout.strip()
             _put_back(worktree, admin, head)
             taken = guard(worktree, admin)
-            private_repository(worktree, branch, head)
+            # The tools' worktree keeps git's pointer: the delivery commits there.
+            private = data.get("private_git") is not False
+            if private:
+                private_repository(worktree, branch, head)
             return {
                 "ok": True, "repository": str(root), "worktree": str(worktree), "branch": branch,
                 "head": head, "merged": merged, "guard": taken,
-                "pointer_restored": restored, "private_git": True, **started,
+                "pointer_restored": restored, "private_git": private, **started,
             }
     except (OSError, git_workspace.GitError) as exc:
         return {"ok": False, "error": str(exc)}

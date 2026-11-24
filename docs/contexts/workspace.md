@@ -104,8 +104,11 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
 
 ### The Git workflow
 
-- `git_workflow.py`: the company's workflow, the delivery's `git` spec with
-  its `forge_policy`, and `record_reply`. It is set from what `workspace.inspect`
+- `git_workflow.py`: the company's workflow, the task's `git` spec
+  (`task_spec`: branch, base, `forge_policy`, the done prerequisites'
+  branches; the tools' worktree is prepared from it before the first turn,
+  [design](../design/first-attempt-in-task-worktree.md)), the delivery's
+  (`delivery_spec`, with the commit message), and `record_reply`. It is set from what `workspace.inspect`
   observed: on only for a repository.
 - `branch_view.py`: what a task's branch changes against its base, for QA,
   from `workspace.git.diff`.
@@ -139,7 +142,9 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   `workspace_move.py` (move lines, delete an emptied file; a delivery's
   `delete` entry, committed and undone like a write; PROTOCOL.md §5.1.4), `repo_map.py`,
   `code_graph.py`, `signatures.py` (see [tools](tools.md)); `console_run.py`
-  (see [producers](producers.md)).
+  (see [producers](producers.md); with `private_git: false` it prepares the
+  task's worktree for the Developer's tools, keeping git's pointer,
+  PROTOCOL.md §5.1.5).
 
 ## See also
 

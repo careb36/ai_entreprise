@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.2). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -209,7 +209,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.signatures` | request | `signatures.py` | `workspace_root`, `wanted` (`path`, `names`) | `files` (per file `status`, `sha256`, per name `found` / `unknown` / `missing`) |
 | `workspace.related` | request | `code_graph.py` | `workspace_root`, `seeds`, `hops`?, `max_files`? | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched` |
 | `workspace.graph` | request | `code_graph.py` | `workspace_root`, `known` (path to sha256), `max_files`? | `files` (`path`, `sha256`, `status`, `defs`, `refs`, `truncated`) for the files whose sha256 the backend does not hold, `unchanged`, `removed`, `more`, `partial` |
-| `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git` | `ok`, `worktree`, `branch`, `head`, `guard`, … |
+| `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git`, `private_git`? (§5.1.5) | `ok`, `worktree`, `branch`, `head`, `guard`, `private_git`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
 | `workspace.sandbox.image` | request | `stack_image.py` | `workspace_root` | `image` (the tag, or `null` with `error`), `toolchains`, `dockerfile_sha256`, `built`, `build_ms` (§5.1.3) |
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
@@ -364,6 +364,23 @@ it removed, as for a write) or `rejected_delete` (with `error`). A deletion is c
 like a write, and an undo writes the file back. A daemon announces both as
 features: `"workspace.edit": ["delete", "move"]` and `"delete"` on
 `workspace.generate`; the backend offers neither to a daemon that does not.
+
+### 5.1.5 The task's worktree for the Developer's tools (additive, issue #766)
+
+`workspace.console.prepare` takes `private_git`: `false` prepares the task's
+worktree as for a console producer (the branch from `git.base` when new, the
+done prerequisites in `git.merge` merged, put back at its `HEAD` with
+untracked files removed) but keeps git's own `.git` pointer and gives it no
+private repository; the reply says `private_git: false`. Missing or `true`:
+the console producer's private repository, as before. The backend sends it
+before a task's first turn under the Git workflow, so the Developer's tools
+(reads, edits, move and delete, `run_tests`) run in the task's worktree from
+the first attempt, and the delivery (`workspace.generate` with the same
+`git.branch`) commits in that same worktree. A daemon announces it as
+`"workspace.console.prepare": ["forge_policy", "private_git"]`; the backend
+sends it only when every daemon does, since an older one ignores the field
+and would add the private repository. Design:
+`docs/design/first-attempt-in-task-worktree.md`.
 
 ### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
 

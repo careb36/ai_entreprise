@@ -62,6 +62,17 @@ the LangGraph graph is only an optional kickoff conversation.
    `audit_log`, then answers within `BRIEF_MAX_TOKENS`. A tool call typed as
    text is no brief; without the daemon it is one plain call
    (`services/loop/worker/architect_brief.py`).
+   With the company's Git workflow on, before the first turn the worker asks
+   the daemon for the task's worktree (`workspace.console.prepare` with
+   `private_git: false`: branch `fabrique/task-<id>` from the base, the done
+   prerequisites merged, put back at its head) and every tool of the attempt
+   (reads, the repository map, edits, move and delete, `run_tests`) runs
+   there, from the first attempt; the person's checkout is never written and
+   the delivery commits in that same worktree. Only when every daemon
+   announces the `private_git` feature; otherwise a first attempt reads the
+   person's checkout without the write tools, as before. The daemon's reply
+   is kept as `tools_offered.task_worktree`
+   ([design](design/first-attempt-in-task-worktree.md)).
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
    the **Project wiki**: the company's pages in force (not stale, not proposed)

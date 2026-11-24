@@ -7,8 +7,8 @@ code and the research tools. Read this before changing
 
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
-- **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -60,7 +60,9 @@ written as text; the tool budget had run out".
   are redacted before the model sees them (`context_read.redact_secrets`).
 - An edit is applied only if the file still parses, and only in the task's own
   worktree (or a project without the Git workflow), never the person's
-  checkout. An edit never delivered never stays on disk.
+  checkout. With the Git workflow the worktree is prepared before the first
+  turn (`task_worktree`), so a first attempt has the write tools too. An edit
+  never delivered never stays on disk.
 - Lint after an edit never writes: a command with an autofix or write option,
   or one the check cannot read, is refused.
 - Research fetches go only to allowed hosts, https unless named explicitly,
@@ -126,9 +128,17 @@ written as text; the tool budget had run out".
   `offered` puts `tools_offered` on the run's evidence: every tool name the
   loop offered and, under `withheld`, the workspace's write tools it did not
   offer with why (the person's checkout of a branch-delivering company, which
-  holds on a task's first attempt; no heartbeat announcing move and delete
-  yet, as right after a backend restart; or a daemon that does not announce
-  them). The backend's own decision, an observation.
+  holds on a first attempt only when a daemon does not announce
+  `private_git`; no heartbeat announcing move and delete yet, as right after
+  a backend restart; or a daemon that does not announce them). The backend's own decision, an observation.
+- `task_worktree.py`: with the Git workflow, `enter` asks the daemon for the
+  task's worktree before the first turn (`workspace.console.prepare` with
+  `private_git: false`, only when every daemon announces that feature) and
+  makes it the attempt's tool root (`developer_tools.tool_root` reads
+  `prepared_for`; `leave` when the tools are done). A reply that does not
+  name `fabrique-worktrees/fabrique__task-<id>` is not used. The reply goes
+  on the evidence as `tools_offered.task_worktree`. Design:
+  [`first-attempt-in-task-worktree.md`](../design/first-attempt-in-task-worktree.md).
 - A call to a tool that is not offered (a bare `read`, an empty name) is
   recorded with the name asked (`requested`) and answered with that name, the
   nearest offered one and the list (`mcp_tools.unknown_tool_note`), in the

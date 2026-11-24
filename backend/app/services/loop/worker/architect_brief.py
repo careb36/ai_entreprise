@@ -21,6 +21,8 @@ from typing import Any
 from config import settings
 from logging_config import setup_logger
 
+from services.models import model_routing
+from services.platform.orchestration_metrics import KPI_ROLE_ARCHITECT
 from services.tools import developer_tools, mcp_tools
 
 logger = setup_logger("fabrique-task-worker")
@@ -32,6 +34,30 @@ READ_NOTE = (
     "anything. Once you have read enough, answer with the brief itself, "
     "never with a tool call written as text."
 )
+
+
+def architect_agent(row: Any, company_model: str | None) -> dict[str, Any]:
+    """The company's Architect agent *row* as the brief's agent: its name,
+    seniority, specialty and prompt, on its own model or the company's."""
+    return {
+        "role": row.role or KPI_ROLE_ARCHITECT,
+        "name": row.name or KPI_ROLE_ARCHITECT,
+        "model": model_routing.resolve_agent_model(
+            {"model": row.model or company_model, "role": KPI_ROLE_ARCHITECT}
+        ),
+        "seniority": row.seniority,
+        "specialty": row.specialty,
+        "system_prompt": row.system_prompt,
+    }
+
+
+def system_prompt(architect: dict[str, Any]) -> str:
+    """The Architect's own system prompt, or one from its seniority and specialty."""
+    return architect["system_prompt"] or (
+        f"You are a {architect.get('seniority') or 'Senior'} Software Architect "
+        f"specializing in {architect.get('specialty') or 'system design'}. "
+        "You advise developers with concise, decisive technical briefs."
+    )
 
 
 def read_tools(company_id: int | None, item_id: int | None, engine: Any) -> Any:

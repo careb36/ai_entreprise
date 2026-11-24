@@ -15,7 +15,9 @@ detail.
 
 `task_worker.py` is the `task.assign` consumer the lifespan starts; it
 re-exports the stages in `worker/`. `worker/intake` claims a task under its
-lock; `worker/task_run` gathers context, `worker/execute` calls the model,
+lock; `worker/task_run` gathers context, `worker/execute` prepares the task's
+worktree under the Git workflow (`developer_tools.enter_task_worktree`, so a
+first attempt's tools run there) and calls the model,
 `worker/deliver` sends the files to the daemon and `worker/record` ingests the
 run and has the Verifier judge it. `worker/review` runs the review cycle (one
 replica at a time) that sends delivered tasks to QA, and `worker/close`
@@ -200,7 +202,9 @@ instead, stays readable by id, and an Owner may unarchive it.
   the task's root; no edit, move, delete or test run), for at most
   `ARCHITECT_TOOL_ROUNDS` rounds. Each call is an observation on its turns in
   `audit_log` (`details.tool_calls`); the brief is a claim, and a tool call
-  typed as text is no brief. Without the daemon it is one plain call.
+  typed as text is no brief. Without the daemon it is one plain call. It also
+  builds the Architect's agent and system prompt from its row
+  (`architect_agent`, `system_prompt`).
 
 ### Delivery and QA
 

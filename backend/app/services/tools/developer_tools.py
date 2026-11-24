@@ -13,7 +13,8 @@ agent-computer interface (``developer_tool_replies``):
 - ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
   existing file, applied by the daemon only if the file still parses
   (``vscode-daemon/workspace_edit.py``); offered only where the task's files
-  may be touched (its worktree, or a project without the Git workflow);
+  may be touched (the task's worktree, from the first turn: ``task_worktree``;
+  or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
   within the same runner, ``test_commands``), or a check script committed under ``scripts/``
   that the task did not change (``check_scripts``), bounded output.
@@ -62,6 +63,7 @@ from services.tools import (
     mcp_tools,
     repo_map,
     research_tools,
+    task_worktree,
     test_commands,
     test_runs,
     workspace_edits,
@@ -115,25 +117,22 @@ class WorkspaceToolbox:
         edit_suffixes: set[str] | None = None,
     ) -> None:
         self.requester = requester
-        self.workspace_root = workspace_root
-        self.test_command = test_command
+        self.workspace_root, self.test_command = workspace_root, test_command
         # Each folder's (and the root's, under "") test and install commands
         # (``test_runs.detect``); the folders installed so far in this toolbox.
         self.folder_tests = dict(folder_tests or {})
         if test_command and test_runs.ROOT not in self.folder_tests:
             self.folder_tests[test_runs.ROOT] = {"test": test_command, "install": None}
         self.installed: set[str] = set()
-        # Where its test runs execute (services/sandbox.py): agent code.
-        self.sandbox = sandbox
-        # The company's sandbox could not be read: its test runs are refused.
-        self.sandbox_error = sandbox_error
+        # Where its test runs execute (services/sandbox.py): agent code; or why
+        # the company's sandbox could not be read (its test runs are refused).
+        self.sandbox, self.sandbox_error = sandbox, sandbox_error
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
         # The edit tool: where it may write, which file types a delivery takes,
         # the daemon's session for the originals, and what ``close`` brought back.
-        self.can_edit = can_edit
-        self.edit_suffixes = edit_suffixes
+        self.can_edit, self.edit_suffixes = can_edit, edit_suffixes
         self.edit_session = uuid.uuid4().hex
         self.edits_made, self.can_move = False, False
         self.edited_files: list[dict[str, Any]] = []
@@ -440,16 +439,16 @@ def _detect_tests(
 def tool_root(
     company_id: int, item_id: int | None = None, *, engine: Any = None
 ) -> str | None:
-    """Where the tools look: the task's own worktree once it has delivered
-    there (the Git workflow; ``git_workflow.record_reply`` keeps it on the
-    evidence), else the company's project. On rework the reads and the test
-    run then see the previous delivery and the merged dependencies."""
+    """Where the tools look: the task's own worktree, prepared for this attempt
+    (``task_worktree``) or where it last delivered (``git_workflow.record_reply``
+    keeps it on the evidence), else the company's project: the reads and the
+    test run see the task's earlier deliveries and merged dependencies."""
+    if prepared := task_worktree.prepared_for(company_id, item_id):
+        return prepared
     try:
         root = _bridge["resolve_root"](company_id)
     except Exception as exc:  # noqa: BLE001 - No project path, no workspace tools.
-        logger.warning(
-            "Could not resolve the project path for company=%s: %s", company_id, exc
-        )
+        logger.warning("Could not resolve the project path for %s: %s", company_id, exc)
         return None
     if not root or item_id is None or engine is None:
         return root
@@ -470,6 +469,13 @@ def read_tools(company_id: int, item_id: Any = None, engine: Any = None) -> Any:
     no edit, move, delete or test run; ``None`` without the daemon or a root."""
     root = tool_root(company_id, item_id, engine=engine) if "nats" in _bridge else None
     return WorkspaceToolbox(_request_from_thread, root) if root else None
+
+
+def enter_task_worktree(company_id: Any, item_id: Any, *, engine: Any = None) -> Any:
+    """The task's worktree prepared as this attempt's tool root (``task_worktree``)."""
+    return task_worktree.enter(
+        _request_from_thread, _bridge.get("resolve_root"), company_id, item_id, engine
+    )
 
 
 def apply_limits(toolbox: Any, *, rounds: int, result_max_chars: int) -> None:
