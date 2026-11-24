@@ -286,6 +286,42 @@ def test_a_sibling_test_the_base_holds_is_still_guarded(sprint_on_branches):
     assert verification.verdict == "refuted"
 
 
+def test_a_sibling_test_the_base_holds_in_an_earlier_version_is_not_an_edit(
+    sprint_on_branches,
+):
+    """Run 2 of the self-hosting owner action (2026-11-24): QA changed a test
+    file the base already had, and an implementation task that never wrote it
+    was refuted for "editing" it, the base's version on its branch."""
+    s = sprint_on_branches
+    session, sprint, root, qa1, qa2, board = (
+        s.session,
+        s.sprint,
+        s.root,
+        s.qa1,
+        s.qa2,
+        s.board,
+    )
+    earlier = "def test_req_2_0_earlier():\n    assert True\n"
+    (root / "tests").mkdir()
+    (root / "tests" / "test_req_2.py").write_text(earlier)
+    git(root, "add", "tests/test_req_2.py")
+    git(root, "commit", "-q", "-m", "an earlier REQ-2 test")
+    nats = _GitDaemon()
+    _deliver(nats, qa1, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
+    _deliver(nats, qa2, sprint, {"tests/test_req_2.py": MOVE_TESTS})
+    _done(session, qa1, qa2)
+
+    _deliver(nats, board, sprint, {"src/__init__.py": "", "src/board.py": BOARD})
+    verification, checks = _checks(session, board)
+    worktree = Path(verification.evidence["git"]["worktree"])
+    acceptance = verification.evidence["acceptance"]
+    assert checks["acceptance_tests_untouched"]["outcome"] == "pass"
+    assert "tampered" not in acceptance
+    assert (worktree / "tests" / "test_req_2.py").read_text() == earlier
+    assert acceptance["base_version"] == ["tests/test_req_2.py"]
+    assert verification.verdict == "verified"
+
+
 def test_a_verified_event_names_its_verification_and_the_pack_shows_it(
     sprint_on_branches,
 ):

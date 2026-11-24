@@ -58,6 +58,7 @@ from services.evidence import (
     browser_smoke,
     command_runs,
     criteria_tests,
+    protected_check,
     wstg_tests,
 )
 from services.evidence.acceptance import test_sources_of
@@ -213,6 +214,15 @@ async def check_application(ctx: Context) -> None:
         evidence["app_run"]["e2e"] = delivery_commands.unverifiable_e2e(e2e, choice)
 
 
+def _written_by_delivery(evidence: dict[str, Any]) -> set[str]:
+    """The paths the daemon saw this delivery write or delete, and the files
+    its tool edits wrote (both observations, never the agent's list)."""
+    edits = evidence.get("tool_edit_files") or []
+    return set(protected_check.observed_paths(evidence) or []) | {
+        f.get("path") for f in edits if isinstance(f, dict)
+    }
+
+
 async def guard_test_files(
     nats_client: Any, engine: Engine, evidence: dict[str, Any], timeout: float
 ) -> None:
@@ -229,7 +239,10 @@ async def guard_test_files(
     sibling tasks' test files (``acceptance.evidence_for``): one is guarded
     only when it is on the task branch's disk (its base holds it); one the
     daemon does not report ``present`` is listed in ``acceptance["not_on_branch"]``,
-    never restored, never an edit and never run for this task."""
+    never restored, never an edit and never run for this task. One the branch
+    holds in another version that this delivery did not write (the daemon's
+    report of its writes and tool edits) is the base's version, listed in
+    ``acceptance["base_version"]``, never restored and never an edit."""
     acceptance = evidence.get("acceptance") or {}
     hashes = acceptance.get("test_hashes") or {}
     others = acceptance.get("other_test_hashes") or {}
@@ -259,6 +272,14 @@ async def guard_test_files(
         present = {f.get("path") for f in files_seen if f.get("status") == "present"}
         held = {p: h for p, h in others.items() if p in present}
         acceptance["not_on_branch"] = [p for p in others if p not in present]
+        # A sibling's file the base holds in an earlier version, which this
+        # delivery did not write, is the base's and not an edit (run 2 of the
+        # self-hosting owner action, 2026-11-24: task 40 was refuted for it).
+        written = _written_by_delivery(evidence)
+        base = [p for p in held if on_disk.get(p) != held[p] and p not in written]
+        held = {p: h for p, h in held.items() if p not in base}
+        if base:
+            acceptance["base_version"] = base
         hashes = acceptance["test_hashes"] = {**hashes, **held}
         guarded = acceptance.setdefault("test_files", [])
         guarded += [p for p in held if p not in guarded]

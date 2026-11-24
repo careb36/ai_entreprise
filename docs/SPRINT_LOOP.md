@@ -171,7 +171,11 @@ the LangGraph graph is only an optional kickoff conversation.
    guarded files are its lineage's (`acceptance.branch_lineage`), a sibling
    task's test file is guarded only when it is on the branch's disk, one that
    is not is recorded in `acceptance.not_on_branch` and neither restored nor
-   run, and the sprint's integration runs the whole suite (#329
+   run, and one the branch holds in the base's earlier version, which the
+   delivery did not write (the daemon's report of its writes and tool edits),
+   is recorded in `acceptance.base_version`, never restored and never an edit
+   (run 2 of the self-hosting owner action refuted a task that never touched
+   it), and the sprint's integration runs the whole suite (#329
    retrospective). `services/evidence/criteria_tests.py`
    holds the reading of the runner's output and the two checks. The same
    output is read for tests named after an OWASP WSTG test

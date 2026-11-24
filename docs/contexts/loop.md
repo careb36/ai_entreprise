@@ -300,7 +300,10 @@ instead, stays readable by id, and an Owner may unarchive it.
   instead of going back again. An unconfirmed delivery may always be sent
   again. From Paperclip's rewake throttle (MIT).
 - `delivery_checks.py`: guards the acceptance tests on a task branch; a test
-  written on a sibling branch is not run against this task.
+  written on a sibling branch is not run against this task, and a sibling's
+  test file the branch holds in the base's earlier version, which the
+  delivery did not write, is listed in `acceptance.base_version`, not called
+  an edit.
 - `changelog_observe.py`: after a delivery that writes a changelog fragment,
   records what the Verifier's `changelog_matches_diff` check reads
   (`evidence["changelog_diff"]`): the daemon's diff of the delivery's commit
