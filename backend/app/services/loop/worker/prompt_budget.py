@@ -50,6 +50,7 @@ SECTION_NAMES = (
     "standards_and_procedures",
     "lessons",
     "task",
+    "changelog_diff",
     "requirements",
     "repository",
     "related_code",

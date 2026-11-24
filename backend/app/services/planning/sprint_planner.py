@@ -22,6 +22,7 @@ from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 
 from services.contracts.task_text import clip_description
+from services.planning import changelog_order
 from services.planning.objective_text import display_name
 from services.planning.sprint_context import (  # noqa: F401 - re-exported
     _DEFAULT_EXECUTION_TEAM,
@@ -124,7 +125,8 @@ def with_dependencies(
     }
     for i, deps in dependencies.without_cycles(graph).items():
         tasks[i]["depends_on"] = deps
-    return tasks
+    # The changelog task describes the sprint's diff: it comes last.
+    return changelog_order.last(tasks)
 
 
 def _foundation_fallback(

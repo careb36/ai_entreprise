@@ -93,6 +93,7 @@
         "agent_run_service",
         "app_check",
         "browser_smoke",
+        "changelog_diff",
         "command_runs",
         "company_standards_check",
         "console_run",
@@ -191,6 +192,7 @@
       "public": [
         "arch_author",
         "arch_check",
+        "changelog_order",
         "document_approval",
         "planner_fallback",
         "spec_check",
@@ -619,6 +621,13 @@
       ],
       "test_changelog_fragments.py": [
         "repo"
+      ],
+      "test_changelog_matches_diff.py": [
+        "evidence"
+      ],
+      "test_changelog_observe.py": [
+        "evidence",
+        "loop"
       ],
       "test_check_architecture_interfaces.py": [
         "repo"

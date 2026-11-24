@@ -24,7 +24,7 @@ from sqlmodel import Session, select, text
 
 from services.contracts import roles as catalogue
 from services.evidence import acceptance, standards
-from services.planning import spec_author, spec_check, sprint_team
+from services.planning import changelog_order, spec_author, spec_check, sprint_team
 from services.planning.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -239,7 +239,8 @@ def _with_tests(
     """QA's test tasks before *tasks*, unless a sprint team leaves QA out."""
     if allowed and acceptance.QA_ROLE not in {catalogue.canonical(r) for r in allowed}:
         return tasks
-    return acceptance.with_test_tasks(tasks, spec, item_limit)
+    # The changelog task still comes after every task, QA's included.
+    return changelog_order.last(acceptance.with_test_tasks(tasks, spec, item_limit))
 
 
 def prepare_plan(

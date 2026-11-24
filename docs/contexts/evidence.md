@@ -7,8 +7,8 @@ module's docstring has the detail.
 
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
-- **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_links`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_links`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -144,6 +144,31 @@ outside the project, an anchor into a document not read back, or a document
 whose text was not read back is `unverifiable`. A bare file name not found is
 a finding. Fenced code and absolute URLs are not followed. The risk tier is
 unchanged (prose is `low`) and the checks are not required checks.
+
+### Changelog fragments against the diff
+
+`changelog_diff.py`: the `changelog_matches_diff` check, on a delivery the
+daemon reports wrote a fragment (`changelog.d/<name>.md`, not its README).
+In sprint 8 a fragment under `Added` claimed a flag and two functions the
+base already had; the diff was a test file, a README and the fragment. The
+fragment is the agent's claim; it is judged against `changelog_diff` on the
+evidence, which the loop records (`loop/changelog_observe.py`): the paths the
+delivery's commit changes against the merge base of the company's base (the
+daemon's `workspace.git.diff`, prerequisites merged), the fragment at that
+commit and the cited and changed files at the merge base
+(`workspace.git.read_at`, sha256 computed by the backend), and the issue the
+sprint's objective names. Rules: (a) a backticked repository path (a `/` or a
+known suffix) is among the changed files, unless its sentence says `already`,
+`existing`, `existed`, `unchanged`, `untouched`, `ya existía`, `ya existe` or
+`sin cambios`; (b) under `Added`, a `--flag`, an identifier with `_` or in
+camelCase, a `name()`, or a plain word defined at the base (`def`, `class`,
+an assignment) in a cited or changed file refutes as already there; (c) the
+file name's and the summary's issue is the sprint's when its objective names
+exactly one (sprint 7 named a nonexistent #780), else a finding. A refuted
+check sends the delivery back before QA (`changelog claims what the diff does
+not show`). No observation, a cut listing, a fragment or base file not read is
+`unverifiable`, and the `risk_tier` check rises to `high` (area `changelog`),
+so a person decides. QA's review lists the check first and whole.
 
 ### Protected paths
 
