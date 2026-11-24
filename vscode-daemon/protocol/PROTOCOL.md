@@ -194,7 +194,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.heartbeat` | published | `daemon_status.py` | — | §3 |
 | `workspace.capabilities` | request | `daemon.py` | `commands`? | `assistants` |
 | `workspace.generate` | request | `daemon.py`, `delivery.py` | `workspace_root`, `files` (`path` with `content` or `edits`), `git`?, `sprint_id`? | `ok`, `workspace_root`, `files` (per file `status`, `sha256` read back, the diff), `snapshot` or `git`, `project_files` |
-| `workspace.execute` | request | `daemon.py`, `shell_exec.py`, `sandbox.py`, `run_logs.py` | `command`, `workspace_root`, `sandbox`?, `command_policy`?, `timeout_seconds`?, `full_log`? | `success`, `stdout`, `stderr`, `exit_code`, `timed_out`?, `sandbox`?, `full_log`? |
+| `workspace.execute` | request | `daemon.py`, `shell_exec.py`, `sandbox.py`, `program_run.py`, `run_logs.py` | `command`, `workspace_root`, `sandbox`? (with `purpose: program`, `workdir` and `program`, §5.12), `command_policy`?, `timeout_seconds`?, `full_log`? | `success`, `stdout`, `stderr`, `exit_code`, `timed_out`?, `sandbox`?, `program`? (§5.12), `full_log`? |
 | `workspace.browse` | request | `host_folders.py` | `path`? | `host`, `path`, `parent`, `entries`, `shortcuts`, `roots`, `truncated` |
 | `workspace.inspect` | request | `host_folders.py` | `path`, `snapshot`? | `host`, `path`, `name`, `exists`, `is_dir`, `git`, `snapshot`? (with `playwright`: the version the project pins, `playwright_pin.py`, #315) |
 | `workspace.hash` | request | `file_hash.py` | `workspace_root`, `paths` | `files` (`present` with `sha256`, `missing`, `rejected`, `workspace_missing`) |
@@ -400,7 +400,7 @@ ran: never the host. Without a floor nothing changes: the host, and **no
 `sandbox` in the reply of a request that did not ask**, so a backend from
 before this change reads the same replies. The report appears whenever the
 command left the host, because then the evidence must say where it ran.
-`sandbox.purpose` takes `test`, `install`, `check` or `assistant` (a console
+`sandbox.purpose` takes `test`, `install`, `check`, `program` (§5.12) or `assistant` (a console
 assistant's consultation, sent by backends before issue #750 with the
 company's sandbox, its network setting and the names in `sandbox_env` and
 `console_env`; the backend no longer sends it, and the daemon keeps
@@ -673,6 +673,62 @@ names.
   again and answers `before`, `after` and the refspecs. A remote that cannot
   be reached is a 502.
 
+### 5.12 A declared program (additive, feature `program`)
+
+`workspace.execute` with `sandbox.purpose: "program"` runs a program a
+person declared in the company's stack profile, for the agents'
+`workspace__run_program` (`backend/app/services/tools/program_runs.py`,
+`docs/design/project-programs-and-screenshots.md`). It is announced as the
+feature `program` of `workspace.execute` (§2.1), and the backend offers the
+tool only when every daemon announces it. A daemon from before it reads the
+purpose as `test`, which is why the backend never sends it unannounced.
+
+The request adds, inside `sandbox`: `workdir: "ro"` and `program`
+(`folder`, the working directory under `/workspace` as a plain relative
+path; `artifacts_mb`; `metrics_file`, one `.json` name under `/artifacts`).
+`command` is plain words (letters, digits and `_ . = : / + -`, no `..`, no
+absolute path), the declared argv and one `--<name>=<value>` per typed
+parameter; the daemon checks that again and refuses anything else
+(`refused: true`), after the command policy. What the daemon does
+(`program_run.py`):
+
+- `container` only. A request whose own `mode` is `host` or `bwrap` is
+  refused with `error: "sandbox unavailable: a program runs only in
+  container mode, not <mode>"` and nothing runs; `FABRIQUE_SANDBOX_REQUIRED`
+  never raises a program request to a container.
+- `--network none` whatever `network` says; the worktree mounted `:ro` at
+  `/workspace` (its Git metadata read-only as today); writable only `/tmp`
+  (512 MiB tmpfs) and `/artifacts`, the folder
+  `<FABRIQUE_ARTIFACTS_ROOT>/<scope>/<run id>/` created for this run outside
+  every worktree; `--pull=never`; the dependency cache not mounted, the
+  environment volume read-only when asked.
+- Time, CPUs, memory (with `--memory-swap` equal) and processes as asked,
+  each capped by `FABRIQUE_PROGRAM_MAX_SECONDS`, `_CPUS`, `_MEMORY_MB` and
+  `_PIDS`; `/artifacts` by the smaller of `artifacts_mb` and
+  `FABRIQUE_PROGRAM_MAX_ARTIFACTS_MB`. No request raises a maximum.
+- Before it starts: run folders older than
+  `FABRIQUE_ARTIFACTS_RETENTION_DAYS` are removed, and a free space under the
+  root below `FABRIQUE_ARTIFACTS_MIN_FREE_MB` refuses the run. While it runs,
+  the folder is measured every second (no symlink followed) and the container
+  is killed past its cap (`artifact_limit: "watch"`; a bind mount has no
+  per-folder quota). It can overshoot by about a second of writes.
+
+The reply is the usual one (`stdout` and `stderr` apart, `exit_code`,
+`timed_out`, `sandbox` with `workdir_mode: "ro"` and `purpose: "program"`)
+plus `program`: `run_id`, `limits` (as applied), `maxima`, `free_mb_before`,
+`pruned_runs`, `stdout_truncated`, `artifacts` (`files`: each `path`,
+`bytes` and `sha256` read back from disk after the run, a symlink as
+`link: true` and never read; `total_bytes`, `truncated` past 1,000 entries,
+`limit_mb`, `artifact_limit`, `killed_for_size`, `peak_bytes`) and
+`metrics_file` (`content_b64`, the whole file when it is a regular file of
+at most 256 KiB, or `reason`). The daemon never parses a metric and never
+sends a hash of the metrics file: the backend decodes and hashes what it
+received. A run killed for size has `success: false` and an `error` naming
+the cap. Fixtures: `workspace.execute/program-refused-in-host.json` and
+`program-refused-in-bwrap.json`; the container runs are covered by
+`vscode-daemon/tests/test_program_run.py` (a fake runtime) and
+`test_program_run_container.py` (a real one, skipped without it).
+
 ## 6. Conformance fixtures
 
 `fixtures/v1/<subject>/<scenario>.json`, one recorded exchange per file, in
@@ -711,8 +767,9 @@ Fixtures cover `workspace.status`, `workspace.heartbeat`,
 `workspace.hash`, `workspace.sandbox.reset`, `workspace.inspect` and
 `workspace.browse` (`workspace.execute` also with `full_log`, replayed
 against an in-memory object store, and read back and hashed by the backend's
-side; a console assistant's consultation on the host; and a request without
-`sandbox` refused by a floor whose runtime is missing); the other subjects are
+side; a console assistant's consultation on the host; a request without
+`sandbox` refused by a floor whose runtime is missing; and a declared program
+refused in `host` and in `bwrap` mode, §5.12); the other subjects are
 covered by their schema, and their handlers by their own tests
 (`workspace.app.check`'s probe and full log in
 `backend/tests/test_browser_image.py` and `test_run_logs.py`, its security

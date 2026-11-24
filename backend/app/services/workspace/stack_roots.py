@@ -35,6 +35,7 @@ import os
 import re
 from typing import Any
 
+from services.contracts import programs as programs_contract
 from services.workspace import stack_profiles
 
 # The keys of a stored profile that are not the root's own fields.
@@ -93,8 +94,8 @@ def _command(raw: Any, what: str) -> str:
 
 def validate_overrides(raw: Any) -> dict[str, Any]:
     """A company's stack profile, checked: the root's fields as
-    ``stack_profiles.validate_overrides`` reads them, plus ``folders`` and
-    ``every_delivery``. Raises ``ValueError`` or ``TypeError`` with the
+    ``stack_profiles.validate_overrides`` reads them, plus ``folders``,
+    ``every_delivery`` and ``programs``. Raises ``ValueError`` or ``TypeError`` with the
     reason."""
     if raw is None:
         return {}
@@ -138,6 +139,10 @@ def validate_overrides(raw: Any) -> dict[str, Any]:
             listed.append(item)
         if listed:
             out["every_delivery"] = listed
+    # The project's programs, typed and bounded (``contracts/programs``).
+    programs = programs_contract.validate_programs(raw.get("programs"))
+    if programs:
+        out["programs"] = programs
     return out
 
 

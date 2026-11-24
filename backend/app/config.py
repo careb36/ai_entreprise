@@ -292,6 +292,11 @@ class Settings(BaseSettings):
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
     EDIT_LINT_TIMEOUT_SECONDS: float = 60.0
+    # ``workspace__run_program`` (``tools/program_runs.py``): the runs of a
+    # declared program one task attempt may make, and the scored evaluation
+    # runs among them (the owner's decision 3: three; only the Owner raises it).
+    PROGRAM_RUNS_PER_TASK: int = 5
+    PROGRAM_EVAL_RUNS_PER_TASK: int = 3
     # The tool loop (``tools/tool_history.py``): results older than the last KEEP
     # rounds go to the model as one line (0: none); an old read that is still the
     # latest view stays whole while all results fit MAX_CHARS (0: no bound).

@@ -12,7 +12,7 @@ function response(status: number, body: unknown = {}) {
 
 const stack = {
   company_id: 4,
-  overrides: { test: 'pytest -q', lint: '', folders: { web: { stack: 'node' } } },
+  overrides: { test: 'pytest -q', lint: '', folders: { web: { stack: 'node' } }, programs: [{ name: 'evaluate' }] },
   effective_without_detection: {}, stacks: [{ stack: 'node' }, { stack: 'python' }],
   installed_manifests: { 'requirements.txt': 'abc' }, folders_without_detection: {}, every_delivery: [],
 }
@@ -77,7 +77,7 @@ describe('ProjectSettings', () => {
     await waitFor(() => expect(puts(fetch, '/v1/companies/4/team_selection')).toEqual([{ team_selection: 'automatic' }]))
   })
 
-  it('saves the overrides, turning a step off and keeping the folders as stored', async () => {
+  it('saves the overrides, turning a step off and keeping the folders and programs as stored', async () => {
     const fetch = routed()
     vi.stubGlobal('fetch', fetch)
     renderAs('Manager')
@@ -92,7 +92,7 @@ describe('ProjectSettings', () => {
     fireEvent.change(within(form).getByLabelText('How the Test step is set'), { target: { value: 'detected' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(puts(fetch, '/v1/companies/4/stack_profile')).toEqual([{
-      profile: { folders: { web: { stack: 'node' } }, stack: 'python', port: 8000, install: 'pip install -r requirements.txt', lint: '' },
+      profile: { folders: { web: { stack: 'node' } }, programs: [{ name: 'evaluate' }], stack: 'python', port: 8000, install: 'pip install -r requirements.txt', lint: '' },
     }]))
   })
 

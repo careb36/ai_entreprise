@@ -32,6 +32,7 @@ from services.tools import (
     docs_write_policy,
     edit_lint,
     mcp_tools,
+    program_runs,
 )
 from services.workspace import daemon_liveness
 
@@ -142,6 +143,8 @@ def offered(toolbox: Any) -> dict[str, Any]:
             name = f"{developer_tool_schemas.SERVER}{mcp_tools.TOOL_NAME_SEP}{tool}"
             if not shown:
                 withheld[name] = NOT_HERE if not box.can_edit else why
+    if box is not None and getattr(box, "program_withheld", None):
+        withheld[program_runs.NAME] = box.program_withheld  # Declared, not offered.
     return {"names": names, "withheld": withheld}
 
 

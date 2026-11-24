@@ -18,6 +18,7 @@ from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from schemas import AgentRunCreate
 from sqlmodel import Session
 
+from services.contracts import program_metrics
 from services.contracts.manifest import MANIFEST_BLOCK, parse_file_manifest
 from services.evidence import agent_run_service, delivery_gate, protected_check, risk
 from services.evidence.verification import verify_agent_run
@@ -65,6 +66,12 @@ def _summarize_deliverable(deliverable: str, limit: int = 500) -> str:
     return prose[:limit]
 
 
+def _claimed_metrics(deliverable: str) -> dict[str, Any]:
+    """``{"metrics": [...]}`` when the answer states metrics, else nothing."""
+    metrics = program_metrics.parse_claims(MANIFEST_BLOCK.sub("", deliverable or ""))
+    return {"metrics": metrics} if metrics else {}
+
+
 def _record_task_run(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -97,6 +104,9 @@ def _record_task_run(
         claims={
             "files": [target["path"] for target in targets],
             "summary": _summarize_deliverable(deliverable),
+            # The metrics it states (``claimed-metric:`` lines): claims, never
+            # beside the observed ones (``evidence/metric_matches``).
+            **_claimed_metrics(deliverable),
         },
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
