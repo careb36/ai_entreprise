@@ -5,6 +5,7 @@ import {
   AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Eye, Loader2, SplitSquareVertical,
 } from 'lucide-react'
 import { FRESH_ACTIVITY_MS, type AgentIdentity } from './identity'
+import type { ActiveAgent, GroupState } from './liveStatus'
 import { formatElapsed, formatTime } from './format'
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
@@ -18,23 +19,28 @@ export function AgentAvatar({ identity, size = 'md' }: { identity: AgentIdentity
   )
 }
 
-export function TypeBadge({ type }: { type: string }) {
+const STATE_LOOK: Record<GroupState, { cls: string; spin?: boolean }> = {
+  working:   { cls: 'bg-brand-500/15 text-brand-300 border-brand-500/25', spin: true },
+  started:   { cls: 'bg-surface-800 text-gray-400 border-surface-600' },
+  approved:  { cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
+  delivered: { cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+  refused:   { cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
+  blocked:   { cls: 'bg-red-500/15 text-red-300 border-red-500/25' },
+  error:     { cls: 'bg-red-500/15 text-red-300 border-red-500/25' },
+  update:    { cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25' },
+  split:     { cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
+}
+
+/** A message group's latest state (`liveStatus.groupState`); "working" only while the backend says so. */
+export function StateBadge({ state }: { state: GroupState }) {
   const { t } = useTranslation()
-  const cfg: Record<string, { label: string; cls: string; spin?: boolean }> = {
-    agent_start:    { label: t('glassroom.badgeLabels.working', 'working'),   cls: 'bg-brand-500/15 text-brand-300 border-brand-500/25',     spin: true  },
-    agent_complete: { label: t('glassroom.badgeLabels.delivered', 'delivered'), cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'             },
-    error:          { label: t('glassroom.badgeLabels.error', 'error'),     cls: 'bg-red-500/15 text-red-300 border-red-500/25'                         },
-    status:         { label: t('glassroom.badgeLabels.update', 'update'),    cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'                },
-    needs_split:    { label: t('glassroom.badgeLabels.split', 'split'),     cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25'                   },
-  }
-  const c = cfg[type]
-  if (!c) return null
+  const look = STATE_LOOK[state]
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${c.cls}`}>
-      {c.spin && <Loader2 size={9} className="animate-spin" />}
-      {type === 'error' && <AlertTriangle size={9} />}
-      {type === 'needs_split' && <SplitSquareVertical size={9} />}
-      {c.label}
+    <span data-state={state} className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${look.cls}`}>
+      {look.spin && <Loader2 size={9} className="animate-spin" />}
+      {(state === 'error' || state === 'blocked') && <AlertTriangle size={9} />}
+      {state === 'split' && <SplitSquareVertical size={9} />}
+      {t(`glassroom.badgeLabels.${state}`)}
     </span>
   )
 }
@@ -95,12 +101,14 @@ export function DateSeparator({ date }: { date: string }) {
   )
 }
 
-export function TypingIndicator({ identity, elapsedMs }: { identity: AgentIdentity; elapsedMs: number }) {
+/** An agent with a run in flight now (the backend's record), and on what. */
+export function TypingIndicator({ agent }: { agent: ActiveAgent }) {
   const { t } = useTranslation()
+  const { identity, elapsedMs, taskTitle, kind } = agent
   const isFresh = elapsedMs <= FRESH_ACTIVITY_MS
-  const statusLabel = isFresh
-    ? t('glassroom.agentActivelyThinking')
-    : t('glassroom.agentStillWorking')
+  const statusLabel = kind === 'review'
+    ? t('glassroom.agentReviewing')
+    : isFresh ? t('glassroom.agentActivelyThinking') : t('glassroom.agentStillWorking')
 
   return (
     <div className="flex items-center gap-2.5 px-4 py-2 animate-fade-in">
@@ -119,9 +127,23 @@ export function TypingIndicator({ identity, elapsedMs }: { identity: AgentIdenti
       ) : (
         <Loader2 size={12} className="text-gray-500 animate-spin" />
       )}
-      <span className="text-[11px] text-gray-600 italic">
-        {statusLabel} · {formatElapsed(elapsedMs)}
+      <span className="text-[11px] text-gray-600 italic truncate">
+        {statusLabel}{elapsedMs > 0 ? ` · ${formatElapsed(elapsedMs)}` : ''}{taskTitle ? ` · ${taskTitle}` : ''}
       </span>
+    </div>
+  )
+}
+
+/** Where the sprint closed in the feed: what follows happened after it (the integration, late events). */
+export function AfterCloseSeparator() {
+  const { t } = useTranslation()
+  return (
+    <div role="separator" className="flex items-center gap-3 py-2 px-4">
+      <div className="flex-1 h-px bg-amber-700/40" />
+      <span className="text-[10px] font-semibold text-amber-300/80 bg-surface-950 px-2.5 py-0.5 rounded-full border border-amber-700/40">
+        {t('glassroom.afterClose')}
+      </span>
+      <div className="flex-1 h-px bg-amber-700/40" />
     </div>
   )
 }

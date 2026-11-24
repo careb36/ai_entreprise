@@ -50,6 +50,8 @@ export function SprintStatusBanner({ sprint }: { sprint: SprintState }) {
     else resume.mutate(sprint.id, track(run))
   }
   const busy = start.isPending || resume.isPending
+  // Why it is paused, as a kind the backend read from the recorded reason, and what to do about it.
+  const kind = sprint.pause_kind ?? (sprint.pause_reason ? 'other' : 'person')
   return (
     <div className={`rounded-xl border p-3 ${planned ? 'border-brand-500/40 bg-brand-500/10' : 'border-yellow-500/40 bg-yellow-500/10'}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,13 +59,18 @@ export function SprintStatusBanner({ sprint }: { sprint: SprintState }) {
           <p className="font-medium text-white">
             {planned
               ? t('workControl.plannedTitle', { defaultValue: 'This sprint has not started' })
-              : t('workControl.pausedTitle', { defaultValue: 'This sprint is paused' })}
+              : t(`workControl.pauseKind.${kind}.title`)}
           </p>
           <p className="text-gray-300">
             {planned
               ? t('workControl.plannedHint', { defaultValue: 'The agents start working when you start it.' })
-              : sprint.pause_reason || t('workControl.pausedHint', { defaultValue: 'Nothing is dispatched, reviewed or retried until it is resumed.' })}
+              : t(`workControl.pauseKind.${kind}.action`)}
           </p>
+          {!planned && sprint.pause_reason && (
+            <p className="mt-1 text-xs text-gray-400">
+              {t('workControl.pauseRecorded', { reason: sprint.pause_reason })}
+            </p>
+          )}
         </div>
         <button type="button" disabled={busy} onClick={run}
           className="btn-primary btn-sm flex items-center gap-1.5">

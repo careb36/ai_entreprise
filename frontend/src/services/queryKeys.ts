@@ -10,6 +10,7 @@ export const QUERY_KEYS = {
   workspaceStatus: () => ['workspace', 'status'] as const,
   sprints: (companyId: number) => ['sprints', companyId] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
+  sprintLiveState: (id: number) => ['sprint', id, 'live_state'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   quotaHistory: (companyId: number, days: number) => ['enterprise', companyId, 'quota_history', days] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,

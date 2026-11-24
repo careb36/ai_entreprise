@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { SprintRetro } from '../../store/agentStore'
 import { getAgent } from './identity'
+import type { ActiveAgent } from './liveStatus'
 import type {
   HealthPanelEntry, QuotaTelemetry, SprintTaskEntry, TaskAutonomyEntry,
 } from './types'
@@ -11,9 +12,11 @@ import {
 
 // ── Right panel: agent detail ─────────────────────────────────────────────────
 
-export function RightPanel({ sprintId, agentStates, messageCount, isConnected, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
+export function RightPanel({ sprintId, agentStates, activeAgents = [], messageCount, isConnected, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
   sprintId: string
   agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string; lastTaskTitle?: string; lastTaskId?: number; lastSemanticType?: string }>
+  /** The runs in flight now, from the backend: the only source of "working". */
+  activeAgents?: ActiveAgent[]
   messageCount: number
   isConnected: boolean
   sprintTasks: SprintTaskEntry[]
@@ -23,7 +26,14 @@ export function RightPanel({ sprintId, agentStates, messageCount, isConnected, s
   lastRetro?: SprintRetro | null
 }) {
   const { t } = useTranslation()
-  const entries = Object.entries(agentStates)
+  // One row per agent (Dev and Developer are one), the system and the gates left out.
+  const rows = new Map<string, { identity: ReturnType<typeof getAgent>; activity: string; lastTaskTitle?: string }>()
+  for (const [role, state] of Object.entries(agentStates)) {
+    const identity = getAgent(role)
+    if (!identity.isAgent) continue
+    rows.set(identity.key, { identity, activity: state.currentActivity, lastTaskTitle: state.lastTaskTitle })
+  }
+  const entries = [...rows.values()]
 
   return (
     <div className="w-full border-l lg:border-l border-t lg:border-t-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0 max-h-none lg:max-h-none overflow-visible lg:overflow-y-auto lg:overflow-x-hidden xl:pb-24">
@@ -41,10 +51,10 @@ export function RightPanel({ sprintId, agentStates, messageCount, isConnected, s
         {entries.length === 0 ? (
           <p className="text-[11px] text-gray-600 px-3 py-2 italic">{t('glassroom.noAgentActivity')}</p>
         ) : (
-          entries.map(([role, state]) => {
-            const identity = getAgent(role)
+          entries.map(({ identity, activity, lastTaskTitle }) => {
+            const run = activeAgents.find(agent => agent.identity.key === identity.key)
             return (
-              <div key={role} className="px-3 py-2 hover:bg-surface-800/40 transition-colors">
+              <div key={identity.key} className="px-3 py-2 hover:bg-surface-800/40 transition-colors">
                 <div className="flex items-center gap-2 mb-1">
                   <AgentAvatar identity={identity} size="sm" />
                   <span className={`text-[11px] font-semibold ${identity.color} truncate flex-1`}>
@@ -53,21 +63,20 @@ export function RightPanel({ sprintId, agentStates, messageCount, isConnected, s
                 </div>
                 <div className="ml-7">
                   <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                    state.fsmState === 'active'  ? 'bg-emerald-500/10 text-emerald-400' :
-                    state.fsmState === 'waiting' ? 'bg-brand-500/10 text-brand-400'    :
-                    state.fsmState === 'error'   ? 'bg-red-500/10 text-red-400'        :
-                                                   'bg-surface-800 text-gray-600'
+                    run ? 'bg-emerald-500/10 text-emerald-400' : 'bg-surface-800 text-gray-500'
                   }`}>
-                    {state.fsmState}
+                    {run
+                      ? t(run.kind === 'review' ? 'glassroom.agentState.reviewing' : 'glassroom.agentState.working')
+                      : t('glassroom.agentState.idle')}
                   </span>
-                  {state.currentActivity && (
-                    <p className="text-[10px] text-gray-600 mt-0.5 break-words leading-tight line-clamp-2">
-                      {state.currentActivity}
+                  {(run?.taskTitle || lastTaskTitle) && (
+                    <p className="text-[10px] text-gray-500 mt-1 break-words leading-tight">
+                      {run?.taskTitle || lastTaskTitle}
                     </p>
                   )}
-                  {state.lastTaskTitle && (
-                    <p className="text-[10px] text-gray-500 mt-1 break-words leading-tight">
-                      {state.lastTaskTitle}
+                  {activity && (
+                    <p className="text-[10px] text-gray-600 mt-0.5 break-words leading-tight line-clamp-2">
+                      {t('glassroom.lastActivity', { text: activity })}
                     </p>
                   )}
                 </div>

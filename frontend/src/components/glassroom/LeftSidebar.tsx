@@ -1,17 +1,23 @@
 import { useTranslation } from 'react-i18next'
 import { Hash, Layers, Loader2 } from 'lucide-react'
+import type { IntegrationState, PauseKind } from '../../services/api'
 import type { AgentIdentity } from './identity'
+import type { ActiveAgent } from './liveStatus'
 import { AgentAvatar } from './atoms'
+import { SprintStatusBadge } from '../ui/SprintStatusBadge'
 
 // ── Left sidebar: sprint selector + agent roster ──────────────────────────────
 
 export function LeftSidebar({
-  sprintId, scope, status, activeAgents, onlineAgents,
+  sprintId, scope, status, integrationState, pauseReason, pauseKind, activeAgents, onlineAgents,
 }: {
   sprintId: string
   scope?: string
   status?: string
-  activeAgents: { key: string; identity: AgentIdentity; elapsedMs: number }[]
+  integrationState?: IntegrationState
+  pauseReason?: string | null
+  pauseKind?: PauseKind | null
+  activeAgents: ActiveAgent[]
   onlineAgents: AgentIdentity[]
 }) {
   const { t } = useTranslation()
@@ -20,12 +26,7 @@ export function LeftSidebar({
     M: 'text-brand-400',
     L: 'text-amber-400',
   }
-
-  const STATUS_DOT: Record<string, string> = {
-    active:      'bg-emerald-400 animate-pulse',
-    needs_split: 'bg-amber-400 animate-pulse',
-    completed:   'bg-gray-400',
-  }
+  const working = new Set(activeAgents.map(agent => agent.identity.key))
 
   return (
     <div className="w-full border-r lg:border-r border-b lg:border-b-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0">
@@ -41,13 +42,13 @@ export function LeftSidebar({
               <Layers size={9} /> {scope}
             </span>
           )}
-          {status && (
-            <span className="flex items-center gap-1 text-[10px] text-gray-500">
-              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status] ?? 'bg-gray-600'}`} />
-              {status}
-            </span>
-          )}
+          {status && <SprintStatusBadge status={status} integrationState={integrationState} />}
         </div>
+        {status === 'paused' && (
+          <p className="mt-1.5 text-[10px] leading-snug text-amber-300/80">
+            {t(`workControl.pauseKind.${pauseKind ?? (pauseReason ? 'other' : 'person')}.title`)}
+          </p>
+        )}
       </div>
 
       {/* Active agents */}
@@ -58,11 +59,11 @@ export function LeftSidebar({
         {onlineAgents.length === 0 ? (
           <p className="text-[11px] text-gray-600 px-3 py-2 italic">{t('glassroom.waitingAgents', 'Waiting for agents…')}</p>
         ) : (
-          onlineAgents.map((identity, i) => {
-            const isActive = activeAgents.some(a => a.identity.initials === identity.initials)
+          onlineAgents.map(identity => {
+            const isActive = working.has(identity.key)
             return (
               <div
-                key={`${identity.label}-${i}`}
+                key={identity.key}
                 className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-800/40 transition-colors rounded"
               >
                 <AgentAvatar identity={identity} size="sm" />
@@ -70,8 +71,8 @@ export function LeftSidebar({
                   {identity.label}
                 </span>
                 {isActive
-                  ? <Loader2 size={10} className="text-emerald-400 animate-spin shrink-0" />
-                  : <span className="w-1.5 h-1.5 rounded-full bg-surface-700 shrink-0" />
+                  ? <Loader2 size={10} className="text-emerald-400 animate-spin shrink-0" aria-label={t('glassroom.agentState.working')} />
+                  : <span className="w-1.5 h-1.5 rounded-full bg-surface-700 shrink-0" aria-label={t('glassroom.agentState.idle')} />
                 }
               </div>
             )
