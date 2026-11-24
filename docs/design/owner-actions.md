@@ -395,7 +395,11 @@ previewed again, the override.
 
 ### Residual risks
 
-- One model turn can pass `token_budget` (checked between calls).
+- One model turn can pass `token_budget` (checked between calls), and an
+  agent attempt already in its tool loop when the sprint is stopped runs to
+  its end: in run 2 (2026-11-24) the check stopped the sprint at 2,101,552
+  tokens against 2,000,000, and QA's attempt in flight spent about 199,000
+  more in 6 calls after the stop.
 - A run started from the app acts with the Owner's full rights in the
   companies she owns, as her CLI token did; it can only run catalogue code.
 - A secret committed to the repository is copied into the snapshot.
