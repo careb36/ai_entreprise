@@ -4152,6 +4152,7 @@
   "duties": {
     "title": "Funciones y accesos",
     "subtitle": "Quien pide un cambio no lo aprueba; quién puede entrar en la empresa se revisa con un calendario.",
+    "otherCompany": "La política de segregación de funciones de la empresa {{company}}, abierta desde una acción del propietario.",
     "ownerOnly": "Solo los propietarios gestionan las funciones y las revisiones de acceso. Tu rol aquí es {{role}}.",
     "protectedPaths": {
       "title": "Rutas protegidas",
@@ -5347,7 +5348,25 @@
       "not_fast_forward": "origin/main no es ancestro de main: no es un avance rápido. Concílialo a mano (merge, nunca force).",
       "nothing_to_push": "origin/main ya es main: no hay nada que enviar.",
       "no_verification_record": "main no tiene registro de verificación: aterriza los cambios con land.sh primero.",
-      "fix_not_on_origin": "El arreglo no está en origin/main: envía main primero o marca la excepción."
+      "fix_not_on_origin": "El arreglo no está en origin/main: envía main primero o marca la excepción.",
+      "sod_refused": "La segregación de funciones rechazaría las aprobaciones de esta ejecución en la empresa que reutiliza (ver abajo)."
+    },
+    "sod": {
+      "title": "Segregación de funciones",
+      "blocked": "La empresa {{company}} ({{mode}}) rechaza {{actions}} por quien lo redactó, y esta ejecución redacta y aprueba en tu nombre.",
+      "soloGrantable": "La excepción de una sola persona no está en vigor. Eres la única persona de la empresa que puede aprobar, así que puedes concederla.",
+      "soloNotEligible": "La excepción de una sola persona no puede aplicarse: la empresa tiene más de una persona que puede aprobar.",
+      "whatToDo": "Concede la excepción de una sola persona en la política de la empresa {{company}}, pide que apruebe otra persona o cambia el modo. La acción nunca cambia la política por sí misma.",
+      "newCompany": "Esta ejecución crea una empresa nueva, que empieza con el modo por defecto ({{mode}}) y sin excepción de una sola persona, así que la ejecución se detendrá justo después de crearla, antes de llamar a ningún modelo.",
+      "newCompanyNext": "Después concede la excepción en la política de la empresa nueva y vuelve a ejecutar con el mismo nombre de carpeta de la copia.",
+      "stopped": "Detenida por la segregación de funciones, antes de cualquier aprobación o llamada a un modelo.",
+      "rerun": "Después vuelve a ejecutar con el mismo nombre de carpeta de la copia: la ejecución reutiliza la empresa {{company}}.",
+      "openPolicy": "Abrir la política de segregación de funciones de la empresa {{company}}",
+      "and": " y ",
+      "actions": {
+        "approve_specification": "aprobar la especificación",
+        "approve_architecture": "aprobar la arquitectura"
+      }
     }
   }
 }

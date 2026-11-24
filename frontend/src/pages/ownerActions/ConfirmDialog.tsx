@@ -2,12 +2,15 @@ import { useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Play } from 'lucide-react'
 import type { OwnerActionPreview } from '../../services/api'
+import { SodNotice, sodOf } from './SodNotice'
 
 /**
  * The confirmation before an owner action runs (issue #701): what it does
  * and what it costs, as the backend's preview returned them. Confirming
  * sends the preview's digest back, so what this dialog showed is what runs
- * (a start with other parameters is refused).
+ * (a start with other parameters is refused). When segregation of duties
+ * would refuse the run's approvals, the dialog says so before she confirms,
+ * with a link to that company's policy; a blocker disables the start.
  */
 export function ConfirmDialog({ preview, pending, error, onConfirm, onClose }: {
   preview: OwnerActionPreview
@@ -21,6 +24,8 @@ export function ConfirmDialog({ preview, pending, error, onConfirm, onClose }: {
   const dialogRef = useRef<HTMLDivElement>(null)
   useEffect(() => { dialogRef.current?.focus() }, [])
   const minutes = Math.ceil(preview.cost.max_seconds / 60)
+  const blockers = preview.blockers ?? []
+  const sod = sodOf(preview.facts?.sod)
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
@@ -56,11 +61,18 @@ export function ConfirmDialog({ preview, pending, error, onConfirm, onClose }: {
             </p>
           )}
         </section>
+        {blockers.length > 0 && (
+          <div role="status" className="space-y-1 text-xs text-amber-300">
+            <p className="font-semibold">{t('ownerActions.repo.blockedBy')}</p>
+            <ul className="list-disc pl-5">{blockers.map(b => <li key={b}>{t(`ownerActions.blockers.${b}`)}</li>)}</ul>
+          </div>
+        )}
+        {sod && <SodNotice sod={sod} />}
         <p className="text-xs text-gray-400">{t('ownerActions.confirm.audited')}</p>
         {error && <p role="alert" className="alert-error text-xs">{error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost btn-sm" onClick={onClose} disabled={pending}>{t('common.cancel')}</button>
-          <button type="button" className="btn-primary btn-sm" onClick={onConfirm} disabled={pending}>
+          <button type="button" className="btn-primary btn-sm" onClick={onConfirm} disabled={pending || blockers.length > 0}>
             {pending ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Play size={13} aria-hidden="true" />}
             {t('ownerActions.confirm.run')}
           </button>

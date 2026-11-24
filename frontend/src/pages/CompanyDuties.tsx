@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AccessReviewPanel from '../components/AccessReviewPanel'
 import ProtectedPathsPanel from '../components/ProtectedPathsPanel'
@@ -14,12 +15,27 @@ import { AccessNotice, PageHeader } from '../components/ui'
  * the report of every approval, the periodic access review, the service
  * accounts, and whether the company's protected paths hold (it hosts the
  * factory itself). The backend enforces the rule at each approval point and audits
- * every change; this page shows and sets it.
+ * every change; this page shows and sets it. With ``?company=N`` (the link
+ * an owner action shows when the rule would refuse its approvals) it shows
+ * only company N's policy (the backend lets only an Owner of N read it).
  */
 export default function CompanyDuties() {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
   const role = useCurrentRole()
+  const [search] = useSearchParams()
+  const asked = Number(search.get('company')) || null
+  const other = asked !== null && asked !== companyId ? asked : null
+
+  if (other !== null) {
+    return (
+      <div className="page-container max-w-5xl">
+        <PageHeader title={t('duties.title')} subtitle={t('duties.otherCompany', { company: other })} />
+        {/* The backend decides: only an Owner of that company reads or sets its policy. */}
+        <SodPolicyPanel companyId={other} />
+      </div>
+    )
+  }
 
   return (
     <div className="page-container max-w-5xl">

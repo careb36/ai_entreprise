@@ -132,6 +132,51 @@ calls, so it can be passed by one model turn; the dialog says so.
 run (the daemon did not report an isolated container for every test run). A
 run with status 5 finishes `failed`; its sandbox report is kept.
 
+**Segregation of duties** (`services/management/owner_action_sod.py`). The
+run acts as the Owner, so the Owner drafts the specification and the
+architectures and then approves them (`records` and `issue`:
+`_approved_spec`, `_approved_architecture`, `_revised_version`). The rule
+(`services/platform/sod.py`) refuses an approval by the person who drafted
+the record unless the company's mode leaves the action alone or the
+single-person exception is in force: `approve_specification` under
+`high_risk` (the default) and `all`, `approve_architecture` under `all`. The
+action does not run `review`, so it never accepts a held delivery nor
+releases an integration. The first run from the app failed two seconds in,
+with no tokens, at `POST /v1/specifications/{id}/approve` 403, because the
+company it had just created had the default policy.
+
+- **The preview observes it.** The company the run will use is the one an
+  earlier run with the same `checkout_name` created (`previous_state`), else
+  a new one. For each approval above, `sod.decide` is asked with the Owner as
+  the actor and as the drafter, under that company's actual mode and
+  exception (`solo_eligible` decides whether a granted exception is in
+  force). The facts (`facts.sod`: company, whether it is new, mode, the
+  exception granted, eligible and in force, the approvals and those refused)
+  go into the digest like any other fact, so a policy changed after the
+  preview makes the start a 409.
+- **A reused company that would refuse is a blocker** (`sod_refused`): the
+  start is a 409 and the dialog names the approvals, the mode, whether the
+  exception is in force or could be granted, and what to do: grant the
+  single-person exception in that company's policy, have another person
+  approve, or change the mode. It links to the policy panel of that company
+  (`/company/duties?company=N`, which shows only that company's policy; the
+  backend lets only its Owner read it).
+- **A new company is not a blocker**: it starts with the default policy and
+  no exception, and the exception can be granted only once it exists. The
+  dialog says so. The run creates the company and, right after `company`,
+  before any approval or model call, reads the policy again; when the rule
+  would refuse, it stops `failed` with `reason: blocked_by_sod` and
+  `observations.sod`. The run panel shows the same guidance and the link; she
+  grants the exception and runs again with the same checkout name, which
+  reuses the company.
+- **Chosen over a preview-only blocker** because a new company cannot be
+  checked before it exists, and the same check after `company` also catches
+  a policy changed between the preview and the start: the run record says
+  what blocked it and what to do, instead of an API error.
+- **The action never grants, changes or bypasses the policy**: granting the
+  exception is the Owner's explicit, audited choice in the duties page. It
+  only reads the policy (`sod.policy_of`, `sod.solo_eligible`, `sod.decide`).
+
 ### How the three repository actions observe first
 
 `land_branch`, `push_main` and `close_issue` have **facts**: what the
@@ -370,6 +415,16 @@ principal is honoured only while live and never from headers.
 `..`, a separator, a symlinked target, the source, a non-empty folder.
 `frontend/src/pages/OwnerActions.test.tsx`: the page and the confirmation
 dialog.
+`backend/tests/test_owner_action_sod.py`: a reused company without the
+exception is a blocker and its start a 409; with the exception in force no
+blocker; a policy changed after the preview changes the digest; a new
+company is not a blocker and the run stops `blocked_by_sod` after `company`
+with no tokens and no further call; the policy rows are the same before and
+after a run, blocked or not; an exception granted to a company with two
+approvers is not in force. `frontend/src/pages/OwnerActions.test.tsx` and
+`CompanyDuties.test.tsx`: the blocker and the link in the dialog, the new
+company's guidance, a `blocked_by_sod` run's guidance, and the policy of the
+linked company.
 
 ### Tests that prove the mitigations (second slice)
 
@@ -432,6 +487,8 @@ previewed again, the override.
 - First slice: the catalogue and its routes, the in-process client and
   principal, `self_host_container_run`, the daemon subject, the inbox entry,
   the page.
+- The segregation-of-duties preview of `self_host_container_run`, its
+  `sod_refused` blocker and the run's `blocked_by_sod` stop.
 - Second slice: `land_branch`, `push_main`, `close_issue`, the options route,
   the step-up, the daemon subjects `workspace.self_host.git`, `.land` and
   `.push`, the GitHub adapter's issue calls, and their dialogs.

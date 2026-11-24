@@ -30,11 +30,12 @@ from models import OwnerActionRun, Sprint
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlmodel import Session, select
 
+from services.management import owner_action_sod
 from services.management import owner_git_actions as git
 from services.platform import locks
 from services.platform.agent_service import AgentService
 
-SELF_HOST = "self_host_container_run"
+SELF_HOST = owner_action_sod.SELF_HOST
 RUNNING = "running"
 FINISHED = ("succeeded", "failed", "cancelled")
 LAST_RUNS = 5
@@ -104,6 +105,7 @@ class Action:
     blockers: Any = None
     step_up: Any = None
     no_active_sprint: bool = False
+    local_facts: Any = None
 
 
 CATALOGUE: dict[str, Action] = {
@@ -125,6 +127,8 @@ CATALOGUE: dict[str, Action] = {
             "exit_status",
         ),
         conflicts=(git.LAND,),
+        local_facts=owner_action_sod.facts,
+        blockers=owner_action_sod.blockers,
     ),
     git.LAND: Action(
         name=git.LAND,
@@ -225,13 +229,14 @@ def preview(
     """The confirmation: effect, cost and the digest a start must echo (O2).
     An action with facts shows them, and the digest covers them."""
     args = (params,) if spec.facts is None else (params, facts or {})
+    observes = spec.facts is not None or spec.local_facts is not None
     body = {
         "action": spec.name,
         "params": params.model_dump(),
         "effect": spec.effect(*args),
         "cost": spec.cost(*args),
     }
-    if spec.facts is not None:
+    if observes:
         body["facts"] = facts or {}
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
     return {**body, "confirmation": hashlib.sha256(canonical.encode()).hexdigest()}
@@ -254,6 +259,17 @@ async def observe_and_preview(
     return params, shown
 
 
+def observe_locally(
+    spec: Action, params: BaseModel, session: Session, user_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The database facts read now, and the preview with its ``blockers``."""
+    facts = spec.local_facts(session, user_id, params)
+    shown = preview(spec, params, facts)
+    shown["blockers"] = spec.blockers(params, facts) if spec.blockers else []
+    shown["step_up"] = False
+    return facts, shown
+
+
 def active_sprints(session: Session) -> list[int]:
     """The sprints agents may be working in now, in any company (a land refuses)."""
     return list(
@@ -271,7 +287,7 @@ def describe(spec: Action) -> dict[str, Any]:
     return {
         "name": spec.name,
         "issue": spec.issue,
-        "observes": spec.facts is not None,
+        "observes": spec.facts is not None or spec.local_facts is not None,
         "params": schema.get("properties", {}),
         "required": schema.get("required", []),
         "records": list(spec.records),

@@ -4152,6 +4152,7 @@
   "duties": {
     "title": "Duties and access",
     "subtitle": "Who asks for a change does not approve it; who can reach the company is reviewed on a schedule.",
+    "otherCompany": "The segregation-of-duties policy of company {{company}}, opened from an owner action.",
     "ownerOnly": "Only owners manage duties and access reviews. Your role here is {{role}}.",
     "protectedPaths": {
       "title": "Protected paths",
@@ -5347,7 +5348,25 @@
       "not_fast_forward": "origin/main is not an ancestor of main: not a fast-forward. Reconcile by hand (merge, never force).",
       "nothing_to_push": "origin/main already is main: nothing to push.",
       "no_verification_record": "main has no verification record: land changes with land.sh first.",
-      "fix_not_on_origin": "The fix is not on origin/main: push main first, or tick the override."
+      "fix_not_on_origin": "The fix is not on origin/main: push main first, or tick the override.",
+      "sod_refused": "Segregation of duties would refuse this run's approvals in the company it reuses (see below)."
+    },
+    "sod": {
+      "title": "Segregation of duties",
+      "blocked": "Company {{company}} ({{mode}}) refuses {{actions}} by the person who drafted it, and this run drafts and approves as you.",
+      "soloGrantable": "The single-person exception is not in force. You are the company's only approver, so you can grant it.",
+      "soloNotEligible": "The single-person exception cannot apply: the company has more than one person who can approve.",
+      "whatToDo": "Grant the single-person exception in company {{company}}'s policy, have another person approve, or change the mode. The action never changes the policy itself.",
+      "newCompany": "This run creates a new company, which starts with the default mode ({{mode}}) and no single-person exception, so the run will stop right after creating it, before any model call.",
+      "newCompanyNext": "Then grant the exception in the new company's policy and run again with the same snapshot folder name.",
+      "stopped": "Stopped by segregation of duties, before any approval or model call.",
+      "rerun": "Then run again with the same snapshot folder name: the run reuses company {{company}}.",
+      "openPolicy": "Open company {{company}}'s segregation-of-duties policy",
+      "and": " and ",
+      "actions": {
+        "approve_specification": "approving the specification",
+        "approve_architecture": "approving the architecture"
+      }
     }
   }
 }

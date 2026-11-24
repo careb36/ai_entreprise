@@ -1093,6 +1093,9 @@
       "test_owner_action_runner.py": [
         "management"
       ],
+      "test_owner_action_sod.py": [
+        "management"
+      ],
       "test_owner_git_actions_router.py": [
         "management"
       ],
