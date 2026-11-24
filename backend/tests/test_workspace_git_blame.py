@@ -126,6 +126,7 @@ def test_blame_returns_no_author_names_or_emails(repo, heard):
     obs, text = _box(repo, daemon).call(
         _call("workspace__git", operation="blame", path="src/app.py"), 1
     )
+    assert not obs["is_error"] and len(obs["blame"]) == 2
     recorded = json.dumps(obs)
     for secret in (NAME, MAIL, "Grace"):
         assert secret not in text and secret not in recorded
