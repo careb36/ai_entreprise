@@ -130,14 +130,17 @@ SCHEMAS: list[dict[str, Any]] = [
             "description": (
                 "Run the project's tests as they are on disk now (your delivery "
                 "is not written yet) and see the output. `command` may narrow "
-                "the run within the same runner, e.g. `python -m pytest tests/test_x.py`."
+                "the run within the same runner, e.g. `python -m pytest tests/test_x.py`, "
+                "or run a check script the project committed, exactly "
+                "`python3 scripts/<name>.py [args]`, at the project root, when "
+                "this task did not change it."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "A narrower test command with the project's runner (optional); any other command is not run, the folder's own test command runs instead.",
+                        "description": "A narrower test command with the project's runner, or `python3 scripts/<name>.py [args]` (optional); any other command is not run, the folder's own test command runs instead.",
                     },
                 },
             },
