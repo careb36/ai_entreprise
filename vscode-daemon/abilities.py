@@ -70,7 +70,9 @@ _FORGE = ("forge_policy",)
 FEATURES = {
     # The forge policy (§5.3, issue #727): enforced by this daemon.
     "workspace.console.prepare": _FORGE,
-    "workspace.generate": _FORGE,
+    # An emptied file deleted by a delivery (docs/design/move-and-delete-files.md).
+    "workspace.generate": _FORGE + ("delete",),
+    "workspace.edit": ("delete", "move"),
     "workspace.git.base_status": _FORGE,
     "workspace.git.diff": _FORGE,
     "workspace.git.integrate": _FORGE,

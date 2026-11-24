@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.2). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.2). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -204,7 +204,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.search` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `matches`, `files_scanned`, `match_count`, `truncated`, … |
 | `workspace.find` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `path`, `files`, `match_count`, `truncated` |
 | `workspace.map` | request | `repo_map.py` | `workspace_root`, `max_chars`? | `map`, `fingerprint`, `definitions`, `shown`, `partial`, `cached`, … |
-| `workspace.edit` | request | `workspace_edit.py` | `workspace_root`, `session`, `path`, lines or `search` / `replace` | `path`, `sha256_before`, `sha256_after`, `bytes`, `lines`, `checked`, the window |
+| `workspace.edit` | request | `workspace_edit.py`, `workspace_move.py` | `workspace_root`, `session`, `op`? (`edit`, `move`, `delete`, §5.1.4), `path`, lines or `search` / `replace`, or `to_path` / `to_line`? | `path`, `sha256_before`, `sha256_after`, `bytes`, `lines`, `checked`, the window; a move `moved_lines`, `moved_sha256`, `source`, `target`; a delete `deleted` |
 | `workspace.edit.finish` | request | `workspace_edit.py` | `workspace_root`, `session` | `session`, `files` |
 | `workspace.signatures` | request | `signatures.py` | `workspace_root`, `wanted` (`path`, `names`) | `files` (per file `status`, `sha256`, per name `found` / `unknown` / `missing`) |
 | `workspace.related` | request | `code_graph.py` | `workspace_root`, `seeds`, `hops`?, `max_files`? | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched` |
@@ -340,6 +340,29 @@ backend asks before a delivery's commands, so their own timeouts do not
 include the build) and replies the same fields, or `error` with the reason.
 Every `workspace.execute` reply carries `duration_ms`, the daemon's clock
 around the command.
+
+### 5.1.4 Moving lines and deleting an emptied file (additive, issue #766)
+
+`workspace.edit` takes `op`: `edit` (the default, as before), `move` or
+`delete` (`workspace_move.py`, design in
+`docs/design/move-and-delete-files.md`). `move` takes `path`, `start_line`,
+`end_line`, `to_path` and `to_line`?, cuts those lines and inserts the same
+bytes into `to_path` (created when missing), applied to both files or neither,
+and replies `moved_lines`, `moved_sha256` (computed by the daemon), `source`
+and `target` (each `path`, `sha256_before`, `sha256_after`, `lines`; the
+target also `created`). `delete` takes `path` and removes the file only when
+it is empty or whitespace; it replies `deleted`, `sha256_before`. At
+`workspace.edit.finish`, a created file carries `created: true` and a deleted
+one `deleted: true` with no `content`; every original is put back.
+
+`workspace.generate` takes a file entry `{"path", "delete": true,
+"sha256_expected"}`: the file is removed only while it still hashes to
+`sha256_expected` (the daemon's own `finish` report), is a regular file and
+may not hold secrets. Its status is `deleted` (with `sha256_before`) or
+`rejected_delete` (with `error`). A deletion is committed on the task's branch
+like a write, and an undo writes the file back. A daemon announces both as
+features: `"workspace.edit": ["delete", "move"]` and `"delete"` on
+`workspace.generate`; the backend offers neither to a daemon that does not.
 
 ### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
 

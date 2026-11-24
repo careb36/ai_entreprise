@@ -31,7 +31,7 @@ from services.loop.worker import board_writes, record, sprint_notes
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
 from services.tools import registry_lookup, signature_lookup
-from services.tools.workspace_edits import with_tool_edits
+from services.tools.workspace_edits import deletions, with_tool_edits
 from services.workspace import daemon_liveness, git_workflow, workspace_daemon
 from services.workspace.workspace_daemon import detect_test_command
 
@@ -343,11 +343,15 @@ async def _deliver_artifacts(
     payload for QA review.
     """
     targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
+    # Files the edit tool emptied and deleted (docs/design/move-and-delete-files.md).
+    deleted = deletions(agent.get("tool_edits"))
     review_payload = _build_review_payload(deliverable, targets)
+    if deleted:
+        review_payload += "\n\nDeleted: " + ", ".join(d["path"] for d in deleted)
 
     evidence: dict[str, Any] | None = None
     queued_job: dict[str, Any] | None = None
-    if targets:
+    if targets or deleted:
         workspace_root = await asyncio.to_thread(
             _resolve_workspace_root, sprint["company_id"]
         )
@@ -371,7 +375,7 @@ async def _deliver_artifacts(
                     "workspace.generate",
                     {
                         "workspace_root": workspace_root,
-                        "files": targets,
+                        "files": targets + deleted,
                         "interaction_id": f"task-{item['id']}",
                         "sprint_id": sprint["id"],
                         **({"git": git_spec} if git_spec else {}),
@@ -399,10 +403,12 @@ async def _deliver_artifacts(
                 )
                 if nats_client.jetstream_enabled:
                     queued_job = _plan_queued_delivery(
-                        item, sprint, workspace_root, targets, evidence
+                        item, sprint, workspace_root, targets + deleted, evidence
                     ) | ({"git": git_spec} if git_spec else {})
 
-        written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
+        written, _ = evaluate_workspace_writes(
+            [t["path"] for t in targets + deleted], evidence
+        )
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
             evidence["acceptance"] = await asyncio.to_thread(
                 acceptance.evidence_for, engine, item["id"], evidence.get("git")
@@ -443,8 +449,8 @@ async def _deliver_artifacts(
         # The run was recorded as waiting for a job that does not exist.
         recorded = await asyncio.to_thread(record._reverify_run, recorded[0], evidence)
 
-    if targets:
-        comment = _delivery_comment(targets, evidence, recorded)
+    if targets or deleted:
+        comment = _delivery_comment(targets + deleted, evidence, recorded)
         # Without Git a refuted delivery is taken back out (refuted_undo).
         undone = await refuted_undo.undo_refuted(
             nats_client,

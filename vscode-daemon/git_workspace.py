@@ -240,9 +240,15 @@ def deliver(
     parent = _out(["rev-parse", "HEAD"], worktree)
     results = write_files(str(worktree), files)
     written = [r["path"] for r in results if r.get("status") == "written"]
+    deleted = [r["path"] for r in results if r.get("status") == "deleted"]
     commit = None
-    if written:
-        run_git(["add", "--", *written], worktree)
+    if written or deleted:
+        if written:
+            run_git(["add", "--", *written], worktree)
+        if deleted:
+            # ``git add`` of a path Git never tracked fails; ``rm --cached
+            # --ignore-unmatch`` records a tracked file's removal, skips the rest.
+            run_git(["rm", "-q", "--cached", "--ignore-unmatch", "--", *deleted], worktree)
         if (
             run_git(["diff", "--cached", "--quiet"], worktree, check=False).returncode
             != 0
@@ -266,7 +272,7 @@ def deliver(
             )
             commit = _out(["rev-parse", "HEAD"], worktree)
     return {
-        "ok": all(r.get("status") == "written" for r in results),
+        "ok": all(r.get("status") in ("written", "deleted") for r in results),
         "workspace_root": str(worktree),
         "files": results,
         "git": {

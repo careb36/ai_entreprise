@@ -99,6 +99,7 @@
 # docs/architecture/contexts.json).
 /backend/tests/test_acceptance_plan.py           @careb36
 /backend/tests/test_agent_tools_delivery.py      @careb36
+/backend/tests/test_move_tool.py                 @careb36
 /backend/tests/test_app_check.py                 @careb36
 /backend/tests/test_board_moves_carry.py         @careb36
 /backend/tests/test_board_observed.py            @careb36

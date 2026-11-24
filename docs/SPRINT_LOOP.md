@@ -70,7 +70,10 @@ the LangGraph graph is only an optional kickoff conversation.
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files, and only those (an answer without `path=` blocks or tool edits writes nothing and is text for QA; a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
-   parses, `vscode-daemon/file_edits.py`). The worker sends them to the
+   parses, `vscode-daemon/file_edits.py`). A file the edit tool emptied and
+   deleted (`workspace__delete`) travels as a `delete` entry with the hash the
+   daemon reported, and the daemon removes it only while it still holds those
+   bytes ([design](design/move-and-delete-files.md)). The worker sends them to the
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
    `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the

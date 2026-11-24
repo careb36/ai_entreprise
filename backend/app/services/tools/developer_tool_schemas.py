@@ -232,3 +232,73 @@ EDIT_SCHEMA: dict[str, Any] = {
         },
     },
 }
+
+MOVE = "move"
+DELETE = "delete"
+# The tools that change the working copy: never read-only.
+WRITES = frozenset({EDIT, MOVE, DELETE})
+WRITE_NAMES = tuple(f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{w}" for w in sorted(WRITES))
+
+# Beside the edit tool, only when every daemon announces both operations
+# (``workspace_edits.can_move``; docs/design/move-and-delete-files.md).
+STRUCTURE_SCHEMAS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{MOVE}",
+            "description": (
+                "Move lines `start_line`..`end_line` of `path`, byte for byte, to "
+                "`to_path` before its line `to_line` (at the end without it). "
+                "`to_path` may be a new file: it is created. Use it to split a "
+                "file or move code between files instead of retyping it: the "
+                "same bytes arrive, and both files must still parse or nothing "
+                "changes. Moved and created files are delivered as they are on "
+                "disk when you finish: do not repeat them in your answer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The file the lines leave.",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "First line to move.",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "Last line to move, inclusive.",
+                    },
+                    "to_path": {
+                        "type": "string",
+                        "description": "The file they go to; created when missing.",
+                    },
+                    "to_line": {
+                        "type": "integer",
+                        "description": "Insert before this line of `to_path` (default: the end).",
+                    },
+                },
+                "required": ["path", "start_line", "end_line", "to_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{DELETE}",
+            "description": (
+                "Delete a file once it is empty: move its lines out first. A "
+                "file that still has content is refused (a person deletes it). "
+                "The deletion is delivered with your other changes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The emptied file."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+]

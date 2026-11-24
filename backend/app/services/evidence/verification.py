@@ -208,6 +208,8 @@ def evaluate_workspace_writes(
         write = by_path.get(path)
         if write is None:
             problems.append(f"{path} not reported")
+        elif write.get("status") == "deleted":  # An emptied file, removed as asked.
+            continue
         elif write.get("status") != "written":
             reason = f": {write['error']}" if write.get("error") else ""
             problems.append(f"{path} {write.get('status') or 'not written'}{reason}")

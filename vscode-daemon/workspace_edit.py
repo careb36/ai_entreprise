@@ -184,8 +184,18 @@ def _window(text: str, first: int, last: int) -> Tuple[str, int, int]:
 def edit_file(workspace_path: str, data: Dict[str, Any], resolve) -> Dict[str, Any]:
     """Apply one edit to an existing file of the project, when it still parses.
 
-    Under the project's lock (``project_lock``), like a delivery and an undo."""
+    Under the project's lock (``project_lock``), like a delivery and an undo.
+    ``op`` ``move`` and ``delete`` are ``workspace_move.py``'s."""
+    import workspace_move
+
+    op = data.get("op") or "edit"
     with project_lock.lock_for(workspace_path):
+        if op == "move":
+            return workspace_move.move_lines(workspace_path, data, resolve)
+        if op == "delete":
+            return workspace_move.delete_file(workspace_path, data, resolve)
+        if op != "edit":
+            raise ReadError(400, f"No such edit operation: {op}")
         return _edit_file(workspace_path, data, resolve)
 
 
@@ -274,7 +284,11 @@ def _finish(workspace_path: str, session: Any, resolve) -> Dict[str, Any]:
     A file is read and restored only while its path still leads to it
     (``_saved_target``) and it holds the bytes the session last wrote. A file
     someone saved meanwhile (``conflict``), or whose path now leads elsewhere,
-    is left as it is, never delivered, and its original stays in the journal."""
+    is left as it is, never delivered, and its original stays in the journal.
+
+    A file the session created (``created``) is removed, with the folders it
+    made when they are empty; one it deleted (``deleted``, no ``content``) is
+    written back. A file created and deleted in the same session is neither."""
     root = workspace_read._root(workspace_path)
     folder = _session_folder(session)
     manifest = _load_manifest(folder)
@@ -286,33 +300,56 @@ def _finish(workspace_path: str, session: Any, resolve) -> Dict[str, Any]:
                                   "sha256_original": entry.get("sha256"), "changed": False, "restored": False}
         target = _saved_target(root, relative, resolve)
         current = target.read_bytes() if target is not None and target.is_file() else None
+        expected = entry.get("sha256_written")
         if target is None:
             report["error"] = "the path no longer leads to the file the edit tool changed; nothing was read or restored"
-        elif current is None or _sha256(current) != entry.get("sha256_written"):
+        elif (current is None) != (expected is None) or (current is not None and _sha256(current) != expected):
             report["conflict"] = True
             report["error"] = "the file changed outside the edit tool after its last edit; it was left as it is"
         if "error" in report:
             kept[relative] = entry
             files.append(report)
             continue
-        original = (folder / entry["original"]).read_bytes()
-        _write_atomically(target, original)
-        report.update({
-            "content": current.decode("utf-8", errors="replace"),
-            "sha256": _sha256(current),
-            "changed": current != original,
-            "restored": _sha256(target.read_bytes()) == entry.get("sha256"),
-        })
+        original = (folder / entry["original"]).read_bytes() if entry.get("original") else None
+        _restore(root, target, original, entry.get("created_dirs") or [])
+        if current is None:
+            report.update({"deleted": original is not None, "changed": original is not None,
+                           "restored": target.is_file() and _sha256(target.read_bytes()) == entry.get("sha256")})
+        else:
+            report.update({
+                "content": current.decode("utf-8", errors="replace"),
+                "sha256": _sha256(current),
+                "changed": current != original,
+                "created": original is None,
+                "restored": (not target.exists()) if original is None
+                else _sha256(target.read_bytes()) == entry.get("sha256"),
+            })
         files.append(report)
     if kept:
         # The originals of the files left alone stay, for a person to compare.
         for relative, entry in (manifest.get("files") or {}).items():
-            if relative not in kept:
+            if relative not in kept and entry.get("original"):  # None: one it created.
                 (folder / entry["original"]).unlink(missing_ok=True)
         _save_manifest(folder, {**manifest, "files": kept})
     else:
         shutil.rmtree(folder, ignore_errors=True)
     return {"session": session, "files": files}
+
+
+def _restore(root: Path, target: Path, original: Optional[bytes], created_dirs: list) -> None:
+    """Put *original* back at *target*; ``None``: the session created it, so remove
+    it and the folders it made, deepest first, while they are empty."""
+    if original is None:
+        target.unlink(missing_ok=True)
+        for relative in created_dirs:
+            try:
+                (root / relative).rmdir()
+            except OSError:
+                break  # Not empty, or already gone: left as it is.
+    elif target.exists():
+        _write_atomically(target, original)
+    else:
+        target.write_bytes(original)
 
 
 async def handle_edit(nc, msg, reply, request_body, resolve) -> None:

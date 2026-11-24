@@ -94,7 +94,8 @@ def observed_paths(evidence: dict[str, Any] | None) -> list[str] | None:
         paths += _strings(
             w.get("path")
             for w in writes
-            if isinstance(w, dict) and w.get("status") == "written"
+            # A deletion changes the path as much as a write does.
+            if isinstance(w, dict) and w.get("status") in ("written", "deleted")
         )
     if isinstance(console, dict):
         paths += _strings(
