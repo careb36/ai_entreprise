@@ -11,7 +11,9 @@ file per decision to the repository through the workspace daemon, whose
 sha256 of the bytes on disk is what the backend keeps, per file. The
 architecture is the company's (``arch_versions``): for a new specification
 the Architect revises the current version, and the earlier specifications'
-covers are kept.
+covers are kept. While it writes or revises, the Architect may read the
+project with the read-only workspace tools beside its research tools
+(``tool_steps.ARCH_AUTHOR``: R and S; ``planning_reads.author_turn``).
 """
 
 from __future__ import annotations
@@ -26,11 +28,13 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
+from services.contracts import tool_steps
 from services.evidence import standards
 from services.planning import (
     adr_docs,
     arch_check,
     arch_versions,
+    planning_reads,
     spec_author,
     spec_check,
     spec_planning,
@@ -277,16 +281,25 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
         request["specification_id"],
         request["model"],
     )
+    toolbox, note, record = planning_reads.author_turn(
+        tool_steps.ARCH_AUTHOR,
+        ARCHITECT_ROLE,
+        request.get("company_id"),
+        request["model"],
+        research_tools.toolbox_for_request(ARCHITECT_ROLE, request),
+    )
     try:
         answer, calls = spec_author.ask_with_tools(
             request["model"],
             request["system_prompt"],
-            request["prompt"],
+            request["prompt"] + note,
             max_tokens=DRAFT_MAX_TOKENS,
             role=ARCHITECT_ROLE,
             bu_id=request["bu_id"],
-            toolbox=research_tools.toolbox_for_request(ARCHITECT_ROLE, request),
+            toolbox=toolbox,
             company_id=request.get("company_id"),
+            record=record,
+            exhausted_note=planning_reads.AUTHOR_EXHAUSTED_NOTE if record else None,
         )
     except spec_author.SpecAuthorError as exc:
         raise ArchAuthorError(str(exc)) from exc

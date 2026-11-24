@@ -8,6 +8,11 @@ says what blocks its approval, a person answers the questions and edits,
 and only a person approves. A revision is asked with the questions already
 answered, so the PO writes the next draft from them.
 
+While it writes, the PO may read the project with the read-only workspace
+tools beside its research tools (``tool_steps.SPEC_AUTHOR``: R and S;
+``planning_reads.author_turn``); each round is an audit turn with the calls'
+observations. Without a daemon or root, the research tools alone.
+
 No usable answer leaves the specification as it was.
 """
 
@@ -23,9 +28,10 @@ from models import Agent
 from models.specification import Specification
 from sqlmodel import Session, select
 
+from services.contracts import tool_steps
 from services.evidence import standards
 from services.models.company_models import business_unit_id
-from services.planning import spec_check
+from services.planning import planning_reads, spec_check
 from services.planning.sprint_planner import _build_stack_summary
 from services.tools import mcp_tools, research_tools
 
@@ -129,10 +135,12 @@ def ask_with_tools(
     bu_id: int | None = None,
     toolbox: Any = None,
     company_id: int | None = None,
+    record: Any = None,
+    exhausted_note: str | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """``ask`` with a toolbox (``mcp_tools.chat_with_tools``): the answer and
-    the observations of every tool call the agent made on the way. Without a
-    toolbox it is ``ask`` itself (the one place a test replaces)."""
+    """``ask`` with a toolbox (``tool_turn``): the answer and the observations
+    of every tool call the agent made on the way. Without a toolbox it is
+    ``ask`` itself (the one place a test replaces)."""
     if toolbox is None:
         plain = ask(
             model,
@@ -145,9 +153,47 @@ def ask_with_tools(
             company_id=company_id,
         )
         return plain, []
+    result, calls = tool_turn(
+        model,
+        system_prompt,
+        prompt,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        role=role,
+        bu_id=bu_id,
+        toolbox=toolbox,
+        company_id=company_id,
+        record=record,
+        exhausted_note=exhausted_note,
+    )
+    return _content(result), calls
+
+
+def tool_turn(
+    model: str,
+    system_prompt: str | None,
+    prompt: str,
+    *,
+    toolbox: Any,
+    max_tokens: int = DRAFT_MAX_TOKENS,
+    timeout: float = DRAFT_TIMEOUT_SECONDS,
+    role: str = PO_ROLE,
+    bu_id: int | None = None,
+    company_id: int | None = None,
+    record: Any = None,
+    exhausted_note: str | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The proxy's raw answer through the tool loop (``mcp_tools.chat_with_tools``)
+    and the observations of every call. *record* (``planning_reads.recorder``)
+    makes each round an audit turn, the last one with every observation."""
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
+    extra: dict[str, Any] = {"exhausted_note": exhausted_note} if exhausted_note else {}
+    if record is not None:
+        extra["on_round"] = lambda r, c: record(
+            r, "tool calls: " + mcp_tools.summarize(c)
+        )
     try:
         result, calls = mcp_tools.chat_with_tools(
             _client(timeout, max_tokens, company_id),
@@ -156,10 +202,13 @@ def ask_with_tools(
             role,
             toolbox,
             bu_id=bu_id,
+            **extra,
         )
     finally:
         toolbox.close()
-    return _content(result), calls
+    if record is not None and calls:
+        record(result, f"answer after {len(calls)} tool call(s)", calls)
+    return result, calls
 
 
 DRAFT_FORMAT = """\
@@ -317,13 +366,22 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
         request["company_id"],
         request["model"],
     )
+    toolbox, note, record = planning_reads.author_turn(
+        tool_steps.SPEC_AUTHOR,
+        PO_ROLE,
+        request["company_id"],
+        request["model"],
+        research_tools.toolbox_for_request(PO_ROLE, request),
+    )
     answer, calls = ask_with_tools(
         request["model"],
         request["system_prompt"],
-        request["prompt"],
+        request["prompt"] + note,
         bu_id=request["bu_id"],
-        toolbox=research_tools.toolbox_for_request(PO_ROLE, request),
+        toolbox=toolbox,
         company_id=request["company_id"],
+        record=record,
+        exhausted_note=planning_reads.AUTHOR_EXHAUSTED_NOTE if record else None,
     )
     spec = parse_draft(answer)
     if spec is None:
