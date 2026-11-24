@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.2). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.2, §5.6). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -215,7 +215,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`?, `forge_policy`? (§5.3) | `ok`, the branch, commit and request URL, `forge_policy`, `remote_contacted` |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`?, `forge_policy`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
-| `workspace.git.diff` | request | `git_diff.py` | `workspace_root`, `commit`, `base`?, `forge_policy`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated` |
+| `workspace.git.diff` | request | `git_diff.py`, `git_view.py` | `workspace_root`, `commit`, `base`?, `forge_policy`?; or `view` (`status`, `changed`, `diff`, `log`, §5.6) with `base`?, `path`?, `limit`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated`; a view: `view` and its fields (§5.6) |
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
@@ -473,6 +473,37 @@ the backend hashes what it received. `sandbox_required` is the machine's
 activate a `command` standard (§12 decision 4 of the design). A malformed
 request is a 400, a folder not on this machine a 404, and a folder that is
 not a repository, a branch or commit it does not have, a 409.
+
+### 5.6 The agents' read-only git views (additive, issue #766)
+
+`workspace.git.diff` with `view` answers one of a fixed set of read-only
+views of the repository at `workspace_root` (a task's worktree, or the
+project), for the agents' `workspace__git` tool
+(`backend/app/services/tools/workspace_git.py`), instead of an integration
+diff; `commit` is then not needed. The daemon announces it as the `view`
+feature of `workspace.git.diff` (§2.1), and the backend offers each
+operation only when every daemon announces it: a daemon from before it would
+read the request as an integration diff without a commit and refuse it.
+
+| `view` | Request | Reply (beside `ok`, `view`) |
+| --- | --- | --- |
+| `status` | — | `branch` (or `null`, detached), `entries` (`code`, the porcelain v1 `XY`; `path`; `from` for a rename or copy), `count`, `truncated` (300 entries) |
+| `changed` | `base`? | `base`, `merge_base`, `branch`, `files` (`path`, `change`: `added`, `modified`, `deleted` or `untracked`), `count`, `truncated` (300) |
+| `diff` | `path`, `base`? | `base`, `merge_base`, `path`, `patch` (60,000 characters), `truncated`, `untracked` |
+| `log` | `limit`? (1 to 20, default 10) | `branch`, `commits` (`commit`, the full id; `subject`, 200 characters), `limit` |
+
+`changed` and `diff` compare the working tree, committed or not, with the
+merge base of `HEAD` and `base` (a local branch), else the default branch of
+§5.5 (origin's HEAD, `main`, `master`). `changed` lists untracked files
+(`git ls-files --others --exclude-standard`) too. Paths are relative to
+`workspace_root`; a `path` that is absolute, has `..`, resolves outside it
+(a symlink followed), or names VCS metadata or a file that may hold secrets
+(`workspace_read.is_sensitive`) is a 400. Every git command is an argument
+list without a shell and without a prompt (`git_env.py`); nothing is written
+and no remote is contacted, whatever the forge policy. A folder not on this
+machine is a 404; one that is not a repository, or a base it does not have,
+a 409. The backend redacts secret-looking lines from a patch before a model
+sees it, as it does a read's.
 
 ## 6. Conformance fixtures
 

@@ -1602,6 +1602,10 @@
       "test_workspace_delete_delivery.py": [
         "workspace"
       ],
+      "test_workspace_git_tool.py": [
+        "tools",
+        "workspace"
+      ],
       "test_workspace_host.py": [
         "release"
       ],
