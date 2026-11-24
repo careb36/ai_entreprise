@@ -29,6 +29,15 @@ export function useOwnerActionRun(companyId: number | null, name: string, runId:
   })
 }
 
+/** What the Owner picks from for *name* (branches, open issues), read when *enabled*. */
+export function useOwnerActionOptions(companyId: number | null, name: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['owner-action-options', companyId, name] as const,
+    queryFn: () => api.getOwnerActionOptions(companyId as number, name),
+    enabled: companyId !== null && enabled,
+  })
+}
+
 /** Preview (writes nothing), start (the preview's digest echoed) and cancel. */
 export function useOwnerActionMutations(companyId: number | null) {
   const client = useQueryClient()
@@ -39,8 +48,9 @@ export function useOwnerActionMutations(companyId: number | null) {
         api.previewOwnerAction(companyId as number, name, params),
     }),
     start: useMutation({
-      mutationFn: ({ name, params, confirmation }: { name: string; params: Record<string, unknown>; confirmation: string }) =>
-        api.startOwnerAction(companyId as number, name, params, confirmation),
+      mutationFn: ({ name, params, confirmation, stepUpPassword }: {
+        name: string; params: Record<string, unknown>; confirmation: string; stepUpPassword?: string
+      }) => api.startOwnerAction(companyId as number, name, params, confirmation, stepUpPassword),
       onSuccess: refresh,
     }),
     cancel: useMutation({

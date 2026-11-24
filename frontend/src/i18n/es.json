@@ -5127,7 +5127,9 @@
     "unavailable": {
       "harness_not_found": "No disponible: el backend no encuentra scripts/self_host (configura SELF_HOST_REPOSITORY_DIR).",
       "daemon_lacks_checkout": "No disponible: el daemon del workspace no anuncia workspace.self_host.checkout; actualízalo y reinícialo.",
-      "unknown": "No disponible."
+      "unknown": "No disponible.",
+      "daemon_lacks_self_host_git": "No disponible: el daemon del espacio de trabajo no anuncia workspace.self_host.git, land y push; actualízalo y reinícialo.",
+      "github_token_missing": "No disponible: el backend no tiene GITHUB_TOKEN (cerrar un issue necesita uno con issues: write)."
     },
     "form": {
       "checkoutName": "Carpeta de la copia",
@@ -5137,7 +5139,16 @@
       "tokenBudget": "Presupuesto de tokens",
       "urgent": "Marcar el sprint como urgente (no espera la ventana de ejecución)",
       "review": "Revisar costo y efecto",
-      "oneAtATime": "Hay una ejecución en curso"
+      "oneAtATime": "Hay una ejecución en curso",
+      "branch": "Rama que aterrizar",
+      "branchPlaceholder": "Elige una de las ramas locales del daemon",
+      "issue": "Issue que cerrar",
+      "issuePlaceholder": "Elige un issue abierto",
+      "loadingOptions": "Cargando las opciones…",
+      "optionsError": "No se pudieron cargar las opciones: {{message}}",
+      "noBranches": "El daemon no lista ninguna rama local además de main.",
+      "noIssues": "No hay issues abiertos.",
+      "pushHint": "Refleja main local y las notas de land.sh en origin, solo por avance rápido."
     },
     "confirm": {
       "title": "¿Ejecutar {{name}}?",
@@ -5177,7 +5188,15 @@
       "containerMode": "Modo contenedor",
       "images": "Imágenes",
       "tokens": "Tokens observados",
-      "exitStatus": "Código de salida"
+      "exitStatus": "Código de salida",
+      "mainBefore": "main antes",
+      "mainAfter": "main después",
+      "checks": "check.sh full",
+      "pushedFrom": "origin/main antes",
+      "pushedTo": "origin/main después",
+      "issueUrl": "Issue",
+      "commentUrl": "Comentario",
+      "closed": "Cerrado"
     },
     "actions": {
       "self_host_container_run": {
@@ -5191,7 +5210,66 @@
           "sandbox": "Lee qué sandbox informó el daemon para cada ejecución de pruebas, aparte del pedido.",
           "urgent": "Marca el sprint como urgente, para que la ventana de ejecución no lo retenga."
         }
+      },
+      "land_branch": {
+        "title": "Aterrizar una rama",
+        "description": "Ejecuta scripts/land.sh <rama> en la computadora del daemon: une main y la rama en un worktree limpio, corre check.sh full y avanza main local. No envía nada.",
+        "effect": {
+          "merge": "Une main y {{branch}} ({{count}} commits) en el worktree limpio de land.sh.",
+          "checks": "Corre scripts/check.sh full sobre el commit de unión (decenas de minutos en la computadora del daemon).",
+          "main": "Si las comprobaciones pasan, escribe el registro de verificación de land.sh y avanza main local desde {{main}}.",
+          "protected": "Toca {{count}} rutas protegidas: LAND_OWNER=1 se fija solo para esta ejecución, después de tu contraseña.",
+          "no_push": "No se envía nada: reflejar main en GitHub es otra acción."
+        }
+      },
+      "push_main": {
+        "title": "Enviar main a GitHub",
+        "description": "Refleja main local y las notas de land.sh en origin después de un fetch, solo por avance rápido, con las credenciales de git de la propia computadora del daemon.",
+        "effect": {
+          "public": "El repositorio es PÚBLICO: lo que se envía queda visible para todo el mundo.",
+          "push": "Envía {{count}} commits: main de origin pasa a ser {{main}} ({{remote}}).",
+          "notes": "Envía las notas de verificación de land.sh (refs/notes/verification).",
+          "no_notes": "No hay notas de verificación que enviar.",
+          "never_force": "Nunca forzado: si origin se movió, el envío se rechaza."
+        }
+      },
+      "close_issue": {
+        "title": "Cerrar un issue",
+        "description": "Publica un comentario en un issue de GitHub y lo cierra, después de comprobar que su arreglo está en origin.",
+        "effect": {
+          "comment": "Publica el comentario de abajo en el #{{number}} de {{repository}}.",
+          "close": "Cierra el #{{number}} como completado.",
+          "override": "Lo cierra aunque el arreglo todavía no esté en origin/main (queda registrado como excepción)."
+        }
       }
+    },
+    "repo": {
+      "commits": "Commits ({{count}})",
+      "more": "…y más que no se muestran.",
+      "diffstat": "Archivos cambiados",
+      "protected": "Rutas protegidas que toca (LAND_OWNER=1 solo para esta ejecución)",
+      "stepUp": "Tu contraseña, para confirmar este aterrizaje protegido",
+      "stepUpHint": "¿Entras con SSO? Déjala vacía, vuelve a iniciar sesión y confirma antes de cinco minutos.",
+      "publicWarning": "Este repositorio es PÚBLICO: estos commits quedan visibles para todo el mundo.",
+      "issue": "Issue",
+      "fix": "Commit que lo arregla",
+      "onOrigin": "en origin/main",
+      "notOnOrigin": "todavía no está en origin/main",
+      "noFix": "Ningún commit de main nombra este issue.",
+      "comment": "Comentario que se publica en el issue (exactamente este texto)",
+      "override": "Cerrarlo aunque el arreglo todavía no esté en origin",
+      "repreview": "Previsualizar este texto",
+      "repreviewHint": "Vuelve a previsualizar para que la confirmación cubra lo que cambiaste.",
+      "blockedBy": "No puede ejecutarse ahora:",
+      "confirm": "Confirmar",
+      "diffLine": "{{path}} +{{added}} −{{deleted}}"
+    },
+    "blockers": {
+      "nothing_to_land": "La rama ya está en main: no hay nada que aterrizar.",
+      "not_fast_forward": "origin/main no es ancestro de main: no es un avance rápido. Concílialo a mano (merge, nunca force).",
+      "nothing_to_push": "origin/main ya es main: no hay nada que enviar.",
+      "no_verification_record": "main no tiene registro de verificación: aterriza los cambios con land.sh primero.",
+      "fix_not_on_origin": "El arreglo no está en origin/main: envía main primero o marca la excepción."
     }
   }
 }
