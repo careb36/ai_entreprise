@@ -15,7 +15,7 @@ agent-computer interface (``developer_tool_replies``):
   (``vscode-daemon/workspace_edit.py``); offered only where the task's files
   may be touched (its worktree, or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
-  within the same runner), or a check script committed under ``scripts/``
+  within the same runner, ``test_commands``), or a check script committed under ``scripts/``
   that the task did not change (``check_scripts``), bounded output.
 
 Every call is an observation the backend made, recorded on the run's
@@ -62,6 +62,7 @@ from services.tools import (
     mcp_tools,
     repo_map,
     research_tools,
+    test_commands,
     test_runs,
     workspace_edits,
 )
@@ -81,22 +82,6 @@ LIST_TIMEOUT_SECONDS = 20.0
 READ_TIMEOUT_SECONDS = 20.0
 SEARCH_TIMEOUT_SECONDS = 40.0
 MAP_MAX_CHARS = 2500
-# The command the model may narrow the test run to must start with the
-# project's own runner: never an arbitrary shell command.
-RUNNERS = (
-    "python -m pytest",
-    "pytest",
-    "npm test",
-    "npx vitest",
-    "npx jest",
-    "go test",
-    "cargo test",
-)
-
-# What may run a runner inside the project's environment: a narrower command
-# keeps the same one (``poetry run python -m pytest`` stays under Poetry).
-WRAPPERS = ("poetry run ", "pipenv run ", "uv run ")
-
 Requester = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
 
@@ -104,10 +89,7 @@ def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-def _runs_with(command: str, runner: str) -> bool:
-    """Whether *command* is *runner* itself or *runner* followed by arguments:
-    ``python -m pytest_custom`` is not ``python -m pytest``."""
-    return command == runner or command.startswith(runner + " ")
+_runs_with = test_commands.runs_with
 
 
 def offered_to(role: str | None) -> bool:
@@ -286,8 +268,10 @@ class WorkspaceToolbox:
             checked, why = check_scripts.attempt(self, arguments, extra)
             if checked is not None:
                 return checked
-            folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
-            command = self._test_command(arguments.get("command"), plan.get("test"))
+            # A narrower command on the folder's runner (``test_commands``).
+            folder, plan, command, notes, refused = test_commands.resolve(
+                self.folder_tests, arguments
+            )
             extra["command"] = command
             extra["folder"] = folder
             if self.sandbox_error:
@@ -313,27 +297,10 @@ class WorkspaceToolbox:
                 self.result_max_chars,
                 arguments.get("command"),
                 command,
-                why,
+                why or refused,
+                notes,
             )
         raise RuntimeError("unknown tool")
-
-    def _test_command(self, requested: Any, base: str | None = None) -> str:
-        """The folder's test command, or a narrower one on the same runner."""
-        base = str(base if base is not None else self.test_command or "")
-        wanted = str(requested or "").strip()
-        if not wanted:
-            return base
-        wrapper = next((w for w in WRAPPERS if base.startswith(w)), "")
-        inner = base[len(wrapper) :]
-        runner = next((r for r in RUNNERS if _runs_with(inner, r)), None)
-        if (
-            runner
-            and wanted.startswith(wrapper)
-            and _runs_with(wanted[len(wrapper) :], runner)
-            and all(ch not in wanted for ch in ";&|`$><\n")
-        ):
-            return wanted
-        return base
 
     def close(self) -> None:
         """The edits' files to deliver come back; the originals go back on disk."""

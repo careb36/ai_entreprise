@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `signature_lookup`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -130,6 +130,18 @@ written as text; the tool budget had run out".
 - `test_runs.py`: what `workspace__run_tests` may run, per folder, installing
   first in an isolated sandbox, and the one `workspace.execute` request every
   run goes through. The delivery's own test run is the evidence.
+- `test_commands.py`: what a narrower `workspace__run_tests` command runs.
+  Leading `VAR=value` assignments are set aside on both sides before the
+  wrapper and the runner are compared; the folder command's own come back and
+  the requested ones are never applied. A leading `cd <folder> &&` for the test
+  folder is dropped (with no `folder` argument it names the folder), a missing
+  wrapper is put back, `pytest` / `python -m pytest` / `python3 -m pytest` run
+  as the folder's spelling, and a trailing `| tail -n N`, `2>&1` or `; echo
+  ...$?` is dropped: it only changes what is printed, the reply gives the exit
+  status and the output's end, and refusing would run the whole suite. What
+  is left must hold no shell operator. Each change is said before the output
+  (`developer_tool_replies.tests_text`); anything else runs the folder's
+  command, with the reason.
 - `check_scripts.py`: `workspace__run_tests` with exactly `python3
   scripts/<name>.py [args]` (or `python`) runs that check at the project root,
   in the sandbox and under the daemon's command policy, when the script is
@@ -140,7 +152,10 @@ written as text; the tool budget had run out".
   plain characters only (no shell operator, quote, variable, glob, `..` or
   absolute path), so no shell reads more than one simple command. Anything
   else keeps the substitution: the folder's test command runs and the reply
-  says why. The observation carries `check_script` (path, commit, both
+  says why. A `poetry run` / `uv run` / `pipenv run` wrapper, a
+  `../scripts/<name>.py` that resolves to the root's `scripts/` from the call's
+  `folder`, and the same trailing noise are read as that command, each said
+  in the reply. The observation carries `check_script` (path, commit, both
   sha256, or `refused` and why).
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole.

@@ -139,16 +139,21 @@ def tests_text(
     asked: Any = None,
     ran: str = "",
     why: str | None = None,
+    notes: list[str] | tuple[str, ...] = (),
 ) -> str:
     """The run's status and output's end; first, when the command asked for was
     not the one run, which one ran instead and, for a check script that may
     not run (``check_scripts``), *why*. In sprint 6 (2026-11-23) a QA asked
     for `python scripts/check_file_sizes.py`, was answered the full suite's
-    output under "exit status 0", and reported a traceback nothing produced."""
+    output under "exit status 0", and reported a traceback nothing produced.
+    *notes*: what was changed to run the narrower command asked for
+    (``test_commands``), each said."""
     body = f"exit status {exit_code}\n{output[-max_chars:] if output else NO_OUTPUT}"
     wanted = str(asked or "").strip()
     if not wanted or wanted == ran:
         return body
+    if notes and not why:
+        return f"[`{wanted}` ran as `{ran}`: {'; '.join(notes)}.]\n" + body
     reason = (
         f"{why}, so"
         if why
