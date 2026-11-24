@@ -68,7 +68,7 @@ delivery, Verifier and QA as the task worker's own output.
 
 ### The GitHub adapter
 
-`github_adapter.py`: ingests a pull request as a run.
+`github_adapter.py`: ingests a pull request as a run. For the owner action `close_issue` it also lists a repository's open issues, posts a comment exactly as given and closes an issue (`list_open_issues`, `comment_on_issue`, `close_issue`, with `GITHUB_TOKEN`), raising `GitHubApiError` or `GitHubRateLimited`, never a transport exception; `repository_of` reads `owner/repo` from a github.com remote URL. The router wires it into management's owner actions; it is still the one GitHub adapter in `http_adapters`.
 
 ## See also
 

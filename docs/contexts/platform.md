@@ -98,6 +98,13 @@ sprint closes once.
   family. A cookie-authenticated unsafe request needs `X-Fabrique-CSRF`.
   Login is rate-limited per address and per account. Design:
   [`SESSIONS.md`](../archive/design/SESSIONS.md).
+- **Step-up** (`backend/app/step_up.py`): a fresh re-authentication in the
+  request that starts a dangerous owner action (a protected `land_branch`):
+  the password, checked with bcrypt and the same per-account backoff as the
+  sign-in, or for an SSO-only account a session whose SSO sign-in is under
+  five minutes old. The password is never stored or audited; the start's
+  audit row names the proof (`password`, `sso_recent`).
+  [Design](../design/owner-actions.md), threat L1.
 - **Email addresses** are compared by one rule, `contracts/emails`.
   Registration answers alike for a new and a taken address.
 - **Invitations** (`invitations.py`): an invite adds nobody and answers the
