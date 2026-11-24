@@ -123,6 +123,29 @@ def held(engine: Engine, name: str, ident: int | str = 0) -> Iterator[bool]:
             yield acquired
 
 
+def is_held(engine: Engine, name: str, ident: int | str = 0) -> bool:
+    """Whether some caller holds the lock *name*/*ident* now; never takes it.
+
+    On Postgres it reads ``pg_locks`` (an advisory bigint key is split into
+    ``classid``, the high 32 bits, and ``objid``, the low 32, with
+    ``objsubid`` 1); elsewhere the process-local table.
+    """
+    key = lock_key(name, ident)
+    if not is_postgres(engine):
+        with _local_lock:
+            return key in _local_held
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted"
+                " AND classid::bigint = :hi AND objid::bigint = :lo AND objsubid = 1"
+                " LIMIT 1"
+            ),
+            {"hi": key >> 32, "lo": key & 0xFFFF_FFFF},
+        ).first()
+        return row is not None
+
+
 def in_transaction(session: Any, name: str, ident: int | str = 0) -> None:
     """Wait for the lock *name*/*ident* inside *session*'s transaction; it is
     released when that transaction commits or rolls back (Postgres only)."""

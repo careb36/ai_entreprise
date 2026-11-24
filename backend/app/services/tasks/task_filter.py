@@ -29,7 +29,7 @@ from models import AgentRun, BacklogItem, Sprint, Verification
 from sqlmodel import Session, select
 
 from services.contracts import roles, task_filters
-from services.tasks import task_projection
+from services.tasks import dependencies, task_hold, task_projection
 
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 5000
@@ -226,17 +226,31 @@ def board_observations(
 
     ``observed``: the latest run's id, the Verifier's verdict, risk tier, the
     areas it named and the protected paths the daemon saw written, and
-    whether the task waits for a person (its ``TaskRecord``, which holds a
-    task for a declared protected path too). ``reported``: the protected
-    paths only the producer declared, a claim.
+    what holds it back (``task_hold``: a person, a dependency, a retry, a
+    risk hold, a freeze or the run window) and whether only a person
+    releases that hold. ``reported``: the protected paths only the producer
+    declared, a claim.
     """
     if not items:
         return {}
     runs = latest_runs(session, company_id, [item.id for item in items])
-    records = task_projection.records_for(session, items)
+    histories = task_projection.histories_for(session, items)
+    records = {
+        item.id: task_projection.TaskRecord(
+            item.comments, histories.get(item.id, []), item.assignee
+        )
+        for item in items
+    }
+    by_id = {item.id: item for item in items}
     out: dict[int, dict[str, Any]] = {}
     for item in items:
         facts = runs[item.id]
+        hold = task_hold.hold_of(
+            records[item.id],
+            item.status,
+            dependencies.waiting_for(by_id, item),
+            histories.get(item.id, []),
+        )
         out[item.id] = {
             "observed": {
                 "run_id": facts["run_id"],
@@ -244,7 +258,10 @@ def board_observations(
                 "risk_tier": facts["risk_tier"],
                 "risk_areas": facts["risk_areas"],
                 "protected_paths": facts["protected_paths"],
-                "waits_for_person": records[item.id].waits_for_a_person(item.status),
+                # A task that only waits for another task does not wait for a person.
+                "waits_for_person": records[item.id].waits_for_a_person(item.status)
+                and task_hold.waits_for_person(hold),
+                "hold": hold,
             },
             "reported": {"protected_paths": facts["declared_protected_paths"]},
         }

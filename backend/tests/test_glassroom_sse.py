@@ -29,8 +29,18 @@ async def test_publish_sse_event_fans_out_to_all_subscribers():
     payload = json.dumps({"type": "message", "agent": "PO", "message": "fanout"})
     await publish_sse_event(sprint_id, payload)
 
-    assert await queue_a.get() == payload
-    assert await queue_b.get() == payload
+    # An event without an id (the daemon's) gets one, the same for everyone,
+    # so a client that reconnects knows the replay of it (issue #766).
+    first, second = await queue_a.get(), await queue_b.get()
+    assert first == second
+    sent = json.loads(first)
+    assert sent.pop("event_id")
+    assert sent == json.loads(payload)
+    # One with an id keeps it.
+    with_id = json.dumps({"type": "message", "event_id": "e-1", "message": "x"})
+    await publish_sse_event(sprint_id, with_id)
+    assert json.loads(await queue_a.get())["event_id"] == "e-1"
+    await queue_b.get()
 
     unregister_sse_connection(sprint_id, queue_a)
     unregister_sse_connection(sprint_id, queue_b)

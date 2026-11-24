@@ -140,6 +140,30 @@ a new attempt with a fresh tool budget), then blocks it. Autonomy (Manager to ch
 at 1 every QA-approved task waits for a person, at 2 only high-risk ones, at 3
 follow-ups and procedures also run on their own.
 
+### What the Live page reads
+
+`live_state.py`, `GET /v1/sprints/{id}/live_state` (Viewer): the Live page's
+statuses from the records (issue #766).
+
+- `working`: the runs in flight now, only while the sprint is `active` or
+  `needs_split`. `in_flight.py` registers an assignee's run of a claimed task
+  (`kind: task`, around `task_run._run_claimed_task`) and QA's review
+  (`kind: review`, around `qa_review._qa_review`) for as long as the call is on
+  this process's stack; an `in_progress` task whose lock another replica holds
+  (`locks.is_held`, read from `pg_locks`) counts too, with `since: null`.
+- `pause_kind`: why a paused sprint is paused, read from the reason its pauser
+  wrote: `person` (none, or "Paused by"), `no_credit`, `nothing_done`,
+  `budget`, `acknowledgement`, `daemon`, else `other`. The board's sprint has
+  it too.
+- `closed_at`: a completed or cancelled sprint's latest sealed progress
+  snapshot (naive UTC).
+- `tiles`: `active_agents` (distinct roles in `working`), `agent_failures`
+  (the sprint's `review_failed` and `retried` events), `blocked_tasks`,
+  `open_reworks` (tasks not done or discarded with an unanswered rework
+  request), `last_agent_event_at` (newest event whose actor is a role),
+  `daemon` (heartbeat liveness, `services/workspace/daemon_liveness`) and
+  `previous_sprint` (the company's latest completed sprint before this one).
+
 ### The run window
 
 - `preconditions.py`: the Owner's acknowledgements a sprint needs before it runs

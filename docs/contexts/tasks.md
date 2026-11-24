@@ -92,6 +92,16 @@ that delivered before its dependencies closed.
 checked by `contracts/board_notes`, each written with a `board_note` event. A
 person may mark one wrong. Design: [`SPRINT_BOARD.md`](../archive/design/SPRINT_BOARD.md).
 
+### What holds a task back
+
+`task_hold.py`: the board's `observed.hold` for each task, from its
+`TaskRecord` (issue #766): `frozen`, `risk_hold`, `dependency` (with
+`waiting_for`), `retry_pending`, `review_pending`, `person` (with the latest
+verdict as `reason`) for a blocked task; `dependency` or `run_window` for a
+`todo` one; `null` otherwise. `observed.waits_for_person` is true only for
+the holds a person releases (`frozen`, `risk_hold`, `person`), so a task that
+waits for another task is not shown as waiting for a person.
+
 ### Filters and saved views
 
 `task_filter.py` evaluates a filter over an allowlist of fields from the

@@ -238,6 +238,7 @@
         "delivery_checks",
         "preconditions",
         "routines",
+        "live_state",
         "run_review",
         "sod_requesters",
         "sprint_control"
@@ -946,6 +947,9 @@
       "test_licence_scan.py": [
         "repo"
       ],
+      "test_live_state.py": [
+        "release"
+      ],
       "test_llm_client.py": [
         "models"
       ],
@@ -1574,6 +1578,9 @@
       ],
       "test_task_events_transitions.py": [
         "management"
+      ],
+      "test_task_hold.py": [
+        "release"
       ],
       "test_task_relations.py": [
         "loop"

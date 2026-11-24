@@ -75,6 +75,7 @@ def test_the_board_shows_the_verifiers_facts_never_the_claims(
         "risk_areas": ["grader", "payments"],
         "protected_paths": ["scripts/bench/grade.py"],
         "waits_for_person": True,
+        "hold": {"kind": "person", "reason": "Blocked: manual triage needed."},
     }
     assert cards[held.id]["reported"] == {"protected_paths": ["bench/a.json"]}
     # The claims say "verified" and "low" on every run; the board reads neither.
@@ -88,6 +89,7 @@ def test_the_board_shows_the_verifiers_facts_never_the_claims(
         "risk_areas": [],
         "protected_paths": [],
         "waits_for_person": False,
+        "hold": None,
     }
     assert cards[never.id]["reported"] == {"protected_paths": []}
 
