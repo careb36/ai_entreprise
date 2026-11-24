@@ -59,6 +59,7 @@ from services.tools import (
     check_scripts,
     developer_tool_replies,
     developer_tool_schemas,
+    docs_write_policy,
     edit_lint,
     mcp_tools,
     repo_map,
@@ -535,6 +536,7 @@ def toolbox_for(
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
+            docs_write_policy.apply(workspace, role)  # Docs only for documentation.
             workspace_git.offer(workspace, company_id, engine)  # Read-only git.
             workspace_documents.offer(workspace)  # A DOCX's text, when announced.
             if workspace.can_edit:  # The linter after each edit, read once.

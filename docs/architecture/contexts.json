@@ -758,6 +758,9 @@
       "test_doc_links.py": [
         "evidence"
       ],
+      "test_docs_write_policy.py": [
+        "tools"
+      ],
       "test_documentation_export_router.py": [
         "planning"
       ],
