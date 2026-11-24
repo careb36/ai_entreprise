@@ -1150,6 +1150,7 @@
         "planning"
       ],
       "test_qa_review_reads.py": [
+        "evidence",
         "loop"
       ],
       "test_quality_gate.py": [
