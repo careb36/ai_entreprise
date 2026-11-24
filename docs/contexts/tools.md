@@ -147,8 +147,12 @@ call written as text; the tool budget had run out" if it happens again.
   `QA_REVIEW_TOOL_ROUNDS` rounds before the verdict. No recorded delivery or
   no daemon: no toolbox. `for_step` gives the same read-only toolbox on the
   task's root (the project without a task) to the steps that only read: the
-  Architect's brief, the PO's planning (`PLANNING_TOOL_ROUNDS`) and the
-  ScrumMaster's decision (`SCRUM_TRIAGE_TOOL_ROUNDS`), through
+  Architect's brief, the PO's planning (`PLANNING_TOOL_ROUNDS`; the plan
+  from a specification too), the PO writing a specification
+  (`PLANNING_TOOL_ROUNDS`), the Architect writing an architecture
+  (`ARCHITECT_TOOL_ROUNDS`; both with the research tools beside the reads,
+  `planning_reads.author_turn`) and the ScrumMaster's decision
+  (`SCRUM_TRIAGE_TOOL_ROUNDS`), through
   `developer_tools.read_tools`, which offers the same family R
   (`workspace_reads.offer`); `None` for a step or role that keeps no reading,
   0 rounds, or no daemon or root. `board_tools.attach` puts another built-in

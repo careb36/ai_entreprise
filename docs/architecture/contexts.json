@@ -1090,6 +1090,9 @@
       "test_playwright_pin.py": [
         "workspace"
       ],
+      "test_po_already_done.py": [
+        "loop"
+      ],
       "test_procedures.py": [
         "loop"
       ],
@@ -1421,6 +1424,9 @@
       ],
       "test_sod_policy.py": [
         "management"
+      ],
+      "test_spec_authors_read.py": [
+        "planning"
       ],
       "test_specifications.py": [
         "loop"

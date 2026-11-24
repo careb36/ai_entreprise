@@ -35,6 +35,7 @@ from services.loop.carry_over import CarryOverError, carry_over
 from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
 from services.planning import (
+    already_done,
     arch_author,
     planner_fallback,
     spec_check,
@@ -161,6 +162,7 @@ async def start_sprint(
 
     # A plan made without the model: the sprint's event, from the backend's record.
     planner_fallback.carry_to_sprint(session, sprint, req.plan_id)
+    already_done.carry_to_sprint(session, sprint, req.plan_id)  # The PO's claim too.
     positions = _refused(dependencies.check_positions, backlog_items)
     item_ids = []
     rows: list[BacklogItem] = []

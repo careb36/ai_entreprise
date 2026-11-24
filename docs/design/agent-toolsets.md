@@ -116,6 +116,8 @@ What stays with the role, and is not a matter of tools:
 | ScrumMaster decides without E | R since `feat/tools-follow-the-step` (`triage_reads`) | `integrate/agent-tools-2` (`board_record.sprint_scope`) |
 | Read-only steps see no Git history or documents | list, read, search, find_file | `integrate/agent-tools-2` (`workspace_reads`: `workspace__git` with `blame` and `workspace__read_document`, when announced, in every read-only toolbox) |
 | Architect brief cannot research though its step allows S | R and E only | `integrate/agent-tools-2` (`research_tools.company_toolbox` beside the reads) |
+| PO writing a specification, Architect an architecture: no R though the step allows R and S | research tools only | `feat/spec-authors-read` (`planning_reads.author_turn`: R beside S, `PLANNING_TOOL_ROUNDS` / `ARCHITECT_TOOL_ROUNDS`) |
+| The plan from a specification neither reads nor checks what is already done | one plain call | `feat/spec-authors-read` (`planning_reads.spec_answer`, `already_done`) |
 | Missing tools are not counted | nowhere | `feat/board-record-tools` (the retrospective's tool demand line) |
 
 ## Next changes
