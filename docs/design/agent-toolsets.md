@@ -135,6 +135,25 @@ What stays with the role, and is not a matter of tools:
    and refused commands from the observations, and show them beside the
    retrospective's other numbers.
 
+6. **Code navigation as tools.** The daemon already keeps the reference
+   graph (`workspace.related`) and the signatures (`workspace.signatures`),
+   but only the prompt and the Verifier use them. Offer read-only
+   `workspace__definition` (where a name is defined, with its signature) and
+   `workspace__references` (who uses it) to every turn with R, so an agent
+   checks a call before writing it instead of guessing.
+7. **Lint on demand.** The lint after an edit (`edit_lint`) runs only on the
+   edited file. Offer `workspace__lint` (the stack profile's lint and type
+   check, narrowed to given paths, in the sandbox) to every turn with X.
+8. **Run the project's own programs.** Since the scope directive
+   (2026-11-19) projects include data science and ML: a turn with X can run a
+   committed entry point declared in the project's plan (a training or
+   evaluation script, a notebook run headless) in the sandbox, bounded in
+   time and output, with its output recorded as an observation and any
+   metric it prints kept as an observation of the platform, not a claim.
+9. **See the result.** Frontend and Designer tasks cannot look at what they
+   built. Offer a sandboxed headless-browser screenshot of a local page of
+   the project (no external hosts), recorded with its sha256.
+
 ## Threat model (STRIDE, the agent as the adversary)
 
 | Threat | Example | Mitigation |
