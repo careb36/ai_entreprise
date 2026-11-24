@@ -31,12 +31,14 @@ Verifier still look at every delivery. Roles are compared through
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from models import Agent, BacklogItem, Sprint
 from sqlmodel import Session, select
 
 from services.contracts import roles as catalogue
+from services.contracts.task_text import DESCRIPTION_MAX
 from services.tasks import task_events
 
 SUGGESTED, AUTOMATIC, PERSON, ALL = "suggested", "automatic", "person", "all"
@@ -149,7 +151,8 @@ def capabilities_section(roles: list[str]) -> str:
         lines.append(
             "Give a task that needs the existing code or runs anything (tests, "
             "scripts, a validation, a build) to a role of the first list; give "
-            "the others writing and decisions."
+            "the others writing and decisions. A task of the second list whose "
+            "title runs, checks or changes the code is moved to the first."
         )
     elif text:
         lines.append(
@@ -217,9 +220,104 @@ def suggested(
     return team, reasons
 
 
+# What a task title says it does in the project, read without a model (issue
+# #766). Only the title: a description may quote the person's objective or a
+# specification whole, and words there do not say what the task does. Verb
+# forms only, so "Design implementation slice" stays a design task.
+_RUNS = re.compile(
+    r"\b(re-?run|runs?|running|execute[sd]?|executing|tests?|testing|"
+    r"validat(?:e[sd]?|ing|ion)|verif(?:y|ies|ied|ying|ication)|checks?|checking|"
+    r"scripts?|builds?|building|lint\w*|scans?|scanning|installs?|installing|"
+    r"compil(?:e[sd]?|ing)|deploys?|deploying|migrat(?:e[sd]?|ing)|benchmark\w*|"
+    r"reproduc(?:e[sd]?|ing)|ejecut\w*|pruebas?|probar|validar|valida|"
+    r"validaci\w*|verific\w*|comprob\w*|comprueba|compilar|desplegar|despliega|"
+    r"instalar)\b",
+    re.IGNORECASE,
+)
+_CHANGES = re.compile(
+    r"\b(implement(?:s|ed|ing)?|refactor\w*|fix(?:es|ed|ing)?|"
+    r"modif(?:y|ies|ied|ying)|patch(?:es|ed|ing)?|edit(?:s|ed|ing)?|"
+    r"integrat(?:e[sd]?|ing)|wir(?:e[sd]?|ing)|audit(?:s|ed|ing)?|"
+    r"inspect(?:s|ed|ing)?|implementar|implementa|corregir|corrige|"
+    r"refactoriz\w*|modificar|modifica|integrar|auditar|audita)\b",
+    re.IGNORECASE,
+)
+_VALIDATES = re.compile(
+    r"\b(tests?|testing|validat(?:e[sd]?|ing|ion)|verif(?:y|ies|ied|ying|ication)|"
+    r"checks?|checking|qa|pruebas?|probar|validar|valida|validaci\w*|"
+    r"verific\w*|comprob\w*|comprueba)\b",
+    re.IGNORECASE,
+)
+_INFRA = re.compile(
+    r"\b(deploy\w*|docker\w*|ci|ci/cd|pipelines?|kubernetes|k8s|infra\w*|"
+    r"desplegar|despliega|despliegue)\b",
+    re.IGNORECASE,
+)
+REASSIGNED_NOTE = (
+    "Reassigned from {role}: this task runs, checks or changes the project's "
+    "files, and only a role with the workspace tools can read them or run a "
+    "command (issue #766)."
+)
+
+
+def needs_workspace(task: dict[str, Any]) -> bool:
+    """Whether *task*, assigned to a role without the workspace tools, needs
+    them: its title runs, checks or changes the existing code. The
+    TechWriter's documents are whole files delivered in its answer, so its
+    task moves only when the title's first word runs or checks something
+    ("Verify the links"; "Document the testing strategy" stays). A task for
+    a file role, or an acceptance-test task, never moves."""
+    role = catalogue.canonical(task.get("assignee"))
+    if catalogue.delivers_files(role) or task.get("kind") == "acceptance_tests":
+        return False
+    title = str(task.get("title") or "").strip()
+    if role == catalogue.TECH_WRITER:
+        return bool(_RUNS.match(title.split(" ", 1)[0]))
+    return bool(_RUNS.search(title) or _CHANGES.search(title))
+
+
+def file_role_for(task: dict[str, Any], allowed: list[str]) -> str | None:
+    """The file role of *allowed* closest to *task*: QA for a validation that
+    changes nothing, DevOps for deployment or CI, else a developer role, else
+    any file role; None when *allowed* has none."""
+    title = str(task.get("title") or "")
+    files = [r for r in allowed if catalogue.delivers_files(r)]
+
+    def first(*names: str) -> str | None:
+        return next((r for r in files if catalogue.canonical(r) in names), None)
+
+    choice = None
+    if _VALIDATES.search(title) and not _CHANGES.search(title):
+        choice = first(catalogue.QA)
+    if choice is None and _INFRA.search(title):
+        choice = first(catalogue.DEVOPS)
+    return choice or first(*catalogue.DEVELOPER_ROLES) or (files[0] if files else None)
+
+
+def to_file_role(task: dict[str, Any], allowed: list[str]) -> dict[str, Any]:
+    """*task* given to ``file_role_for`` when it ``needs_workspace``, with
+    ``reassigned_from`` and a note in its description saying why; else as is."""
+    if not needs_workspace(task):
+        return task
+    role = file_role_for(task, allowed)
+    if role is None:
+        return task
+    before = str(task.get("assignee") or "")
+    note = "\n\n" + REASSIGNED_NOTE.format(role=before)
+    body = str(task.get("description") or "")[: DESCRIPTION_MAX - len(note)]
+    return {
+        **task,
+        "assignee": role,
+        "reassigned_from": before,
+        "description": body + note,
+    }
+
+
 def fit_tasks(tasks: list[dict[str, Any]], allowed: list[str]) -> list[dict[str, Any]]:
     """*tasks* with an assignee outside *allowed* given to an allowed role: a
-    developer role first, else the first one. Without *allowed*, unchanged."""
+    developer role first, else the first one. A task that needs the workspace
+    tools but went to a role without them goes to a file role of *allowed*
+    (``to_file_role``, issue #766). Without *allowed*, unchanged."""
     if not allowed:
         return tasks
     by_key = {catalogue.canonical(r): r for r in allowed}
@@ -227,7 +325,7 @@ def fit_tasks(tasks: list[dict[str, Any]], allowed: list[str]) -> list[dict[str,
     out = []
     for task in tasks:
         role = by_key.get(catalogue.canonical(task.get("assignee")))
-        out.append({**task, "assignee": role or fallback})
+        out.append(to_file_role({**task, "assignee": role or fallback}, allowed))
     return out
 
 

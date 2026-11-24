@@ -1050,6 +1050,9 @@
       "test_planner_fallback.py": [
         "release"
       ],
+      "test_plans_see_repo_and_tools.py": [
+        "loop"
+      ],
       "test_playwright_pin.py": [
         "workspace"
       ],

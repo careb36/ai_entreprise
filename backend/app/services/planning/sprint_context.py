@@ -4,12 +4,23 @@ The default execution team when a company has no stored agents yet, the
 stack summary and root-file listing for the prompt, the team roster, the
 PO's choice among the agents and the bounded objective of a
 self-improvement sprint. ``sprint_planner`` re-exports every name.
+
+The listing comes from the workspace daemon (``project_listing``), the only
+component that sees the user's files: the backend container does not mount
+the project, so ``_list_root_files`` there answered "(project path not
+accessible)" and the PO planned blind (issue #766). ``_list_root_files`` is
+what is said when no daemon answers.
 """
 
 from pathlib import Path
 from typing import Any
 
 from logging_config import logger
+
+# The project's top two levels, as the daemon lists them, bounded for the prompt.
+LISTING_DEPTH = 2
+LISTING_MAX_ENTRIES = 120
+LISTING_TIMEOUT_SECONDS = 10.0
 
 _DEFAULT_EXECUTION_TEAM = [
     {
@@ -97,6 +108,53 @@ def _list_root_files(project_path: str, max_files: int = 60) -> str:
     except Exception as e:  # noqa: BLE001 - Directory context is optional for sprint planning.
         logger.warning(f"Could not list project root: {e}")
         return "(could not read directory)"
+
+
+def listing_text(reply: Any, max_entries: int = LISTING_MAX_ENTRIES) -> str:
+    """The daemon's ``workspace.list`` reply as the prompt's listing: folders
+    end in ``/``, ``.git`` is left out, at most *max_entries* lines; ``""``
+    for an unusable or empty reply."""
+    if not isinstance(reply, dict) or not isinstance(reply.get("entries"), list):
+        return ""
+    entries = [
+        str(e)
+        for e in reply["entries"]
+        if isinstance(e, str) and e and not (e == ".git/" or e.startswith(".git/"))
+    ]
+    if not entries:
+        return ""
+    lines = [f"  {e}" for e in entries[:max_entries]]
+    if len(entries) > max_entries or reply.get("truncated"):
+        lines.append("  ... and more")
+    return "\n".join(lines)
+
+
+async def project_listing(
+    nats_client: Any,
+    project_path: str | None,
+    timeout: float = LISTING_TIMEOUT_SECONDS,
+) -> str:
+    """The project's top levels for the PO's prompt, from the workspace daemon
+    (``workspace.list``, depth ``LISTING_DEPTH``); ``_list_root_files`` when no
+    daemon answers or its reply is unusable, ``(no project path)`` without one."""
+    if not project_path:
+        return "(no project path)"
+    if nats_client is not None:
+        from services.workspace.workspace_daemon import daemon_request
+
+        try:
+            reply = await daemon_request(
+                nats_client,
+                "workspace.list",
+                {"workspace_root": project_path, "path": None, "depth": LISTING_DEPTH},
+                timeout,
+            )
+            text = listing_text(reply)
+            if text:
+                return text
+        except Exception as exc:  # noqa: BLE001 - The plan goes on without the daemon's listing.
+            logger.info("Could not list the project through the daemon: %s", exc)
+    return _list_root_files(project_path)
 
 
 def _build_team_roster(agents: list[dict[str, Any]]) -> str:

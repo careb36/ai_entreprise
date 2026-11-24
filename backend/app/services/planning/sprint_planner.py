@@ -31,6 +31,7 @@ from services.planning.sprint_context import (  # noqa: F401 - re-exported
     _find_po_agent,
     _list_root_files,
     build_self_improvement_objective,
+    project_listing,
 )
 from services.planning.sprint_fallbacks import (  # noqa: F401 - re-exported
     _FALLBACK_TASKS,
@@ -269,10 +270,15 @@ def _plan_with_po(
     detected_stack: dict[str, Any] | None,
     project_path: str | None,
     team: list[str] | None,
+    file_listing: str | None = None,
 ) -> dict[str, Any]:
     """The PO's plan from *template*, or *fallback(team_agents, scope)* when no
     model answers usably. With a sprint *team* (``services/planning/sprint_team.py``)
     only its roles get tasks, else only hired ones; the PO suggests the team.
+    *file_listing* is the project's listing the caller read through the daemon
+    (``project_listing``); without one, the backend's own (``_list_root_files``).
+    A task that needs the workspace tools never stays with a role without them
+    (``sprint_team.fit_tasks``).
 
     The plan carries ``objective`` (what the person wrote, never cut) apart
     from the model's ``goal``, and ``planner_fallback``: None when the model
@@ -321,9 +327,9 @@ def _plan_with_po(
         scope_size=normalized_scope,
         item_limit=item_limit,
         stack_summary=_build_stack_summary(detected_stack or {}),
-        file_listing=_list_root_files(project_path)
-        if project_path
-        else "(no project path)",
+        file_listing=file_listing
+        if file_listing is not None
+        else (_list_root_files(project_path) if project_path else "(no project path)"),
         available_roles=", ".join(available_roles),
     ) + sprint_team.prompt_section(hired, team)
     logger.info(
@@ -399,6 +405,7 @@ def plan_execution_sprint(
     detected_stack: dict[str, Any] | None = None,
     project_path: str | None = None,
     team: list[str] | None = None,
+    file_listing: str | None = None,
 ) -> dict[str, Any]:
     """Plan an executable sprint from a strategic prompt."""
     return _plan_with_po(
@@ -412,6 +419,7 @@ def plan_execution_sprint(
         detected_stack,
         project_path,
         team,
+        file_listing,
     )
 
 
@@ -423,6 +431,7 @@ def plan_self_improvement_sprint(
     detected_stack: dict[str, Any] | None = None,
     project_path: str | None = None,
     team: list[str] | None = None,
+    file_listing: str | None = None,
 ) -> dict[str, Any]:
     """Plan a bounded self-improvement sprint using explicit preservation and Scrumban rules."""
     return _plan_with_po(
@@ -438,4 +447,5 @@ def plan_self_improvement_sprint(
         detected_stack,
         project_path,
         team,
+        file_listing,
     )
