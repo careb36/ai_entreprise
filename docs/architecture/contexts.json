@@ -1633,7 +1633,14 @@
       "test_workspace_isolation.py": [
         "workspace"
       ],
+      "test_workspace_lint.py": [
+        "tools"
+      ],
       "test_workspace_move.py": [
+        "tools",
+        "workspace"
+      ],
+      "test_workspace_navigation.py": [
         "tools",
         "workspace"
       ],

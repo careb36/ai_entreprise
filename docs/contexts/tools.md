@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`, `workspace_lint`, `workspace_navigation`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -191,6 +191,36 @@ call written as text; the tool budget had run out" if it happens again.
   `read_only` true, `git_operation`, and the base and merge base the daemon
   used. It takes any toolbox with `requester` and `workspace_root`, so
   another read-only toolbox can offer it.
+- `workspace_navigation.py`: `workspace__definition` (where a name is
+  defined: path, line, the repository map's redacted signature, the
+  parameters of a top-level Python function or class as
+  `workspace.signatures` reads them, and the file's sha256 as the daemon read
+  it) and `workspace__references` (the files and line numbers that use a
+  name, what a module defines, or that module's name alone). Both ask
+  `workspace.related` with its optional `lookup` field
+  (`vscode-daemon/code_lookup.py`, PROTOCOL.md §5.7): the same candidate
+  files, guards and parse cache as the code graph, no new subject. Offered by
+  every `WorkspaceToolbox` (the file roles', the Architect's brief, QA's
+  review) only when every daemon heard announces the `lookup` feature; a
+  reply without `lookup` (an older daemon) is an error, never "nothing
+  found". Paths are checked like `workspace__git`'s and again by the daemon;
+  at most 20 files and ten lines a file; redacted. Each call is an
+  observation with `lookup`, the files named with their sha256, `more` and
+  `partial`.
+- `workspace_lint.py`: `workspace__lint`, the stack profile's lint (and its
+  `typecheck`, when a profile names one) on the paths the model gives, in
+  execution turns only (`toolbox_for`; never a read-only toolbox), off with
+  `EDIT_LINT_ENABLED`, and only when the profile names a lint or type check
+  command (read once when the toolbox is made; the lint after an edit reuses
+  that reading). It runs like `edit_lint`: `workspace.execute` in the
+  company's sandbox, under the daemon's command policy, bounded by
+  `EDIT_LINT_TIMEOUT_SECONDS`, never a command that may rewrite files
+  (`edit_lint.writes_files`). A command ending in ` .` is narrowed to the
+  paths, another runs as named and only its lines naming the paths are shown.
+  The model gives paths only, never command text: at most 20, inside the tool
+  root, plain characters, no leading `-`; files the stack's linter does not
+  read are left out. The observation's `lint` records per command the
+  command, `narrowed`, the exit status, `available` and the output's sha256.
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole. A read still the latest view of
   its lines (no later edit, move or delete of the file, no later read covering
