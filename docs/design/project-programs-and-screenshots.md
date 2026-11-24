@@ -1,7 +1,8 @@
 # Running the project's programs and seeing the result: a design
 
-> **Status: proposed, 2026-11-24.** Written for the owner's review; nothing
-> here is built. It designs the two tools left open in
+> **Status: approved 2026-11-24; slice 1 built.** The owner approved it and
+> answered its open questions ("The owner's decisions" at the end); slice 1
+> is built ("Slice 1 as built"). It designs the two tools left open in
 > [`agent-toolsets.md`](agent-toolsets.md) ("Next changes" 8 and 9):
 > `workspace__run_program`, which runs an entry point the project declared,
 > and `workspace__screenshot`, which shows a turn the page it built. It
@@ -387,7 +388,8 @@ under `program_output` and cannot be confused with the scorer's.
  the prompt, B4 (the provider).
 ```
 
-New boundary **B15: the evaluation scorer's sandbox.** It holds the only
+New boundary **B16: the evaluation scorer's sandbox** (B15 is the owner actions'
+in-process principal, [`owner-actions.md`](owner-actions.md)). It holds the only
 mount of `eval_labels` and runs only person-pinned code. A flow from a
 predict sandbox into it carries one file, checked against a schema. It is a
 boundary because the scorer's output is the observation that decides
@@ -410,7 +412,7 @@ follows SECURITY.md §9.2.
 | T5 | B3 | D | **Filling the disk.** Through artifacts, `/tmp`, the worktree or the output. | M | H | High | New: worktree mounted read-only. `/tmp` a bounded tmpfs. `/artifacts` capped by quota or a 1 s watch with a kill, plus a free-space floor before start. Existing: output tail bounded (`MAX_OUTPUT_BYTES`), full log capped (`FABRIQUE_FULL_LOG_MAX_MB`). New: artifact retention. Test: a program writing past `artifacts_mb` is killed, and the report says `artifact_limit` and how. |
 | T6 | B3 | T | **Poisoned dataset.** The agent changes the training or eval data to fit its result. | M | H | High | New: datasets mounted `:ro`. Each manifest re-checked against the digest pinned when a person accepted it, with a mismatch refusing the run. Data the agent produces is an artifact, never a declared dataset, until a person promotes it. Test: a changed file in a dataset refuses the run with both digests. |
 | T7 | B3 | T | **Poisoned dataset as an injection.** Text in a dataset ("ignore your instructions…") is printed and read by the model. | M | M | Medium | Program output is delimited and marked as untrusted data (SECURITY.md §8.1). The turn's tools are bounded by its step, so an injection cannot widen them. T2's withholding applies. |
-| T8 | B5 | T/S | **A metric the agent forges by printing.** Its code prints `fabrique-metric: {"name":"accuracy","value":0.99}`, or writes `metrics.json`. | H | H | Critical | New: provenance on every observed metric (section 3). `program_output` never supports a quality threshold. Quality at the `high` tier and acceptance thresholds need `platform_scorer` (two phases, B15). Metrics parsed by the backend from the log it hashed, never from the model's restatement. A claimed metric is compared deterministically (`metric_matches`). Test: a predict-phase program printing a metric line produces no `platform_scorer` metric, and a claimed 0.99 against a scored 0.7 is `refuted`. |
+| T8 | B5 | T/S | **A metric the agent forges by printing.** Its code prints `fabrique-metric: {"name":"accuracy","value":0.99}`, or writes `metrics.json`. | H | H | Critical | New: provenance on every observed metric (section 3). `program_output` never supports a quality threshold. Quality at the `high` tier and acceptance thresholds need `platform_scorer` (two phases, B16). Metrics parsed by the backend from the log it hashed, never from the model's restatement. A claimed metric is compared deterministically (`metric_matches`). Test: a predict-phase program printing a metric line produces no `platform_scorer` metric, and a claimed 0.99 against a scored 0.7 is `refuted`. |
 | T9 | B5 | T | **The evaluator rewritten.** The task edits the evaluation script so that it scores generously. | M | H | High | Existing: the committed-and-unchanged check (`check_scripts.verify`, `command_runs.rewritten_by_delivery`). New: `kind: evaluation` must be `code: committed`, and the scorer is pinned by a person. Test: an evaluation edited in the task is refused. |
 | T10 | B5 | E | **Parameters as a shell.** `lr="0.1; curl …"` or `split="$(id)"`. | M | H | Critical | New: typed parameters, enum and regex checked against the plain character set, one rendered word each. Fixed argv words from the declaration. Existing: the daemon's command policy reads one simple command. Test: each shell metacharacter in each type is refused before a request is sent. |
 | T11 | B1/B5 | E | **Declaring a program from inside the task.** The agent commits a programs file, or puts a program in a PO plan, and a later task runs it. | M | H | High | New: only the stack profile (Manager, audited) activates a program or a page. Plans can only propose, and a person accepts. A repository file is never read as a declaration. Test: a `.fabrique/programs.*` in the worktree changes nothing offered. |
@@ -421,7 +423,7 @@ follows SECURITY.md §9.2.
 | T16 | B2 | S | **Forged artifacts or a forged digest.** The daemon is told which digest to expect, or a reply's hash is taken from the program. | L | H | Medium | Existing: hashes by the side that observed the bytes (`docs/contexts/workspace.md`, Rules). The daemon reads artifacts back from disk, and the backend hashes PNGs, logs and uploaded artifacts it received. A digest printed by the program is never one. Test: a `sha256` field inside `metrics.json` is ignored. |
 | T17 | B3 | E | **Container escape**, wider with a GPU driver. | L | H | High | Existing: capabilities dropped, `no-new-privileges`, non-root uid, image by content ID, `--pull=never`. New: GPU only with the machine's, the company's and the declaration's opt-in. Residual: a shared kernel. |
 | T18 | — | R | **Runs nobody can trace.** | L | M | Low | Each call is an observation on the turn: arguments, rendered argv, image, sandbox, digests, metrics with provenance. Profile changes are audited rows with the user or `api-token:<id>`. |
-| T19 | B15 | I | **Adaptive overfitting to the holdout** through repeated scored runs. | M | M | Medium | Evaluation budget per task, rounded scores, every scored run audited. Residual, accepted by the owner (open question 3). |
+| T19 | B16 | I | **Adaptive overfitting to the holdout** through repeated scored runs. | M | M | Medium | Evaluation budget per task, rounded scores, every scored run audited. Residual, accepted by the owner (open question 3). |
 
 **Questions STRIDE misses.**
 
@@ -479,7 +481,7 @@ Not in slice 1: datasets, the two-phase scorer, GPU, notebooks, `code: task`
 and screenshots. **Slice 2** is `workspace__screenshot` with text for the
 model and the PNG for people. It is independent and can be built in parallel.
 **Slice 3** adds datasets (read-only, pinned digests, classification, T2's
-withholding). **Slice 4** is the two-phase scorer and leakage checks (B15).
+withholding). **Slice 4** is the two-phase scorer and leakage checks (B16).
 **Slice 5** is GPU. **Slice 6** sends images to models that accept them, if
 the owner chooses such a model.
 
@@ -508,10 +510,92 @@ the owner chooses such a model.
 - Protocol: new fields in `vscode-daemon/protocol/PROTOCOL.md` with schema
   and fixtures. A daemon without the feature is not offered the tool.
 - `docs/threat_model.md` regenerated through `scripts/threat_model.py` when
-  B15 is built (slice 4), and SECURITY.md §8.3 updated for the new sandbox
+  B16 is built (slice 4), and SECURITY.md §8.3 updated for the new sandbox
   fields in slice 1.
 
-## Open questions for the owner
+## Slice 1 as built
+
+- **Declaration.** `programs` in the company's stack profile
+  (`backend/app/services/contracts/programs.py`), checked when a Manager
+  saves it (`workspace/stack_roots.validate_overrides`, a 422 with the
+  reason) and again at each call. Slice 1 accepts `kind: script | training |
+  evaluation` and `code: committed` only, a required `entry` (the file
+  checked as committed and unchanged), `argv` of plain words, typed
+  parameters, `metrics` (`line_prefix`, `file`, `tolerance`, `tolerances`,
+  `precision`, `thresholds`) and `limits`. The program's `folder` is the
+  container's working directory (`-w`), so the command stays one simple
+  command. The settings page keeps stored programs when it saves; they are
+  edited through the API for now.
+- **The tool.** `workspace__run_program` (`services/tools/program_runs.py`),
+  family X, offered beside the lint where the step allows X. Withheld, with
+  the reason in `tools_offered.withheld`, when nothing is declared, the
+  company's sandbox is not `container` or a daemon does not announce
+  `program` on `workspace.execute`. The entry is checked with
+  `check_scripts.verify`.
+- **The daemon.** `vscode-daemon/program_run.py`, through
+  `workspace.execute` with `sandbox.purpose: "program"` (PROTOCOL.md §5.12),
+  no new subject. Host and bwrap refused (`sandbox.normalize`), network
+  none, worktree `:ro`, `/tmp` tmpfs and a per-run `/artifacts`, the
+  free-space floor, the one-second size watch (`artifact_limit: watch`; no
+  quota is used in slice 1), `FABRIQUE_PROGRAM_MAX_*` caps, the retention
+  sweep, the manifest with each file's sha256 read back, symlinks listed and
+  not followed.
+- **Metrics.** Parsed by the backend from the stdout it received and hashed
+  (`stdout_sha256`) and from the metrics file's bytes it hashed, never from
+  stderr (`contracts/program_metrics.py`), recorded as `observed_metrics` on
+  the call's `program_run` with provenance `program_output` or
+  `committed_evaluator`. Evaluation scores are rounded to `precision`. The
+  agent's stated metrics are read from `claimed-metric:` lines of its answer
+  into the run's claims (`metrics`). `metric_matches` and `metric_threshold`
+  (`services/evidence/metric_matches.py`) apply decision 2 with the
+  delivery's risk tier, and a refutation sends the delivery back.
+- **Budgets.** `PROGRAM_RUNS_PER_TASK` (5) and `PROGRAM_EVAL_RUNS_PER_TASK`
+  (3, decision 3), counted per task attempt (per toolbox).
+
+**Departures from the design, and what is left for later slices.**
+
+- The full stdout and stderr are not uploaded to the object store for a
+  program run yet: metrics are parsed from the reply's stdout (the daemon's
+  bounded tail, 1 MiB), which the backend hashes. A cut stdout is said
+  (`stdout_truncated`). Uploading the full log and parsing from the object
+  the backend read back is left for later.
+- Small artifacts are not uploaded to the object store: only the metrics
+  file travels, whole, in the reply, at most 256 KiB (the design said 1 MiB;
+  the reply crosses NATS). Large and small artifacts stay on the daemon's
+  machine for 14 days, known by the manifest (decision 8).
+- `params.json` at `/fabrique/params.json` is not mounted; parameters come
+  only as words.
+- The evaluation budget counts per task attempt, not across a task's
+  attempts, and it is a deployment setting: a per-company setting the Owner
+  raises for one task is left for later.
+- The disk limit is the watch only. A filesystem quota (XFS project quota)
+  is left for later.
+- Later slices, as planned: datasets (read-only, pinned digests,
+  classification, T2's withholding), the two-phase `platform_scorer` and
+  leakage checks (B16), GPU (decision 7), notebooks and `code: task`,
+  `workspace__screenshot` and its use in QA review (decision 6), images to a
+  model (decision 5), proposals of programs from plans.
+
+## The owner's decisions (2026-11-24)
+
+The owner approved the design and answered the open questions:
+
+1. **Declarations** come only from the stack profile, for now. A committed
+   file is never read as one.
+2. **`committed_evaluator`** metrics may support the `low` and `medium` risk
+   tiers; `high` requires `platform_scorer`.
+3. **Evaluation budget:** three scored evaluation runs per task, with
+   rounded scores. Only the Owner may raise it.
+4. **Network** is always off. A host opens only when a project needs one.
+5. **Images:** the model gets text only. Sending images to a model is the
+   owner's decision, later.
+6. **Screenshots** are offered to QA review too (a later slice).
+7. **GPU** needs the three-way opt-in, and a GPU run raises the delivery's
+   risk tier (a later slice).
+8. **Large artifacts** stay 14 days on the daemon's machine, with a manifest
+   in the record.
+
+## Open questions for the owner (answered above)
 
 1. **Where declarations may come from.** Only the stack profile (this
    design), or also a committed file under a protected path
