@@ -197,6 +197,19 @@ the LangGraph graph is only an optional kickoff conversation.
    `external_ref: task-<id>`) and verified deterministically (`files_written`,
    `tests_run`, …). Claims (declared files, the agent's summary) and observations
    (daemon reports) are kept apart; the board and Glassroom show the verdict.
+   A delivery that writes a changelog fragment (`changelog.d/<issue>-<slug>.md`)
+   is also held to its diff (`changelog_matches_diff`,
+   `services/evidence/changelog_diff.py`): the loop records the daemon's diff of
+   the delivery's commit against the merge base, the fragment at that commit
+   and the cited files at the merge base (`services/loop/changelog_observe.py`).
+   A cited path the diff did not change, a name under `Added` the base already
+   has, or an issue other than the one the sprint's objective names refutes,
+   and the gate sends it back before QA; what cannot be compared is
+   unverifiable and raises the risk tier to high. The writer's prompt tells it
+   to read `workspace__git` `changed` and `diff` first, and the PO's changelog
+   task always depends on every other task of the sprint
+   (`planning/changelog_order.py`). Sprint 8's fragment, which claimed a flag
+   the base already had, is the regression case.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
    `APPROVED:` closes the task. The Verifier also records a `risk_tier` check

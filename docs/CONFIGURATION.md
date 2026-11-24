@@ -293,7 +293,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `WIKI_COMPILE_MAX_PAGES` | `5` | Pages compiled per sprint close. |
 | `WIKI_PAGE_MAX_CHARS` | `6000` | Longest accepted compiled page. |
 | `PROMPT_BUDGET`, `PROMPT_BUDGET_<ROLE>` | unset | Developer prompt budget in estimated tokens; over it, the least needed sections are dropped. Unset or `0`: nothing is cut. |
-| `PROMPT_SECTIONS_OFF` | `""` | Comma-separated prompt sections to leave out, for bench comparisons. |
+| `PROMPT_SECTIONS_OFF` | `""` | Comma-separated prompt sections to leave out, for bench comparisons (for example `changelog_diff`, the changelog writer's "read the diff first" section). |
 | `WORKSPACE_SNAPSHOT_ENABLED` | `true` | The workspace snapshot in the Developer's prompt. |
 | `WORKSPACE_SNAPSHOT_CACHE_TTL` | `60` | Snapshot cache life in seconds (at least 10). |
 | `WORKSPACE_SNAPSHOT_MAX_FILES` | `4000` | Files scanned (at least 20). |

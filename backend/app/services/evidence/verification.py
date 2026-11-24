@@ -13,6 +13,7 @@ from services.contracts.verdicts import (
 )
 from services.evidence import (
     app_check,
+    changelog_diff,
     claimed_paths,
     command_runs,
     context_read,
@@ -501,6 +502,9 @@ def verify_agent_run(
     # Documentation: its links and cited paths against the delivered tree,
     # as the daemon listed and read it back (``doc_links``).
     checks.extend(doc_links.checks(evidence, _declared_files(run.artifact_text)))
+    # A changelog fragment against the task's diff (``changelog_diff``).
+    if chlog := changelog_diff.check(evidence):
+        checks.append(chlog)
     # A console producer's run (``services/producers/console_producer.py``): who ran,
     # how it ended and what the daemon saw it change (``evidence/console_run.py``).
     console_check = check_console_run(evidence)
@@ -543,6 +547,10 @@ def verify_agent_run(
         tier_check = risk.held_for_a_person(tier_check, protected_check.UNAVAILABLE)
     if reason := tests_removed.hold_reason(lost_tests):
         tier_check = risk.held_for_a_person(tier_check, reason, tests_removed.HOLD_AREA)
+    if reason := changelog_diff.hold_reason(chlog):
+        tier_check = risk.held_for_a_person(
+            tier_check, reason, changelog_diff.HOLD_AREA
+        )
     checks.append(tier_check)
     # What the delivery had to show, whatever ran (``required_checks``): a
     # required check that did not run is unverifiable, never a silent pass.
