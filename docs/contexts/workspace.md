@@ -96,10 +96,14 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
   (`stack_profiles.docs_build`): `mkdocs.yml`, a Sphinx `conf.py` under
   `docs/` or `doc/` (or their `source/`), or `docusaurus.config.*` at the
   root, in `website/` or `docs/`; the site goes to `/tmp`, never into the
-  project, and warnings do not fail it.
+  project, and warnings do not fail it. `programs` (the project's entry
+  points for `workspace__run_program`) come only from the company's stored
+  profile, never from detection or a file in the repository; `resolve`
+  carries those that still pass `contracts/programs.validate_programs`.
 - `stack_roots.py`, `folder_commands.py`: a profile per folder in a repository
   with several projects. Which suites run is decided from the daemon's write
-  report, never the agent's list.
+  report, never the agent's list. `validate_overrides` also checks the
+  profile's `programs` when a Manager saves it (a 422 with the reason).
 - `dependency_install.py`: installs when a manifest changed since the last
   successful install, keyed per folder and sandbox mode.
 - `run_logs.py`: reads a full log back from the JetStream object store and
@@ -135,7 +139,12 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   `sandbox_image.py` (which image ran, by content ID), `sandbox_cache.py`
   (per-project cache and environment volumes, quarantine), `stack_image.py`,
   `win_job.py` (Windows process trees), `run_logs.py` (full logs to the object
-  store).
+  store), `program_run.py` (a declared program, `sandbox.purpose: program`,
+  PROTOCOL.md §5.12: container only, network off, the worktree read-only, a
+  per-run `/artifacts` under `FABRIQUE_ARTIFACTS_ROOT` with a free-space
+  floor and a one-second size watch that kills the run, limits capped by
+  `FABRIQUE_PROGRAM_MAX_*`, a manifest of each artifact's sha256 read back,
+  symlinks listed and never followed; it parses no metric).
 - Application check: `app_run.py` (`workspace.app.check`), `security_probe.py`,
   `browser_probe.py`, `playwright_pin.py`, the browser image in `images/browser/`.
 - Git: `git_workspace.py` (worktrees, `run_git`), `git_base.py` (where a branch
