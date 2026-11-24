@@ -8,7 +8,7 @@ module's docstring has the detail.
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
 - **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_snippets`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_links`, `doc_snippets`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_links`, `doc_snippets`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `metric_matches`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -194,6 +194,28 @@ check sends the delivery back before QA (`changelog claims what the diff does
 not show`). No observation, a cut listing, a fragment or base file not read is
 `unverifiable`, and the `risk_tier` check rises to `high` (area `changelog`),
 so a person decides. QA's review lists the check first and whole.
+
+### Metrics against what the platform read
+
+`metric_matches.py`: the `metric_matches` and `metric_threshold` checks
+([`project-programs-and-screenshots.md`](../design/project-programs-and-screenshots.md),
+slice 1). A metric the agent states (`claimed-metric:` lines, kept in the
+run's claims as `metrics` by `loop/worker/record.py`) is a claim. A metric a
+declared program printed and the backend parsed from bytes it hashed is an
+observation: `observed_metrics` on the call's `program_run`
+(`services/tools/program_runs.py`). The two never share a field.
+`metric_matches` compares each claim with the latest observed metric of the
+same name and split: a difference above the tolerance a person set in the
+program's declaration refutes; no observed value is `unverifiable`; a match
+passes only when the metric's provenance may support quality at the
+delivery's risk tier (`contracts/program_metrics.supports_quality`: a
+`committed_evaluator` metric at `low` and `medium`; `high` needs
+`platform_scorer`, a later slice; `program_output` never), and is
+`unverifiable` otherwise. `metric_threshold` judges each threshold a person
+declared on a program that ran, with the same provenance rule; outside its
+bounds refutes. A refutation of either sends the delivery back before QA
+(`claimed metric refuted by the observed one`, `metric outside its declared
+threshold`). No claim and no threshold give no check.
 
 ### Protected paths
 

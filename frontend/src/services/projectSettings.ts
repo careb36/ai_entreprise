@@ -12,7 +12,7 @@ import { api } from './api'
 export const COMMAND_FIELDS = ['install', 'test', 'lint', 'start', 'e2e'] as const
 export type CommandField = typeof COMMAND_FIELDS[number]
 
-/** The company's overrides; `folders` and `every_delivery` are kept as they are when the root is edited. */
+/** The company's overrides; `folders`, `every_delivery` and `programs` are kept as they are when the root is edited. */
 export interface StackOverrides {
   stack?: string
   install?: string
@@ -25,6 +25,8 @@ export interface StackOverrides {
   web?: boolean
   folders?: Record<string, unknown>
   every_delivery?: unknown[]
+  /** The programs a Manager declared (`workspace__run_program`); edited through the API for now. */
+  programs?: unknown[]
 }
 
 export interface StackProfileSetting {

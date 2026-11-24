@@ -19,7 +19,10 @@ lock; `worker/task_run` gathers context, `worker/execute` prepares the task's
 worktree under the Git workflow (`developer_tools.enter_task_worktree`, so a
 first attempt's tools run there) and calls the model,
 `worker/deliver` sends the files to the daemon and `worker/record` ingests the
-run and has the Verifier judge it. `worker/review` runs the review cycle (one
+run and has the Verifier judge it. The run's claims keep the metrics the
+answer states (`claimed-metric:` lines, `contracts/program_metrics.parse_claims`)
+under `metrics`, apart from the metrics a declared program printed, which are
+observations on the tool calls (`evidence/metric_matches`). `worker/review` runs the review cycle (one
 replica at a time) that sends delivered tasks to QA, and `worker/close`
 finalises a sprint once its tasks settle. The step-by-step flow is
 [the sprint loop](../SPRINT_LOOP.md).

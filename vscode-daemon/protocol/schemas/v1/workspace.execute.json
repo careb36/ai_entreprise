@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.execute",
   "title": "workspace.execute",
-  "description": "Run a command in the project, in the sandbox the request names (daemon.py, shell_exec.py, sandbox.py). A request without `sandbox` is read as `{\"mode\": \"host\"}`, so the daemon's FABRIQUE_SANDBOX_REQUIRED raises it to its mode (`forced_by_daemon` in the reply's `sandbox`) or, when that mode cannot run, refuses it (`error`); never the host. A command that could not run is an observation in the reply (`error`), not a refusal. With `full_log` the whole output goes to the object store and the reply says which objects.",
+  "description": "Run a command in the project, in the sandbox the request names (daemon.py, shell_exec.py, sandbox.py). A request without `sandbox` is read as `{\"mode\": \"host\"}`, so the daemon's FABRIQUE_SANDBOX_REQUIRED raises it to its mode (`forced_by_daemon` in the reply's `sandbox`) or, when that mode cannot run, refuses it (`error`); never the host. A command that could not run is an observation in the reply (`error`), not a refusal. With `full_log` the whole output goes to the object store and the reply says which objects. With `sandbox.purpose: program` (§5.12) it runs a declared program in a container only, network off, the worktree read-only, and the reply adds `program`.",
   "x-protocol-version": 1,
   "x-subject": "workspace.execute",
   "x-kind": "request",
@@ -26,7 +26,7 @@
             },
             "purpose": {
               "type": "string",
-              "description": "test, install, check or assistant (a console assistant's consultation); anything else reads as test."
+              "description": "test, install, check, assistant (a console assistant's consultation) or program (a declared program, §5.12: container only, network off, the worktree read-only); anything else reads as test."
             },
             "network": {
               "type": "boolean"
@@ -37,6 +37,29 @@
                 "type": "string"
               },
               "description": "Variable names only; the values come from the daemon's own environment."
+            },
+            "workdir": {
+              "type": "string",
+              "description": "`ro` with purpose `program`: the worktree is mounted read-only (§5.12)."
+            },
+            "program": {
+              "type": "object",
+              "description": "With purpose `program` (§5.12): where it runs and what it writes. Limits are capped by the daemon's FABRIQUE_PROGRAM_MAX_*.",
+              "properties": {
+                "folder": {
+                  "type": "string",
+                  "description": "The working directory under /workspace, a plain relative path."
+                },
+                "artifacts_mb": {
+                  "type": "number",
+                  "description": "The cap on /artifacts; the daemon kills the run past it."
+                },
+                "metrics_file": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\\.json$",
+                  "description": "A file under /artifacts sent whole (base64) for the backend to hash and parse."
+                }
+              }
             }
           }
         },
@@ -179,6 +202,104 @@
           "required": [
             "bucket",
             "objects"
+          ]
+        },
+        "program": {
+          "type": "object",
+          "description": "A program run's report (§5.12): the limits applied and this machine's maxima, the free space before it, whether stdout was cut, the artifact manifest (each file's path, bytes and sha256 read back from disk; a symlink as `link: true`, never followed), `artifact_limit` and `killed_for_size`, and the declared metrics file (`content_b64`, or `reason`). Never a metric: the backend parses and hashes.",
+          "properties": {
+            "run_id": {
+              "type": "string"
+            },
+            "limits": {
+              "type": "object"
+            },
+            "maxima": {
+              "type": "object"
+            },
+            "free_mb_before": {
+              "type": "number"
+            },
+            "pruned_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "stdout_truncated": {
+              "type": "boolean"
+            },
+            "artifacts": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "link": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ]
+                  }
+                },
+                "total_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "artifact_limit": {
+                  "type": "string",
+                  "enum": [
+                    "watch",
+                    "quota"
+                  ]
+                },
+                "killed_for_size": {
+                  "type": "boolean"
+                },
+                "limit_mb": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "files",
+                "artifact_limit",
+                "killed_for_size"
+              ]
+            },
+            "metrics_file": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "content_b64": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "limits",
+            "artifacts"
           ]
         }
       },

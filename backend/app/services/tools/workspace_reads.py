@@ -6,8 +6,9 @@ of ``developer_tools.WorkspaceToolbox``: read-only Git, ``blame`` included
 navigation (``workspace_navigation``) and what the project declares
 (``workspace_facts``: its API surface, configuration variables and
 dependencies), each offered only when every daemon heard announces it.
-``workspace__lint`` (``workspace_lint``) and ``workspace__docs_build``
-(``workspace_docs_build``) are family X and are offered apart
+``workspace__lint`` (``workspace_lint``), ``workspace__docs_build``
+(``workspace_docs_build``) and ``workspace__run_program``
+(``program_runs``) are family X and are offered apart
 (``offer_runs``, called by ``developer_tools.toolbox_for`` only where the
 step allows runs); this module lists their schemas and routes their calls
 when they were offered.
@@ -26,6 +27,7 @@ import logging
 from typing import Any
 
 from services.tools import (
+    program_runs,
     workspace_docs_build,
     workspace_documents,
     workspace_facts,
@@ -43,6 +45,7 @@ TOOLS = frozenset(
         *workspace_navigation.TOOLS,
         *workspace_facts.TOOLS,
         workspace_docs_build.TOOL,
+        program_runs.TOOL,
     }
 )
 
@@ -61,8 +64,9 @@ def offer(box: Any, company_id: int | None = None, engine: Any = None) -> None:
 
 def offer_runs(box: Any, loader: Any = None) -> None:
     """Family X beside the reads, where the step allows runs: the lint
-    (``workspace_lint``) and the docs build (``workspace_docs_build``), both
-    from the stack profile *loader* reads once."""
+    (``workspace_lint``), the docs build (``workspace_docs_build``) and the
+    declared programs (``program_runs``), all from the stack profile *loader*
+    reads once."""
     if box is None:
         return
     workspace_lint.offer(box, loader)
@@ -74,7 +78,9 @@ def offer_runs(box: Any, loader: Any = None) -> None:
             logger.warning(
                 "Could not read the stack profile for the docs build: %s", exc
             )
-    workspace_docs_build.offer(box, profile if isinstance(profile, dict) else None)
+    profile = profile if isinstance(profile, dict) else None
+    workspace_docs_build.offer(box, profile)
+    program_runs.offer(box, profile)  # The declared programs, or why not.
 
 
 def schemas(box: Any) -> list[dict[str, Any]]:
@@ -87,6 +93,7 @@ def schemas(box: Any) -> list[dict[str, Any]]:
         + workspace_documents.schemas(box)
         + workspace_facts.schemas(box)
         + workspace_docs_build.schemas(box)
+        + program_runs.schemas(box)
     )
 
 
@@ -100,4 +107,6 @@ def run(box: Any, tool: str, arguments: dict[str, Any], extra: dict[str, Any]) -
         return workspace_facts.run(box, tool, arguments, extra)
     if tool == workspace_docs_build.TOOL:
         return workspace_docs_build.run(box, arguments, extra)
+    if tool == program_runs.TOOL:
+        return program_runs.run(box, arguments, extra)
     return workspace_navigation.run(box, tool, arguments, extra)

@@ -320,6 +320,23 @@ The daemon reports the mode it applied and never falls back to the host.
 request into that mode or refuses it (`backend/tests/test_sandbox_floor.py`).
 Cache volumes: `docs/archive/design/EXECUTION_ENVIRONMENT.md`.
 
+**A declared program** (`workspace__run_program`, `sandbox.purpose: program`,
+`vscode-daemon/program_run.py`, PROTOCOL.md §5.12): the agents run only the
+entry points a Manager declared in the stack profile, with typed, bounded
+parameters rendered as plain words; a model never writes the command. The
+daemon refuses `host` and `bwrap` for it (the floor never raises it), runs it
+with `--network none`, the worktree mounted read-only, writable only `/tmp`
+and a per-run `/artifacts` outside every worktree, `--pull=never`, and the
+limits capped by `FABRIQUE_PROGRAM_MAX_*`, which the backend cannot raise. A
+free-space floor refuses a run before it starts and a one-second size watch
+kills it past its artifacts cap. Each artifact's sha256 is read back from disk;
+a symlink is listed and never followed. The entry file must be committed and
+unchanged on disk. Metrics are parsed by the backend from bytes it hashed,
+never from stderr, and carry their provenance: an agent's stated metric stays
+a claim and the Verifier compares it (`metric_matches`). Program output reaches
+the model as text in a block marked as untrusted data, redacted. Threat model:
+`docs/design/project-programs-and-screenshots.md` section 5.
+
 **The command policy is a first pass, not the boundary**
 (`vscode-daemon/command_policy.py`). It parses commands as a shell would and
 refuses what it cannot read. `FABRIQUE_COMMAND_DENY` adds a local deny list a

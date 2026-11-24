@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `board_tools`, `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `board_tools`, `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `docs_write_policy`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_docs_build`, `workspace_documents`, `workspace_edits`, `workspace_facts`, `workspace_git`, `workspace_lint`, `workspace_navigation`, `workspace_reads`.
+- **Modules:** `board_tools`, `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `docs_write_policy`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `program_runs`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_docs_build`, `workspace_documents`, `workspace_edits`, `workspace_facts`, `workspace_git`, `workspace_lint`, `workspace_navigation`, `workspace_reads`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -318,6 +318,32 @@ call written as text; the tool budget had run out" if it happens again.
   `timed_out`, `available`, the first error lines and the output's sha256;
   the reply shows the first errors and the redacted tail. The delivery's own
   build is the evidence (`loop/docs_checks.py`, `evidence/doc_build.py`).
+- `program_runs.py`: `workspace__run_program`, family X, offered beside the
+  lint (`workspace_reads.offer_runs`) where the step allows runs, when the
+  stack profile declares programs (`contracts/programs`; only a Manager
+  declares them, through the audited `PUT .../stack_profile`; a file in the
+  repository never does), the company's sandbox mode is `container` and every
+  daemon announces `program` on `workspace.execute` (PROTOCOL.md §5.12).
+  Otherwise it is withheld and `tools_offered.withheld` says why
+  (`workspace_edits.offered`). The model names a program and gives typed
+  parameters; it never writes command text. Each call checks the run budget
+  (`PROGRAM_RUNS_PER_TASK`, and `PROGRAM_EVAL_RUNS_PER_TASK` for
+  `evaluation`, per task attempt), the declaration again, the parameters
+  (`programs.render`), and that the entry file is committed and unchanged on
+  disk (`check_scripts.verify`), then sends one `workspace.execute` with
+  `sandbox.purpose: program`, `network: false`, `workdir: ro`, the declared
+  limits and `program` (`folder`, `artifacts_mb`, `metrics_file`). The
+  observation `program_run` records the argv as run, the parameters, the
+  entry's commit and sha256, the exit status, the sandbox the daemon applied,
+  the sha256 the backend computed over the stdout it received, the artifact
+  manifest and `observed_metrics`: parsed here from that stdout and from the
+  metrics file's bytes (hashed here), never from stderr, and none unless the
+  daemon reports a container with the network off; evaluation scores are
+  rounded to the declared precision; each metric carries its provenance
+  (`program_output` or `committed_evaluator`). The reply shows the exit
+  status, the metrics and the redacted output tail in a block marked as
+  program output. The Verifier compares claims with these observations
+  (`evidence/metric_matches.py`).
 - `docs_write_policy.py`: the docs-only write policy. Where a turn writes is
   the step table's rule (`contracts/tool_steps.write_scope`): the
   `documentation` step, and the TechWriter in any step that writes (a role's

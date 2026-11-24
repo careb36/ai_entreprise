@@ -285,6 +285,8 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `TOOL_HISTORY_MAX_CHARS` | `120000` | An old `workspace__read` still the latest view of its lines stays whole while all tool results in the history fit this many characters; past it the oldest reads become one line. `0`: no bound. |
 | `EDIT_LINT_ENABLED` | `true` | Lint a file after `workspace__edit`, and offer `workspace__lint` in execution turns. |
 | `EDIT_LINT_TIMEOUT_SECONDS` | `60` | Timeout of that lint. |
+| `PROGRAM_RUNS_PER_TASK` | `5` | Runs of a declared program (`workspace__run_program`) one task attempt may make. See [`docs/design/project-programs-and-screenshots.md`](design/project-programs-and-screenshots.md). |
+| `PROGRAM_EVAL_RUNS_PER_TASK` | `3` | Runs of an `evaluation` program among them, with scores rounded to the declared precision (the owner's decision 3). Only the Owner, who sets the deployment, raises it. |
 | `REPO_MAP_MAX_CHARS` | `3000` | Repository map in prompts. `0` leaves it out. |
 | `CODE_GRAPH_MAX_CHARS` | `2500` | "Related code" section. `0` leaves it out. |
 | `CODE_GRAPH_STORE` | `postgres` | Where the code graph is kept: `postgres`, `neo4j` (only with `NEO4J_ENABLED`) or `off`. |
@@ -383,6 +385,14 @@ Read by `vscode-daemon/` on the computer that holds the projects. Protocol: [`vs
 | `FABRIQUE_SANDBOX_ENV` | `on` | `off` refuses the environment volume. |
 | `FABRIQUE_SANDBOX_CACHE_STATE` | `~/.fabrique-daemon/sandbox-cache` | Failed installs and quarantine per project. |
 | `FABRIQUE_FULL_LOG_MAX_MB` | `50` | Largest uploaded output per stream. Range 1–1024. |
+| `FABRIQUE_PROGRAM_MAX_SECONDS` | `900` | Longest run of a declared program (`sandbox.purpose: program`). The backend cannot raise it. |
+| `FABRIQUE_PROGRAM_MAX_CPUS` | `4` | Most CPUs a program run gets. |
+| `FABRIQUE_PROGRAM_MAX_MEMORY_MB` | `8192` | Most memory a program run gets, with no swap. |
+| `FABRIQUE_PROGRAM_MAX_PIDS` | `512` | Most processes in a program run. |
+| `FABRIQUE_PROGRAM_MAX_ARTIFACTS_MB` | `2048` | Largest `/artifacts` of a program run; the daemon kills the run past the smaller of this and the declared `artifacts_mb`. |
+| `FABRIQUE_ARTIFACTS_ROOT` | `~/.fabrique/artifacts` | Where program runs write their artifacts, a folder per company and run, outside every worktree. |
+| `FABRIQUE_ARTIFACTS_MIN_FREE_MB` | `1024` | A program run is refused when less space is free under the artifacts root. |
+| `FABRIQUE_ARTIFACTS_RETENTION_DAYS` | `14` | Run folders older than this are removed when the next program run starts (the owner's decision 8). |
 | `FABRIQUE_COMMAND_DENY` | unset | Comma-separated command patterns the daemon always refuses; a request cannot relax it. |
 | `FABRIQUE_SELF_HOST_SOURCE` | the La Fabrique repository the daemon runs from | The repository `workspace.self_host.checkout` copies for an owner action (PROTOCOL.md §5.9). The request never names it. |
 | `FABRIQUE_SELF_HOST_ROOT` | `~/fabrique-self-host` | The folder the self-hosting snapshots go under; the request names only a folder inside it. |

@@ -171,9 +171,25 @@ What stays with the role, and is not a matter of tools:
    evaluation script, a notebook run headless) in the sandbox, bounded in
    time and output, with its output recorded as an observation and any
    metric it prints kept as an observation of the platform, not a claim.
+   *Designed and approved* (owner, 2026-11-24):
+   [`project-programs-and-screenshots.md`](project-programs-and-screenshots.md)
+   (`workspace__run_program`: entry points declared in the stack profile,
+   typed parameters, container only with the network off, metrics with
+   their provenance, the two-phase scorer; with its threat model).
+   *Slice 1 built* (`feat/run-program`): `services/tools/program_runs.py`,
+   family X, for committed `script`, `training` and `evaluation` programs
+   without datasets or GPU; the daemon's `program_run.py` behind the
+   `program` feature of `workspace.execute` (PROTOCOL.md §5.12); metrics
+   observed with provenance and the Verifier's `metric_matches`
+   (`services/evidence/metric_matches.py`).
 9. **See the result.** Frontend and Designer tasks cannot look at what they
    built. Offer a sandboxed headless-browser screenshot of a local page of
    the project (no external hosts), recorded with its sha256.
+   *Designed* (proposed, for the owner's review):
+   [`project-programs-and-screenshots.md`](project-programs-and-screenshots.md)
+   (`workspace__screenshot`: declared pages, the pinned browser image with
+   every other origin blocked, the PNG kept by its sha256 and an ARIA
+   snapshot for the model, since images do not reach a model today).
 
 10. **Documenting whole projects.** The documentation pack compiles the
     management documents from the records; documenting a project's code is a

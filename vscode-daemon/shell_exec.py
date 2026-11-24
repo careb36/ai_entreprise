@@ -168,6 +168,12 @@ def execute_shell_command(
     started = time.monotonic()
     try:
         box = sandbox_runner.normalize(request)
+        if box["purpose"] == sandbox_runner.PROGRAM:  # Container only (program_run.py).
+            import program_run
+
+            result = program_run.run(command, cwd, request, timeout, keep_full)
+            result["duration_ms"] = int((time.monotonic() - started) * 1000)
+            return result
         if box["mode"] != "host":
             result = sandbox_runner.run_sandboxed(command, cwd, request, seconds, keep_full)
             # The daemon's own clock, for the evidence (issue #766); a stack

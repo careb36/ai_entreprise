@@ -7,7 +7,7 @@ docstring has the detail.
 - **Folder:** `backend/app/services/contracts/`
 - **May import:** no other context.
 - **Interface:** every module (`"*"`): the context exists to be shared.
-- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `tool_demand`, `tool_steps`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
+- **Modules:** `board_notes`, `company_limits`, `company_regex`, `company_standards`, `edit_blocks`, `emails`, `forge_policy`, `intake_rules`, `language`, `manifest`, `program_metrics`, `programs`, `protected_paths`, `roles`, `routine_schedule`, `routine_variables`, `rsi_cycle_record`, `run_window`, `sandbox_report`, `sandbox_schemas`, `specification_text`, `standards_catalogue`, `task_dependencies`, `task_filters`, `task_text`, `tool_calls`, `tool_demand`, `tool_steps`, `verdicts`, `wiki`, `wiki_lint`, `wiki_templates`.
 
 ## Rules
 
@@ -51,6 +51,29 @@ or `doc` folder, a README, Markdown or reStructuredText) for the
 TechWriter in any step (`ROLE_WRITE_SCOPE`); like a deny it only narrows, and
 a step without W has no scope. `writable(step, role, path)` applies it to one
 path. What a family turns into is the [tools](tools.md) context's decision.
+
+### A project's programs and their metrics
+
+`programs.py`: the programs a Manager declares in the stack profile
+(`programs`), checked when it is saved and again at each call
+(`validate_programs`, `validate_program`): a name, a `kind` (`script`,
+`training`, `evaluation`), `code: committed`, the committed `entry` file,
+`argv` as fixed plain words (letters, digits, `_ . = : / + -`; no `..`, no
+absolute path), typed and bounded `params` (`int`, finite `float`, `bool`,
+`enum`, `string` with a regex of at most 64 characters), `metrics` (the stdout
+prefix, a `.json` file under `/artifacts`, the tolerance and precision a
+person set, thresholds) and `limits`. `render` turns a call's arguments into
+one `--<name>=<value>` word each and refuses an unknown parameter, a value
+out of bounds and a missing one without a default, naming what is allowed.
+`program_metrics.py`: what the platform reads. `parse_lines` reads the
+declared prefix's lines from stdout the caller hashed (never stderr), finite
+values only, at most 500 (`metrics_truncated`); `parse_file` a metrics file
+against its schema; `parse_claims` the `claimed-metric:` lines of an agent's
+answer, which stay claims; `provenance` gives `program_output` or
+`committed_evaluator`; `supports_quality` is the owner's decision 2: a
+`committed_evaluator` metric supports the `low` and `medium` tiers, `high`
+needs `platform_scorer` (a later slice), `program_output` never. Design:
+[`project-programs-and-screenshots.md`](../design/project-programs-and-screenshots.md).
 
 ### The protected paths
 

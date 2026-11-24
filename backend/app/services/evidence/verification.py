@@ -21,6 +21,7 @@ from services.evidence import (
     doc_build,
     doc_links,
     grounding,
+    metric_matches,
     protected_check,
     required_checks,
     risk,
@@ -554,6 +555,8 @@ def verify_agent_run(
         tier_check = risk.held_for_a_person(
             tier_check, reason, changelog_diff.HOLD_AREA
         )
+    # Claimed metrics and thresholds against the observed ones, at this tier.
+    checks.extend(metric_matches.checks(run.claims, evidence, tier_check.get("tier")))
     checks.append(tier_check)
     # What the delivery had to show, whatever ran (``required_checks``): a
     # required check that did not run is unverifiable, never a silent pass.

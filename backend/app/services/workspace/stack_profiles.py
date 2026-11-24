@@ -23,11 +23,14 @@ from typing import Any
 
 from config import settings
 
+from services.contracts.programs import valid_or_empty
+
 # The fields a profile carries, and the ones a company may override.
 COMMAND_FIELDS = ("install", "test", "lint", "start", "e2e", "docs_build")
 FIELDS = ("stack", *COMMAND_FIELDS, "port", "probe_path", "web")
 # The keys of a stored profile beyond the root's own fields (``stack_roots``).
-EXTENSION_KEYS = ("folders", "every_delivery")
+# ``programs``: the entry points a Manager declared (``contracts/programs``).
+EXTENSION_KEYS = ("folders", "every_delivery", "programs")
 
 # Detected in this order: the first stack whose marker files exist wins.
 # ``manifests`` are the files whose change calls for an install (exact names
@@ -498,6 +501,11 @@ def resolve(detected: dict[str, Any] | None, company_overrides: Any) -> dict[str
     """The profile to use: detected, then the deployment's settings, then the
     company's; an empty command means the step is off. ``source`` names where
     each field came from, so the evidence can say whose command ran."""
+    programs = valid_or_empty(
+        company_overrides.get("programs")
+        if isinstance(company_overrides, dict)
+        else None
+    )
     if isinstance(company_overrides, dict):  # The root's fields only.
         company_overrides = {
             k: v for k, v in company_overrides.items() if k not in EXTENSION_KEYS
@@ -524,5 +532,6 @@ def resolve(detected: dict[str, Any] | None, company_overrides: Any) -> dict[str
     for field in COMMAND_FIELDS:
         profile.setdefault(field, None)
     profile.setdefault("port", None)
+    profile["programs"] = programs  # Declared by a person only, never detected.
     profile["source"] = {k: v for k, v in source.items() if profile.get(k)}
     return profile

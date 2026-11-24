@@ -19,7 +19,7 @@ export function choiceOf(value: string | undefined): CommandChoice {
   return value === '' ? { mode: 'off', value: '' } : { mode: 'command', value }
 }
 
-/** The overrides to send: the root's fields from the form, the folders and every-delivery commands kept as stored. */
+/** The overrides to send: the root's fields from the form, the folders, every-delivery commands and declared programs kept as stored. */
 export function overridesFrom(
   stored: StackOverrides,
   form: { stack: string; port: string; probePath: string; web: '' | 'yes' | 'no'; commands: Record<CommandField, CommandChoice> },
@@ -27,6 +27,7 @@ export function overridesFrom(
   const out: StackOverrides = {}
   if (stored.folders) out.folders = stored.folders
   if (stored.every_delivery) out.every_delivery = stored.every_delivery
+  if (stored.programs) out.programs = stored.programs
   if (form.stack) out.stack = form.stack
   if (form.port.trim()) out.port = Number(form.port)
   if (form.probePath.trim()) out.probe_path = form.probePath.trim()

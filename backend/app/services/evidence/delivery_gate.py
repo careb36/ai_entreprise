@@ -24,6 +24,7 @@ from services.evidence import (
     criteria_tests,
     doc_build,
     doc_links,
+    metric_matches,
     security_probe,
     standards,
 )
@@ -50,6 +51,8 @@ _GATE_PROBLEMS = {
     doc_links.CHECK_CODE_PATHS: "documentation cites missing paths",
     doc_build.CHECK_NAME: "documentation build failed",
     changelog_diff.CHECK_NAME: "changelog claims what the diff does not show",
+    metric_matches.CHECK_MATCHES: "claimed metric refuted by the observed one",
+    metric_matches.CHECK_THRESHOLD: "metric outside its declared threshold",
 }
 
 # The problems the code itself caused: the Developer fixes the code.
@@ -62,6 +65,7 @@ CODE_PROBLEMS = frozenset(
         "invented dependency or import",
         "security probe refuted",
         "required command failed",
+        "metric outside its declared threshold",
     }
 )
 

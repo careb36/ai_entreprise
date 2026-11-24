@@ -90,7 +90,8 @@ FEATURES = {
     "workspace.git.sync_base": _FORGE,
     # A document's text instead of its bytes (document_text.py, §5.8).
     "workspace.read": ("document_text",),
-    "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
+    # A declared program (program_run.py, §5.12): container only, network off.
+    "workspace.execute": ("full_log", "program", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
     # Where a name is defined and who uses it (code_lookup.py, §5.7), for
     # the agents' navigation tools; what the project declares (project_facts.py,
     # §5.10), each kind announced apart.

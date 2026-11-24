@@ -1027,6 +1027,10 @@
       "test_memory_tenancy.py": [
         "models"
       ],
+      "test_metric_matches.py": [
+        "evidence",
+        "loop"
+      ],
       "test_metrics.py": [
         "loop"
       ],
@@ -1119,6 +1123,13 @@
       ],
       "test_procedures.py": [
         "loop"
+      ],
+      "test_program_runs.py": [
+        "tools"
+      ],
+      "test_programs_contract.py": [
+        "contracts",
+        "workspace"
       ],
       "test_project_docs.py": [
         "planning"

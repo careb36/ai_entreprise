@@ -1,0 +1,20 @@
+{
+  "description": "A declared program (sandbox.purpose program, §5.12) asked in bwrap mode: refused before anything runs, because a program runs only in a container with the network off and the worktree read-only.",
+  "subject": "workspace.execute",
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "command": "python3 -m ml.evaluate --split=val",
+    "timeout_seconds": 60,
+    "sandbox": {
+      "mode": "bwrap",
+      "purpose": "program",
+      "network": false,
+      "workdir": "ro",
+      "program": {"artifacts_mb": 16, "metrics_file": "metrics.json"}
+    }
+  },
+  "reply": {
+    "success": false,
+    "error": "sandbox unavailable: a program runs only in container mode, not bwrap"
+  }
+}
