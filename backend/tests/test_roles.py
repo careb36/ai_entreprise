@@ -115,10 +115,12 @@ def test_the_file_roles_get_the_workspace_tools_and_the_designer_researches(
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "DEVELOPER_TOOLS_ENABLED", True)
+    # The step sets the ceiling (contracts/tool_steps): every role executing
+    # a task gets the workspace tools, the PO and the TechWriter too.
     for role in (*CODING, "Developer", "Dev", "QA", "Designer", "BackendDev"):
         assert developer_tools.offered_to(role), role
     for role in ("PO", "TechWriter", "ScrumMaster"):
-        assert not developer_tools.offered_to(role)
+        assert developer_tools.offered_to(role), role
     default = type(settings).model_fields["RESEARCH_ROLES"].default
     assert default.split(",") == list(roles.RESEARCH_ROLES)
     monkeypatch.setattr(settings, "RESEARCH_ROLES", default)

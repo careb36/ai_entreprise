@@ -63,6 +63,10 @@ ACTION_QA_REVIEW = "qa_review"
 # A round of QA's reads before its verdict: priced, never counted as a review.
 ACTION_QA_REVIEW_READ = "qa_review_read"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
+# The reading turns of the steps that only read (contracts/tool_steps): the
+# PO's sprint planning and the ScrumMaster's decision on a blocked task.
+ACTION_PLAN_READ = "plan_read"
+ACTION_SCRUM_TRIAGE_READ = "scrum_triage_read"
 ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
 
 

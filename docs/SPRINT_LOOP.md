@@ -8,7 +8,11 @@ Tasks are executed by the **task worker**, split by stage into `backend/app/serv
 the LangGraph graph is only an optional kickoff conversation.
 
 0. Before the sprint exists, `POST /v1/plan_sprint` asks the PO for a plan
-   (`services/planning/sprint_planner.py`). The objective the person wrote is
+   (`services/planning/sprint_planner.py`). The PO may first read the project
+   with the read-only workspace tools for `PLANNING_TOOL_ROUNDS` rounds
+   (`services/planning/planning_reads.py`; each call an observation on its
+   turn, the plan's `planning_reads`; without a daemon or project path, one
+   plain call). The objective the person wrote is
    never cut: the plan carries it whole as `objective`, apart from the
    model's one-line `goal`, and `start_sprint` stores it as
    `Sprint.objective` (TEXT, migration `0056`). When the planner's model does
@@ -92,6 +96,12 @@ the LangGraph graph is only an optional kickoff conversation.
    what the Verifier's records observed beside the files it names, and how
    to write a note (`services/loop/worker/sprint_notes.py`,
    [design](archive/design/SPRINT_BOARD.md)).
+   The tools follow the step, not the role (`services/contracts/tool_steps.py`):
+   an execution turn of any role (a TechWriter, SecOps, Architect or PO task
+   too) reads the project, runs the folder's tests and committed scripts,
+   researches registries and advisories, and edits where edits may go; a
+   role's profile may only drop families. The run's `tools_offered` records
+   the `step` and its `families` beside the tools offered and withheld.
    With tools, the call is the bounded tool loop
    ([tools](contexts/tools.md)): the run's evidence records `rounds_used`,
    `rounds_max` and `rounds_exhausted`, and a final answer that is only a tool
@@ -233,7 +243,10 @@ the LangGraph graph is only an optional kickoff conversation.
    from the boards of completed sprints, the same numbers the Sprints page
    shows) and decides, in a fixed `DECISION … END`
    format a parser checks, between another attempt with a brief for it or
-   leaving it to a person. The decision is a `decision` message that names
+   leaving it to a person. Before it decides it may read the task's files
+   with the read-only workspace tools for `SCRUM_TRIAGE_TOOL_ROUNDS` rounds
+   (`services/loop/worker/triage_reads.py`; each call an observation on its
+   turn; without a daemon or root, one plain call). The decision is a `decision` message that names
    the escalation it answers (written by the worker, not the model), a claim: the
    inbox shows it as `triage`, the brief travels with the carried task into
    its prompt (and into QA's review prompt, so the second attempt is judged

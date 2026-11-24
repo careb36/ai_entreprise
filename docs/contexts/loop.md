@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
@@ -200,8 +200,9 @@ instead, stays readable by id, and an Owner may unarchive it.
   default; [models](models.md)).
 - `worker/architect_brief`: the Architect's brief (`worker/execute`,
   `_consult_architect`) runs through the tool loop with the workspace's read
-  tools alone (`developer_tools.read_tools`: list, read, search, find_file on
-  the task's root; no edit, move, delete or test run), for at most
+  tools alone (`review_tools.for_step` for the `architect_brief` step: list,
+  read, search, find_file on the task's root; no edit, move, delete or test
+  run), for at most
   `ARCHITECT_TOOL_ROUNDS` rounds. Each call is an observation on its turns in
   `audit_log` (`details.tool_calls`); the brief is a claim, and a tool call
   typed as text is no brief. Without the daemon it is one plain call. It also
@@ -251,6 +252,14 @@ instead, stays readable by id, and an Owner may unarchive it.
   turn (`tool_calls`).
 - `worker/messages`: hand-over messages (claims) and the ScrumMaster's triage of
   an escalation.
+- `worker/triage_reads`: before its decision on a blocked task, the
+  ScrumMaster may read the task's root with the read-only workspace tools
+  (`review_tools.for_step`, step `scrum_decision`: read only) for
+  `SCRUM_TRIAGE_TOOL_ROUNDS` rounds. Each reading round is a
+  `scrum_triage_read` audit turn and the final one carries the calls'
+  observations (`tool_calls`); the decision stays a claim, parsed as before.
+  No daemon or root, 0 rounds, or no decision after the reads: today's single
+  call (`scrum_master.ask_triage`).
 
 ### Closing a sprint
 

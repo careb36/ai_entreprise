@@ -1586,6 +1586,11 @@
       "test_tool_observability.py": [
         "loop"
       ],
+      "test_tools_follow_the_step.py": [
+        "loop",
+        "planning",
+        "tools"
+      ],
       "test_trusted_proxies.py": [
         "platform"
       ],

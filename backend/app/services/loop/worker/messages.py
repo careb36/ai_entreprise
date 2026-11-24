@@ -16,6 +16,7 @@ from sqlmodel import Session
 from services.contracts.manifest import parse_file_manifest
 from services.learning import scrum_master
 from services.loop import replicas
+from services.loop.worker import triage_reads
 from services.tasks import task_events
 
 logger = setup_logger("fabrique-task-worker")
@@ -91,8 +92,11 @@ def _triage_blocked_task(
                 prompt, model, system_prompt = scrum_master.prepare_triage(
                     session, company_id, item, reason
                 )
+            # The ScrumMaster may read the task's files first (triage_reads).
             decision = scrum_master.decide(
-                scrum_master.ask_triage(model, system_prompt, prompt, company_id),
+                triage_reads.answer(
+                    model, system_prompt, prompt, company_id, item_id, sprint_id
+                ),
                 item_id,
             )
             if decision is None:

@@ -246,16 +246,19 @@ def test_the_developer_and_the_architect_get_the_map_beside_the_tree(
         assert dev.startswith("\n\n## Repository\n") and "src/store.py" in dev
         assert "### Definitions, most used first" in dev and "class Store(dict)" in dev
         assert "workspace tools" in dev
+        # Every executing role has the tools now (contracts/tool_steps).
         architect = developer_tools.repository_section(1, "Architect")
-        assert "class Store(dict)" in architect and "workspace tools" not in architect
-        assert developer_tools.repository_section(1, "ScrumMaster") == ""
+        assert "class Store(dict)" in architect and "workspace tools" in architect
+        assert "workspace tools" in developer_tools.repository_section(1, "ScrumMaster")
         # The budget travels to the daemon; 0 leaves the definitions out.
         monkeypatch.setattr(settings, "REPO_MAP_MAX_CHARS", 300)
         cut = developer_tools.repository_section(1, "Developer")
         assert "definitions shown; search for the rest]" in cut
         monkeypatch.setattr(settings, "REPO_MAP_MAX_CHARS", 0)
         assert "### Definitions" not in developer_tools.repository_section(1, "QA")
-        assert developer_tools.repository_section(1, "Architect") == ""
+        assert "### Definitions" not in developer_tools.repository_section(
+            1, "Architect"
+        )
         # A daemon without workspace.map: the tree alone, as before.
         monkeypatch.setattr(settings, "REPO_MAP_MAX_CHARS", 3000)
         monkeypatch.setattr(

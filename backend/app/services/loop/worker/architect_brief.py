@@ -5,7 +5,7 @@ sprint 7 (2026-11-24), asked in one plain call with only the repository map,
 the Architect wanted to look at the project's workflows first and could only
 type a tool call as text. The brief now runs through the Developer's loop
 (``mcp_tools.chat_with_tools``) with the workspace's read tools alone
-(``developer_tools.read_tools``: list, read, search and find_file; no edit,
+(``review_tools.for_step``: list, read, search and find_file; no edit,
 move, delete or test run) on the task's root, for at most
 ``ARCHITECT_TOOL_ROUNDS`` rounds, each answer capped at ``BRIEF_MAX_TOKENS``.
 
@@ -21,9 +21,10 @@ from typing import Any
 from config import settings
 from logging_config import setup_logger
 
+from services.contracts import tool_steps
 from services.models import model_routing
 from services.platform.orchestration_metrics import KPI_ROLE_ARCHITECT
-from services.tools import developer_tools, mcp_tools
+from services.tools import mcp_tools, review_tools
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -62,18 +63,16 @@ def system_prompt(architect: dict[str, Any]) -> str:
 
 def read_tools(company_id: int | None, item_id: int | None, engine: Any) -> Any:
     """The Architect's read tools for the task, at most ``ARCHITECT_TOOL_ROUNDS``
-    rounds; ``None`` when the rounds are 0 or there is nothing to read."""
-    rounds = settings.ARCHITECT_TOOL_ROUNDS
-    if rounds <= 0 or company_id is None:
-        return None
-    try:
-        box = developer_tools.read_tools(company_id, item_id, engine)
-    except Exception as exc:  # noqa: BLE001 - The brief is asked without tools.
-        logger.warning("No read tools for the Architect on item=%s: %s", item_id, exc)
-        return None
-    if box is not None:
-        box.max_rounds = rounds
-    return box
+    rounds; ``None`` when the rounds are 0 or there is nothing to read. The
+    brief's step never writes nor runs (``contracts/tool_steps``)."""
+    return review_tools.for_step(
+        tool_steps.ARCHITECT_BRIEF,
+        KPI_ROLE_ARCHITECT,
+        company_id,
+        item_id,
+        engine=engine,
+        rounds=settings.ARCHITECT_TOOL_ROUNDS,
+    )
 
 
 def ask(

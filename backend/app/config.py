@@ -236,6 +236,11 @@ class Settings(BaseSettings):
     # passed, and spec 01 cost a third less (DeepSeek) to three fifths less (Qwen).
     DEVELOPER_TOOL_ROUNDS: int = 5
     QA_REVIEW_TOOL_ROUNDS: int = 3  # QA's read-only rounds before its verdict
+    # The read-only rounds of the steps that only read (contracts/tool_steps):
+    # the PO's sprint planning and the ScrumMaster's decision on a blocked
+    # task. 0: one call without tools, as before.
+    PLANNING_TOOL_ROUNDS: int = 3
+    SCRUM_TRIAGE_TOOL_ROUNDS: int = 3
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's
     # output limit (services/models/model_profile.py).
