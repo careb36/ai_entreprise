@@ -129,3 +129,35 @@ def test_the_started_sprint_holds_the_validation_until_the_work_is_done(
     assert split.depends_on in (None, [])
     assert register.depends_on == [split.id]
     assert validate.depends_on == [split.id, register.id]
+
+
+def test_a_follow_up_sprint_holds_its_tasks_in_the_plan_s_order(sqlite_session):
+    """The sprint the platform opens on its own follows the same order."""
+    from models import OutboxEvent, Sprint
+    from services.loop.worker import close
+
+    company = Company(company_name=f"Follow {secrets.token_hex(3)}")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sprint = Sprint(company_id=company.id, sprint_name="Next", scope_size="S")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    tasks = [
+        {"title": "Build", "assignee": "Developer", "depends_on": []},
+        {"title": "Check", "assignee": "QA", "depends_on": [0, 1, 7]},
+    ]
+
+    close._add_follow_up_tasks(sqlite_session, sprint, tasks)
+    sqlite_session.commit()
+
+    build, check = sqlite_session.exec(
+        select(BacklogItem)
+        .where(BacklogItem.sprint_id == sprint.id)
+        .order_by(BacklogItem.id)
+    ).all()
+    assert build.depends_on in (None, []) and check.depends_on == [build.id]
+    queued = [
+        e.payload["message"]["backlog_item_id"]
+        for e in sqlite_session.exec(select(OutboxEvent)).all()
+    ]
+    assert build.id in queued and check.id not in queued
