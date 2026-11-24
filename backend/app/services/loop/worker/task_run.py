@@ -14,6 +14,8 @@ claims it; ``_run_claimed_task`` then runs it, in these steps:
 - ``_still_in_progress``: a completion for a task that was frozen or moved
   meanwhile is discarded (``_load_item_runtime_state``,
   ``_sync_manual_freeze_state``);
+- ``_ran_blind``: a run whose every workspace tool call found no daemon is
+  discarded, the sprint paused (``daemon_gate``);
 - ``_passes_quality_gate``: the text checks, which send the task back;
 - ``_hand_to_qa``: the artifacts to the daemon, the task ``in_review`` with the
   deliverable, the handoff message and the Glassroom events.
@@ -30,7 +32,7 @@ from models import Agent, BacklogItem, Sprint
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
-from services.loop import console_host, sprint_control
+from services.loop import console_host, daemon_gate, sprint_control
 from services.loop.answers import gate_reason as _gate_reason
 from services.loop.worker import (
     board_writes,
@@ -161,6 +163,8 @@ async def _run_claimed_task(
     deliverable = await _produce(nats_client, item, agent, sprint, context)
 
     if not await _still_in_progress(item["id"]):
+        return
+    if await _ran_blind(nats_client, item, agent):
         return
     if not await _passes_quality_gate(nats_client, item, agent, sprint, deliverable):
         return
@@ -403,6 +407,22 @@ async def _still_in_progress(item_id: int) -> bool:
             latest_state.get("status"),
         )
         return False
+    return True
+
+
+async def _ran_blind(
+    nats_client: NATSClient, item: dict[str, Any], agent: dict[str, Any]
+) -> bool:
+    """A run whose every workspace call found no daemon is not delivered: the
+    sprint pauses and the task waits as ``todo``, with no rework spent."""
+    calls = daemon_gate.blind(agent.get("tool_calls"))
+    if not calls:
+        return False
+    observed = f"all {calls} workspace tool calls: no responders"
+    paused = await asyncio.to_thread(daemon_gate.hold, engine, item["id"], observed)
+    if paused is not None:
+        await daemon_gate.publish(nats_client, paused)
+    logger.warning("Discarding a blind run of item=%s: %s", item["id"], observed)
     return True
 
 

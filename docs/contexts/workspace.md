@@ -62,7 +62,9 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
 ### The daemon client and liveness
 
 - `workspace_daemon.py`: NATS requests about the person's machine (status,
-  browse, inspect, the test-run record), behind `routers/workspace.py`.
+  browse, inspect, the test-run record), behind `routers/workspace.py`;
+  `no_responders(exc)` tells a daemon that is not running (NATS's "no
+  responders") from one that did not answer in time.
   `output_tail` keeps the end of a command's output with the end of stdout
   last and most of the room, so stderr's warnings never hide the result.
 - `daemon_liveness.py`: heartbeats to `online`, `stale` or `offline`, the

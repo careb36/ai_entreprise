@@ -1,10 +1,8 @@
 """The Developer's workspace tools: read the project and run its tests before delivering.
 
-A task used to be written in one shot from a prompt, with a listing of the
-project's root files as all the model saw of the code it was changing. Here
-the roles that deliver files (the Developer roles, QA, the Designer) get these tools through the
-workspace daemon, offered beside the company's MCP tools in the same loop
-(``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
+The roles that deliver files (the Developer roles, QA, the Designer) get these
+tools through the workspace daemon, beside the company's MCP tools in the same
+loop (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
@@ -21,24 +19,24 @@ agent-computer interface (``developer_tool_replies``):
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
-sha256 of the result. A read also records the file's sha256 and size as the
-daemon read them, so the Verifier can say which of the files a delivery
-modified the Developer had read first (``context_read``), and raise the risk
-tier for one it had not. What the model says it learned stays a claim; its
-own account of a test run is never evidence, the daemon's exit status after
-the delivery is (``delivery_checks.run_delivery_tests``).
+sha256 of the result; ``daemon_absent`` when NATS said no daemon listens (the
+worker pauses the sprint, ``loop/daemon_gate.py``). A read records the file's
+sha256 and size as the daemon read them, so the Verifier can say which of the
+files a delivery modified the Developer had read first (``context_read``), and
+raise the risk tier for one it had not. What the model says it learned stays a
+claim; its account of a test run is never evidence, the daemon's exit status
+after the delivery is (``delivery_checks.run_delivery_tests``).
 
-An edit is an observation with the file's sha256 before and after, and a
-working copy delivered with the answer's files (``services/workspace_edits.py``).
+An edit is an observation with the file's sha256 before and after, and a working
+copy delivered with the answer's files (``services/workspace_edits.py``).
 
-The other tools are read-only on the project. ``run_tests`` executes the project's
-test command, which ``DELIVERY_TESTS_ENABLED`` already runs after every
-delivery; it is offered only when that setting is on, since it runs
-project code on the daemon's machine.
+The other tools are read-only on the project. ``run_tests`` executes the
+project's test command, which ``DELIVERY_TESTS_ENABLED`` already runs after
+every delivery; it is offered only when that setting is on, since it runs project
+code on the daemon's machine.
 
-A repository map (the top of the tree and the definitions ranked by use,
-``services/repo_map.py``) goes into the prompt of a task on an existing
-project, so the model knows what to read.
+A repository map (``services/repo_map.py``: the tree's top, the definitions by
+use) goes into the prompt on an existing project, so the model knows what to read.
 """
 
 from __future__ import annotations
@@ -68,6 +66,7 @@ from services.tools import (
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
+from services.workspace.workspace_daemon import no_responders
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -210,6 +209,7 @@ class WorkspaceToolbox:
         except Exception as exc:  # noqa: BLE001 - The failure is the result the model sees.
             reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
             text, is_error = f"Error: {reason[:300]}", True
+            extra.update({"daemon_absent": True} if no_responders(exc) else {})
         elapsed_ms = int((time.monotonic() - started) * 1000)
         observation = self._observation(
             tool, arguments, round_no, is_error, elapsed_ms, text

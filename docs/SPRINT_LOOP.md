@@ -32,7 +32,13 @@ the LangGraph graph is only an optional kickoff conversation.
    outbox event per task on `task.assign`; the outbox processor stores them in the
    JetStream stream `FABRIQUE_TASKS` (an outbox row completes only once stored).
 2. The task worker consumes `task.assign` as the durable consumer `task-worker`,
-   so assignments published while it was down are processed when it starts. It
+   so assignments published while it was down are processed when it starts.
+   When no workspace daemon was heard within the offline window and NATS
+   answers "no responders", it does not claim the task: the sprint pauses
+   with the reason (start the daemon with `./scripts/start-daemon.sh`, then
+   resume), the task stays `todo` and no rework is counted; a run whose
+   workspace tool calls were all answered "no responders" is discarded the
+   same way instead of going to review (`services/loop/daemon_gate.py`). It
    loads the item and the assigned agent
    (empty model → role default from `services/models/model_factory.py`) and calls the LLM proxy.
    Before each attempt `services/loop/task_routing.py` estimates the task's
