@@ -14,7 +14,9 @@ a name git quotes in a patch header (a tab, a quote, a backslash), which the
 patch parser does not read, is still listed, and a rename lists its source
 and its destination. The backend matches protected paths against it.
 
-Read-only: no worktree, no checkout, no ref is written.
+Read-only: no worktree, no checkout, no ref is written. A request with
+``view`` asks instead for one of the agents' fixed views of a task's
+repository (``git_view.py``).
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import git_view
 from git_workspace import _SHA, GIT_TIMEOUT_SECONDS, TASK_BRANCH_PREFIX, GitError, _out, run_git, valid_branch
 
 MAX_FILES = 300
@@ -177,6 +180,9 @@ def integration_diff(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any
 async def handle_diff(nc, msg, reply, request_body) -> None:
     """``workspace.git.diff`` → the files, hunks and hashes, or ``{"error": {status, message}}``."""
     data = request_body(msg)
+    if data.get("view"):  # The agents' read-only views (git_view.py, PROTOCOL.md §5.6).
+        await git_view.handle(nc, msg, reply, data)
+        return
     try:
         body = await asyncio.to_thread(integration_diff, str(data.get("workspace_root") or ""), data)
     except GitError as e:

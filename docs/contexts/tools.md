@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -175,6 +175,21 @@ written as text; the tool budget had run out".
   `folder`, and the same trailing noise are read as that command, each said
   in the reply. The observation carries `check_script` (path, commit, both
   sha256, or `refused` and why).
+- `workspace_git.py`: `workspace__git`, read-only git with a fixed set of
+  operations and no free arguments: `status` (porcelain, bounded), `changed`
+  (the files this task changed against the company's base branch, committed
+  or not, untracked included), `diff` (one path against that base, bounded),
+  `log` (the last 20 commits at most) and `show_base` (one path as the base's
+  head has it, `workspace.git.read_at`, its sha256 computed here). The first
+  four are the daemon's views on `workspace.git.diff` (`vscode-daemon/git_view.py`,
+  PROTOCOL.md §5.6). Each operation is offered only when every daemon heard
+  announces what it needs (the `view` feature, or `workspace.git.read_at`);
+  none announced, no tool. A path that is absolute, has `..`, or names VCS
+  metadata or a file that may hold secrets is refused here and by the daemon;
+  patches and files are redacted like reads. Each call is an observation with
+  `read_only` true, `git_operation`, and the base and merge base the daemon
+  used. It takes any toolbox with `requester` and `workspace_root`, so
+  another read-only toolbox can offer it.
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole. A read still the latest view of
   its lines (no later edit, move or delete of the file, no later read covering

@@ -76,7 +76,8 @@ FEATURES = {
     "workspace.generate": _FORGE + ("delete",),
     "workspace.edit": ("delete", "move"),
     "workspace.git.base_status": _FORGE,
-    "workspace.git.diff": _FORGE,
+    # The agents' read-only views of a task's repository (git_view.py, §5.6).
+    "workspace.git.diff": _FORGE + ("view",),
     "workspace.git.integrate": _FORGE,
     "workspace.git.merge": _FORGE,
     "workspace.git.publish": _FORGE,

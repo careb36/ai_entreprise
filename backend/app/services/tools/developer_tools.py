@@ -67,6 +67,7 @@ from services.tools import (
     test_commands,
     test_runs,
     workspace_edits,
+    workspace_git,
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
@@ -157,7 +158,7 @@ class WorkspaceToolbox:
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
             schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
-        return schemas
+        return schemas + workspace_git.schemas(self)  # Read-only git, when offered.
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -250,6 +251,8 @@ class WorkspaceToolbox:
                 extra["files_scanned"] = reply.get("files_scanned")
                 return developer_tool_replies.search_text(str(pattern), reply)
             return developer_tool_replies.find_text(str(pattern), reply)
+        if tool == workspace_git.TOOL:
+            return workspace_git.run(self, arguments, extra)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool in (MOVE, DELETE) and self.can_move:
@@ -528,6 +531,7 @@ def toolbox_for(
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
+            workspace_git.offer(workspace, company_id, engine)  # Read-only git.
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine

@@ -136,7 +136,9 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
 - Git: `git_workspace.py` (worktrees, `run_git`), `git_base.py` (where a branch
   starts), `git_env.py` (never a prompt), `git_local.py`, `git_sync.py`
   (fast-forward the person's base), `git_read_at.py` (files at the base's
-  head), `git_diff.py`, `local_merge.py`, `sprint_integration.py`,
+  head), `git_diff.py`, `git_view.py` (the agents' read-only views on
+  `workspace.git.diff`: status, changed, one path's diff, log; PROTOCOL.md
+  §5.6), `local_merge.py`, `sprint_integration.py`,
   `platform_reviews.py`, `forge_gate.py`.
 - Tools and producers: `workspace_read.py`, `workspace_edit.py`,
   `workspace_move.py` (move lines, delete an emptied file; a delivery's
