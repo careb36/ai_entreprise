@@ -33,6 +33,7 @@ from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
     architect_brief,
     board_writes,
+    changelog_prompt,
     execute_tools,
     messages,
     prompt,
@@ -142,6 +143,7 @@ def _developer_prompt(
             "Produce a complete, professional deliverable for this task. "
             "Be thorough and specific to the project context.",
         ),
+        changelog_prompt.section(item),  # Read the diff first (sprint 8).
         Section("requirements", requirements_context or "", 2),
         Section(
             "repository",
