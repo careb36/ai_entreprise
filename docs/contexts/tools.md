@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`, `workspace_git`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `docs_write_policy`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_documents`, `workspace_edits`, `workspace_git`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -180,17 +180,44 @@ call written as text; the tool budget had run out" if it happens again.
   operations and no free arguments: `status` (porcelain, bounded), `changed`
   (the files this task changed against the company's base branch, committed
   or not, untracked included), `diff` (one path against that base, bounded),
-  `log` (the last 20 commits at most) and `show_base` (one path as the base's
-  head has it, `workspace.git.read_at`, its sha256 computed here). The first
-  four are the daemon's views on `workspace.git.diff` (`vscode-daemon/git_view.py`,
-  PROTOCOL.md §5.6). Each operation is offered only when every daemon heard
-  announces what it needs (the `view` feature, or `workspace.git.read_at`);
+  `log` (the last 20 commits at most), `show_base` (one path as the base's
+  head has it, `workspace.git.read_at`, its sha256 computed here) and `blame`
+  (one path's line range, at most 200 lines, as groups of lines with the
+  commit, its date and its subject that last changed them: when and why, for
+  documenting a project). Blame never carries an author's or committer's name
+  or e-mail: the daemon drops them while parsing and the groups are rebuilt
+  here from the named fields only; subjects are redacted like log lines. The
+  first four and `blame` are the daemon's views on `workspace.git.diff`
+  (`vscode-daemon/git_view.py`, PROTOCOL.md §5.6). Each operation is offered
+  only when every daemon heard announces what it needs (the `view` feature,
+  the `blame` feature, or `workspace.git.read_at`);
   none announced, no tool. A path that is absolute, has `..`, or names VCS
   metadata or a file that may hold secrets is refused here and by the daemon;
   patches and files are redacted like reads. Each call is an observation with
   `read_only` true, `git_operation`, and the base and merge base the daemon
   used. It takes any toolbox with `requester` and `workspace_root`, so
   another read-only toolbox can offer it.
+- `workspace_documents.py`: `workspace__read_document`, the text of a DOCX in
+  the project as numbered lines, paged with `start_line` (`workspace.read`
+  with `extract: "text"`, `vscode-daemon/document_text.py`, PROTOCOL.md §5.7).
+  Offered only when every daemon announces the `document_text` feature; the
+  path is checked as `workspace__git` checks it, only `.docx` and `.pdf`. A
+  PDF is refused by the daemon for now (no PDF library among its
+  dependencies) and the model is told why. The text is redacted and bounded
+  like a read's; the observation is a read's (path, the sha256 and size of
+  the file's bytes as the daemon read them) plus `format`, so a statement
+  about a document can cite the digest the platform read. A reply without
+  `extracted` (an older daemon's bytes) is an error, never shown as text.
+- `docs_write_policy.py`: the docs-only write policy. A toolbox whose task is
+  documentation (the TechWriter role, or a kind or step named
+  `documentation`; `apply`, called from `toolbox_for`) is `docs_only`: every
+  write the edit tools ask (`workspace_edits._deliverable`: edit, move,
+  delete) must name a file under `docs/` or `doc/`, a README, or a `.md`,
+  `.markdown`, `.mdx` or `.rst` file; anything else is refused before the
+  daemon is asked, with a reply that says what may be written. TechWriter is
+  not yet offered the workspace tools (`FILE_ROLES`), so the policy takes
+  effect once the tools follow the step. The files an answer delivers in its
+  own blocks are not filtered yet.
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole. A read still the latest view of
   its lines (no later edit, move or delete of the file, no later read covering

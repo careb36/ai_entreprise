@@ -137,10 +137,12 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   starts), `git_env.py` (never a prompt), `git_local.py`, `git_sync.py`
   (fast-forward the person's base), `git_read_at.py` (files at the base's
   head), `git_diff.py`, `git_view.py` (the agents' read-only views on
-  `workspace.git.diff`: status, changed, one path's diff, log; PROTOCOL.md
-  §5.6), `local_merge.py`, `sprint_integration.py`,
+  `workspace.git.diff`: status, changed, one path's diff, log, and blame of
+  a line range without names or e-mails; PROTOCOL.md §5.6), `local_merge.py`, `sprint_integration.py`,
   `platform_reviews.py`, `forge_gate.py`.
-- Tools and producers: `workspace_read.py`, `workspace_edit.py`,
+- Tools and producers: `workspace_read.py`, `document_text.py` (a DOCX's
+  text for `workspace.read` with `extract: "text"`, standard library only, no
+  DTD accepted; PDF refused for now; PROTOCOL.md §5.7), `workspace_edit.py`,
   `workspace_move.py` (move lines, delete an emptied file; a delivery's
   `delete` entry, committed and undone like a write; PROTOCOL.md §5.1.4), `repo_map.py`,
   `code_graph.py`, `signatures.py` (see [tools](tools.md)); `console_run.py`

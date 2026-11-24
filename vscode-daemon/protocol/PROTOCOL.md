@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6, §5.7). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -200,7 +200,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.hash` | request | `file_hash.py` | `workspace_root`, `paths` | `files` (`present` with `sha256`, `missing`, `rejected`, `workspace_missing`) |
 | `workspace.undo` | request | `delivery_snapshot.py` | `workspace_root`, `snapshot_id` | `ok`, `snapshot`, `restored`, `removed` |
 | `workspace.list` | request | `workspace_read.py` | `workspace_root`, `path`?, `depth`? | `path`, `entries`, `truncated` |
-| `workspace.read` | request | `workspace_read.py` | `workspace_root`, `path`, `start_line`?, `lines`? | `path`, `sha256`, `bytes`, `binary`, `text`, `lines`, `first_line`, `last_line`, `truncated` |
+| `workspace.read` | request | `workspace_read.py`, `document_text.py` | `workspace_root`, `path`, `start_line`?, `lines`?, `extract`? (§5.7) | `path`, `sha256`, `bytes`, `binary`, `text`, `lines`, `first_line`, `last_line`, `truncated`; with `extract`, `format` and `extracted` |
 | `workspace.search` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `matches`, `files_scanned`, `match_count`, `truncated`, … |
 | `workspace.find` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `path`, `files`, `match_count`, `truncated` |
 | `workspace.map` | request | `repo_map.py` | `workspace_root`, `max_chars`? | `map`, `fingerprint`, `definitions`, `shown`, `partial`, `cached`, … |
@@ -215,7 +215,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.sandbox.reset` | request | `sandbox_cache.py` | `workspace_root`, `scope`? | `volume`, `volume_reset`, `quarantine_cleared`, `environment_reset` (§5.1.2), … |
 | `workspace.git.publish` | request | `git_workspace.py` | `workspace_root`, `branch`, `base`?, `title`?, `body`?, `forge_policy`? (§5.3) | `ok`, the branch, commit and request URL, `forge_policy`, `remote_contacted` |
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`?, `forge_policy`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
-| `workspace.git.diff` | request | `git_diff.py`, `git_view.py` | `workspace_root`, `commit`, `base`?, `forge_policy`?; or `view` (`status`, `changed`, `diff`, `log`, §5.6) with `base`?, `path`?, `limit`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated`; a view: `view` and its fields (§5.6) |
+| `workspace.git.diff` | request | `git_diff.py`, `git_view.py` | `workspace_root`, `commit`, `base`?, `forge_policy`?; or `view` (`status`, `changed`, `diff`, `log`, `blame`, §5.6) with `base`?, `path`?, `limit`?, `start_line`?, `end_line`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated`; a view: `view` and its fields (§5.6) |
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
@@ -508,6 +508,7 @@ read the request as an integration diff without a commit and refuse it.
 | `changed` | `base`? | `base`, `merge_base`, `branch`, `files` (`path`, `change`: `added`, `modified`, `deleted` or `untracked`), `count`, `truncated` (300) |
 | `diff` | `path`, `base`? | `base`, `merge_base`, `path`, `patch` (60,000 characters), `truncated`, `untracked` |
 | `log` | `limit`? (1 to 20, default 10) | `branch`, `commits` (`commit`, the full id; `subject`, 200 characters), `limit` |
+| `blame` | `path`, `start_line`? (default 1), `end_line`? (default `start_line` + 99) | `path`, `start_line`, `end_line` (at most 200 lines, never past the end), `file_lines`, `groups` (`commit`, `start_line`, `end_line`, `date`: the author date in UTC, `subject`, `uncommitted`), `truncated` |
 
 `changed` and `diff` compare the working tree, committed or not, with the
 merge base of `HEAD` and `base` (a local branch), else the default branch of
@@ -521,6 +522,38 @@ and no remote is contacted, whatever the forge policy. A folder not on this
 machine is a 404; one that is not a repository, or a base it does not have,
 a 409. The backend redacts secret-looking lines from a patch before a model
 sees it, as it does a read's.
+
+`blame` is announced as its own `blame` feature of `workspace.git.diff`, so
+a daemon that serves the other views but not blame is never asked it. It
+blames the working tree (`git blame --porcelain -L`), so its line numbers are
+those `workspace.read` shows; a line not committed yet has the all-zero
+commit, `uncommitted: true` and an empty subject. The porcelain's author and
+committer names and e-mail addresses are dropped while parsing and never
+returned, nor are the lines' contents: the date and the subject say when and
+why. A `start_line` past the end is a 400; a path git does not track, a 409.
+
+### 5.7 A document's text (additive, issue #766)
+
+`workspace.read` with `extract: "text"` answers the text of a document in the
+project instead of its bytes, for the agents' `workspace__read_document`
+(`backend/app/services/tools/workspace_documents.py`), in a read's reply
+shape: numbered lines from `start_line`, at most `lines` (the read's window
+and byte bound), `lines` the document's line count, plus `format` (`docx`)
+and `extracted: true`. `sha256` and `bytes` are those of the file's bytes as
+the daemon read them. Announced as the `document_text` feature of
+`workspace.read`; a daemon from before it ignores the field and answers the
+bytes (`binary: true`), which the backend never shows as text.
+
+- **DOCX** (`document_text.py`, standard library only): `word/document.xml`,
+  one line per paragraph, a heading style as `#` marks, tabs and line breaks
+  kept. The part is at most 30 MiB uncompressed and a DTD or entity
+  declaration is refused (415), so no entity expands.
+- **PDF** is refused (415, "PDF text extraction is not available on this
+  daemon yet"): none of the daemon's dependencies reads PDF.
+
+The path rules are a read's: inside the project, symlinks followed, never a
+file that may hold secrets (403). A file over 20 MiB is a 413; another suffix,
+or a file that is not a DOCX, a 415.
 
 ## 6. Conformance fixtures
 

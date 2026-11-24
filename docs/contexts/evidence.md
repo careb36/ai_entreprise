@@ -8,7 +8,7 @@ module's docstring has the detail.
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
 - **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_links`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -122,6 +122,28 @@ no registry has, or an exact version it lacks, refutes; registry answers are
 observations recorded at delivery. `signatures.py` compares calls in delivered
 Python files with project signatures; a mismatch is a finding, never a
 refutation.
+
+### Documentation links and cited paths
+
+`doc_links.py` (parsing in `markdown_refs.py`): on a delivery that changes
+Markdown under a docs folder (a path component `docs` or `doc`) or a README,
+two checks. `docs_links`: every relative link and reference definition
+resolves to a file or folder of the delivered tree, and its `#anchor` to a
+heading (GitHub's slugs) or explicit anchor of the target. `docs_code_paths`:
+every inline code span that names a path (a known file suffix, or a trailing
+`/`) names one the tree has, from the root, from the document's folder or as
+the tail of a listed path. The tree is the daemon's listing of the folder the
+delivery was written into (`project_files`); a document's text counts only
+when the daemon read the same bytes back (the edit tool's `tool_edit_files`,
+or an answer's file whose sha256, computed here, equals the daemon's
+read-back sha256 in `workspace_writes`). A broken link, or a missing path
+with a `/`, refutes with the broken ones listed, and the gate sends the
+delivery back (`broken documentation links`, `documentation cites missing
+paths`). A cut or missing listing, a target in a folder the listing skips or
+outside the project, an anchor into a document not read back, or a document
+whose text was not read back is `unverifiable`. A bare file name not found is
+a finding. Fenced code and absolute URLs are not followed. The risk tier is
+unchanged (prose is `low`) and the checks are not required checks.
 
 ### Protected paths
 
