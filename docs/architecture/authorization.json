@@ -539,6 +539,9 @@
     "GET /v1/sprints/{sprint_id}/integration/reviews": {
       "access": "Viewer"
     },
+    "GET /v1/sprints/{sprint_id}/live_state": {
+      "access": "Viewer"
+    },
     "GET /v1/sprints/{sprint_id}/progress": {
       "access": "Viewer"
     },

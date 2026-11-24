@@ -9,7 +9,7 @@ has the detail.
 - **Folder:** `backend/app/services/tasks/`
 - **May import:** [contracts](contracts.md), [platform](platform.md).
 - **Interface:** `board`, `dependencies`, `progress_snapshot`, `relations`, `sprint_board`, `task_events`, `task_projection`, `task_records`.
-- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_projection`, `task_records`.
+- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_hold`, `task_projection`, `task_records`.
 
 ## How it works
 
