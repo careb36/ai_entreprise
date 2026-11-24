@@ -86,6 +86,8 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 - `developer_tools.py`: `workspace__list`, `read`, `search`, `find_file`,
   `edit` and `run_tests`, offered to the roles that deliver files.
   `repository_section` puts the tree and the map into the task prompt.
+  `read_tools` offers the four read tools alone, to any role (the Architect's
+  brief, `loop/worker/architect_brief`).
 - `developer_tool_schemas.py`: the schemas. `developer_tool_replies.py`: what
   the model sees, after SWE-agent's interface (a numbered window per read, a
   count instead of a silent cut).

@@ -6,8 +6,8 @@ observation); ``_architect_brief`` asks the company's Architect for a brief,
 or an edit plan (``edit_plan``), before a design-sensitive, reworked or hard
 task of a coding role, QA, PO or ScrumMaster (the team's own advice, on the
 Architect's role default model unless the company chose one; issue #750), and
-``_consult_architect`` is that call. Moved out of
-``task_worker``, which still re-exports these names.
+``_consult_architect`` is that call, with the project's read tools
+(``architect_brief``). Moved out of ``task_worker``, which re-exports them.
 """
 
 import asyncio
@@ -31,6 +31,7 @@ from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
+    architect_brief,
     board_writes,
     messages,
     prompt,
@@ -426,14 +427,25 @@ def _consult_architect(
 
     client = LLMProxyClient(settings.LLM_PROXY_URL)
     client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
+
+    def record(llm_result: dict[str, Any], preview: str, calls: Any = None) -> None:
+        model = llm_result.get("served_model") or architect["model"]
+        record_agent_turn(
+            company_id=sprint["company_id"],
+            sprint_id=sprint.get("id"),
+            backlog_item_id=item.get("id"),
+            agent={**architect, "model": model},
+            action=ACTION_ARCHITECT_CONSULT,
+            llm_result=llm_result,
+            result_preview=preview,
+            tool_calls=calls,
+        )
+
+    # The project's read tools, each call an observation (``architect_brief``).
+    toolbox = architect_brief.read_tools(sprint["company_id"], item.get("id"), engine)
     try:
-        result = client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request},
-            ],
-            model=architect["model"],
-            role=architect["role"],
+        result, observed = architect_brief.ask(
+            client, system_prompt, request, architect, toolbox, record
         )
     except Exception as exc:  # noqa: BLE001 - Network/proxy failure must not block the developer.
         logger.warning(
@@ -452,22 +464,14 @@ def _consult_architect(
 
     advice = _llm_content(result)
     if tool_calls.written_as_text(advice):
-        # Offered no tools, it typed a tool call: that is no brief to pass on.
+        # A tool call typed as text, not made through the tools: no brief.
         logger.warning(
             "Architect answered item=%s with a tool call written as text; no brief",
             item.get("id"),
         )
         advice = ""
 
-    record_agent_turn(
-        company_id=sprint["company_id"],
-        sprint_id=sprint.get("id"),
-        backlog_item_id=item.get("id"),
-        agent={**architect, "model": result.get("served_model") or architect["model"]},
-        action=ACTION_ARCHITECT_CONSULT,
-        llm_result=result,
-        result_preview=advice,
-    )
+    record(result, advice, observed)
     return advice
 
 

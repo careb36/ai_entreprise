@@ -207,6 +207,7 @@ Model choice, most specific first: an agent's own model, the company's model for
 | `RUN_WINDOW_RECHECK_SECONDS` | `300` | Longest sleep of the run-window worker (at least 60). The window itself is a company setting. |
 | `WORKSPACE_WRITE_TIMEOUT_SECONDS` | `30` | How long the task worker waits for the daemon to confirm writes. |
 | `ARCHITECT_CONSULT_ENABLED` | `true` | Consult the Architect before high-priority, design-sensitive or reworked tasks. |
+| `ARCHITECT_TOOL_ROUNDS` | `6` | Rounds of read-only workspace tools (list, read, search, find_file) the Architect may use before its brief. `0` asks in one call without tools. |
 | `ARCHITECT_EDITOR_MODE` | `false` | A hard Developer task gets a numbered edit plan from the Architect. Needs `ARCHITECT_CONSULT_ENABLED`. |
 | `ARCHITECT_EDITOR_MIN_DIFFICULTY` | `4` | Lowest difficulty (1–5) for editor mode. |
 | `AGENT_GRAPH_ENABLED` | `false` | The internal LangGraph producer. Off, `POST /v1/generate` answers 409. Compose default `false`. |

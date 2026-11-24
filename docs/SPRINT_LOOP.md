@@ -54,6 +54,14 @@ the LangGraph graph is only an optional kickoff conversation.
    the run's evidence as `difficulty` and `routing`, beside the model the
    proxy reports serving (`AgentRun.model`, the observation); the request is
    never recorded as the served model. No policy: the role default, as before.
+   Before a design-sensitive, reworked or hard task the Architect writes a
+   brief for the prompt (`_consult_architect`). It may first read the project
+   with the workspace's read tools alone (list, read, search, find_file on the
+   task's root; no edit, move, delete or test run) for at most
+   `ARCHITECT_TOOL_ROUNDS` rounds, each call an observation on its turn in
+   `audit_log`, then answers within `BRIEF_MAX_TOKENS`. A tool call typed as
+   text is no brief; without the daemon it is one plain call
+   (`services/loop/worker/architect_brief.py`).
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
    the **Project wiki**: the company's pages in force (not stale, not proposed)

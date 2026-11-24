@@ -313,12 +313,13 @@ class Settings(BaseSettings):
     RESEARCH_CRATES_URL: str = "https://crates.io/api/v1/crates"
     RESEARCH_GO_URL: str = "https://proxy.golang.org"
     RESEARCH_OSV_URL: str = "https://api.osv.dev"
-    # Consult the Architect agent, on the team's own model (its role default
-    # from model_factory, DeepSeek Pro unless overridden), before a
-    # high-priority, design-sensitive or QA-reworked task of a coding role, QA,
-    # PO or ScrumMaster: the team's second opinion (issue #750). Emits
-    # ``ARCHITECT_CONSULTED:`` comments for analytics.
+    # Consult the Architect, on the team's own model, before a high-priority,
+    # design-sensitive or reworked task of a coding role, QA, PO or ScrumMaster
+    # (issue #750; ``ARCHITECT_CONSULTED:`` comments). It may read the project
+    # first with the read-only workspace tools for at most ARCHITECT_TOOL_ROUNDS
+    # rounds (services/loop/worker/architect_brief.py); 0 asks in one call.
     ARCHITECT_CONSULT_ENABLED: bool = True
+    ARCHITECT_TOOL_ROUNDS: int = 6
     # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.
     AGENT_GRAPH_ENABLED: bool = False
     # How long a console producer's CLI cools down after a quota stop whose

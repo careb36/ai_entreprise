@@ -31,10 +31,9 @@ after the delivery is (``delivery_checks.run_delivery_tests``).
 An edit is an observation with the file's sha256 before and after, and a working
 copy delivered with the answer's files (``services/workspace_edits.py``).
 
-The other tools are read-only on the project. ``run_tests`` executes the
-project's test command, which ``DELIVERY_TESTS_ENABLED`` already runs after
-every delivery; it is offered only when that setting is on, since it runs project
-code on the daemon's machine.
+The other tools are read-only on the project; ``read_tools`` offers those alone
+(the Architect's brief). ``run_tests`` runs project code on the daemon's machine,
+so only with ``DELIVERY_TESTS_ENABLED``, which runs it after each delivery anyway.
 
 A repository map (``services/repo_map.py``: the tree's top, the definitions by
 use) goes into the prompt on an existing project, so the model knows what to read.
@@ -505,6 +504,13 @@ def tool_root(
     evidence = (verification.evidence if verification is not None else None) or {}
     worktree = evidence.get("workspace_root") if evidence.get("git") else None
     return worktree if isinstance(worktree, str) and worktree else root
+
+
+def read_tools(company_id: int, item_id: Any = None, engine: Any = None) -> Any:
+    """List, read, search and find_file alone on the task's root (``tool_root``):
+    no edit, move, delete or test run; ``None`` without the daemon or a root."""
+    root = tool_root(company_id, item_id, engine=engine) if "nats" in _bridge else None
+    return WorkspaceToolbox(_request_from_thread, root) if root else None
 
 
 def apply_limits(toolbox: Any, *, rounds: int, result_max_chars: int) -> None:
