@@ -1,0 +1,49 @@
+{
+  "description": "Which files use the names a module defines, with the lines that name them and their sha256 (lookup, code_lookup.py).",
+  "subject": "workspace.related",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name, punctuation=None):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "seeds": [],
+    "lookup": {
+      "kind": "references",
+      "path": "src/greeting.py"
+    },
+    "max_files": 10
+  },
+  "reply": {
+    "files": [],
+    "partial": false,
+    "seeds_matched": [],
+    "seeds_unmatched": [],
+    "lookup": {
+      "kind": "references",
+      "name": null,
+      "path": "src/greeting.py",
+      "path_found": true,
+      "definitions": [],
+      "references": [
+        {
+          "path": "src/main.py",
+          "sha256": "685bd27aedad0bf0bb34d4fc6cb1f5a3fdeaf3eed37a9d32ef12e64878244989",
+          "names": [
+            "greet"
+          ],
+          "lines": [
+            1,
+            5
+          ],
+          "more_lines": 0
+        }
+      ],
+      "more": 0,
+      "common_name": false
+    }
+  }
+}

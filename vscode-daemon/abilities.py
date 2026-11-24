@@ -84,6 +84,9 @@ FEATURES = {
     "workspace.git.reviews": _FORGE,
     "workspace.git.sync_base": _FORGE,
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
+    # Where a name is defined and who uses it (code_lookup.py, §5.7), for
+    # the agents' navigation tools.
+    "workspace.related": ("lookup",),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }
 

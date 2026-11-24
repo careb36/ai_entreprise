@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6, §5.7). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -207,7 +207,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.edit` | request | `workspace_edit.py`, `workspace_move.py` | `workspace_root`, `session`, `op`? (`edit`, `move`, `delete`, §5.1.4), `path`, lines or `search` / `replace`, or `to_path` / `to_line`? | `path`, `sha256_before`, `sha256_after`, `bytes`, `lines`, `checked`, the window; a move `moved_lines`, `moved_sha256`, `source`, `target`; a delete `deleted` |
 | `workspace.edit.finish` | request | `workspace_edit.py` | `workspace_root`, `session` | `session`, `files` |
 | `workspace.signatures` | request | `signatures.py` | `workspace_root`, `wanted` (`path`, `names`) | `files` (per file `status`, `sha256`, per name `found` / `unknown` / `missing`) |
-| `workspace.related` | request | `code_graph.py` | `workspace_root`, `seeds`, `hops`?, `max_files`? | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched` |
+| `workspace.related` | request | `code_graph.py`, `code_lookup.py` | `workspace_root`, `seeds`, `hops`?, `max_files`?, `lookup`? (§5.7) | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched`; with `lookup`, `lookup` (§5.7) |
 | `workspace.graph` | request | `code_graph.py` | `workspace_root`, `known` (path to sha256), `max_files`? | `files` (`path`, `sha256`, `status`, `defs`, `refs`, `truncated`) for the files whose sha256 the backend does not hold, `unchanged`, `removed`, `more`, `partial` |
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git`, `private_git`? (§5.1.5) | `ok`, `worktree`, `branch`, `head`, `guard`, `private_git`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
@@ -521,6 +521,32 @@ and no remote is contacted, whatever the forge policy. A folder not on this
 machine is a 404; one that is not a repository, or a base it does not have,
 a 409. The backend redacts secret-looking lines from a patch before a model
 sees it, as it does a read's.
+
+### 5.7 Where a name is defined and who uses it (additive, issue #766)
+
+`workspace.related` with `lookup` answers a definition or references lookup
+on the code graph instead of a walk from `seeds` (send `seeds: []`), for the
+agents' `workspace__definition` and `workspace__references` tools
+(`backend/app/services/tools/workspace_navigation.py`). The daemon announces
+it as the `lookup` feature of `workspace.related` (§2.1), and the backend
+offers the tools only when every daemon announces it; a daemon from before it
+ignores the field and answers an empty walk without `lookup`, which the
+backend reads as "not served", never as "no definition".
+
+| `lookup.kind` | Request | Reply `lookup` |
+| --- | --- | --- |
+| `definition` | `name` (one identifier), `path`? (narrows to one file) | `definitions` (`path`, `sha256`, `line`, `depth`: 0 top level, 1 a method; `signature`, the repository map's, redacted; `parameters` for a top-level Python function or class whose signature `workspace.signatures` would report as `found`), `more` |
+| `references` | `name`, `path`, or both | `references` (`path`, `sha256`, `names`, `lines`: the line numbers that name it, at most 10; `more_lines`), `more`; with `path`, the files that use the names that file defines (or its `name` alone), by the edge rule of `repo_map.reference_edges` |
+
+Both carry `kind`, `name`, `path`, `path_found` (with `path`: whether it is
+a file the graph read) and `common_name` (a name every program uses, such
+as `get` or `len`, which the parse does not count as a reference).
+`max_files` (default 20, at most 30) bounds the files listed; `more` counts
+those left out. The files are the code graph's: never a folder a listing
+skips, a hidden file, a file that may hold secrets or a symlink out of the
+project. A `path` that is absolute, has `..` or names a folder is a 400.
+Only paths, names, line numbers and hashes leave the machine, never a file's
+contents.
 
 ## 6. Conformance fixtures
 

@@ -19,7 +19,9 @@ agent-computer interface (``developer_tool_replies``):
   or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
   within the same runner, ``test_commands``), or a check script committed under ``scripts/``
-  that the task did not change (``check_scripts``), bounded output.
+  that the task did not change (``check_scripts``), bounded output;
+- ``workspace__definition``, ``workspace__references`` and
+  ``workspace__lint`` where the step allows X (``workspace_navigation``, ``workspace_lint``).
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
@@ -71,6 +73,8 @@ from services.tools import (
     test_runs,
     workspace_edits,
     workspace_git,
+    workspace_lint,
+    workspace_navigation,
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
@@ -142,6 +146,7 @@ class WorkspaceToolbox:
         self.edits_made, self.can_move = False, False
         self.edited_files: list[dict[str, Any]] = []
         self.finish_error: str | None = None
+        workspace_navigation.offer(self)  # Definition and references, when announced.
 
     @property
     def tools(self) -> dict[str, dict[str, Any]]:
@@ -162,6 +167,7 @@ class WorkspaceToolbox:
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
             schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
+        schemas += workspace_navigation.schemas(self)  # Navigation; lint in execution.
         return schemas + workspace_git.schemas(self)  # Read-only git, when offered.
 
     def call(
@@ -257,6 +263,8 @@ class WorkspaceToolbox:
             return developer_tool_replies.find_text(str(pattern), reply)
         if tool == workspace_git.TOOL:
             return workspace_git.run(self, arguments, extra)
+        if tool in workspace_navigation.TOOLS:
+            return workspace_navigation.run(self, tool, arguments, extra)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool in (MOVE, DELETE) and self.can_move:
@@ -542,10 +550,13 @@ def toolbox_for(
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
             workspace_git.offer(workspace, company_id, engine)  # Read-only git.
+            loader = functools.partial(
+                edit_lint.load_profile, _bridge, company_id, root, engine
+            )
             if workspace.can_edit:  # The linter after each edit, read once.
-                workspace.lint_profile = functools.partial(
-                    edit_lint.load_profile, _bridge, company_id, root, engine
-                )
+                workspace.lint_profile = loader
+            if tool_steps.RUN in allowed:  # ``workspace__lint`` is family X.
+                workspace_lint.offer(workspace, loader)
     # The research tools where the step allows them, whatever the role.
     research = None
     if tool_steps.RESEARCH in allowed:

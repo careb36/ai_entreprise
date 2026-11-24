@@ -143,7 +143,9 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
 - Tools and producers: `workspace_read.py`, `workspace_edit.py`,
   `workspace_move.py` (move lines, delete an emptied file; a delivery's
   `delete` entry, committed and undone like a write; PROTOCOL.md §5.1.4), `repo_map.py`,
-  `code_graph.py`, `signatures.py` (see [tools](tools.md)); `console_run.py`
+  `code_graph.py`, `code_lookup.py` (definition and references lookups on
+  `workspace.related`, PROTOCOL.md §5.7), `signatures.py` (see
+  [tools](tools.md)); `console_run.py`
   (see [producers](producers.md); with `private_git: false` it prepares the
   task's worktree for the Developer's tools, keeping git's pointer,
   PROTOCOL.md §5.1.5).

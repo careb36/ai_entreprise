@@ -77,9 +77,9 @@ What stays with the role, and is not a matter of tools:
 
 | Family | Tools | Notes |
 |---|---|---|
-| R: read | `workspace__list`, `read`, `search`, `find_file`, `git` (status, changed, diff vs base, log, file at base) | Read-only, on the task's root. |
+| R: read | `workspace__list`, `read`, `search`, `find_file`, `git` (status, changed, diff vs base, log, file at base), `definition`, `references` | Read-only, on the task's root. |
 | W: write | `workspace__edit`, `move`, `delete`, whole-file delivery | Only in the task's worktree (or a folder without the Git workflow). |
-| X: run | `workspace__run_tests` (narrowed), committed `scripts/*.py` | Sandbox and command policy; no shell. |
+| X: run | `workspace__run_tests` (narrowed), committed `scripts/*.py`, `workspace__lint` (narrowed to paths) | Sandbox and command policy; no shell. |
 | S: research | `research__package`, `advisories`, `fetch` | Allowed hosts only. |
 | E: record | `board__task` (history, comments, attempts), `board__evidence` (a run's checks and observations) | Read-only, the company's own tasks only. **New.** |
 
@@ -142,9 +142,14 @@ What stays with the role, and is not a matter of tools:
    `workspace__definition` (where a name is defined, with its signature) and
    `workspace__references` (who uses it) to every turn with R, so an agent
    checks a call before writing it instead of guessing.
+   *Built* (`feat/navigation-and-lint-tools`): `services/tools/workspace_navigation.py`,
+   through an optional `lookup` field on `workspace.related` (PROTOCOL.md
+   §5.7), offered when every daemon announces it.
 7. **Lint on demand.** The lint after an edit (`edit_lint`) runs only on the
    edited file. Offer `workspace__lint` (the stack profile's lint and type
    check, narrowed to given paths, in the sandbox) to every turn with X.
+   *Built* (`feat/navigation-and-lint-tools`): `services/tools/workspace_lint.py`,
+   in execution turns only; the model gives paths, never command text.
 8. **Run the project's own programs.** Since the scope directive
    (2026-11-19) projects include data science and ML: a turn with X can run a
    committed entry point declared in the project's plan (a training or
