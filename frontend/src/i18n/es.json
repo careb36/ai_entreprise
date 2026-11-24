@@ -4928,6 +4928,28 @@
   "account": {
     "title": "Cuenta",
     "subtitle": "Tu configuración personal, en cualquier empresa en la que trabajes.",
+    "password": {
+      "title": "Contraseña",
+      "intro": "Escribe tu contraseña actual y luego la nueva dos veces. Necesita al menos {{min}} caracteres. Tus otras sesiones terminan; esta sigue abierta.",
+      "current": "Contraseña actual",
+      "new": "Contraseña nueva",
+      "repeat": "Repite la contraseña nueva",
+      "submit": "Cambiar contraseña",
+      "saving": "Cambiando…",
+      "mismatch": "Las dos contraseñas nuevas no coinciden.",
+      "changed_one": "Tu contraseña cambió. Se cerró {{count}} sesión; este navegador sigue con la sesión abierta.",
+      "changed_other": "Tu contraseña cambió. Se cerraron {{count}} sesiones; este navegador sigue con la sesión abierta.",
+      "ssoOnly": "Entras con inicio de sesión único: esta cuenta no tiene contraseña que cambiar.",
+      "errors": {
+        "wrong_password": "La contraseña actual no es correcta.",
+        "too_short": "La contraseña nueva necesita al menos {{min}} caracteres.",
+        "too_long": "La contraseña nueva es demasiado larga: como máximo 72 bytes.",
+        "same_password": "La contraseña nueva debe ser distinta de la actual.",
+        "locked": "Demasiados intentos: espera un poco y vuelve a probar.",
+        "no_password": "Esta cuenta solo entra con inicio de sesión único: no tiene contraseña que cambiar.",
+        "person_only": "Solo una persona con la sesión iniciada puede cambiar una contraseña."
+      }
+    },
     "sso": {
       "title": "Inicio de sesión único",
       "intro": "Vincula tu cuenta con el proveedor de identidad de tu empresa para iniciar sesión con él. El correo verificado del proveedor debe ser el de esta cuenta, en un dominio que la empresa haya verificado. Puedes desvincularla mientras conserves otra forma de iniciar sesión.",
