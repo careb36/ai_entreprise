@@ -325,9 +325,9 @@ def chat_with_tools(
     # (index in history, round, observation) of each tool result, so the old
     # ones go to the model as one line (``services/tool_history.py``).
     results: list[tuple[int, int, dict[str, Any]]] = []
-    keep = settings.TOOL_HISTORY_KEEP_ROUNDS
+    keep, budget = settings.TOOL_HISTORY_KEEP_ROUNDS, settings.TOOL_HISTORY_MAX_CHARS
     for round_no in range(1, rounds + 1):
-        tool_history.compress(history, results, round_no, keep)
+        tool_history.compress(history, results, round_no, keep, budget)
         result = client.chat(
             messages=history, model=model, role=role, tools=schemas, **billing
         )
@@ -348,7 +348,7 @@ def chat_with_tools(
                     "content": text,
                 }
             )
-    tool_history.compress(history, results, rounds + 1, keep)
+    tool_history.compress(history, results, rounds + 1, keep, budget)
     history.append({"role": "user", "content": ROUNDS_EXHAUSTED_NOTE})
     return client.chat(
         messages=history, model=model, role=role, **billing

@@ -276,6 +276,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `MCP_STDIO_ALLOWED_COMMANDS` | `""` | Absolute paths a company's stdio MCP server may spawn. Empty disables stdio servers. |
 | `MCP_HTTP_ALLOWED_HOSTS` | `""` | Hosts an MCP server may reach over plain http. |
 | `TOOL_HISTORY_KEEP_ROUNDS` | `3` | Older tool results go to the model as one line each. `0` keeps all whole. |
+| `TOOL_HISTORY_MAX_CHARS` | `120000` | An old `workspace__read` still the latest view of its lines stays whole while all tool results in the history fit this many characters; past it the oldest reads become one line. `0`: no bound. |
 | `EDIT_LINT_ENABLED` | `true` | Lint a file after `workspace__edit`. |
 | `EDIT_LINT_TIMEOUT_SECONDS` | `60` | Timeout of that lint. |
 | `REPO_MAP_MAX_CHARS` | `3000` | Repository map in prompts. `0` leaves it out. |

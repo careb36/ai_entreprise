@@ -276,10 +276,11 @@ class Settings(BaseSettings):
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
     EDIT_LINT_TIMEOUT_SECONDS: float = 60.0
-    # The tool loop (``services/tool_history.py``): results older than the
-    # last this many rounds go to the model as one line each; the evidence
-    # keeps them whole. 0 keeps every result whole.
+    # The tool loop (``tools/tool_history.py``): results older than the last KEEP
+    # rounds go to the model as one line (0: none); an old read that is still the
+    # latest view stays whole while all results fit MAX_CHARS (0: no bound).
     TOOL_HISTORY_KEEP_ROUNDS: int = 3
+    TOOL_HISTORY_MAX_CHARS: int = 120000
     # Named sections of the Developer's task prompt left out of every prompt,
     # comma-separated (``services/loop/worker/prompt_budget.py``, issue #443):
     # a with/without comparison for the bench. Empty: nothing is off.

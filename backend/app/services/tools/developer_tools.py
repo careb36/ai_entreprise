@@ -6,8 +6,8 @@ loop (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
-- ``workspace__read``: a window of 100 numbered lines (``lines`` asks for up
-  to 400), paged with ``start_line``;
+- ``workspace__read``: a window of numbered lines, as many as fit the result
+  budget up to 400 (or ``lines``), paged with ``start_line``;
 - ``workspace__search``: the lines matching a pattern; past the bound, how many;
 - ``workspace__find_file``: files by name or glob; past the bound, how many;
 - ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
@@ -243,24 +243,16 @@ class WorkspaceToolbox:
                     "workspace_root": root,
                     "path": arguments.get("path"),
                     "start_line": arguments.get("start_line"),
-                    "lines": arguments.get("lines"),
+                    "lines": arguments.get("lines")
+                    or developer_tool_replies.READ_ASK_LINES,
                 },
                 READ_TIMEOUT_SECONDS,
             )
-            extra.update(
-                {
-                    "path": reply.get("path"),
-                    "sha256": reply.get("sha256"),
-                    "bytes": reply.get("bytes"),
-                    "lines": reply.get("lines"),
-                    "first_line": reply.get("first_line"),
-                    "last_line": reply.get("last_line"),
-                    "file_truncated": bool(reply.get("truncated")),
-                }
-            )
-            return developer_tool_replies.read_text(
+            text = developer_tool_replies.read_text(
                 str(arguments.get("path") or ""), reply, self.result_max_chars
             )
+            extra.update(developer_tool_replies.read_fields(reply, text))
+            return text
         if tool in ("search", developer_tool_schemas.FIND):
             subject = "workspace.search" if tool == "search" else "workspace.find"
             pattern = arguments.get("pattern")

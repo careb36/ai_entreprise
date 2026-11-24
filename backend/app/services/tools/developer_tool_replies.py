@@ -7,12 +7,19 @@ the list silently; an empty answer says it is empty ("the command finished
 with no output") rather than being an empty string, which models misread.
 
 Kept apart from ``developer_tools`` (the loop, the record, the wiring) so each
-file stays under the repository's size limit. Text only: the observation the
-toolbox records is built there.
+file stays under the repository's size limit. Text, and the fields a read
+adds to the observation the toolbox records (``read_fields``).
+
+A read the model sized itself keeps its ``lines``; otherwise the toolbox asks
+the daemon for ``READ_ASK_LINES`` (its ceiling) and ``read_text`` keeps as many
+whole lines as fit the model's result budget (issue #766: 601 of 1063 reads
+stopped at the old 100-line default and the same files were read again). A
+daemon older than ``lines`` ignores it and answers its 100.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from services.evidence import context_read
@@ -30,6 +37,27 @@ def list_text(reply: dict[str, Any]) -> str:
     if reply.get("truncated"):
         lines.append("[listing cut here; list a sub-folder to see the rest]")
     return "\n".join(lines)
+
+
+# What a read asks the daemon for when the model named no ``lines``: the
+# daemon's READ_LINES_CEILING, still bounded by its READ_MAX_BYTES.
+READ_ASK_LINES = 400
+_SHOWN = re.compile(r": lines (\d+)–(\d+) of [^\]]*\]$")
+
+
+def read_fields(reply: dict[str, Any], text: str) -> dict[str, Any]:
+    """The read's observation fields; ``last_line`` is the last line the model
+    was shown (``read_text`` may stop before the daemon's)."""
+    shown = _SHOWN.search(text.split("\n", 1)[0])
+    return {
+        "path": reply.get("path"),
+        "sha256": reply.get("sha256"),
+        "bytes": reply.get("bytes"),
+        "lines": reply.get("lines"),
+        "first_line": reply.get("first_line"),
+        "last_line": int(shown.group(2)) if shown else reply.get("last_line"),
+        "file_truncated": bool(reply.get("truncated")),
+    }
 
 
 # Room kept for the header and the continuation lines around a window.
