@@ -41,6 +41,7 @@
     "backend/tests/test_board_moves_carry.py",
     "backend/tests/test_board_observed.py",
     "backend/tests/test_browser_image.py",
+    "backend/tests/test_browser_image_backend.py",
     "backend/tests/test_browser_smoke.py",
     "backend/tests/test_code_graph.py",
     "backend/tests/test_command_runs_rewritten_check.py",

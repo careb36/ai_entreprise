@@ -567,6 +567,10 @@
         "evidence",
         "loop"
       ],
+      "test_browser_image_backend.py": [
+        "evidence",
+        "loop"
+      ],
       "test_browser_images_playwright.py": [
         "loop"
       ],
