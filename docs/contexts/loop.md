@@ -225,6 +225,14 @@ close the procedures round (`worker/procedures_round`: keep or revert
 procedures by the board's numbers) and the wiki compile (`wiki_close.py`, which
 never raises).
 
+Who closes: a worker approval closes its sprint on the spot, and the review
+cycle (`worker/review._closing_candidates`) looks at every `active` sprint and
+closes each one that has settled (`dependencies.sprint_settled`). That covers
+a sprint whose last task a person moved to Done or Discarded on the board
+(`PATCH /v1/backlog/{id}`), which does not close the sprint itself; it closes
+within one cycle (issue #766). A paused, planned or cancelled sprint is not
+`active` and is never closed this way.
+
 ### Elsewhere
 
 `replicas.py` (claims, recovery, one close): [platform](platform.md).

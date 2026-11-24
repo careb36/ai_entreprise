@@ -160,7 +160,10 @@ the LangGraph graph is only an optional kickoff conversation.
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the
-   spot and the review cycle closes one whose last open task got blocked.
+   spot, and each review cycle (every 30 seconds) closes every active sprint
+   that has settled, whether its last open task got blocked or a person moved
+   it to Done or Discarded on the board. A paused, planned or cancelled
+   sprint is not closed.
    `GET /v1/inbox` (Viewer, `routers/inbox.py`) lists what the company needs a
    person for: the tasks blocked until someone acts (not the ones the worker
    still retries or re-reviews), the procedure proposals waiting and how many
