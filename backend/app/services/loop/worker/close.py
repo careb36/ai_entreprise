@@ -28,8 +28,12 @@ from sqlmodel import Session, select
 from services.learning import retrospective
 from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
-from services.loop.sprint_close import NOTHING_DONE, PROTECTED_PATHS_ON, RECLOSED
-from services.loop.sprint_close import nothing_done_reason
+from services.loop.sprint_close import (
+    NOTHING_DONE,
+    PROTECTED_PATHS_ON,
+    RECLOSED,
+    nothing_done_reason,
+)
 from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )

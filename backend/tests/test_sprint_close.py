@@ -143,7 +143,9 @@ def test_a_sprint_with_every_task_blocked_pauses_instead_of_completing(db):
     """Sprint 7 (2026-11-24) closed as completed with all four tasks blocked."""
     sprint = _sprint(db)
     for _ in range(2):
-        _item(db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}])
+        _item(
+            db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}]
+        )
 
     result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
 
