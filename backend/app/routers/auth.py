@@ -11,6 +11,9 @@ Endpoints:
 - ``GET /v1/auth/csrf``       — the session's CSRF value, for a page that
   cannot read the API host's cookie.
 - ``GET /v1/auth/me``         — return the authenticated user's profile.
+- ``POST /v1/auth/password``  — the signed-in person changes their password;
+  every session ends and this browser gets a new one
+  (``docs/design/change-password.md``).
 - ``POST /v1/company/invite`` lives in ``routers/invitations.py``: a pending
   invitation the invitee accepts or declines.
 - ``DELETE /v1/company/{id}/members/{user_id}`` — remove a member (Owner);
@@ -41,9 +44,16 @@ from passwords import (
     rehash_password,
     verify_password,
 )
-from schemas import LoginRequest, UserCreateRequest
+from pydantic import Field
+from schemas import STRICT, LoginRequest, RequestModel, UserCreateRequest
 from security import limiter
-from services.platform import login_throttle, sessions, sso_flow, teams
+from services.platform import (
+    login_throttle,
+    password_change,
+    sessions,
+    sso_flow,
+    teams,
+)
 from services.platform.agent_service import AgentService
 from services.platform.oidc import SsoError
 from sqlalchemy.exc import IntegrityError
@@ -294,6 +304,10 @@ async def get_me(
         "email": user.email,
         "full_name": user.full_name,
         "support_admin": is_support_admin(user),
+        # Whether there is a password to change (an SSO-only account has
+        # none), and the rule a new one follows, for the account page.
+        "has_password": bool(user.password_hash),
+        "password_min_length": int(settings.PASSWORD_MIN_LENGTH),
         "memberships": [
             {
                 "company_id": membership.company_id,
@@ -308,6 +322,81 @@ async def get_me(
             for membership in memberships
         ],
     }
+
+
+class PasswordChangeRequest(RequestModel):
+    """Payload for ``POST /v1/auth/password``. The new password's rule
+    (``check_new_password``) is applied by the route, so its refusal names a
+    code the page can translate."""
+
+    model_config = STRICT
+
+    current_password: str = Field(max_length=password_change.MAX_CURRENT)
+    new_password: str = Field(max_length=password_change.MAX_CURRENT)
+
+
+def _cookie_family(request: Request, session: Session):
+    """The live family of a request authenticated by the session cookie;
+    ``None`` for a Bearer token, which wins whenever present."""
+    if request.headers.get("Authorization"):
+        return None
+    sid = auth_tokens.session_id_of(
+        request.cookies.get(session_cookies.SESSION_COOKIE) or ""
+    )
+    return sessions.active(session, sid)
+
+
+@router.post("/auth/password")
+@limiter.limit(_login_limit)
+def change_password(
+    request: Request,
+    req: PasswordChangeRequest,
+    response: Response,
+    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The signed-in person changes their own password.
+
+    The current password is checked under the sign-in's per-account backoff;
+    the new one follows ``check_new_password`` and must differ. Every session
+    family of the person is revoked, this one included; a browser session
+    gets a new family in the answer's cookies, so only this browser stays
+    signed in. Audited as ``password_changed``, with no password or hash.
+    An API token, or an owner action acting for the person, is refused.
+    """
+    if (
+        getattr(user, "_api_token_company_id", None) is not None
+        or getattr(user, "_owner_action_run_id", None) is not None
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "person_only",
+                "message": "Only a signed-in person can change a password.",
+            },
+        )
+    family = _cookie_family(request, session)
+    method = family.method if family is not None else None
+    try:
+        changed = password_change.change_own(
+            session,
+            user,
+            req.current_password,
+            req.new_password,
+            reissue=method is not None,
+        )
+    except password_change.PasswordChangeRefused as exc:
+        headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+        raise HTTPException(
+            status_code=exc.status,
+            detail={"code": exc.code, "message": exc.message},
+            headers=headers,
+        ) from exc
+    body = {"status": "changed", "sessions_ended": changed.sessions_ended}
+    if method is not None:
+        body.update(session_cookies.start(response, session, user, method))
+    response.headers["Cache-Control"] = "no-store"
+    return body
 
 
 @router.delete("/company/{company_id}/members/{user_id}", status_code=204)

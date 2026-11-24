@@ -9,7 +9,7 @@ knows nothing of tasks, runs or a company's decisions.
 - **Folder:** `backend/app/services/platform/`
 - **May import:** [contracts](contracts.md). Every context but contracts may import it.
 - **Interface:** `acknowledgements`, `agent_service`, `audit_anchors`, `company_limits_setting`, `company_standards_setting`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `hooks`, `in_process_principal`, `locks`, `mail`, `memory_graph`, `notifications`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_window_setting`, `sod`, `standard_exceptions`, `teams`, `wstg_catalogue`.
-- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `in_process_principal`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
+- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `in_process_principal`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `password_change`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
 - **HTTP adapters:** `healthcheck` (the LLM proxy's probe), `oidc_client`. `dns_client` is the DNS resolver adapter, held to the same shape (returns data, raises `DnsNameNotFound` or `DnsUnavailable`).
 
 ## How it works
@@ -98,6 +98,15 @@ sprint closes once.
   family. A cookie-authenticated unsafe request needs `X-Fabrique-CSRF`.
   Login is rate-limited per address and per account. Design:
   [`SESSIONS.md`](../archive/design/SESSIONS.md).
+- **Changing a password** (`password_change.py`): `POST /v1/auth/password`
+  for the signed-in person (an API token or an owner action gets 403). The
+  current password is checked under the sign-in's backoff, the new one by
+  `check_new_password` and must differ. Every session family of the person
+  is revoked and a browser session gets a new one; the change, the
+  revocations and the audit rows are one commit. A forgotten password is
+  reset on the server (`backend/app/reset_password.py`, audited as
+  `password_reset_by_operator`). One audit row per company of the person,
+  never a password or hash. [Design](../design/change-password.md).
 - **Step-up** (`backend/app/step_up.py`): a fresh re-authentication in the
   request that starts a dangerous owner action (a protected `land_branch`):
   the password, checked with bcrypt and the same per-account backoff as the

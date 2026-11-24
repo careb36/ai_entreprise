@@ -250,6 +250,42 @@ Members link their account with `/fabrique link CODE` (Teams:
 
 After a leak, rotate first, then read the `chat_approval_*` audit rows.
 
+## A person forgot their password
+
+La Fabrique sends no email, so there is no reset link: someone with a shell
+on the computer that runs the backend container sets a new password. A person
+who still knows the password changes it under **Account** in the app.
+
+```bash
+docker exec -it factory-backend python -m reset_password
+# or, from a checkout on that computer:
+python3 scripts/reset_password.py            # --container NAME for another name
+```
+
+The reset lives in the image (`backend/app/reset_password.py`); the
+repository's `scripts/` folder is not copied into it, so
+`scripts/reset_password.py` only runs the command above. It asks for the
+email, then for the new password twice, hidden (`getpass`); it never takes the
+password from an argument or the environment, so it stays out of the shell
+history and `ps`. Then it:
+
+1. applies the same rule as the app (at least `PASSWORD_MIN_LENGTH`
+   characters, at most 72 bytes) and stores a bcrypt hash;
+2. ends every session of that person (they sign in again everywhere);
+3. writes the audit row `password_reset_by_operator`, by `operator:cli`, in
+   the hash chain of each of the person's companies. The row carries the
+   user id and how many sessions ended, never the password or hash.
+
+It refuses an unknown email and an account that signs in only with single
+sign-on (it has no password; use the identity provider). If the person also
+failed to sign in many times, the sign-in backoff of that backend process
+still applies until it runs out (at most `LOGIN_BACKOFF_MAX_SECONDS`). Give
+the new password to the person by a channel other than the one the request
+came on, and ask them to change it under Account.
+
+Do not write the hash with SQL: that leaves no audit row and no revoked
+sessions.
+
 ## Rotate keys
 
 Generate keys as `CONFIGURATION.md`, Required Environment Variables, says.
