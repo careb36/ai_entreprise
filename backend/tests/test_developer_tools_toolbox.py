@@ -95,7 +95,7 @@ def test_errors_are_results_the_model_sees_and_the_record_keeps(project):
     missing, text = box.call(_call("workspace__read", path="src/none.py"), 1)
     assert missing["is_error"] is True and text.startswith("Error: No such file")
     unknown, text = box.call(_call("workspace__delete", path="x"), 1)
-    assert unknown["reason"] == "unknown tool" and text == mcp_tools.NO_TOOL_NOTE
+    assert unknown["reason"] == "unknown tool" and text.startswith("Unknown tool")
     malformed, text = box.call(
         {"id": "c", "function": {"name": "workspace__read", "arguments": "{nope"}}, 1
     )

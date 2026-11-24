@@ -28,7 +28,7 @@ from models.sprint import BacklogItem, Sprint
 from services.evidence import risk
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import quality_gate
-from services.tools import developer_tools, mcp_tools, workspace_edits
+from services.tools import developer_tools, workspace_edits
 from sqlmodel import select
 
 # The shared fixtures.
@@ -41,7 +41,7 @@ def test_the_toolbox_offers_the_edit_only_where_edits_may_go(project, daemon):
     names = [s["function"]["name"] for s in plain.schemas()]
     assert "workspace__find_file" in names and "workspace__edit" not in names
     refused, text = plain.call(_call("workspace__edit", path="src/notes.txt"), 1)
-    assert refused["reason"] == "unknown tool" and text == mcp_tools.NO_TOOL_NOTE
+    assert refused["reason"] == "unknown tool" and text.startswith("Unknown tool")
     editing = developer_tools.WorkspaceToolbox(
         _Requester(daemon), str(project), can_edit=True
     )

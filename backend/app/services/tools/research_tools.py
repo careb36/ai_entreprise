@@ -253,8 +253,8 @@ class ResearchToolbox:
             return observation, f"Error: malformed arguments ({exc})."
         if full_name not in self.tools:
             observation = self._observation(tool, arguments, round_no, True, 0, "")
-            observation["reason"] = "unknown tool"
-            return observation, mcp_tools.NO_TOOL_NOTE
+            observation.update(reason="unknown tool", requested=full_name[:200])
+            return observation, mcp_tools.unknown_tool_note(full_name, self.tools)
         started = time.monotonic()
         extra: dict[str, Any] = {}
         try:

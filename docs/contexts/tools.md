@@ -92,7 +92,19 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
   every daemon announces them, `workspace__move` (the same bytes from one file
   to another, `moved_sha256` from the daemon) and `workspace__delete` (only an
   emptied file; delivered as a deletion, `tool_edit_deletions`). Design:
-  [`move-and-delete-files.md`](../design/move-and-delete-files.md).
+  [`move-and-delete-files.md`](../design/move-and-delete-files.md). When move
+  is offered, the task prompt gets `## Moving code between files`
+  (`MOVE_NOTE`): a split moves the lines instead of retyping both files.
+  `offered` puts `tools_offered` on the run's evidence: every tool name the
+  loop offered and, under `withheld`, the workspace's write tools it did not
+  offer with why (the person's checkout of a branch-delivering company, which
+  holds on a task's first attempt; no heartbeat announcing move and delete
+  yet, as right after a backend restart; or a daemon that does not announce
+  them). The backend's own decision, an observation.
+- A call to a tool that is not offered (a bare `read`, an empty name) is
+  recorded with the name asked (`requested`) and answered with that name, the
+  nearest offered one and the list (`mcp_tools.unknown_tool_note`), in the
+  workspace, research and MCP toolboxes alike.
 - `edit_lint.py`: the stack profile's lint command after an edit, in the
   sandbox, its result shown to the model in the same turn.
 - `test_runs.py`: what `workspace__run_tests` may run, per folder, installing

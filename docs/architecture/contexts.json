@@ -734,6 +734,9 @@
       "test_developer_tools_toolbox.py": [
         "loop"
       ],
+      "test_developer_uses_move.py": [
+        "loop"
+      ],
       "test_difficulty_routing.py": [
         "loop"
       ],

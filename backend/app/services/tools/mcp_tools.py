@@ -25,6 +25,7 @@ a way to audit, a stdio server is not started.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import logging
@@ -46,7 +47,23 @@ ROUNDS_EXHAUSTED_NOTE = (
     "The tool budget for this task is spent; answer now with the complete "
     "deliverable from what you already know."
 )
-NO_TOOL_NOTE = "Unknown tool. The available tools are listed in the request."
+
+
+def unknown_tool_note(name: str, offered: Any) -> str:
+    """The reply to a call of a tool that is not offered: the name it used
+    (or that it named none), the nearest offered name and every offered name,
+    so the model can call the right one next round."""
+    names = sorted(str(n) for n in offered or [])
+    asked = str(name or "").strip()[:100]
+    near = [n for n in names if asked and n.endswith(TOOL_NAME_SEP + asked)]
+    near = near or difflib.get_close_matches(asked, names, n=1, cutoff=0.6)
+    what = f"Unknown tool {asked!r}." if asked else "The call named no tool."
+    hint = f" Did you mean {near[0]}?" if near else ""
+    return (
+        f"{what}{hint} Call a tool by its exact name: "
+        + (", ".join(names) or "none is offered")
+        + "."
+    )
 
 
 def _sha256(text: str) -> str:
@@ -205,8 +222,8 @@ class Toolbox:
         tool = self.tools.get(full_name)
         if tool is None:
             observation = self._observation(full_name, arguments, round_no, True, 0, "")
-            observation["reason"] = "unknown tool"
-            return observation, NO_TOOL_NOTE
+            observation.update(reason="unknown tool", requested=full_name[:200])
+            return observation, unknown_tool_note(full_name, self.tools)
         started = time.monotonic()
         try:
             self._starting(self.specs[tool["server"]], f"call {tool['name']}")
