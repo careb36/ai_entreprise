@@ -133,11 +133,26 @@ back at finish. For each file, `finish` answers with one of three outcomes:
 - QA's acceptance test files are checked before the tests run
   (`delivery_checks.guard_test_files`): one that is missing is restored and the
   delivery refuted, so deleting one gains nothing.
-- **Residual risk.** No check counts the project's other tests between
-  deliveries. A Developer could already empty an unprotected test file with
-  edits before this change; `delete` adds no new way to lose tests (a deleted
-  file was emptied first, and every line that left it is recorded), but a
-  count of collected tests per delivery would close the gap. Not built.
+- **Tests removed (`tests_removed`, 2026-11-24).** On 2026-11-24 (sprint 6,
+  task 27) a Developer went around "only an empty file is deleted" without
+  `delete` at all: it delivered `backend/tests/test_browser_image.py` whole
+  with empty content (`additions 0, deletions 642`) and rewrote two other test
+  files from memory, the old tests gone. The Verifier now counts test
+  definitions in every test file the delivery wrote or deleted, from the
+  daemon's diffs (`services/evidence/tests_removed.py`). A deleted file's
+  report carries the diff of the bytes the daemon removed, so the lines that
+  left with an edit are counted too. The names are summed over the whole
+  delivery: a test moved to another test file of the delivery is not lost. A
+  name removed and not added back anywhere holds the task for a person
+  (`risk_tier` high, area `tests`), as a protected path does; a test file
+  modified or deleted with no diff to count is unverifiable.
+- **Residual risk.** Still not caught: a test hollowed out under its own name
+  (`assert True`), a removed test replaced by a new one under the same name,
+  tests removed by a console producer (its report has no diffs), test files
+  outside the name patterns (`test_*.py`, `*_test.py`, `*.test.*`,
+  `*.spec.*`), and tests generated at run time (parametrisation, loops). A
+  renamed test counts as removed: a person decides. A count of collected
+  tests per delivery would close more of the gap. Not built.
 
 ## Older daemons
 
@@ -151,7 +166,7 @@ sees an operation it would misread.
 
 | Threat | Example | Mitigation |
 |---|---|---|
-| Tampering: make failing tests vanish | Delete `test_x.py` | `delete` only removes an empty file. Emptying a file needs moves (bytes kept elsewhere, hash checked) or edits (each recorded). A deleted protected path is held for a person; a missing acceptance test is restored and refutes the delivery. Residual: an unprotected test emptied with edits is not counted (as before this change). |
+| Tampering: make failing tests vanish | Delete `test_x.py` | `delete` only removes an empty file. Emptying a file needs moves (bytes kept elsewhere, hash checked) or edits (each recorded). A deleted protected path is held for a person; a missing acceptance test is restored and refutes the delivery. A test file a delivery wrote or deleted has its test definitions counted from the daemon's diffs; a name lost from the whole delivery holds the task for a person (`tests_removed`). Residual: a test hollowed out under its own name, or removed by a console producer. |
 | Tampering: hollow out a check | Delete `scripts/check_file_sizes.py` | Same as above. A check script the delivery rewrote or deleted is not evidence about it (`rewritten_by_delivery`). |
 | Tampering: write outside the project | `to_path: ../../etc/x` | The daemon's resolver, as for every edit: no `..`, no symlink escape, no VCS metadata. |
 | Information disclosure | Move lines from `.env` into a tracked file | `is_sensitive` refuses both ends of a move, as for read and edit. |

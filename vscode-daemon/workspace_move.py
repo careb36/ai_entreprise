@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import file_diff
 import workspace_read
 import workspace_edit as edit
 from workspace_read import ReadError
@@ -246,7 +247,9 @@ def deliver_delete(root: Path, target: Path, file_info: Dict[str, Any], requeste
     """A delivery's ``delete`` entry (``write_files``): the file is removed only
     when it still holds the bytes the edit session saw (``sha256_expected``, the
     daemon's own ``finish`` report), is a regular file and may not hold secrets.
-    ``deleted`` with ``sha256_before``, or ``rejected_delete`` with the reason."""
+    ``deleted`` with ``sha256_before`` and the diff of the bytes it removed
+    (``file_diff.describe_change``, ``change: deleted``), so the Verifier counts
+    the tests that went with them; or ``rejected_delete`` with the reason."""
     report: Dict[str, Any] = {"path": requested, "absolute_path": str(target)}
     expected = file_info.get("sha256_expected")
     if not target.is_file() or target.is_symlink():
@@ -257,5 +260,8 @@ def deliver_delete(root: Path, target: Path, file_info: Dict[str, Any], requeste
     if not isinstance(expected, str) or edit._sha256(data) != expected:
         return {**report, "status": "rejected_delete",
                 "error": "the file changed since the edit session saw it; it was left as it is"}
+    previous = (file_diff.Previous(expected, data) if len(data) <= file_diff.MAX_DIFF_SOURCE_BYTES
+                else file_diff.Previous(expected, None, "too_large"))
+    change = {**file_diff.describe_change(requested, previous, b""), "change": "deleted"}
     os.unlink(target)
-    return {**report, "status": "deleted", "sha256_before": expected, "bytes": 0}
+    return {**report, "status": "deleted", "sha256_before": expected, "bytes": 0, **change}
