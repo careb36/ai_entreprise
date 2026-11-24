@@ -55,7 +55,8 @@ class DaemonIncompatible(DaemonUnavailable):
     """
 
 
-def _no_responders(exc: BaseException) -> bool:
+def no_responders(exc: BaseException) -> bool:
+    """NATS said nobody listens on the subject: no daemon is running."""
     return (
         type(exc).__name__ == "NoRespondersError" or "no responders" in str(exc).lower()
     )
@@ -84,7 +85,7 @@ async def daemon_request(
         reply = await nats_client.request(subject, payload, timeout=timeout)
     except Exception as e:
         raise DaemonUnavailable(
-            f"{type(e).__name__}: {e}", absent=_no_responders(e)
+            f"{type(e).__name__}: {e}", absent=no_responders(e)
         ) from e
     if not isinstance(reply, dict):
         raise DaemonError(502, "The workspace daemon sent an unreadable reply")

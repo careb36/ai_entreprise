@@ -9,8 +9,9 @@ when JetStream is on), then runs the review cycle every 30 seconds
 
 - ``_claim``: the task's context (``task_run._load_task_context``), its queue
   marker cleared, a frozen task kept blocked, a task whose dependencies are
-  not done left for later (``dependencies.ready``), and the conditional claim
-  from ``todo`` (``replicas.claim_todo``);
+  not done left for later (``dependencies.ready``), a missing workspace daemon
+  pausing the sprint (``daemon_gate``), and the conditional claim from ``todo``
+  (``replicas.claim_todo``);
 - ``task_run._run_claimed_task``: the run itself, up to the handoff to QA;
 - ``_record_failure``: a provider out of credit pauses the sprint and puts
   the task back to ``todo``; any other failure blocks it with the error.
@@ -38,6 +39,7 @@ from sqlmodel import Session, select
 
 from services.evidence import delivery_gate
 from services.loop import (
+    daemon_gate,
     preconditions,
     replicas,
     run_window_gate,
@@ -210,6 +212,14 @@ async def _claim(
     if item.get("status") == "todo" and await asyncio.to_thread(
         preconditions.hold_task, engine, item["id"]
     ):
+        return None
+    # No agent turn runs blind: with no workspace daemon the sprint pauses.
+    if item.get("status") == "todo" and await daemon_gate.absent(nats_client):
+        paused = await asyncio.to_thread(
+            daemon_gate.hold, engine, item["id"], "workspace.status: no responders"
+        )
+        if paused is not None:
+            await daemon_gate.publish(nats_client, paused)
         return None
     # A sprint at its budget in money pauses before the next model turn.
     if item.get("status") == "todo":

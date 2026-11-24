@@ -25,6 +25,9 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 - Each call is an observation the backend made (tool, arguments, duration,
   sha256 of the result). The model's reading of a result is a claim. The tools
   never decide a verdict.
+- A workspace call NATS answered "no responders" (no daemon running) is marked
+  `daemon_absent`; a run whose workspace calls all are is not delivered and
+  pauses the sprint (`loop/daemon_gate.py`).
 - The repository map, the related code and the stored code graph are context,
   never evidence.
 - A tool without a read-only annotation raises the delivery's risk tier to at

@@ -688,6 +688,10 @@
       "test_daemon_capabilities.py": [
         "workspace"
       ],
+      "test_daemon_gate.py": [
+        "loop",
+        "tools"
+      ],
       "test_daemon_protocol.py": [
         "workspace"
       ],
