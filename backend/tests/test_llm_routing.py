@@ -311,6 +311,37 @@ def test_llm_failure_is_recorded_on_the_board(llm, db, monkeypatch, response, ex
     assert stored.status == "blocked"
 
 
+def test_a_tool_call_written_as_text_is_retried_once_then_blocks(llm, db, monkeypatch):
+    """The first final answer that is only a tool call written as text queues
+    the task again (a new attempt, a fresh tool budget) and says so; the
+    second blocks it, saying it happened again (issue #766)."""
+    reason = "the model's last answer was a tool call written as text; the tool budget had run out"
+    llm.response = {
+        "choices": [{"message": {"content": "<tool_calls>read</tool_calls>"}}],
+        "served_model": "deepseek-v4-pro",
+        "tool_loop": {"rounds_exhausted": True, "not_a_deliverable": reason},
+    }
+    _company, sprint, item = _board(db, role="Developer", agent_model="")
+    nats = _task_assign_handler(monkeypatch)
+    assign = {"backlog_item_id": item.id, "sprint_id": sprint.id}
+
+    asyncio.run(nats.handler(None, assign))
+    db.expire_all()
+    stored = db.get(BacklogItem, item.id)
+    assert stored.status == "todo"
+    retried = stored.comments[-1]["text"]
+    assert retried.startswith(intake.TOOL_CALL_AS_TEXT_RETRY_PREFIX + " (1/1)")
+    assert retried.endswith(reason)
+
+    asyncio.run(nats.handler(None, assign))
+    db.expire_all()
+    stored = db.get(BacklogItem, item.id)
+    assert stored.status == "blocked"
+    texts = [c["text"] for c in stored.comments]
+    assert retried in texts  # The first one stays on the task's events.
+    assert reason in texts[-1] and "again, after one retry" in texts[-1]
+
+
 # ---------------------------------------------------------------------------
 # AgentRun.model is the model that answered
 # ---------------------------------------------------------------------------

@@ -26,8 +26,9 @@ and `rounds_exhausted` (the limit was reached and the last request went
 without tools). When the final answer is only a tool call typed out as text
 (`contracts.tool_calls.written_as_text`), `tool_loop.not_a_deliverable` says
 so, and the worker takes it like an empty answer (`loop/answers.llm_failure`):
-no delivery, the task blocked with "the model's last answer was a tool call
-written as text; the tool budget had run out".
+no delivery. The worker queues the task again once, with a fresh tool budget
+(`loop/worker/intake`), and blocks it with "the model's last answer was a tool
+call written as text; the tool budget had run out" if it happens again.
 
 ## Rules
 

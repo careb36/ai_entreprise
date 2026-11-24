@@ -134,7 +134,9 @@ revisions and variables (MIT).
 `sprint_control.py`: start, pause, resume, stop and dispatch (all Manager).
 A provider out of credit pauses the sprint with a `pause_reason` and puts the
 task back to `todo`; a transient model failure re-queues it at most
-`MAX_TRANSIENT_RETRIES` (3) times, then blocks it. Autonomy (Manager to change):
+`MAX_TRANSIENT_RETRIES` (3) times, then blocks it, and a final answer that was
+only a tool call written as text re-queues it once (`MAX_TOOL_CALL_AS_TEXT_RETRIES`,
+a new attempt with a fresh tool budget), then blocks it. Autonomy (Manager to change):
 at 1 every QA-approved task waits for a person, at 2 only high-risk ones, at 3
 follow-ups and procedures also run on their own.
 
