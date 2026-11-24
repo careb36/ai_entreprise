@@ -131,3 +131,26 @@ def install_failed(record: dict[str, Any] | None) -> str | None:
         f"The install `{record['command']}` {where} {why}, so the tests were not run.\n"
         f"{record['output_tail']}"
     )
+
+
+def execute(box: Any, command: str, extra: dict[str, Any]) -> tuple[Any, str, bool]:
+    """Run *command* at *box*'s root through ``workspace.execute``, in its
+    sandbox: ``(exit_code, output, timed_out)``, with the observation's fields
+    on *extra*; raises when it could not run (``check_scripts`` runs here too)."""
+    request: dict[str, Any] = {
+        "workspace_root": box.workspace_root,
+        "command": command,
+        "timeout_seconds": sandbox.test_seconds(),
+    }
+    if box.sandbox is not None:
+        request["sandbox"] = box.sandbox
+    reply = box.requester("workspace.execute", request, sandbox.test_wait())
+    exit_code = reply.get("exit_code")
+    extra["exit_code"] = exit_code
+    if isinstance(reply.get("sandbox"), dict):
+        extra["sandbox"] = reply["sandbox"]
+    extra["timed_out"] = bool(reply.get("timed_out"))
+    output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    if reply.get("error") and exit_code is None and not reply.get("timed_out"):
+        raise RuntimeError(str(reply["error"]))
+    return exit_code, output, bool(reply.get("timed_out"))

@@ -29,8 +29,9 @@ from services.planning.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
     _find_po_agent,
+    named_dependencies,
+    with_dependencies,
 )
-from services.tasks import dependencies
 
 PLAN_MAX_TOKENS = 4096
 TASK_TITLE_LIMIT = 80
@@ -168,8 +169,7 @@ def _validate_tasks(
         originals.append(str(task["title"]).strip())
         covers = task.get("covers") if isinstance(task.get("covers"), list) else []
         assignee = str(task.get("assignee") or "Developer")
-        raw = task.get("depends_on")
-        named.append([str(d).strip() for d in raw] if isinstance(raw, list) else [])
+        named.append(named_dependencies(task))
         validated.append(
             {
                 "title": str(task["title"])[:TASK_TITLE_LIMIT],
@@ -185,28 +185,8 @@ def _validate_tasks(
                 ),
             }
         )
-    validated, named = validated[:item_limit], named[:item_limit]
-    # Dependencies by title (as the PO wrote it, or as shown once cut to
-    # TASK_TITLE_LIMIT), or by position: unknown ones and self dropped, a
-    # cycle broken at the edge that closes it. Positions in the answer.
-    position_of: dict[str, int] = {}
-    for i, t in enumerate(validated):
-        position_of.setdefault(originals[i].casefold(), i)
-        position_of.setdefault(t["title"].casefold(), i)
-    graph = {
-        i: list(
-            dict.fromkeys(
-                p
-                for d in deps
-                for p in [position_of.get(d.casefold(), int(d) if d.isdigit() else -1)]
-                if 0 <= p < len(validated) and p != i
-            )
-        )
-        for i, deps in enumerate(named)
-    }
-    for i, deps in dependencies.without_cycles(graph).items():
-        validated[i]["depends_on"] = deps
-    return validated
+    # Dependencies by title (as given or as cut) or by position, checked.
+    return with_dependencies(validated[:item_limit], originals, named[:item_limit])
 
 
 def uncovered(spec: dict[str, Any], tasks: list[dict[str, Any]]) -> list[str]:

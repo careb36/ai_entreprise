@@ -25,7 +25,12 @@ import logging
 from typing import Any
 
 from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
-from services.tools import developer_tool_replies, edit_lint
+from services.tools import (
+    developer_tool_replies,
+    developer_tool_schemas,
+    edit_lint,
+    mcp_tools,
+)
 from services.workspace import daemon_liveness
 
 logger = logging.getLogger("fabrique-task-worker")
@@ -69,16 +74,77 @@ def _deliverable(box: Any, path: str) -> None:
         )
 
 
-def can_move(can_edit: bool) -> bool:
-    """Whether to offer move and delete: where edits may go, and only when every
-    daemon announces both operations, so an older one never misreads them."""
+# The abilities move and delete need on every daemon (vscode-daemon/abilities.py).
+MOVE_ABILITIES = (
+    ("workspace.edit", "move"),
+    ("workspace.edit", "delete"),
+    ("workspace.generate", "delete"),
+)
+NOT_HERE = (
+    "edits are not allowed here: the person's checkout of a company that "
+    "delivers on branches (the task's worktree exists after its first delivery)"
+)
+NOT_ANNOUNCED = (
+    "the workspace daemon does not announce move and delete (an older daemon: "
+    "restart it from this checkout)"
+)
+NOT_HEARD = (
+    "no heartbeat announcing move and delete observed (none since the backend "
+    "started, an older daemon among them, or the daemons disagree)"
+)
+
+
+def move_offer(can_edit: bool) -> tuple[bool, str | None]:
+    """Whether to offer move and delete, and why not: only where edits may go
+    and when every daemon announces both operations, so an older one never
+    misreads them. The daemons' announcement is their claim (``announces``)."""
     if not can_edit:
-        return False
-    return bool(
-        daemon_liveness.announces("workspace.edit", "move")
-        and daemon_liveness.announces("workspace.edit", "delete")
-        and daemon_liveness.announces("workspace.generate", "delete")
-    )
+        return False, NOT_HERE
+    verdicts = [daemon_liveness.announces(s, f) for s, f in MOVE_ABILITIES]
+    if all(v is True for v in verdicts):
+        return True, None
+    return False, NOT_ANNOUNCED if False in verdicts else NOT_HEARD
+
+
+def offer_move(box: Any) -> None:
+    """Set *box*'s ``can_move`` and ``move_withheld`` (why not) from ``move_offer``."""
+    box.can_move, box.move_withheld = move_offer(box.can_edit)
+
+
+def can_move(can_edit: bool) -> bool:
+    """Whether to offer move and delete (``move_offer`` without the reason)."""
+    return move_offer(can_edit)[0]
+
+
+def offered(toolbox: Any) -> dict[str, Any]:
+    """The tools this run's loop offers, by name, and the workspace's write
+    tools it withheld with why: the backend's own decision, an observation
+    for the run's evidence (``observe_tools``). Empty without a toolbox."""
+    try:
+        names = sorted(str(s["function"]["name"]) for s in toolbox.schemas())
+    except Exception as exc:  # noqa: BLE001 - No toolbox, or none readable: nothing recorded.
+        if toolbox is not None:
+            logger.warning("Could not list the tools offered: %s", exc)
+        return {}
+    box = getattr(toolbox, "workspace", toolbox)
+    withheld: dict[str, str] = {}
+    if box is not None and hasattr(box, "can_edit"):
+        why = getattr(box, "move_withheld", None) or NOT_HERE
+        for tool, shown in (
+            (developer_tool_schemas.EDIT, box.can_edit),
+            (developer_tool_schemas.MOVE, box.can_move),
+            (developer_tool_schemas.DELETE, box.can_move),
+        ):
+            name = f"{developer_tool_schemas.SERVER}{mcp_tools.TOOL_NAME_SEP}{tool}"
+            if not shown:
+                withheld[name] = NOT_HERE if not box.can_edit else why
+    return {"names": names, "withheld": withheld}
+
+
+def move_note(offer: dict[str, Any]) -> str:
+    """The prompt's word on moving code, when the move tool is offered."""
+    move = f"{developer_tool_schemas.SERVER}{mcp_tools.TOOL_NAME_SEP}move"
+    return developer_tool_schemas.MOVE_NOTE if move in offer.get("names", []) else ""
 
 
 def structure(
@@ -228,7 +294,8 @@ def with_tool_edits(targets: list[dict[str, Any]], edited: Any) -> list[dict[str
 
 def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     """The tool loop's observations onto the run's evidence, apart from the
-    claims: the calls (``tool_calls``), the edited files' texts as the daemon
+    claims: the tools offered and withheld (``tools_offered``), the calls
+    (``tool_calls``), the edited files' texts as the daemon
     read them back (``tool_edit_files``, scanned by the standards check and
     read back by the acceptance guard) and the edits it left alone
     (``tool_edit_conflicts``). Updates *evidence* in place, so a later
@@ -252,8 +319,10 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         if isinstance(f, dict) and f.get("error")
     ]
     console = agent.get("console_run")  # A console producer's run (console_producer).
+    offered_tools = agent.get("tools_offered")
     if not (
         calls
+        or offered_tools
         or files
         or deleted
         or conflicts
@@ -268,6 +337,7 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         evidence["console_producer_skipped"] = agent["console_skipped"]
     for key, value in (
         ("tool_calls", calls),
+        ("tools_offered", offered_tools),
         ("tool_edit_files", files),
         ("tool_edit_deletions", deleted),
         ("tool_edit_conflicts", conflicts),

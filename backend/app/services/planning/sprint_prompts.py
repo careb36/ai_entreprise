@@ -88,6 +88,7 @@ For each task return an object with these exact fields:
 - "description": 2-4 sentences with expected outcome and acceptance criteria
 - "priority": "critical" | "high" | "medium" | "low"
 - "assignee": one of: {available_roles}
+- "depends_on": the exact titles of the tasks of this plan that must be done before this one starts; [] when it can start at once. A task that validates, reviews or tests the work of other tasks names those tasks.
 
 Rules:
 - Return between 3 and {item_limit} tasks.
@@ -140,6 +141,7 @@ For each task return an object with these exact fields:
 - "description": 2-4 sentences with expected outcome and acceptance criteria
 - "priority": "critical" | "high" | "medium" | "low"
 - "assignee": one of: {available_roles}
+- "depends_on": the exact titles of the tasks of this plan that must be done before this one starts; [] when it can start at once. A task that validates, reviews or tests the work of other tasks names those tasks.
 
 Rules:
 - Return between 3 and {item_limit} tasks.

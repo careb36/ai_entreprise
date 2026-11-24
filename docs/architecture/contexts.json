@@ -619,6 +619,9 @@
       "test_check_context_docs.py": [
         "repo"
       ],
+      "test_check_scripts.py": [
+        "tools"
+      ],
       "test_check_file_sizes.py": [
         "repo"
       ],
@@ -688,6 +691,10 @@
       "test_daemon_capabilities.py": [
         "workspace"
       ],
+      "test_daemon_gate.py": [
+        "loop",
+        "tools"
+      ],
       "test_daemon_protocol.py": [
         "workspace"
       ],
@@ -734,6 +741,9 @@
       "test_developer_tools_toolbox.py": [
         "loop"
       ],
+      "test_developer_uses_move.py": [
+        "loop"
+      ],
       "test_difficulty_routing.py": [
         "loop"
       ],
@@ -777,6 +787,9 @@
       ],
       "test_events.py": [
         "tasks"
+      ],
+      "test_execution_plan_dependencies.py": [
+        "release"
       ],
       "test_factories.py": [
         "platform"
@@ -1472,6 +1485,10 @@
       "test_tests_on.py": [
         "evidence",
         "tools"
+      ],
+      "test_tests_removed.py": [
+        "evidence",
+        "workspace"
       ],
       "test_stack_roots.py": [
         "evidence",

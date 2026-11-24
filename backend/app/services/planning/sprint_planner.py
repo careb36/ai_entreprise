@@ -44,6 +44,7 @@ from services.planning.sprint_prompts import (
     _FOUNDATION_PROMPT,
     _SELF_IMPROVEMENT_PROMPT,
 )
+from services.tasks import dependencies
 
 # A plan is a JSON list of a handful of tasks. One attempt: the template stands in.
 PLAN_MAX_TOKENS = 4096
@@ -86,6 +87,43 @@ def _model_failure(result: dict[str, Any]) -> str | None:
 def _unparseable(exc: Exception, raw: str) -> str:
     """The ``unparseable`` detail: the parse error and the answer's length."""
     return f"{type(exc).__name__}: {exc} (answer of {len(raw)} characters)"
+
+
+def named_dependencies(task: dict[str, Any]) -> list[str]:
+    """What the PO's *task* says it waits for (``depends_on``), as text."""
+    raw = task.get("depends_on")
+    return [str(d).strip() for d in raw] if isinstance(raw, list) else []
+
+
+def with_dependencies(
+    tasks: list[dict[str, Any]], originals: list[str], named: list[list[str]]
+) -> list[dict[str, Any]]:
+    """*tasks* each with ``depends_on``: the positions, in *tasks*, of the
+    tasks it waits for.
+
+    *named* holds what the PO wrote for each task: a title (as given in
+    *originals*, or as cut in ``title``) or a position. Unknown ones and self
+    are dropped, and a cycle is broken at the edge that closes it, so
+    ``start_sprint`` gets only an order it can follow
+    (``services/tasks/dependencies.py``)."""
+    position_of: dict[str, int] = {}
+    for i, t in enumerate(tasks):
+        position_of.setdefault(originals[i].casefold(), i)
+        position_of.setdefault(t["title"].casefold(), i)
+    graph = {
+        i: list(
+            dict.fromkeys(
+                p
+                for d in deps
+                for p in [position_of.get(d.casefold(), int(d) if d.isdigit() else -1)]
+                if 0 <= p < len(tasks) and p != i
+            )
+        )
+        for i, deps in enumerate(named)
+    }
+    for i, deps in dependencies.without_cycles(graph).items():
+        tasks[i]["depends_on"] = deps
+    return tasks
 
 
 def _foundation_fallback(
@@ -311,9 +349,13 @@ def _plan_with_po(
         parsed = json.loads(cleaned.strip())
         valid_roles = set(available_roles)
         validated = []
+        originals: list[str] = []  # the PO's titles as given, for depends_on
+        named: list[list[str]] = []
         for task in parsed.get("tasks", []):
             if not isinstance(task, dict) or not task.get("title"):
                 continue
+            originals.append(str(task["title"]).strip())
+            named.append(named_dependencies(task))
             assignee = str(task.get("assignee", "PO"))
             validated.append(
                 {
@@ -325,7 +367,9 @@ def _plan_with_po(
                     "assignee": assignee if assignee in valid_roles else "PO",
                 }
             )
-        validated = validated[:item_limit]
+        validated = with_dependencies(
+            validated[:item_limit], originals, named[:item_limit]
+        )
         if len(validated) < 2:
             return fell_back(
                 "too_few_tasks",

@@ -21,6 +21,7 @@ from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services.learning import scrum_master
+from services.loop import board_moves
 from services.loop.worker import close as worker_close
 from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review
@@ -235,6 +236,62 @@ def test_approving_the_last_open_task_closes_the_sprint_in_that_cycle(db, monkey
         )
     ).one()
     assert "Completed 2/2 tasks" in retro.body
+
+
+def _person_moves(db, sprint, item, status: str):
+    """A person's move on the board, as ``PATCH /v1/backlog/{id}`` writes it."""
+    board_moves.record_person_change(
+        db, item, sprint, None, status=status, comment="", starts=False
+    )
+    db.commit()
+
+
+@pytest.mark.parametrize("status", ["done", "discarded"])
+def test_a_persons_move_of_the_last_open_task_closes_the_sprint(db, status):
+    """Issue #766: every task moved to Done by a person, no blocked task left,
+    and the sprint stayed active until it was closed by hand."""
+    sprint = _sprint(db)
+    first = _item(db, sprint, "in_review")
+    last = _item(db, sprint, "todo")
+    _person_moves(db, sprint, first, "done")
+    _person_moves(db, sprint, last, status)
+
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(Sprint, sprint.id).status == "completed"
+    assert db.exec(
+        select(AgentMessage).where(
+            AgentMessage.sprint_id == sprint.id, AgentMessage.kind == "retrospective"
+        )
+    ).one()
+
+
+@pytest.mark.parametrize("sprint_status", ["paused", "planned", "cancelled"])
+def test_a_halted_sprint_is_not_closed_by_a_persons_move(db, sprint_status):
+    sprint = _sprint(db)
+    item = _item(db, sprint, "in_review")
+    _person_moves(db, sprint, item, "done")
+    sprint.status = sprint_status
+    db.add(sprint)
+    db.commit()
+
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(Sprint, sprint.id).status == sprint_status
+
+
+def test_a_sprint_with_an_open_task_left_stays_active_after_a_persons_move(db):
+    sprint = _sprint(db)
+    done = _item(db, sprint, "in_review")
+    _item(db, sprint, "in_progress")
+    _person_moves(db, sprint, done, "done")
+
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(Sprint, sprint.id).status == "active"
 
 
 # ---------------------------------------------------------------------------

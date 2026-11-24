@@ -358,8 +358,9 @@ one `deleted: true` with no `content`; every original is put back.
 `workspace.generate` takes a file entry `{"path", "delete": true,
 "sha256_expected"}`: the file is removed only while it still hashes to
 `sha256_expected` (the daemon's own `finish` report), is a regular file and
-may not hold secrets. Its status is `deleted` (with `sha256_before`) or
-`rejected_delete` (with `error`). A deletion is committed on the task's branch
+may not hold secrets. Its status is `deleted` (with `sha256_before`, and
+`change: deleted`, `previous_sha256`, `deletions` and the `diff` of the bytes
+it removed, as for a write) or `rejected_delete` (with `error`). A deletion is committed on the task's branch
 like a write, and an undo writes the file back. A daemon announces both as
 features: `"workspace.edit": ["delete", "move"]` and `"delete"` on
 `workspace.generate`; the backend offers neither to a daemon that does not.

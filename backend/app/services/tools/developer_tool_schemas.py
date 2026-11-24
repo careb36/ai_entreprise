@@ -130,14 +130,17 @@ SCHEMAS: list[dict[str, Any]] = [
             "description": (
                 "Run the project's tests as they are on disk now (your delivery "
                 "is not written yet) and see the output. `command` may narrow "
-                "the run within the same runner, e.g. `python -m pytest tests/test_x.py`."
+                "the run within the same runner, e.g. `python -m pytest tests/test_x.py`, "
+                "or run a check script the project committed, exactly "
+                "`python3 scripts/<name>.py [args]`, at the project root, when "
+                "this task did not change it."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "A narrower test command with the project's runner (optional); any other command is not run, the folder's own test command runs instead.",
+                        "description": "A narrower test command with the project's runner, or `python3 scripts/<name>.py [args]` (optional); any other command is not run, the folder's own test command runs instead.",
                     },
                 },
             },
@@ -252,8 +255,11 @@ STRUCTURE_SCHEMAS: list[dict[str, Any]] = [
                 "`to_path` may be a new file: it is created. Use it to split a "
                 "file or move code between files instead of retyping it: the "
                 "same bytes arrive, and both files must still parse or nothing "
-                "changes. Moved and created files are delivered as they are on "
-                "disk when you finish: do not repeat them in your answer."
+                "changes. Move a block at a time, from the bottom up so the "
+                "line numbers above stay put. Moved and created files are "
+                "delivered as they are on disk when you finish: do not repeat "
+                "them in your answer, and never deliver the source file "
+                "rewritten without the moved code."
             ),
             "parameters": {
                 "type": "object",
@@ -302,3 +308,18 @@ STRUCTURE_SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
+
+# The prompt's word on moving code, added only when the move tool is offered
+# (``workspace_edits.move_note``): the output format asks for whole files,
+# which a split would otherwise follow by retyping both files from memory.
+MOVE_NOTE = (
+    "\n\n## Moving code between files\n"
+    f"To split a file or move code from one file to another, use "
+    f"`{SERVER}{mcp_tools.TOOL_NAME_SEP}{MOVE}` (the lines arrive byte for byte; "
+    f"a missing `to_path` is created) and `{SERVER}{mcp_tools.TOOL_NAME_SEP}{DELETE}` "
+    "for a file it emptied. Do not retype moved code into a new file and do not "
+    "deliver an existing file rewritten with code removed: the files you moved "
+    "lines between are delivered as they are on disk when you finish, so leave "
+    "them out of your answer. Add imports or headers the moved code needs with "
+    f"`{SERVER}{mcp_tools.TOOL_NAME_SEP}{EDIT}`."
+)

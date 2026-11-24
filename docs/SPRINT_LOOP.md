@@ -32,7 +32,13 @@ the LangGraph graph is only an optional kickoff conversation.
    outbox event per task on `task.assign`; the outbox processor stores them in the
    JetStream stream `FABRIQUE_TASKS` (an outbox row completes only once stored).
 2. The task worker consumes `task.assign` as the durable consumer `task-worker`,
-   so assignments published while it was down are processed when it starts. It
+   so assignments published while it was down are processed when it starts.
+   When no workspace daemon was heard within the offline window and NATS
+   answers "no responders", it does not claim the task: the sprint pauses
+   with the reason (start the daemon with `./scripts/start-daemon.sh`, then
+   resume), the task stays `todo` and no rework is counted; a run whose
+   workspace tool calls were all answered "no responders" is discarded the
+   same way instead of going to review (`services/loop/daemon_gate.py`). It
    loads the item and the assigned agent
    (empty model → role default from `services/models/model_factory.py`) and calls the LLM proxy.
    Before each attempt `services/loop/task_routing.py` estimates the task's
@@ -160,7 +166,10 @@ the LangGraph graph is only an optional kickoff conversation.
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the
-   spot and the review cycle closes one whose last open task got blocked.
+   spot, and each review cycle (every 30 seconds) closes every active sprint
+   that has settled, whether its last open task got blocked or a person moved
+   it to Done or Discarded on the board. A paused, planned or cancelled
+   sprint is not closed.
    `GET /v1/inbox` (Viewer, `routers/inbox.py`) lists what the company needs a
    person for: the tasks blocked until someone acts (not the ones the worker
    still retries or re-reviews), the procedure proposals waiting and how many

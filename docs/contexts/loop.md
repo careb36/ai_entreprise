@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
 
 ## How it works
 
@@ -92,6 +92,19 @@ waits as `todo`, and a `sprint_budget_reached` audit row records the
 incident; a cost that cannot be priced pauses it too. Past the warning share,
 once per sprint, a `sprint_budget_warning` row and a Glassroom event say so.
 From Paperclip's budget policies (MIT).
+
+### No agent turn without a workspace daemon
+
+`daemon_gate.py`: before the worker claims a task, when no daemon heartbeat
+was heard within `DAEMON_HEARTBEAT_OFFLINE_SECONDS`, a `workspace.status`
+request asks; only NATS's "no responders" counts as absent (a timeout is
+unknown and the task runs). After a run, one whose workspace tool calls were
+all answered "no responders" (`daemon_absent` on each observation) is not
+handed to review. Either way the sprint pauses with the reason (run
+`./scripts/start-daemon.sh`, then resume), the task goes back to `todo` with a
+`paused` event (no rework counted), a `sprint_daemon_absent` audit row records
+the incident once per pause, and the Glassroom shows
+`sprint.paused_daemon_absent`. Mirrors `sprint_budget.py`.
 
 ### Routines
 
@@ -224,6 +237,14 @@ instead, stays readable by id, and an Owner may unarchive it.
 close the procedures round (`worker/procedures_round`: keep or revert
 procedures by the board's numbers) and the wiki compile (`wiki_close.py`, which
 never raises).
+
+Who closes: a worker approval closes its sprint on the spot, and the review
+cycle (`worker/review._closing_candidates`) looks at every `active` sprint and
+closes each one that has settled (`dependencies.sprint_settled`). That covers
+a sprint whose last task a person moved to Done or Discarded on the board
+(`PATCH /v1/backlog/{id}`), which does not close the sprint itself; it closes
+within one cycle (issue #766). A paused, planned or cancelled sprint is not
+`active` and is never closed this way.
 
 ### Elsewhere
 

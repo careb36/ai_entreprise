@@ -1,10 +1,8 @@
 """The Developer's workspace tools: read the project and run its tests before delivering.
 
-A task used to be written in one shot from a prompt, with a listing of the
-project's root files as all the model saw of the code it was changing. Here
-the roles that deliver files (the Developer roles, QA, the Designer) get these tools through the
-workspace daemon, offered beside the company's MCP tools in the same loop
-(``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
+The roles that deliver files (the Developer roles, QA, the Designer) get these
+tools through the workspace daemon, beside the company's MCP tools in the same
+loop (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
@@ -17,28 +15,29 @@ agent-computer interface (``developer_tool_replies``):
   (``vscode-daemon/workspace_edit.py``); offered only where the task's files
   may be touched (its worktree, or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
-  within the same runner), bounded output.
+  within the same runner), or a check script committed under ``scripts/``
+  that the task did not change (``check_scripts``), bounded output.
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
-sha256 of the result. A read also records the file's sha256 and size as the
-daemon read them, so the Verifier can say which of the files a delivery
-modified the Developer had read first (``context_read``), and raise the risk
-tier for one it had not. What the model says it learned stays a claim; its
-own account of a test run is never evidence, the daemon's exit status after
-the delivery is (``delivery_checks.run_delivery_tests``).
+sha256 of the result; ``daemon_absent`` when NATS said no daemon listens (the
+worker pauses the sprint, ``loop/daemon_gate.py``). A read records the file's
+sha256 and size as the daemon read them, so the Verifier can say which of the
+files a delivery modified the Developer had read first (``context_read``), and
+raise the risk tier for one it had not. What the model says it learned stays a
+claim; its account of a test run is never evidence, the daemon's exit status
+after the delivery is (``delivery_checks.run_delivery_tests``).
 
-An edit is an observation with the file's sha256 before and after, and a
-working copy delivered with the answer's files (``services/workspace_edits.py``).
+An edit is an observation with the file's sha256 before and after, and a working
+copy delivered with the answer's files (``services/workspace_edits.py``).
 
-The other tools are read-only on the project. ``run_tests`` executes the project's
-test command, which ``DELIVERY_TESTS_ENABLED`` already runs after every
-delivery; it is offered only when that setting is on, since it runs
-project code on the daemon's machine.
+The other tools are read-only on the project. ``run_tests`` executes the
+project's test command, which ``DELIVERY_TESTS_ENABLED`` already runs after
+every delivery; it is offered only when that setting is on, since it runs project
+code on the daemon's machine.
 
-A repository map (the top of the tree and the definitions ranked by use,
-``services/repo_map.py``) goes into the prompt of a task on an existing
-project, so the model knows what to read.
+A repository map (``services/repo_map.py``: the tree's top, the definitions by
+use) goes into the prompt on an existing project, so the model knows what to read.
 """
 
 from __future__ import annotations
@@ -57,6 +56,7 @@ from config import settings
 
 from services.contracts import roles
 from services.tools import (
+    check_scripts,
     developer_tool_replies,
     developer_tool_schemas,
     edit_lint,
@@ -68,6 +68,7 @@ from services.tools import (
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
+from services.workspace.workspace_daemon import no_responders
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -198,8 +199,8 @@ class WorkspaceToolbox:
             return observation, f"Error: malformed arguments ({exc})."
         if full_name not in self.tools:
             observation = self._observation(tool, arguments, round_no, True, 0, "")
-            observation["reason"] = "unknown tool"
-            return observation, mcp_tools.NO_TOOL_NOTE
+            observation.update(reason="unknown tool", requested=full_name[:200])
+            return observation, mcp_tools.unknown_tool_note(full_name, self.tools)
         started = time.monotonic()
         extra: dict[str, Any] = {}
         try:
@@ -210,6 +211,7 @@ class WorkspaceToolbox:
         except Exception as exc:  # noqa: BLE001 - The failure is the result the model sees.
             reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
             text, is_error = f"Error: {reason[:300]}", True
+            extra.update({"daemon_absent": True} if no_responders(exc) else {})
         elapsed_ms = int((time.monotonic() - started) * 1000)
         observation = self._observation(
             tool, arguments, round_no, is_error, elapsed_ms, text
@@ -281,6 +283,10 @@ class WorkspaceToolbox:
         if tool in (MOVE, DELETE) and self.can_move:
             return workspace_edits.structure(self, tool, arguments, extra)
         if tool == RUN_TESTS:
+            # A committed check script runs as asked (``check_scripts``).
+            checked, why = check_scripts.attempt(self, arguments, extra)
+            if checked is not None:
+                return checked
             folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
             command = self._test_command(arguments.get("command"), plan.get("test"))
             extra["command"] = command
@@ -297,30 +303,18 @@ class WorkspaceToolbox:
                 if failed:
                     return failed
                 self.installed.add(folder)
-            request: dict[str, Any] = {
-                "workspace_root": root,
-                "command": test_runs.in_folder(command, folder),
-                "timeout_seconds": sandbox.test_seconds(),
-            }
-            if self.sandbox is not None:
-                request["sandbox"] = self.sandbox
-            reply = self.requester("workspace.execute", request, sandbox.test_wait())
-            exit_code = reply.get("exit_code")
-            extra["exit_code"] = exit_code
-            if isinstance(reply.get("sandbox"), dict):
-                extra["sandbox"] = reply["sandbox"]
-            extra["timed_out"] = bool(reply.get("timed_out"))
-            output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
-            if reply.get("timed_out"):
+            exit_code, output, timed_out = test_runs.execute(
+                self, test_runs.in_folder(command, folder), extra
+            )
+            if timed_out:
                 return f"The tests ran past the time limit and were stopped.\n{output[-2000:]}"
-            if reply.get("error") and exit_code is None:
-                raise RuntimeError(str(reply["error"]))
             return developer_tool_replies.tests_text(
                 exit_code,
                 output,
                 self.result_max_chars,
                 arguments.get("command"),
                 command,
+                why,
             )
         raise RuntimeError("unknown tool")
 
@@ -562,7 +556,7 @@ def toolbox_for(
                 can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
-            workspace.can_move = workspace_edits.can_move(workspace.can_edit)
+            workspace_edits.offer_move(workspace)  # Move and delete, or why not.
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine

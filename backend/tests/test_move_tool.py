@@ -261,3 +261,6 @@ def test_the_worker_delivers_a_split_and_the_daemon_removes_the_emptied_file(
     )
     moves = [c for c in verification.evidence["tool_calls"] if c["tool"] == "move"]
     assert [m["moved_lines"] for m in moves] == [8, 8]
+    # The split moved every test: none lost, the tier not raised for tests.
+    lost = next(c for c in verification.checks if c["name"] == "tests_removed")
+    assert lost["outcome"] == "pass" and lost["removed"] == []

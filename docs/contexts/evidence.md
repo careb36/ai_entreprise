@@ -8,7 +8,7 @@ module's docstring has the detail.
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
 - **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -91,6 +91,8 @@ implementation task is judged on the same tests with no such excuse.
   refusal, no exit status) is unverifiable. An every-delivery check whose own
   file the delivery changed (the daemon's report of its writes) refutes
   whatever it exited: a check the delivery rewrote is not evidence about it.
+  Before a delivery, the same rule keeps `workspace__run_tests` from running a
+  check script the task changed (`services/tools/check_scripts.py`).
 - `app_check.py`: the `dependencies_installed`, `application_started` and
   `e2e_run` checks, from the daemon's install and application run.
 - `security_probe.py`: the running application's answers to the daemon's probe
@@ -131,6 +133,23 @@ counts as a change of its path. A match gives the tier `high` (area
 `grader`) so a person decides at every autonomy level. Without the list it
 fails closed: the check is unverifiable and the tier `high`. Design:
 [`rsi-loop.md`](../design/rsi-loop.md) §3.3.
+
+### Tests a delivery removed
+
+`tests_removed.py`: the `tests_removed` check, for every company. For each
+test file the daemon reports `written` or `deleted` (`test_*.py`,
+`*_test.py`, `*.test.*`, `*.spec.*`), the test definitions on the removed and
+added lines of the daemon's diff (Python `def test_…`, JavaScript
+`it("…")`/`test("…")`) are summed over the whole delivery; a name removed more
+often than it is added is lost. The diff is the daemon's observation of the
+disk (`vscode-daemon/file_diff.py`; a deletion carries the diff of the bytes
+it removed), never the producer's account. A lost name passes the check with
+the names in `removed` and raises the `risk_tier` check to `high` (area
+`tests`), so a person decides, as for a protected path: a test may be removed
+on purpose. A test moved to another file of the same delivery is not lost. A
+test file modified or deleted with no diff in the report is `unverifiable`.
+A hollowed-out test that keeps its name is not caught. Design:
+[`move-and-delete-files.md`](../design/move-and-delete-files.md).
 
 ### Keep, revert or unmeasured: the fitness decision
 

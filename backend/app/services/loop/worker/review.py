@@ -11,11 +11,12 @@ replica's tasks go back to ``todo`` first (``replicas.recover_stale``), then
   before opinion (``_send_back_from_delivery_gate``), then QA's review
   (``qa_review._qa_review``);
 - ``_retry_blocked``: a blocked task with a deliverable and no block reason
-  goes back to QA (``_recover_to_review``), one the worker retries is queued
-  again (``_requeue_blocked``), and the sprints with nothing left to move are
-  named;
-- ``_closing_candidates``: those that settled, which then close
-  (``close._finalize_sprint_if_ready``); last, the ``todo`` tasks are
+  goes back to QA (``_recover_to_review``), and one the worker retries is
+  queued again (``_requeue_blocked``);
+- ``_closing_candidates``: every active sprint with nothing left to move,
+  however its last task settled (the worker, or a person's move on the
+  board), which then closes (``close._finalize_sprint_if_ready``); last, the
+  ``todo`` tasks are
   dispatched (the intake's ``_dispatch_todo_items``, imported when used,
   since ``intake`` imports this module).
 
@@ -77,13 +78,13 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
 
     with Session(engine) as session:
         await _review_delivered(session, nats_client, quality_gate_blocked_ids)
-        settled_sprint_ids = await _retry_blocked(
-            session, nats_client, quality_gate_blocked_ids
-        )
-        closing_candidates = _closing_candidates(session, settled_sprint_ids)
+        await _retry_blocked(session, nats_client, quality_gate_blocked_ids)
+        closing_candidates = _closing_candidates(session)
 
-    # A sprint whose last open task just got blocked for a person closes now,
-    # with its retrospective; approvals close theirs on the spot.
+    # A sprint whose last open task settled closes now, with its
+    # retrospective: blocked for a person in this cycle, or moved to Done or
+    # Discarded by a person on the board, which does not close it itself
+    # (issue #766). The worker's approvals also close theirs on the spot.
     for sprint_id in closing_candidates:
         await close._finalize_sprint_if_ready(nats_client, sprint_id)
 
@@ -393,15 +394,12 @@ async def _send_back_from_delivery_gate(
 
 async def _retry_blocked(
     session: Session, nats_client: NATSClient, quality_gate_blocked_ids: set[int]
-) -> set[int]:
-    """Blocked tasks the worker may move again; the sprints with nothing left to move."""
+) -> None:
+    """Blocked tasks the worker may move again go back to review or to ``todo``."""
     # --- Retry: blocked → todo (one retry only) ---
     blocked = session.exec(
         select(BacklogItem).where(BacklogItem.status == "blocked")
     ).all()
-    # Sprints holding an item that stays blocked until a person acts may
-    # have nothing left to move; they are checked for closing below.
-    settled_sprint_ids: set[int] = set()
     histories = task_projection.histories_for(session, list(blocked))
 
     for item in blocked:
@@ -416,14 +414,10 @@ async def _retry_blocked(
             continue
         histories.pop(item.id, None)
         if item.id in quality_gate_blocked_ids:
-            settled_sprint_ids.add(item.sprint_id)
             continue
 
         next_step = task_projection.record_of(session, item, histories).next_step()
-        if next_step is None:
-            settled_sprint_ids.add(item.sprint_id)
-            continue
-        if next_step == "frozen":
+        if next_step is None or next_step == "frozen":
             continue
 
         if next_step == "review":
@@ -433,7 +427,6 @@ async def _retry_blocked(
         await _requeue_blocked(session, nats_client, item)
 
     session.commit()
-    return settled_sprint_ids
 
 
 async def _recover_to_review(
@@ -513,20 +506,19 @@ async def _requeue_blocked(
     logger.info("Retrying blocked item=%s", item.id)
 
 
-def _closing_candidates(session: Session, settled_sprint_ids: set[int]) -> list[int]:
-    """The active sprints among those named that have settled, worth closing."""
+def _closing_candidates(session: Session) -> list[int]:
+    """The active sprints that have settled, worth closing.
+
+    Every active sprint, not only those this cycle touched: a person who moves
+    the last open task to Done on the board settles the sprint outside the
+    worker, and it stayed active until someone closed it by hand (issue #766).
+    A paused, planned or cancelled sprint is not ``active`` and is left alone.
+    """
     # Only a sprint with nothing left to move is worth the retrospective.
+    active_ids = session.exec(select(Sprint.id).where(Sprint.status == "active")).all()
     closing_candidates = [
         sprint_id
-        for sprint_id in (
-            session.exec(
-                select(Sprint.id).where(
-                    Sprint.id.in_(settled_sprint_ids), Sprint.status == "active"
-                )
-            ).all()
-            if settled_sprint_ids
-            else []
-        )
+        for sprint_id in active_ids
         if dependencies.sprint_settled(session, sprint_id)
     ]
     session.commit()

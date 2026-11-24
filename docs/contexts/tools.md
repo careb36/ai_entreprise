@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `signature_lookup`, `workspace_edits`.
-- **Modules:** `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_runs`, `tool_history`, `workspace_edits`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -25,6 +25,9 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 - Each call is an observation the backend made (tool, arguments, duration,
   sha256 of the result). The model's reading of a result is a claim. The tools
   never decide a verdict.
+- A workspace call NATS answered "no responders" (no daemon running) is marked
+  `daemon_absent`; a run whose workspace calls all are is not delivered and
+  pauses the sprint (`loop/daemon_gate.py`).
 - The repository map, the related code and the stored code graph are context,
   never evidence.
 - A tool without a read-only annotation raises the delivery's risk tier to at
@@ -92,11 +95,36 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
   every daemon announces them, `workspace__move` (the same bytes from one file
   to another, `moved_sha256` from the daemon) and `workspace__delete` (only an
   emptied file; delivered as a deletion, `tool_edit_deletions`). Design:
-  [`move-and-delete-files.md`](../design/move-and-delete-files.md).
+  [`move-and-delete-files.md`](../design/move-and-delete-files.md). When move
+  is offered, the task prompt gets `## Moving code between files`
+  (`MOVE_NOTE`): a split moves the lines instead of retyping both files.
+  `offered` puts `tools_offered` on the run's evidence: every tool name the
+  loop offered and, under `withheld`, the workspace's write tools it did not
+  offer with why (the person's checkout of a branch-delivering company, which
+  holds on a task's first attempt; no heartbeat announcing move and delete
+  yet, as right after a backend restart; or a daemon that does not announce
+  them). The backend's own decision, an observation.
+- A call to a tool that is not offered (a bare `read`, an empty name) is
+  recorded with the name asked (`requested`) and answered with that name, the
+  nearest offered one and the list (`mcp_tools.unknown_tool_note`), in the
+  workspace, research and MCP toolboxes alike.
 - `edit_lint.py`: the stack profile's lint command after an edit, in the
   sandbox, its result shown to the model in the same turn.
 - `test_runs.py`: what `workspace__run_tests` may run, per folder, installing
-  first in an isolated sandbox. The delivery's own test run is the evidence.
+  first in an isolated sandbox, and the one `workspace.execute` request every
+  run goes through. The delivery's own test run is the evidence.
+- `check_scripts.py`: `workspace__run_tests` with exactly `python3
+  scripts/<name>.py [args]` (or `python`) runs that check at the project root,
+  in the sandbox and under the daemon's command policy, when the script is
+  committed on the default branch (`workspace.git.read_at`) and its bytes on
+  disk are those bytes (the sha256 computed here against the daemon's
+  `workspace.hash`). A script this task edited, moved or delivered over is not
+  run: a check the task rewrote is not evidence about it. The arguments take
+  plain characters only (no shell operator, quote, variable, glob, `..` or
+  absolute path), so no shell reads more than one simple command. Anything
+  else keeps the substitution: the folder's test command runs and the reply
+  says why. The observation carries `check_script` (path, commit, both
+  sha256, or `refused` and why).
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole.
 

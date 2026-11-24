@@ -53,7 +53,7 @@ from services.platform.orchestration_metrics import (
     should_consult_architect,
 )
 from services.tasks import task_projection
-from services.tools import developer_tools, mcp_tools
+from services.tools import developer_tools, mcp_tools, workspace_edits
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -324,6 +324,10 @@ def _execute_task(
         rounds=limits["tool_rounds"],
         result_max_chars=limits["result_max_chars"],
     )
+    # The tools offered (and withheld, with why) go on the evidence; a split
+    # is pointed to the move tool when it is offered.
+    agent["tools_offered"] = workspace_edits.offered(toolbox)
+    user_prompt += workspace_edits.move_note(agent["tools_offered"])
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
             client,
