@@ -768,6 +768,11 @@
       "test_docs_write_policy.py": [
         "tools"
       ],
+      "test_docs_write_scope.py": [
+        "contracts",
+        "loop",
+        "tools"
+      ],
       "test_documentation_export_router.py": [
         "planning"
       ],

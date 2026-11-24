@@ -39,11 +39,18 @@ roles stay free text on `POST /v1/agents`.
 may be offered and the role may only narrow them. `CEILING` maps each step to
 its families, `R` read, `W` write, `X` run, `S` research: `execute` R, W, X, S;
 `architect_brief` R, S; `qa_review` R; `plan` R; `spec_author` and
-`arch_author` R, S; `scrum_decision` R. `ROLE_DENY` drops families for a role
+`arch_author` R, S; `scrum_decision` R; `documentation` R, W, X, S. `ROLE_DENY` drops families for a role
 by catalogue name and is empty by default; `families(step, role)` is the
 ceiling minus the deny set, so a role never goes above its step. `record`
-gives the step and its families for a run's `tools_offered`. What a family
-turns into is the [tools](tools.md) context's decision.
+gives the step and its families for a run's `tools_offered`, and its
+`write_scope` when narrowed. Within W, `write_scope(step, role)` says where a
+turn writes: `docs` (documentation paths only, `is_doc_path`: under a `docs`
+or `doc` folder, a README, Markdown or reStructuredText) for the
+`documentation` step (`STEP_WRITE_SCOPE`; a task whose kind is
+`documentation` or `docs` is executed as it, `execution_step`) and for the
+TechWriter in any step (`ROLE_WRITE_SCOPE`); like a deny it only narrows, and
+a step without W has no scope. `writable(step, role, path)` applies it to one
+path. What a family turns into is the [tools](tools.md) context's decision.
 
 ### The protected paths
 

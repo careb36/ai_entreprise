@@ -104,8 +104,11 @@ the LangGraph graph is only an optional kickoff conversation.
    an execution turn of any role (a TechWriter, SecOps, Architect or PO task
    too) reads the project, runs the folder's tests and committed scripts,
    researches registries and advisories, and edits where edits may go; a
-   role's profile may only drop families. The run's `tools_offered` records
-   the `step` and its `families` beside the tools offered and withheld.
+   role's profile may only drop families. A TechWriter, or a task whose kind
+   is documentation (the `documentation` step), writes documentation only,
+   with the edit tools and in the answer's own blocks alike (`write_scope`).
+   The run's `tools_offered` records the `step`, its `families` and any
+   `write_scope` beside the tools offered and withheld.
    With tools, the call is the bounded tool loop
    ([tools](contexts/tools.md)): the run's evidence records `rounds_used`,
    `rounds_max` and `rounds_exhausted`, and a final answer that is only a tool

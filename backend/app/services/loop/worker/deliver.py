@@ -23,6 +23,7 @@ from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from nats_client import NATSClient
 from sqlmodel import Session, select, text
 
+from services.contracts import roles, tool_steps
 from services.contracts.manifest import expected_hashes, parse_file_manifest
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
@@ -321,6 +322,29 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         )
 
 
+DOCS_ONLY_REASON = "a documentation task writes documentation only"
+
+
+def docs_scope(
+    targets: list[dict[str, Any]],
+    deleted: list[dict[str, Any]],
+    agent: dict[str, Any],
+    kind: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """*targets* and *deleted* within the execution turn's write scope
+    (``contracts/tool_steps.writable``: a TechWriter, or a task whose kind is
+    documentation, writes documentation only), and the paths left out. The
+    refusal goes on the run's evidence (``docs_write``) with its reason."""
+    role = roles.canonical(agent.get("role"))
+    step = tool_steps.execution_step(kind)
+    keep = [t for t in targets if tool_steps.writable(step, role, t.get("path"))]
+    gone = [d for d in deleted if tool_steps.writable(step, role, d.get("path"))]
+    refused = [t.get("path") or "" for t in targets + deleted if t not in keep + gone]
+    if refused:
+        agent["docs_write"] = {"refused": refused, "reason": DOCS_ONLY_REASON}
+    return keep, gone, refused
+
+
 async def _deliver_artifacts(
     nats_client: NATSClient,
     item: dict[str, Any],
@@ -345,9 +369,15 @@ async def _deliver_artifacts(
     targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
     # Files the edit tool emptied and deleted (docs/design/move-and-delete-files.md).
     deleted = deletions(agent.get("tool_edits"))
+    # A documentation task writes documentation only, its answer's blocks too.
+    targets, deleted, refused = docs_scope(targets, deleted, agent, item.get("kind"))
     review_payload = _build_review_payload(deliverable, targets)
     if deleted:
         review_payload += "\n\nDeleted: " + ", ".join(d["path"] for d in deleted)
+    if refused:
+        review_payload += f"\n\nNot delivered ({DOCS_ONLY_REASON}): " + ", ".join(
+            refused
+        )
 
     evidence: dict[str, Any] | None = None
     queued_job: dict[str, Any] | None = None

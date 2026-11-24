@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
@@ -208,6 +208,11 @@ instead, stays readable by id, and an Owner may unarchive it.
   typed as text is no brief. Without the daemon it is one plain call. It also
   builds the Architect's agent and system prompt from its row
   (`architect_agent`, `system_prompt`).
+- `worker/execute_tools`: the execution turn's toolbox, moved out of
+  `worker/execute`: the task's step (`tool_steps.execution_step`: a
+  documentation task is the `documentation` step), `toolbox_for` for that
+  step and the role within the model's limits, the record tools on a rework,
+  and `tools_offered` with the step, its families and its write scope.
 - `worker/board_record`: the record tools' scope and readers
   (`tools/board_tools`: `board__task`, `board__evidence`). The scope is the
   turn's company and its task plus the tasks it depends on, read from the
@@ -223,7 +228,11 @@ instead, stays readable by id, and an Owner may unarchive it.
 ### Delivery and QA
 
 - `worker/deliver`: the files to the daemon (`workspace.generate`, or queued on
-  `workspace.deliver`).
+  `workspace.deliver`). A documentation turn's answer delivers documentation
+  only (`docs_scope`, `contracts/tool_steps.writable`: a TechWriter, or a task
+  whose kind is documentation): a block naming another path is left out, the
+  review payload says so, and the run's evidence records `docs_write`
+  (`refused`, `reason`), the backend's decision.
 - `refuted_undo.py`: without Git, a delivery the Verifier refutes is undone at
   once from the daemon's snapshot (`workspace.undo`, audited as
   `run_delivery_undone`), so the shared folder holds only verified work; a

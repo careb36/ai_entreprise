@@ -12,7 +12,15 @@ narrows"):
    never add one: ``families`` is the step's ceiling minus the role's deny
    set, so no role goes above its step. Empty for every role today: a
    TechWriter, a SecOps, an Architect or a PO executing a task gets the same
-   tools as a Developer.
+   tool families as a Developer.
+
+Within ``W`` a step or a role may narrow *where* a turn writes
+(``write_scope``): the documentation step (``DOCUMENT``) and the TechWriter
+(``ROLE_WRITE_SCOPE``) write documentation only (``DOCS``: ``is_doc_path``).
+Like a deny, a write scope only narrows: it never offers ``W`` where the step
+does not. The tools context enforces it on the edit tools
+(``services/tools/docs_write_policy.py``) and the loop on the files an answer
+delivers in its own blocks (``services/loop/worker/deliver.py``).
 
 The families:
 
@@ -43,6 +51,7 @@ PLAN = "plan"
 SPEC_AUTHOR = "spec_author"
 ARCH_AUTHOR = "arch_author"
 SCRUM_DECISION = "scrum_decision"
+DOCUMENT = "documentation"  # Document a project: write documentation only.
 
 CEILING: dict[str, frozenset[str]] = {
     EXECUTE: frozenset({READ, WRITE, RUN, RESEARCH}),
@@ -52,11 +61,23 @@ CEILING: dict[str, frozenset[str]] = {
     SPEC_AUTHOR: frozenset({READ, RESEARCH}),
     ARCH_AUTHOR: frozenset({READ, RESEARCH}),
     SCRUM_DECISION: frozenset({READ}),
+    DOCUMENT: frozenset({READ, WRITE, RUN, RESEARCH}),
 }
 
 # What a role drops within any step, by catalogue name (``roles.canonical``).
 # Empty by default: a family is denied here only with a reason beside it.
 ROLE_DENY: dict[str, frozenset[str]] = {}
+
+# Where ``W`` may write, when narrowed. ``DOCS``: documentation paths only.
+DOCS = "docs"
+DOC_FOLDERS = frozenset({"docs", "doc"})
+DOC_SUFFIXES = (".md", ".markdown", ".mdx", ".rst")
+STEP_WRITE_SCOPE: dict[str, str] = {DOCUMENT: DOCS}
+# A task whose kind is one of these is executed as the documentation step.
+DOC_KINDS = frozenset({"documentation", "docs"})
+# The TechWriter writes documentation (``docs/design/agent-toolsets.md``,
+# "Document a whole project": W docs only), whatever task it executes.
+ROLE_WRITE_SCOPE: dict[str, str] = {"TechWriter": DOCS}
 
 
 def _key(role: str | None) -> str:
@@ -66,11 +87,12 @@ def _key(role: str | None) -> str:
 
 def denied(role: str | None) -> frozenset[str]:
     """The families *role* drops (``ROLE_DENY``), matched by its normalised name."""
+    return frozenset(_role_entry(ROLE_DENY, role) or ())
+
+
+def _role_entry(table: dict[str, object], role: str | None) -> object:
     key = _key(role)
-    for name, deny in ROLE_DENY.items():
-        if _key(name) == key:
-            return frozenset(deny)
-    return frozenset()
+    return next((v for name, v in table.items() if _key(name) == key), None)
 
 
 def families(step: str, role: str | None = None) -> frozenset[str]:
@@ -84,7 +106,50 @@ def allows(step: str, role: str | None, family: str) -> bool:
     return family in families(step, role)
 
 
+def write_scope(step: str, role: str | None = None) -> str | None:
+    """Where a turn of *step* by *role* may write: ``DOCS``, or ``None`` for
+    anywhere ``W`` reaches; ``None`` too when the turn may not write at all."""
+    if WRITE not in families(step, role):
+        return None
+    scope = STEP_WRITE_SCOPE.get(step) or _role_entry(ROLE_WRITE_SCOPE, role)
+    return str(scope) if scope else None
+
+
+def execution_step(kind: str | None = None) -> str:
+    """The step a task of *kind* is executed as: ``DOCUMENT`` for a
+    documentation task, else ``EXECUTE``."""
+    return DOCUMENT if str(kind or "").strip().lower() in DOC_KINDS else EXECUTE
+
+
+def is_doc_path(path: str | None) -> bool:
+    """A documentation path: under a ``docs`` or ``doc`` folder, a ``README``
+    whatever its suffix, or Markdown or reStructuredText anywhere."""
+    parts = [p for p in str(path or "").replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    name = parts[-1]
+    return (
+        any(p.lower() in DOC_FOLDERS for p in parts[:-1])
+        or name.upper().startswith("README")
+        or name.lower().endswith(DOC_SUFFIXES)
+    )
+
+
+def writable(step: str, role: str | None, path: str | None) -> bool:
+    """Whether *path* is within the write scope of a turn of *step* by *role*
+    (whether ``W`` is offered at all is ``allows``)."""
+    return write_scope(step, role) != DOCS or is_doc_path(path)
+
+
 def record(step: str, role: str | None = None) -> dict[str, object]:
-    """The step and its families for the run's ``tools_offered``, in a fixed order."""
+    """The step and its families for the run's ``tools_offered``, in a fixed
+    order, and the write scope when it is narrowed."""
     allowed = families(step, role)
-    return {"step": step, "families": [f for f in FAMILIES if f in allowed]}
+    out: dict[str, object] = {
+        "step": step,
+        "families": [f for f in FAMILIES if f in allowed],
+    }
+    scope = write_scope(step, role)
+    if scope:
+        out["write_scope"] = scope
+    return out

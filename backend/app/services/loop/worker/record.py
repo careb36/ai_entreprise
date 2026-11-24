@@ -111,7 +111,8 @@ def _record_task_run(
     # The difficulty estimate and the routing it led to (#319): the plan and
     # the request, beside the served model above (the observation); and the
     # model's profile the backend applied, with each field's source (#766).
-    for key in ("difficulty", "routing", "model_profile"):
+    # The paths a documentation task's answer named outside the docs (deliver).
+    for key in ("difficulty", "routing", "model_profile", "docs_write"):
         if agent.get(key):
             evidence = evidence if isinstance(evidence, dict) else {}
             evidence[key] = agent[key]

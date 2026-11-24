@@ -21,7 +21,7 @@ from models import Agent
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
-from services.contracts import roles, tool_calls, tool_steps
+from services.contracts import tool_calls
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
 from services.loop import edit_plan, sprint_control, task_routing
@@ -32,8 +32,8 @@ from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
     architect_brief,
-    board_record,
     board_writes,
+    execute_tools,
     messages,
     prompt,
     prompt_budget,
@@ -323,26 +323,18 @@ def _execute_task(
                 result_preview=preview,
             )
 
-    # The workspace and MCP tools for this role: each call an observation.
-    toolbox = developer_tools.toolbox_for(
-        company_id, role, engine=engine, item_id=item.get("id")
+    # The workspace and MCP tools of the task's step: each call an observation;
+    # a split is pointed to the move tool when it is offered.
+    toolbox = execute_tools.task_toolbox(
+        company_id,
+        role,
+        item,
+        agent,
+        limits,
+        rework=bool(_rework_feedback),
+        prepared=prepared,
+        engine=engine,
     )
-    developer_tools.apply_limits(
-        toolbox,
-        rounds=limits["tool_rounds"],
-        result_max_chars=limits["result_max_chars"],
-    )
-    if _rework_feedback:  # A rework reads its own record (``board_record``).
-        toolbox = board_record.on_rework(toolbox, company_id, item, limits, engine)
-    # The tools offered (and withheld, with why) go on the evidence; a split
-    # is pointed to the move tool when it is offered.
-    agent["tools_offered"] = workspace_edits.offered(toolbox)
-    if agent["tools_offered"]:  # The step and the families it allows (tool_steps).
-        agent["tools_offered"].update(
-            tool_steps.record(tool_steps.EXECUTE, roles.canonical(role))
-        )
-    if prepared:  # The daemon's reply: where this attempt's tools ran, or why not.
-        agent["tools_offered"]["task_worktree"] = prepared
     user_prompt += workspace_edits.move_note(agent["tools_offered"])
     try:
         result, tool_calls = mcp_tools.chat_with_tools(

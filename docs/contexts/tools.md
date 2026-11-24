@@ -275,16 +275,18 @@ call written as text; the tool budget had run out" if it happens again.
   the file's bytes as the daemon read them) plus `format`, so a statement
   about a document can cite the digest the platform read. A reply without
   `extracted` (an older daemon's bytes) is an error, never shown as text.
-- `docs_write_policy.py`: the docs-only write policy. A toolbox whose task is
-  documentation (the TechWriter role, or a kind or step named
-  `documentation`; `apply`, called from `toolbox_for`) is `docs_only`: every
-  write the edit tools ask (`workspace_edits._deliverable`: edit, move,
-  delete) must name a file under `docs/` or `doc/`, a README, or a `.md`,
-  `.markdown`, `.mdx` or `.rst` file; anything else is refused before the
-  daemon is asked, with a reply that says what may be written. TechWriter is
-  not yet offered the workspace tools (`FILE_ROLES`), so the policy takes
-  effect once the tools follow the step. The files an answer delivers in its
-  own blocks are not filtered yet.
+- `docs_write_policy.py`: the docs-only write policy. Where a turn writes is
+  the step table's rule (`contracts/tool_steps.write_scope`): the
+  `documentation` step, and the TechWriter in any step that writes (a role's
+  narrowing within W, `ROLE_WRITE_SCOPE`), write documentation only. `apply`,
+  called from `toolbox_for` with the turn's step, sets the toolbox's
+  `docs_only` from it; then every write the edit tools ask
+  (`workspace_edits._deliverable`: edit, move, delete) must name a file under
+  `docs/` or `doc/`, a README, or a `.md`, `.markdown`, `.mdx` or `.rst` file
+  (`tool_steps.is_doc_path`); anything else is refused before the daemon is
+  asked, with a reply that says what may be written. The files an answer
+  delivers in its own blocks follow the same rule in the loop
+  (`loop/worker/deliver.docs_scope`).
 - `workspace_reads.py`: family R beyond the four base reads, in one place:
   `offer` sets read-only Git (`workspace_git`), a document's text
   (`workspace_documents`) and navigation (`workspace_navigation`) on a box,

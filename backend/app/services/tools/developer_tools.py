@@ -552,7 +552,7 @@ def toolbox_for(
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
-            docs_write_policy.apply(workspace, role)  # Docs only for documentation.
+            docs_write_policy.apply(workspace, role, step=step)  # Docs-only scope.
             workspace_reads.offer(workspace, company_id, engine)  # Git, documents.
             loader = functools.partial(
                 edit_lint.load_profile, _bridge, company_id, root, engine
