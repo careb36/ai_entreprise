@@ -83,6 +83,12 @@ def _run_window_waiting(session: Session, company_id: int, limit: int) -> list[d
     ]
 
 
+def _owner_action_of(text: str) -> dict:
+    """``{"owner_action": name}`` when *text* names a catalogue action, else ``{}``."""
+    name = owner_actions.matching(text)
+    return {"owner_action": name} if name else {}
+
+
 def _owner_actions(session: Session, user: User | None, company_id: int) -> list[dict]:
     """The catalogue's actions, for a signed-in Owner: things she can run from
     the app (``routers/owner_actions.py``), not decisions waiting."""
@@ -158,11 +164,9 @@ async def inbox(
                 # The Manager agent marked it for the next sprint (issue #394):
                 # the "Plan a sprint" form ticks it; a person may untick it.
                 "marked_for_carry_over": carry_mark(item, records[item.id]) is True,
-                # A step only the owner takes that the app can run (#701).
-                "owner_action": owner_actions.matching(
-                    f"{item.title} {records[item.id].block_reason()}"
-                ),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+                # A step only the owner takes that the app can run (#701).
+                **_owner_action_of(f"{item.title} {records[item.id].block_reason()}"),
             }
         )
 

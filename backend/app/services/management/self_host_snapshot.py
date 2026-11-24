@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import base64
 import importlib.util
-import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -38,7 +37,7 @@ _MODULE_NAME = "fabrique_owner_action_self_host"
 def harness_dir() -> Path | None:
     """The folder holding ``self_host.py``, or ``None`` when none is found."""
     candidates = [settings.SELF_HOST_REPOSITORY_DIR.strip(), str(_CHECKOUT_ROOT)]
-    candidates.append(os.getenv("AGENT_WORKSPACE_ROOT", ""))
+    candidates.append(settings.AGENT_WORKSPACE_ROOT.strip())
     for root in filter(None, candidates):
         folder = Path(root) / "scripts" / "self_host"
         if (folder / "self_host.py").is_file():
