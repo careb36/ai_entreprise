@@ -1070,6 +1070,13 @@
       "test_owner_action_runner.py": [
         "management"
       ],
+      "test_owner_git_actions_router.py": [
+        "management"
+      ],
+      "test_owner_git_runner.py": [
+        "management",
+        "producers"
+      ],
       "test_owner_actions_router.py": [
         "management"
       ],

@@ -494,6 +494,9 @@
     "GET /v1/owner_actions": {
       "access": "Owner"
     },
+    "GET /v1/owner_actions/{name}/options": {
+      "access": "Owner"
+    },
     "GET /v1/owner_actions/{name}/runs/{run_id}": {
       "access": "Owner"
     },

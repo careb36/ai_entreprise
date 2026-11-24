@@ -219,6 +219,9 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
 | `workspace.self_host.checkout` | request | `self_host_checkout.py` | `name` (§5.9) | `ok`, `path`, `created`, `head`, `source_head`, `files` |
+| `workspace.self_host.git` | request | `self_host_git.py` | `view` (`branches`, `land_preview` with `branch`, `origin`, `push_preview`, `fix_commit` with `issue`; §5.10) | `ok`, `view` and its fields |
+| `workspace.self_host.land` | request | `self_host_git.py` | `branch`, `expected_head`, `land_owner`? (§5.10) | `ok`, `exit_code`, `outcome`, `landed`, `main_before`, `main_after`, `record`, `output_tail` |
+| `workspace.self_host.push` | request | `self_host_git.py` | `main`, `origin_main` (§5.10) | `ok`, `before`, `after`, `main`, `pushed`, `notes_ref`, `refspecs`, `remote_url` |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
 | `workspace.git.read_at` | request | `git_read_at.py` | `workspace_root`, `base`?, `commit`?, `paths`?, `folders`?, `list`? | `ok`, `commit`, `base`, `files` (per path `status` and `content_b64`), `folders` (every file under each, sorted), `tree`?, `sandbox_required` (§5.5) |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
@@ -602,6 +605,44 @@ that is not an earlier snapshot; an earlier snapshot is answered as it is
 `path`, `created`, `head`, `source_head`, `files`. A git failure is a 409.
 Announced as a subject (§2.1); the backend asks only a daemon that announces
 it, or one that announces nothing.
+
+### 5.10 Landing and mirroring the self-hosting source (additive, owner actions)
+
+The owner actions `land_branch` and `push_main`, and the observations
+`close_issue` needs (`docs/design/owner-actions.md`), on the repository this
+machine names in `FABRIQUE_SELF_HOST_SOURCE` (§5.9), never one the request
+names.
+
+- `workspace.self_host.git` is read-only. `branches`: the local branches but
+  `main`, newest first (at most 200). `land_preview` (`branch`): the branch,
+  which must be one `branches` lists and pass `git check-ref-format
+  --branch`; its commits in `main..branch`, the diffstat and changed files of
+  `main...branch` (renames off, as land.sh), and `tests.files` of main's
+  `docs/architecture/contexts.json`, from which the backend computes the
+  protected paths. `origin`: the remote's URL without credentials.
+  `push_preview`: after fetching origin's `main`, the commits of
+  `origin/main..main`, `fast_forward`, `up_to_date`, `has_record` (land.sh's
+  record of `main`, file or note) and `notes`. `fix_commit` (`issue`): after
+  that fetch (`fetched` false when it failed), the commits on `main` whose
+  message names `#<issue>`, each with `on_origin`.
+- `workspace.self_host.land` runs `bash scripts/land.sh <branch>` as an
+  argument list, never `--push`, after checking the branch is listed and
+  still at `expected_head` (409 otherwise). The daemon's own `LAND_*`
+  variables are dropped; `LAND_OWNER=1` is set for that process only when
+  `land_owner` is `true`; `PYTHON_KEYRING_BACKEND` defaults to the null
+  keyring so the proxy's Poetry install never waits on a keyring. Bounded by
+  `FABRIQUE_SELF_HOST_LAND_TIMEOUT` (default 5,400 s; the process group is
+  killed past it). The reply is the exit code and its meaning, whether `main`
+  moved, `main` before and after, land.sh's record of the new `main` as it
+  wrote it (a claim, as it says), and the output's last 6,000 characters.
+- `workspace.self_host.push` fetches, then refuses (409) unless `main` and
+  `origin/main` are where the preview saw them, `origin/main` is an ancestor
+  of `main`, there is something to push and `main` has a record. It pushes
+  `git push --atomic origin <main>:refs/heads/main` and
+  `refs/notes/verification` when present, never `--force` or a `+` refspec,
+  with this machine's credentials and no prompt (`git_env.py`), then fetches
+  again and answers `before`, `after` and the refspecs. A remote that cannot
+  be reached is a 502.
 
 ## 6. Conformance fixtures
 

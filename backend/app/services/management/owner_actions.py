@@ -26,10 +26,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from models import OwnerActionRun
+from models import OwnerActionRun, Sprint
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlmodel import Session, select
 
+from services.management import owner_git_actions as git
 from services.platform import locks
 from services.platform.agent_service import AgentService
 
@@ -87,6 +88,11 @@ def _self_host_cost(p: SelfHostParams) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class Action:
+    """A catalogue entry. With ``facts`` (async ``(ctx, params) -> (params, facts)``),
+    the preview observes before it shows: effect, cost and ``blockers`` then take
+    ``(params, facts)`` and the digest covers the facts. ``step_up(facts)`` says a
+    start needs a fresh re-authentication (``step_up.py``)."""
+
     name: str
     issue: int
     params: type[BaseModel]
@@ -94,6 +100,10 @@ class Action:
     cost: Any
     records: tuple[str, ...]
     conflicts: tuple[str, ...] = field(default_factory=tuple)
+    facts: Any = None
+    blockers: Any = None
+    step_up: Any = None
+    no_active_sprint: bool = False
 
 
 CATALOGUE: dict[str, Action] = {
@@ -114,6 +124,57 @@ CATALOGUE: dict[str, Action] = {
             "tokens_observed",
             "exit_status",
         ),
+        conflicts=(git.LAND,),
+    ),
+    git.LAND: Action(
+        name=git.LAND,
+        issue=701,
+        params=git.LandParams,
+        effect=git.land_effect,
+        cost=git.land_cost,
+        records=(
+            "branch",
+            "land_owner",
+            "verification_record",
+            "check_summary",
+            "main_before",
+            "main_after",
+            "exit_code",
+        ),
+        conflicts=(SELF_HOST, git.PUSH),
+        facts=git.land_facts,
+        blockers=git.land_blockers,
+        step_up=lambda facts: bool(facts.get("needs_owner")),
+        no_active_sprint=True,
+    ),
+    git.PUSH: Action(
+        name=git.PUSH,
+        issue=701,
+        params=git.PushParams,
+        effect=git.push_effect,
+        cost=git.push_cost,
+        records=("pushed_range", "notes_ref", "remote_url"),
+        conflicts=(git.LAND,),
+        facts=git.push_facts,
+        blockers=git.push_blockers,
+    ),
+    git.CLOSE: Action(
+        name=git.CLOSE,
+        issue=701,
+        params=git.CloseParams,
+        effect=git.close_effect,
+        cost=git.close_cost,
+        records=(
+            "issue_url",
+            "comment_url",
+            "comment_sent",
+            "closed",
+            "fix_commit",
+            "fix_on_origin",
+            "override_not_on_origin",
+        ),
+        facts=git.close_facts,
+        blockers=git.close_blockers,
     ),
 }
 
@@ -123,6 +184,9 @@ CATALOGUE: dict[str, Action] = {
 # text match: it only offers the dialog, it never starts anything.
 MENTIONS: dict[str, tuple[str, ...]] = {
     SELF_HOST: ("--container-mode", "self_host.py", "#701"),
+    git.PUSH: ("land.sh --push", "push main to github", "push to github"),
+    git.LAND: ("scripts/land.sh", "land.sh "),
+    git.CLOSE: ("close the issue", "close issue #"),
 }
 
 
@@ -155,16 +219,51 @@ def validate(spec: Action, raw: dict[str, Any]) -> BaseModel:
         ) from exc
 
 
-def preview(spec: Action, params: BaseModel) -> dict[str, Any]:
-    """The confirmation: effect, cost and the digest a start must echo (O2)."""
+def preview(
+    spec: Action, params: BaseModel, facts: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The confirmation: effect, cost and the digest a start must echo (O2).
+    An action with facts shows them, and the digest covers them."""
+    args = (params,) if spec.facts is None else (params, facts or {})
     body = {
         "action": spec.name,
         "params": params.model_dump(),
-        "effect": spec.effect(params),
-        "cost": spec.cost(params),
+        "effect": spec.effect(*args),
+        "cost": spec.cost(*args),
     }
+    if spec.facts is not None:
+        body["facts"] = facts or {}
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
     return {**body, "confirmation": hashlib.sha256(canonical.encode()).hexdigest()}
+
+
+async def observe_and_preview(
+    spec: Action, params: BaseModel, ctx: Any
+) -> tuple[BaseModel, dict[str, Any]]:
+    """The facts read now, and the preview with its ``blockers`` (not digested:
+    a blocker refuses the start, it is not something the Owner confirms)."""
+    facts = None
+    if spec.facts is not None:
+        try:
+            params, facts = await spec.facts(ctx, params)
+        except git.Refused as exc:
+            raise RunRefused(exc.status, exc.detail) from exc
+    shown = preview(spec, params, facts)
+    shown["blockers"] = spec.blockers(params, facts) if spec.blockers else []
+    shown["step_up"] = bool(spec.step_up and spec.step_up(facts or {}))
+    return params, shown
+
+
+def active_sprints(session: Session) -> list[int]:
+    """The sprints agents may be working in now, in any company (a land refuses)."""
+    return list(
+        session.exec(
+            select(Sprint.id).where(
+                Sprint.status == "active",
+                Sprint.archived_at.is_(None),  # type: ignore[union-attr]
+            )
+        ).all()
+    )
 
 
 def describe(spec: Action) -> dict[str, Any]:
@@ -172,6 +271,7 @@ def describe(spec: Action) -> dict[str, Any]:
     return {
         "name": spec.name,
         "issue": spec.issue,
+        "observes": spec.facts is not None,
         "params": schema.get("properties", {}),
         "required": schema.get("required", []),
         "records": list(spec.records),
@@ -249,9 +349,12 @@ def start(
     spec: Action,
     params: BaseModel,
     confirmation: str,
+    facts: dict[str, Any] | None = None,
+    audit_extra: dict[str, Any] | None = None,
 ) -> OwnerActionRun:
-    """Record a run's start (audited), or refuse it."""
-    if confirmation != preview(spec, params)["confirmation"]:
+    """Record a run's start (audited), or refuse it. The facts confirmed are
+    kept as the run's ``confirmed`` observation."""
+    if confirmation != preview(spec, params, facts)["confirmation"]:
         raise RunRefused(
             409, "The confirmation does not match these parameters: preview again"
         )
@@ -270,11 +373,11 @@ def start(
         action=spec.name,
         params=params.model_dump(),
         started_by_user_id=user_id,
-        observations={},
+        observations={} if facts is None else {"confirmed": facts},
     )
     session.add(run)
     session.flush()
-    _audit(session, run, user_id, "started", {"status": RUNNING})
+    _audit(session, run, user_id, "started", {"status": RUNNING, **(audit_extra or {})})
     session.commit()
     session.refresh(run)
     return run

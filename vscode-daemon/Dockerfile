@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --require-hashes -r /app/requirements.txt
 
-COPY abilities.py app_run.py browser_probe.py code_graph.py code_lookup.py command_policy.py console_run.py daemon.py daemon_status.py delivery.py delivery_journal.py delivery_snapshot.py document_text.py file_diff.py file_edits.py file_hash.py forge_gate.py git_base.py git_diff.py git_env.py git_local.py git_read_at.py git_sync.py git_view.py git_workspace.py host_folders.py local_merge.py nats_connect.py nats_scope.py platform_reviews.py playwright_pin.py project_lock.py repo_map.py run_logs.py sandbox.py sandbox_cache.py sandbox_image.py security_probe.py self_host_checkout.py shell_exec.py signatures.py sprint_integration.py stack_image.py win_job.py workspace_edit.py workspace_move.py workspace_read.py /app/
+COPY abilities.py app_run.py browser_probe.py code_graph.py code_lookup.py command_policy.py console_run.py daemon.py daemon_status.py delivery.py delivery_journal.py delivery_snapshot.py document_text.py file_diff.py file_edits.py file_hash.py forge_gate.py git_base.py git_diff.py git_env.py git_local.py git_read_at.py git_sync.py git_view.py git_workspace.py host_folders.py local_merge.py nats_connect.py nats_scope.py platform_reviews.py playwright_pin.py project_lock.py repo_map.py run_logs.py sandbox.py sandbox_cache.py sandbox_image.py security_probe.py self_host_checkout.py self_host_git.py shell_exec.py signatures.py sprint_integration.py stack_image.py win_job.py workspace_edit.py workspace_move.py workspace_read.py /app/
 
 COPY images/browser/probe-browser.js /app/images/browser/probe-browser.js
 

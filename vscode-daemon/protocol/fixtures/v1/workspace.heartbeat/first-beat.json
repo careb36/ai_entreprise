@@ -45,6 +45,9 @@
         "workspace.sandbox.reset",
         "workspace.search",
         "workspace.self_host.checkout",
+        "workspace.self_host.git",
+        "workspace.self_host.land",
+        "workspace.self_host.push",
         "workspace.signatures",
         "workspace.status",
         "workspace.undo"
