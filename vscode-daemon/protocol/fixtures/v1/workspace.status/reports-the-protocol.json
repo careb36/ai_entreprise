@@ -87,7 +87,8 @@
           "forge_policy"
         ],
         "workspace.git.diff": [
-          "forge_policy"
+          "forge_policy",
+          "view"
         ],
         "workspace.git.integrate": [
           "forge_policy"
