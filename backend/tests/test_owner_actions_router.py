@@ -136,7 +136,7 @@ def test_only_a_signed_in_owner_sees_or_starts_an_action(
         f"/v1/owner_actions?company_id={company.id}", headers=owner
     )
     assert listing.status_code == 200
-    (entry,) = listing.json()["actions"]
+    entry = listing.json()["actions"][0]
     assert (
         entry["name"] == NAME and entry["issue"] == 701 and entry["available"] is True
     )
@@ -321,9 +321,9 @@ def test_a_missing_harness_makes_the_action_unavailable(
     monkeypatch.setattr(self_host_snapshot, "harness_dir", lambda: None)
     company = _company(sqlite_session)
     owner = _member(sqlite_session, company.id, "Owner")
-    (entry,) = test_client.get(
+    entry = test_client.get(
         f"/v1/owner_actions?company_id={company.id}", headers=owner
-    ).json()["actions"]
+    ).json()["actions"][0]
     assert (entry["available"], entry["reason"]) == (False, "harness_not_found")
     assert _start(test_client, company.id, owner).status_code == 503
     assert sqlite_session.exec(select(OwnerActionRun)).all() == []
@@ -338,7 +338,7 @@ def test_the_inbox_lists_the_actions_for_an_owner_only(
     owner = _member(sqlite_session, company.id, "Owner")
     viewer = _member(sqlite_session, company.id, "Viewer")
     mine = test_client.get(f"/v1/inbox?company_id={company.id}", headers=owner).json()
-    assert mine["owner_actions"] == [{"name": NAME, "issue": 701}]
+    assert mine["owner_actions"][0] == {"name": NAME, "issue": 701}
     assert (
         test_client.get(f"/v1/inbox?company_id={company.id}", headers=viewer).json()[
             "owner_actions"

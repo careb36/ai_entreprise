@@ -2,9 +2,9 @@ import type { RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentMessage } from '../../store/agentStore'
 import { Bot, ChevronDown, Loader2, SplitSquareVertical } from 'lucide-react'
-import type { AgentIdentity } from './identity'
+import type { ActiveAgent } from './liveStatus'
 import type { MessageGroup } from './types'
-import { DateSeparator, NeedsSplitBanner, TypingIndicator } from './atoms'
+import { AfterCloseSeparator, DateSeparator, NeedsSplitBanner, TypingIndicator } from './atoms'
 import { SlackMessageGroup } from './MessageGroup'
 
 /** The middle column: the grouped feed, who is typing, the scroll prompt and the status bar. */
@@ -19,7 +19,7 @@ export function MessageFeed({
   isFiltered: string
   isConnected: boolean
   connectionError: string | null
-  activeAgents: { key: string; identity: AgentIdentity; elapsedMs: number }[]
+  activeAgents: ActiveAgent[]
   sprintStatus?: string
   containerRef: RefObject<HTMLDivElement>
   messagesEndRef: RefObject<HTMLDivElement>
@@ -63,16 +63,21 @@ export function MessageFeed({
             <div key={di}>
               <DateSeparator date={day.date} />
               {day.groups.map((g, gi) => {
-                if (g.messages[0]?.type === ('needs_split' as any)) {
+                if (g.messages[0]?.type === ('needs_split' as AgentMessage['type'])) {
                   return <NeedsSplitBanner key={`${di}-${gi}`} message={g.messages[0]} />
                 }
-                return <SlackMessageGroup key={`${di}-${gi}`} group={g} sprintId={sprintId} />
+                return (
+                  <div key={`${di}-${gi}`}>
+                    {g.afterClose && <AfterCloseSeparator />}
+                    <SlackMessageGroup group={g} sprintId={sprintId} activeAgents={activeAgents} />
+                  </div>
+                )
               })}
             </div>
           ))
         )}
 
-        {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} elapsedMs={a.elapsedMs} />)}
+        {activeAgents.map(a => <TypingIndicator key={a.key} agent={a} />)}
         <div ref={messagesEndRef} />
       </div>
 

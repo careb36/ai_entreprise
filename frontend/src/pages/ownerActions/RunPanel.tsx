@@ -6,6 +6,7 @@ import type { OwnerActionRun } from '../../services/api'
 /** The ids a run recorded, as the platform observed them, in the order an issue cites them. */
 export function recordedIds(run: OwnerActionRun): [string, string][] {
   const o = run.observations
+  const str = (v: unknown) => (v === null || v === undefined ? '' : String(v))
   const rows: [string, string | number | null | undefined][] = [
     ['run', run.id],
     ['company', o.company_id],
@@ -20,6 +21,14 @@ export function recordedIds(run: OwnerActionRun): [string, string][] {
     ['images', o.sandbox?.images?.length ? o.sandbox.images.join(', ') : null],
     ['tokens', o.tokens_observed],
     ['exitStatus', run.exit_status],
+    ['mainBefore', str(o.main_before ?? '') || null],
+    ['mainAfter', str(o.main_after ?? '') || null],
+    ['checks', (o.check_summary as { status?: string } | null | undefined)?.status],
+    ['pushedFrom', (o.pushed_range as { from?: string } | undefined)?.from],
+    ['pushedTo', (o.pushed_range as { to?: string } | undefined)?.to],
+    ['issueUrl', str(o.issue_url ?? '') || null],
+    ['commentUrl', str(o.comment_url ?? '') || null],
+    ['closed', typeof o.closed === 'boolean' ? String(o.closed) : null],
   ]
   return rows.filter((r): r is [string, string | number] => r[1] !== null && r[1] !== undefined)
     .map(([k, v]) => [k, String(v)])

@@ -830,13 +830,14 @@
     "noAgentActivity": "No agent activity yet.",
     "healthLabels": {
       "stream": "Stream",
-      "activeAgents": "Active agents",
-      "agentErrors": "Agent errors",
+      "activeAgents": "Agents with a run in flight",
       "blockedTasks": "Blocked tasks",
-      "openReworks": "Open reworks",
-      "freshestHeartbeat": "Freshest heartbeat",
-      "memoryHits": "Memory hits",
-      "lastSprintCompletion": "Last sprint"
+      "openReworks": "Tasks with an unanswered rework request",
+      "memoryHits": "Memory retrievals seen on this stream",
+      "agentFailures": "Failed agent calls (review or model)",
+      "lastAgentEvent": "Last event an agent recorded",
+      "daemonHeartbeat": "Workspace daemon heartbeat",
+      "previousSprint": "Previous sprint ({{name}})"
     },
     "streamStatus": {
       "live": "Live",
@@ -853,7 +854,11 @@
     },
     "badgeLabels": {
       "working": "working",
+      "started": "started",
+      "approved": "approved",
       "delivered": "delivered",
+      "refused": "rework requested",
+      "blocked": "blocked",
       "error": "error",
       "update": "update",
       "split": "split"
@@ -865,7 +870,7 @@
       "rework": "Rework",
       "done": "Done"
     },
-    "retroTitle": "Last Sprint Retro",
+    "retroTitle": "This sprint's retrospective",
     "retroCompletion": "Completion",
     "retroDone": "Done",
     "retroBlocked": "Blocked",
@@ -957,7 +962,22 @@
       "retrying": "🔄 Retrying blocked task: {{task}}",
       "gate_rework": "↩️ Sent back for rework: {{task}} ({{detail}}).",
       "gate_blocked": "❌ The pre-review gate blocked the deliverable for: {{task}} ({{detail}})."
-    }
+    },
+    "previousSprintValue": "{{done}}/{{total}} done ({{rate}}%)",
+    "daemonState": {
+      "online": "online",
+      "stale": "late",
+      "offline": "offline",
+      "not_observed": "no heartbeat seen"
+    },
+    "agentState": {
+      "working": "working",
+      "reviewing": "reviewing",
+      "idle": "not working"
+    },
+    "agentReviewing": "reviewing the delivery",
+    "lastActivity": "Last activity: {{text}}",
+    "afterClose": "After the sprint closed"
   },
   "governance": {
     "title": "Governance",
@@ -2255,8 +2275,6 @@
   "workControl": {
     "plannedTitle": "This sprint has not started",
     "plannedHint": "The agents start working when you start it.",
-    "pausedTitle": "This sprint is paused",
-    "pausedHint": "Nothing is dispatched, reviewed or retried until it is resumed.",
     "start": "Start",
     "stop": "Stop",
     "stopConfirm": "Stop this sprint for good? Unfinished tasks are blocked and no follow-up sprint opens.",
@@ -2278,7 +2296,38 @@
     "gitError": "Git settings unavailable",
     "loading": "Loading…",
     "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
-    "autonomySaved": "Autonomy level saved"
+    "autonomySaved": "Autonomy level saved",
+    "pauseRecorded": "Recorded reason: {{reason}}",
+    "pauseKind": {
+      "person": {
+        "title": "Paused by a person",
+        "action": "Nothing is dispatched, reviewed or retried until someone resumes it."
+      },
+      "no_credit": {
+        "title": "Paused: a model provider has no credit",
+        "action": "Top up the provider's account, then resume the sprint."
+      },
+      "nothing_done": {
+        "title": "Paused: no task is done and the rest wait for a person",
+        "action": "Unblock, finish or discard the blocked tasks, then resume the sprint."
+      },
+      "budget": {
+        "title": "Paused: the sprint budget",
+        "action": "An Owner raises the sprint budget (or adds the model's price), then resumes the sprint."
+      },
+      "acknowledgement": {
+        "title": "Paused: an Owner's acknowledgement is missing",
+        "action": "An Owner acknowledges the company's settings, then resumes the sprint."
+      },
+      "daemon": {
+        "title": "Paused: the workspace daemon is not answering",
+        "action": "Start the daemon on the computer that holds the projects, then resume the sprint."
+      },
+      "other": {
+        "title": "This sprint is paused",
+        "action": "Read the recorded reason below, then resume the sprint."
+      }
+    }
   },
   "execution": {
     "title": "Execution",
@@ -5115,6 +5164,25 @@
     "unidentified": "Unidentified (no signed-in person)",
     "unrecorded": "A person (name not recorded)"
   },
+  "taskHold": {
+    "person": "Waits for a person",
+    "dependency": "Waits for another task",
+    "dependencyOn": "Waits for {{ids}}",
+    "retry_pending": "Retry pending",
+    "review_pending": "Review pending",
+    "frozen": "Frozen",
+    "risk_hold": "Risk hold",
+    "run_window": "Held for the run window",
+    "hint": {
+      "person": "Blocked: nothing moves it until a person acts.",
+      "dependency": "Not started or held until the tasks it depends on are done; the worker moves it then.",
+      "retry_pending": "Blocked by a failure the worker retries on its own.",
+      "review_pending": "Blocked with a delivery the worker reviews again on its own.",
+      "frozen": "Frozen out of automation by an operator; a person unfreezes it.",
+      "risk_hold": "Approved, held for a person to accept the risk.",
+      "run_window": "Ready, held until the company's run window opens."
+    }
+  },
   "ownerActions": {
     "title": "Owner actions",
     "subtitle": "Steps only you take, run by the platform after you confirm their cost and effect. One run at a time; each start, cancel and finish is in the company's audit chain.",
@@ -5137,7 +5205,9 @@
     "unavailable": {
       "harness_not_found": "Unavailable: the backend cannot find scripts/self_host (set SELF_HOST_REPOSITORY_DIR).",
       "daemon_lacks_checkout": "Unavailable: the workspace daemon does not announce workspace.self_host.checkout; update and restart it.",
-      "unknown": "Unavailable."
+      "unknown": "Unavailable.",
+      "daemon_lacks_self_host_git": "Unavailable: the workspace daemon does not announce workspace.self_host.git, land and push; update and restart it.",
+      "github_token_missing": "Unavailable: the backend has no GITHUB_TOKEN (closing an issue needs one with issues: write)."
     },
     "form": {
       "checkoutName": "Snapshot folder",
@@ -5147,7 +5217,16 @@
       "tokenBudget": "Token budget",
       "urgent": "Mark the sprint urgent (it does not wait for the run window)",
       "review": "Review cost and effect",
-      "oneAtATime": "A run is in progress"
+      "oneAtATime": "A run is in progress",
+      "branch": "Branch to land",
+      "branchPlaceholder": "Pick one of the daemon's local branches",
+      "issue": "Issue to close",
+      "issuePlaceholder": "Pick an open issue",
+      "loadingOptions": "Loading the choices…",
+      "optionsError": "Could not load the choices: {{message}}",
+      "noBranches": "The daemon lists no local branch other than main.",
+      "noIssues": "No open issue.",
+      "pushHint": "Mirrors local main and land.sh's notes to origin, fast-forward only."
     },
     "confirm": {
       "title": "Run {{name}}?",
@@ -5187,7 +5266,15 @@
       "containerMode": "Container mode",
       "images": "Images",
       "tokens": "Tokens observed",
-      "exitStatus": "Exit status"
+      "exitStatus": "Exit status",
+      "mainBefore": "main before",
+      "mainAfter": "main after",
+      "checks": "check.sh full",
+      "pushedFrom": "origin/main before",
+      "pushedTo": "origin/main after",
+      "issueUrl": "Issue",
+      "commentUrl": "Comment",
+      "closed": "Closed"
     },
     "actions": {
       "self_host_container_run": {
@@ -5201,7 +5288,66 @@
           "sandbox": "Reads which sandbox the daemon reported for each test run, apart from the one asked.",
           "urgent": "Marks the sprint urgent, so the run window does not hold it."
         }
+      },
+      "land_branch": {
+        "title": "Land a branch",
+        "description": "Runs scripts/land.sh <branch> on the daemon's computer: merges main and the branch in a clean worktree, runs check.sh full and fast-forwards local main. It does not push.",
+        "effect": {
+          "merge": "Merges main and {{branch}} ({{count}} commits) in land.sh's clean worktree.",
+          "checks": "Runs scripts/check.sh full on the merge commit (tens of minutes on the daemon's computer).",
+          "main": "When the checks pass, writes land.sh's verification record and fast-forwards local main from {{main}}.",
+          "protected": "Touches {{count}} protected paths: LAND_OWNER=1 is set for this run only, after your password.",
+          "no_push": "Nothing is pushed: mirroring main to GitHub is its own action."
+        }
+      },
+      "push_main": {
+        "title": "Push main to GitHub",
+        "description": "Mirrors local main and land.sh's notes to origin after a fetch, fast-forward only, with the daemon computer's own git credentials.",
+        "effect": {
+          "public": "The repository is PUBLIC: what is pushed is visible to everyone.",
+          "push": "Pushes {{count}} commits: origin's main becomes {{main}} ({{remote}}).",
+          "notes": "Pushes land.sh's verification notes (refs/notes/verification).",
+          "no_notes": "There are no verification notes to push.",
+          "never_force": "Never forced: if origin moved, the push is refused."
+        }
+      },
+      "close_issue": {
+        "title": "Close an issue",
+        "description": "Posts one comment on a GitHub issue and closes it, after checking its fix is on origin.",
+        "effect": {
+          "comment": "Posts the comment below on #{{number}} of {{repository}}.",
+          "close": "Closes #{{number}} as completed.",
+          "override": "Closes it although the fix is not on origin/main yet (recorded as an override)."
+        }
       }
+    },
+    "repo": {
+      "commits": "Commits ({{count}})",
+      "more": "…and more not shown.",
+      "diffstat": "Files changed",
+      "protected": "Protected paths it touches (LAND_OWNER=1 for this run only)",
+      "stepUp": "Your password, to confirm this protected land",
+      "stepUpHint": "Signed in with SSO? Leave it empty, sign in again and confirm within five minutes.",
+      "publicWarning": "This repository is PUBLIC: these commits become visible to everyone.",
+      "issue": "Issue",
+      "fix": "Fixing commit",
+      "onOrigin": "on origin/main",
+      "notOnOrigin": "not on origin/main yet",
+      "noFix": "No commit on main names this issue.",
+      "comment": "Comment posted on the issue (exactly this text)",
+      "override": "Close it although the fix is not on origin yet",
+      "repreview": "Preview this text",
+      "repreviewHint": "Preview again so the confirmation covers what you changed.",
+      "blockedBy": "It cannot run now:",
+      "confirm": "Confirm",
+      "diffLine": "{{path}} +{{added}} −{{deleted}}"
+    },
+    "blockers": {
+      "nothing_to_land": "The branch is already in main: nothing to land.",
+      "not_fast_forward": "origin/main is not an ancestor of main: not a fast-forward. Reconcile by hand (merge, never force).",
+      "nothing_to_push": "origin/main already is main: nothing to push.",
+      "no_verification_record": "main has no verification record: land changes with land.sh first.",
+      "fix_not_on_origin": "The fix is not on origin/main: push main first, or tick the override."
     }
   }
 }

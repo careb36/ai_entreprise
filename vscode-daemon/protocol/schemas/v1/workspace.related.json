@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.related",
   "title": "workspace.related",
-  "description": "The files around a task's seeds and the names that tie them: paths, names and sha256, never contents (code_graph.py); with lookup, where a name is defined or who uses it (code_lookup.py).",
+  "description": "The files around a task's seeds and the names that tie them: paths, names and sha256, never contents (code_graph.py); with lookup, where a name is defined or who uses it (code_lookup.py); with api_surface, config_vars or dependencies, what the project declares (project_facts.py).",
   "x-protocol-version": 1,
   "x-subject": "workspace.related",
   "x-kind": "request",
@@ -29,12 +29,15 @@
         },
         "lookup": {
           "type": "object",
-          "description": "Optional (feature `lookup`, \u00a75.7): a definition or references lookup instead of a walk from seeds.",
+          "description": "Optional (feature `lookup`, \u00a75.7): a definition or references lookup instead of a walk from seeds; with the features `api_surface`, `config_vars` and `dependencies` (\u00a75.9), what the project declares.",
           "properties": {
             "kind": {
               "enum": [
                 "definition",
-                "references"
+                "references",
+                "api_surface",
+                "config_vars",
+                "dependencies"
               ]
             },
             "name": {
@@ -118,7 +121,10 @@
             "kind": {
               "enum": [
                 "definition",
-                "references"
+                "references",
+                "api_surface",
+                "config_vars",
+                "dependencies"
               ]
             },
             "name": {
@@ -211,6 +217,184 @@
             },
             "common_name": {
               "type": "boolean"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ]
+              }
+            },
+            "files_scanned": {
+              "type": "integer"
+            },
+            "scanned_sha256": {
+              "type": "string"
+            },
+            "openapi": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "operations": {
+                    "type": "array"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "function": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "method",
+                  "path",
+                  "function",
+                  "file",
+                  "line"
+                ]
+              }
+            },
+            "mounts": {
+              "type": "array"
+            },
+            "variables": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "default": {
+                    "type": "string"
+                  },
+                  "default_withheld": {
+                    "type": "boolean"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "file",
+                  "line",
+                  "source"
+                ]
+              }
+            },
+            "manifests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "ecosystem": {
+                    "enum": [
+                      "pypi",
+                      "npm"
+                    ]
+                  },
+                  "count": {
+                    "type": "integer"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "ecosystem"
+                ]
+              }
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "manifest": {
+                    "type": "string"
+                  },
+                  "ecosystem": {
+                    "enum": [
+                      "pypi",
+                      "npm"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "manifest",
+                  "ecosystem",
+                  "name",
+                  "version",
+                  "group"
+                ]
+              }
             }
           },
           "required": [

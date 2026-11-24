@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.self_host.git",
+  "title": "workspace.self_host.git",
+  "description": "Read-only views of the self-hosting source (this machine's FABRIQUE_SELF_HOST_SOURCE) for the owner actions land_branch, push_main and close_issue (self_host_git.py, PROTOCOL.md \u00a75.10). push_preview and fix_commit fetch origin's main first; nothing else contacts a remote.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.self_host.git",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "view": {
+          "enum": [
+            "branches",
+            "land_preview",
+            "origin",
+            "push_preview",
+            "fix_commit"
+          ]
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$",
+          "description": "One of the branches the view branches lists; never main."
+        },
+        "issue": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "view"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "view": {
+          "enum": [
+            "branches",
+            "land_preview",
+            "origin",
+            "push_preview",
+            "fix_commit"
+          ]
+        },
+        "main": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "head": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              "subject": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "head",
+              "subject"
+            ]
+          }
+        },
+        "branch": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "already_in_main": {
+          "type": "boolean"
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sha": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "on_origin": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "sha",
+              "subject"
+            ]
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "diffstat": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "added": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "deleted": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "added",
+              "deleted"
+            ]
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_truncated": {
+          "type": "boolean"
+        },
+        "test_map": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "tests.files of main's docs/architecture/contexts.json: the backend derives the protected list from it, as land.sh does."
+        },
+        "origin_main": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "fast_forward": {
+          "type": "boolean"
+        },
+        "up_to_date": {
+          "type": "boolean"
+        },
+        "has_record": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "boolean"
+        },
+        "issue": {
+          "type": "integer"
+        },
+        "fetched": {
+          "type": "boolean"
+        },
+        "fetch_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "origin's URL without credentials."
+        }
+      },
+      "required": [
+        "ok",
+        "view"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

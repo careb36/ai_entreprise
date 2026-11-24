@@ -6,6 +6,7 @@ import { errorDetail } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { EmptyState, LoadError, LoadingRows, PageHeader } from '../components/ui'
 import { ActionCard } from './ownerActions/ActionCard'
+import { RepoActionCard } from './ownerActions/RepoActionCard'
 
 /**
  * Owner actions (`/company/owner-actions`, issue #701): steps only the
@@ -32,7 +33,9 @@ export default function OwnerActions() {
       ) : query.isError ? (
         <LoadError onRetry={() => query.refetch()}>{t('ownerActions.loadError', { message: errorDetail(query.error) })}</LoadError>
       ) : (
-        query.data.actions.map(action => <ActionCard key={action.name} companyId={companyId} action={action} />)
+        query.data.actions.map(action => action.name === 'self_host_container_run'
+          ? <ActionCard key={action.name} companyId={companyId} action={action} />
+          : <RepoActionCard key={action.name} companyId={companyId} action={action} />)
       )}
     </div>
   )

@@ -18,6 +18,7 @@ from services.evidence import (
     command_runs,
     context_read,
     criteria_tests,
+    doc_build,
     doc_links,
     grounding,
     protected_check,
@@ -502,6 +503,8 @@ def verify_agent_run(
     # Documentation: its links and cited paths against the delivered tree,
     # as the daemon listed and read it back (``doc_links``).
     checks.extend(doc_links.checks(evidence, _declared_files(run.artifact_text)))
+    # Its build and its snippets' project names, as the loop observed them.
+    checks.extend(doc_build.checks(evidence))
     # A changelog fragment against the task's diff (``changelog_diff``).
     if chlog := changelog_diff.check(evidence):
         checks.append(chlog)

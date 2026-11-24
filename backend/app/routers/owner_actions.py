@@ -5,6 +5,14 @@
 - ``POST /v1/owner_actions/{name}/runs``                     start a run (digest echoed); 409 while one runs
 - ``GET  /v1/owner_actions/{name}/runs/{run_id}?company_id=`` one run, with its observations
 - ``POST /v1/owner_actions/{name}/runs/{run_id}/cancel``     ask it to stop
+- ``GET  /v1/owner_actions/{name}/options?company_id=``      what the Owner picks from (branches, open issues)
+
+``land_branch``, ``push_main`` and ``close_issue`` observe before they show
+(the daemon's view of the repository, GitHub's open issues): the preview's
+digest covers those facts, and the start reads them again, so a branch or a
+``main`` that moved, or another comment, is a 409. A protected land needs the
+Owner's step-up in the start request (``step_up.py``); a land is refused
+while a sprint is active.
 
 Every route needs a signed-in person who is Owner of the company the request
 names: a Manager gets 403, and so does an API token whatever its role (as the
@@ -18,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import step_up
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -26,8 +35,10 @@ from pydantic import Field
 from schemas import RequestModel
 from services.management import owner_action_runner as runner
 from services.management import owner_actions as catalogue
-from services.management import self_host_snapshot
-from services.workspace import daemon_liveness
+from services.management import owner_git_actions as git
+from services.management import owner_git_runner, self_host_snapshot
+from services.producers import github_adapter
+from services.workspace import daemon_liveness, workspace_daemon
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Company"])
@@ -40,6 +51,8 @@ class PreviewRequest(RequestModel):
 
 class StartRequest(PreviewRequest):
     confirmation: str = ""
+    # A protected land's step-up (``step_up.py``): never stored, logged or audited.
+    step_up_password: str | None = Field(default=None, max_length=1024)
 
 
 class CancelRequest(RequestModel):
@@ -71,7 +84,27 @@ def _refused(exc: catalogue.RunRefused) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
+def _github_token() -> str | None:
+    return github_adapter.configured_token()
+
+
+def _context(request: Request) -> git.Context:
+    nats_client = getattr(request.app.state, "nats_client", None)
+
+    async def daemon(subject: str, payload: dict[str, Any], timeout: float) -> Any:
+        return await workspace_daemon.daemon_request(
+            nats_client, subject, payload, timeout
+        )
+
+    return git.Context(daemon=daemon, github=github_adapter, token=_github_token())
+
+
 def _availability(name: str) -> dict[str, Any]:
+    if name in git.SUBJECTS:
+        if any(daemon_liveness.announces(s) is False for s in git.SUBJECTS[name]):
+            return {"available": False, "reason": "daemon_lacks_self_host_git"}
+        if name == git.CLOSE and not _github_token():
+            return {"available": False, "reason": "github_token_missing"}
     if name == catalogue.SELF_HOST:
         if self_host_snapshot.harness_dir() is None:
             return {"available": False, "reason": "harness_not_found"}
@@ -115,19 +148,72 @@ def list_owner_actions(
 
 
 @router.post("/owner_actions/{name}/preview")
-def preview_owner_action(
+async def preview_owner_action(
     name: str,
     payload: PreviewRequest,
+    request: Request,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """What a run would do and cost, and the digest its start must echo."""
+    """What a run would do and cost, what it observed, and the digest its start must echo."""
     require_human_owner(session, user, payload.company_id)
     try:
         spec = catalogue.action(name)
-        return catalogue.preview(spec, catalogue.validate(spec, payload.params))
+        params = catalogue.validate(spec, payload.params)
+        if spec.facts is None:
+            return catalogue.preview(spec, params)
+        _, shown = await catalogue.observe_and_preview(spec, params, _context(request))
+        return shown
     except catalogue.RunRefused as exc:
         raise _refused(exc) from exc
+    except workspace_daemon.DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"daemon: {exc}") from exc
+    except workspace_daemon.DaemonError as exc:
+        raise HTTPException(status_code=502, detail=f"daemon: {exc.message}") from exc
+
+
+async def _start_observed(
+    spec: catalogue.Action,
+    payload: StartRequest,
+    request: Request,
+    session: Session,
+    owner: User,
+) -> OwnerActionRun:
+    """Start an action that observes first: the facts are read again and must be
+    the ones confirmed (409), then the blockers, the active sprints and the
+    step-up; the run keeps the facts confirmed."""
+    params = catalogue.validate(spec, payload.params)
+    ctx = _context(request)
+    params, shown = await catalogue.observe_and_preview(spec, params, ctx)
+    if payload.confirmation != shown["confirmation"]:
+        raise catalogue.RunRefused(
+            409, "What the confirmation showed has changed: preview again"
+        )
+    if shown["blockers"]:
+        raise catalogue.RunRefused(409, {"blockers": shown["blockers"]})
+    if spec.no_active_sprint:
+        active = catalogue.active_sprints(session)
+        if active:
+            raise catalogue.RunRefused(
+                409, {"message": "A sprint is active", "active_sprint_ids": active}
+            )
+    proof = None
+    if shown["step_up"]:
+        proof = step_up.verify(session, request, owner, payload.step_up_password)
+    run = catalogue.start(
+        session,
+        payload.company_id,
+        int(owner.id or 0),
+        spec,
+        params,
+        payload.confirmation,
+        facts=shown["facts"],
+        audit_extra={"step_up": proof} if proof else None,
+    )
+    owner_git_runner.launch(
+        run, session.get_bind(), ctx, shown["facts"], land_owner=proof is not None
+    )
+    return run
 
 
 @router.post("/owner_actions/{name}/runs", status_code=202)
@@ -142,6 +228,12 @@ async def start_owner_action(
     owner = require_human_owner(session, user, payload.company_id)
     try:
         spec = catalogue.action(name)
+        if spec.facts is not None:
+            available = _availability(spec.name)
+            if not available["available"]:
+                raise catalogue.RunRefused(503, available)
+            started = await _start_observed(spec, payload, request, session, owner)
+            return catalogue.serialize(started)
         params = catalogue.validate(spec, payload.params)
         available = _availability(spec.name)
         if not available["available"]:
@@ -156,6 +248,10 @@ async def start_owner_action(
         )
     except catalogue.RunRefused as exc:
         raise _refused(exc) from exc
+    except workspace_daemon.DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"daemon: {exc}") from exc
+    except workspace_daemon.DaemonError as exc:
+        raise HTTPException(status_code=502, detail=f"daemon: {exc.message}") from exc
     try:
         runner.launch(
             request.app,
@@ -204,3 +300,26 @@ def cancel_owner_action_run(
     except catalogue.RunRefused as exc:
         raise _refused(exc) from exc
     return catalogue.serialize(run)
+
+
+@router.get("/owner_actions/{name}/options")
+async def owner_action_options(
+    name: str,
+    request: Request,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """What the Owner picks from: the daemon's local branches, or the open issues."""
+    require_human_owner(session, user, company_id)
+    try:
+        catalogue.action(name)
+        return await git.options(_context(request), name)
+    except catalogue.RunRefused as exc:
+        raise _refused(exc) from exc
+    except git.Refused as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    except workspace_daemon.DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"daemon: {exc}") from exc
+    except workspace_daemon.DaemonError as exc:
+        raise HTTPException(status_code=502, detail=f"daemon: {exc.message}") from exc

@@ -101,6 +101,8 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
+        "doc_build",
+        "doc_snippets",
         "fitness",
         "manifests",
         "protected_check",
@@ -241,6 +243,7 @@
         "delivery_checks",
         "preconditions",
         "routines",
+        "live_state",
         "run_review",
         "sod_requesters",
         "sprint_control"
@@ -773,6 +776,10 @@
       "test_discovery_team_models.py": [
         "planning"
       ],
+      "test_doc_build_snippets.py": [
+        "evidence",
+        "loop"
+      ],
       "test_doc_links.py": [
         "evidence"
       ],
@@ -956,6 +963,9 @@
       "test_licence_scan.py": [
         "repo"
       ],
+      "test_live_state.py": [
+        "release"
+      ],
       "test_llm_client.py": [
         "models"
       ],
@@ -1078,6 +1088,13 @@
       "test_output_tail.py": ["evidence", "workspace"],
       "test_owner_action_runner.py": [
         "management"
+      ],
+      "test_owner_git_actions_router.py": [
+        "management"
+      ],
+      "test_owner_git_runner.py": [
+        "management",
+        "producers"
       ],
       "test_owner_actions_router.py": [
         "management"
@@ -1597,6 +1614,9 @@
       "test_task_events_transitions.py": [
         "management"
       ],
+      "test_task_hold.py": [
+        "release"
+      ],
       "test_task_relations.py": [
         "loop"
       ],
@@ -1692,6 +1712,9 @@
       ],
       "test_workspace_isolation.py": [
         "workspace"
+      ],
+      "test_workspace_facts.py": [
+        "tools"
       ],
       "test_workspace_lint.py": [
         "tools"

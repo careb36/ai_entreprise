@@ -494,6 +494,9 @@
     "GET /v1/owner_actions": {
       "access": "Owner"
     },
+    "GET /v1/owner_actions/{name}/options": {
+      "access": "Owner"
+    },
     "GET /v1/owner_actions/{name}/runs/{run_id}": {
       "access": "Owner"
     },
@@ -543,6 +546,9 @@
       "access": "Viewer"
     },
     "GET /v1/sprints/{sprint_id}/integration/reviews": {
+      "access": "Viewer"
+    },
+    "GET /v1/sprints/{sprint_id}/live_state": {
       "access": "Viewer"
     },
     "GET /v1/sprints/{sprint_id}/progress": {

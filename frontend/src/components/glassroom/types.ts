@@ -1,5 +1,5 @@
 import type { AgentMessage } from '../../store/agentStore'
-import type { BacklogItem } from '../../services/api'
+import type { BacklogItem, TaskHold } from '../../services/api'
 import type { AgentIdentity } from './identity'
 
 export interface MessageGroup {
@@ -7,6 +7,8 @@ export interface MessageGroup {
   identity: AgentIdentity
   timestamp: string
   messages: AgentMessage[]
+  /** The first group after the sprint closed: the feed marks it. */
+  afterClose?: boolean
 }
 
 export interface HealthPanelEntry {
@@ -29,6 +31,8 @@ export interface SprintTaskEntry {
   priority: BacklogItem['priority']
   assignee?: string
   comments?: BacklogItem['comments']
+  /** What holds the task back, from its record (the board's `observed.hold`). */
+  hold?: TaskHold | null
 }
 
 export interface TaskAutonomyEntry {

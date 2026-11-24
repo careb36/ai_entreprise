@@ -44,6 +44,7 @@ import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import code_graph
+import project_facts
 import repo_map
 import signatures
 import workspace_read
@@ -107,8 +108,11 @@ def _lines(raw: bytes, names: Set[str]) -> Tuple[List[int], int]:
 
 def lookup(workspace_path: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The reply to ``workspace.related`` when the request carries ``lookup``."""
+    asked = data.get("lookup")
+    if isinstance(asked, dict) and asked.get("kind") in project_facts.KINDS:
+        return project_facts.facts(workspace_path, data)  # §5.10.
     root = workspace_read._root(workspace_path)
-    kind, name, path, max_files = _request(data.get("lookup"), data)
+    kind, name, path, max_files = _request(asked, data)
     deadline = time.monotonic() + code_graph.DEADLINE_SECONDS
     files, files_capped = repo_map._candidates(root)
     contents, too_large = repo_map.read_sources(files)

@@ -254,3 +254,131 @@ def fetch_pr_diff(
         f"{quote(repo, safe='')}/pulls/{number}"
     )
     return _get(url, token=token, accept="application/vnd.github.v3.diff").text
+
+
+# -- Issues, for the owner action close_issue (docs/design/owner-actions.md) ---------
+
+_REPOSITORY_URL = re.compile(
+    r"^(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/([A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$"
+)
+
+
+class GitHubApiError(Exception):
+    """GitHub refused or could not be reached; ``status`` is GitHub's, or None."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+
+def configured_token() -> str | None:
+    """The backend's configured ``GITHUB_TOKEN`` (closing an issue needs issues: write)."""
+    return _default_token()
+
+
+def repository_of(remote_url: str | None) -> tuple[str, str] | None:
+    """``(owner, repo)`` of a github.com remote URL without credentials, else None."""
+    match = _REPOSITORY_URL.match((remote_url or "").strip())
+    return (match.group(1), match.group(2)) if match else None
+
+
+def _issue_url(base_url: str, owner: str, repo: str, suffix: str = "") -> str:
+    return (
+        f"{base_url.rstrip('/')}/repos/{quote(owner, safe='')}/"
+        f"{quote(repo, safe='')}/issues{suffix}"
+    )
+
+
+def _send(method: str, url: str, *, token: str | None, body: dict) -> dict:
+    try:
+        response = httpx.request(
+            method,
+            url,
+            headers=_headers(token, "application/vnd.github+json"),
+            json=body,
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        raise GitHubApiError(
+            f"GitHub could not be reached: {type(exc).__name__}"
+        ) from exc
+    if (
+        response.status_code in (403, 429)
+        and response.headers.get("X-RateLimit-Remaining") == "0"
+    ):
+        raise GitHubRateLimited(response.headers.get("X-RateLimit-Reset"))
+    if response.status_code >= 400:
+        raise GitHubApiError(
+            f"GitHub answered {response.status_code} to {method} {urlsplit(url).path}",
+            response.status_code,
+        )
+    data = response.json()
+    if not isinstance(data, dict):
+        raise GitHubApiError("GitHub returned an unexpected response")
+    return data
+
+
+def list_open_issues(
+    owner: str,
+    repo: str,
+    *,
+    token: str | None = None,
+    limit: int = 100,
+    base_url: str = GITHUB_API_URL,
+) -> list[dict]:
+    """The open issues (pull requests left out), newest first: number, title, URL."""
+    try:
+        response = _get(
+            _issue_url(base_url, owner, repo),
+            token=token,
+            accept="application/vnd.github+json",
+            params={"state": "open", "per_page": min(limit, 100), "sort": "created"},
+        )
+    except httpx.HTTPError as exc:
+        raise GitHubApiError(f"GitHub could not list the issues: {exc}") from exc
+    data = response.json()
+    if not isinstance(data, list):
+        raise GitHubApiError("GitHub returned an unexpected issue list")
+    return [
+        {"number": i["number"], "title": i.get("title") or "", "url": i.get("html_url")}
+        for i in data
+        if isinstance(i, dict) and "pull_request" not in i and "number" in i
+    ][:limit]
+
+
+def comment_on_issue(
+    owner: str,
+    repo: str,
+    number: int,
+    body: str,
+    *,
+    token: str | None = None,
+    base_url: str = GITHUB_API_URL,
+) -> dict:
+    """Post *body* exactly as given; GitHub's id, URL and the body it stored."""
+    data = _send(
+        "POST",
+        _issue_url(base_url, owner, repo, f"/{int(number)}/comments"),
+        token=token,
+        body={"body": body},
+    )
+    return {"id": data.get("id"), "url": data.get("html_url"), "body": data.get("body")}
+
+
+def close_issue(
+    owner: str,
+    repo: str,
+    number: int,
+    *,
+    token: str | None = None,
+    base_url: str = GITHUB_API_URL,
+) -> dict:
+    """Close the issue as completed; its URL and the state GitHub answered."""
+    data = _send(
+        "PATCH",
+        _issue_url(base_url, owner, repo, f"/{int(number)}"),
+        token=token,
+        body={"state": "closed", "state_reason": "completed"},
+    )
+    return {"url": data.get("html_url"), "state": data.get("state")}

@@ -8,7 +8,7 @@ owner actions run from the app, the Reviewer and Support agents. Read this befor
 - **Folder:** `backend/app/services/management/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md). Nothing imports it.
 - **Interface:** none.
-- **Modules:** `brief_mail`, `company_export`, `company_import`, `in_process_api`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `owner_action_runner`, `owner_actions`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `self_host_snapshot`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `company_export`, `company_import`, `in_process_api`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `owner_action_runner`, `owner_actions`, `owner_git_actions`, `owner_git_runner`, `reviewer_agent`, `rsi_cycle`, `rsi_cycle_import`, `rsi_cycle_steps`, `rsi_cycle_view`, `self_host_snapshot`, `sod_report`, `support_agent`.
 
 ## How it works
 
@@ -105,8 +105,8 @@ beside the quotas, and the refused suggestions with their `refusal_reason`.
 
 [Design and threat model](../design/owner-actions.md), issue #701.
 
-- `owner_actions.py`: the catalogue (one action today,
-  `self_host_container_run`), parameter validation, the confirmation digest,
+- `owner_actions.py`: the catalogue (`self_host_container_run`,
+  `land_branch`, `push_main`, `close_issue`), parameter validation, the confirmation digest,
   one run at a time (`locks.in_transaction`), and the run's record: start,
   cancel request and finish audited `owner_action_<step>` as `human:<id>`.
 - `owner_action_runner.py`: the job. The checkout goes through the daemon
@@ -120,7 +120,24 @@ beside the quotas, and the refused suggestions with their `refusal_reason`.
 - `self_host_snapshot.py`: finds and imports the harness
   (`SELF_HOST_REPOSITORY_DIR`), and reads the snapshot for the `records` step
   through `workspace.git.read_at` and `workspace.git.diff`'s `status` view.
-- Routes: `routers/owner_actions.py`; the inbox lists the catalogue for an
+- `owner_git_actions.py`: the three actions on La Fabrique's own repository.
+  Their preview observes first, through the daemon's read-only
+  `workspace.self_host.git` views and the GitHub adapter
+  ([producers](producers.md), injected by the router), and the digest covers
+  those facts: a branch or `main` that moved, or another comment, is a 409.
+  The protected paths of a land are computed here with
+  `contracts/protected_paths` from the daemon's changed files and main's test
+  map, as land.sh does. Blockers (`not_fast_forward`, `fix_not_on_origin`…)
+  refuse a start; a land also refuses while a sprint is active, and conflicts
+  with a self-hosting run and a push.
+- `owner_git_runner.py`: their jobs, one call each: `workspace.self_host.land`
+  (with `land_owner` only after the step-up, `step_up.py` in
+  [platform](platform.md)), `workspace.self_host.push`, or the comment and the
+  close on GitHub with exactly the confirmed text. land.sh's verification
+  record is stored as it wrote it (`verification_record`, a claim), apart
+  from what the daemon observed (`main_before`, `main_after`, `exit_code`).
+- Routes: `routers/owner_actions.py` (and `GET …/{name}/options`: the
+  daemon's branches or the open issues to pick from); the inbox lists the catalogue for an
   Owner (`owner_actions`) and marks a blocked task that names an action.
 
 ### The segregation-of-duties report

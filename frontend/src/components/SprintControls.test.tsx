@@ -43,10 +43,26 @@ describe('sprint work controls', () => {
 
   it('says why the worker paused a sprint and resumes it', async () => {
     const resume = vi.spyOn(api, 'resumeSprint').mockResolvedValue({ status: 'active' })
-    wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_reason: 'No credit at deepseek: top up.' }} />)
-    expect(screen.getByText('No credit at deepseek: top up.')).toBeInTheDocument()
+    wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_kind: 'no_credit', pause_reason: 'No credit at deepseek: top up.' }} />)
+    expect(screen.getByText('Paused: a model provider has no credit')).toBeInTheDocument()
+    expect(screen.getByText("Top up the provider's account, then resume the sprint.")).toBeInTheDocument()
+    expect(screen.getByText('Recorded reason: No credit at deepseek: top up.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
     await waitFor(() => expect(resume).toHaveBeenCalledWith(8))
+  })
+
+  it('says why a sprint with nothing done paused and what to do', () => {
+    const reason = 'No task of this sprint is done and 2 wait for a person: unblock, finish or discard them, then resume the sprint.'
+    wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_kind: 'nothing_done', pause_reason: reason }} />)
+    expect(screen.getByText('Paused: no task is done and the rest wait for a person')).toBeInTheDocument()
+    expect(screen.getByText('Unblock, finish or discard the blocked tasks, then resume the sprint.')).toBeInTheDocument()
+    expect(screen.getByText(`Recorded reason: ${reason}`)).toBeInTheDocument()
+  })
+
+  it('says a person paused a sprint with no recorded reason', () => {
+    wrap(<SprintStatusBanner sprint={{ ...sprint, status: 'paused', pause_kind: 'person', pause_reason: null }} />)
+    expect(screen.getByText('Paused by a person')).toBeInTheDocument()
+    expect(screen.queryByText(/Recorded reason/)).not.toBeInTheDocument()
   })
 
   it('shows nothing while the sprint runs', () => {

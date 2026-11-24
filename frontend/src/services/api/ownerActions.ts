@@ -75,13 +75,29 @@ export interface OwnerAction {
 
 export interface OwnerActionEffect { key: string; values: Record<string, string | number> }
 
+export interface OwnerActionCommit { sha: string; subject: string; on_origin?: boolean }
+
 export interface OwnerActionPreview {
   action: string
   params: Record<string, unknown>
   effect: OwnerActionEffect[]
-  cost: { models: string[]; token_budget: number; max_seconds: number; budget_checked_between_calls: boolean }
+  cost: { models: string[]; token_budget: number; max_seconds: number; budget_checked_between_calls?: boolean }
+  /** What the platform observed before this confirmation (the daemon, GitHub); the digest covers it. */
+  facts?: Record<string, unknown>
+  /** Why it cannot start now (not covered by the digest). */
+  blockers?: string[]
+  /** A start needs a fresh re-authentication (a protected land). */
+  step_up?: boolean
   /** The digest a start must echo: what the dialog showed is what runs. */
   confirmation: string
+}
+
+/** What the Owner picks from: the daemon's local branches, or the open issues. */
+export interface OwnerActionOptions {
+  main?: string | null
+  branches?: { name: string; head: string; subject: string }[]
+  repository?: string
+  issues?: { number: number; title: string; url: string | null }[]
 }
 
 // The Owner's only: a Manager or an API token gets 403.
@@ -90,8 +106,12 @@ export const ownerActionEndpoints = (http: Http) => ({
     http.get<{ actions: OwnerAction[] }>('/v1/owner_actions', { company_id: companyId }),
   previewOwnerAction: (companyId: number, name: string, params: Record<string, unknown>) =>
     http.post<OwnerActionPreview>(`/v1/owner_actions/${encodeURIComponent(name)}/preview`, { company_id: companyId, params }),
-  startOwnerAction: (companyId: number, name: string, params: Record<string, unknown>, confirmation: string) =>
-    http.post<OwnerActionRun>(`/v1/owner_actions/${encodeURIComponent(name)}/runs`, { company_id: companyId, params, confirmation }),
+  startOwnerAction: (companyId: number, name: string, params: Record<string, unknown>, confirmation: string, stepUpPassword?: string) =>
+    http.post<OwnerActionRun>(`/v1/owner_actions/${encodeURIComponent(name)}/runs`, {
+      company_id: companyId, params, confirmation, ...(stepUpPassword ? { step_up_password: stepUpPassword } : {}),
+    }),
+  getOwnerActionOptions: (companyId: number, name: string) =>
+    http.get<OwnerActionOptions>(`/v1/owner_actions/${encodeURIComponent(name)}/options`, { company_id: companyId }),
   getOwnerActionRun: (companyId: number, name: string, runId: number) =>
     http.get<OwnerActionRun>(`/v1/owner_actions/${encodeURIComponent(name)}/runs/${runId}`, { company_id: companyId }),
   cancelOwnerActionRun: (companyId: number, name: string, runId: number) =>

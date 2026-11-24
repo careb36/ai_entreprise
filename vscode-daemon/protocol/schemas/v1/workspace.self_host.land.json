@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.self_host.land",
+  "title": "workspace.self_host.land",
+  "description": "scripts/land.sh <branch> in the self-hosting source, as an argument list, never --push (self_host_git.py, PROTOCOL.md \u00a75.10). LAND_OWNER=1 only when land_owner is true; the daemon's own LAND_* variables are dropped.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.self_host.land",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$",
+          "description": "One of the branches the view branches lists; never main."
+        },
+        "expected_head": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "land_owner": {
+          "type": "boolean",
+          "description": "Set LAND_OWNER=1 for this one process; the backend sends true only after the Owner's step-up."
+        }
+      },
+      "required": [
+        "branch",
+        "expected_head"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "branch": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "land_owner": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "outcome": {
+          "enum": [
+            "landed",
+            "checks_failed_or_conflict",
+            "usage_or_environment",
+            "refused",
+            "locked",
+            "stopped"
+          ]
+        },
+        "landed": {
+          "type": "boolean"
+        },
+        "main_before": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "main_after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "record": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "land.sh's verification record as it wrote it (nature: claim)."
+        },
+        "output_tail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "branch",
+        "head",
+        "land_owner",
+        "exit_code",
+        "outcome",
+        "landed",
+        "main_before",
+        "main_after",
+        "record",
+        "output_tail"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

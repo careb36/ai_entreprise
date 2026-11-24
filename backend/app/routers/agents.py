@@ -76,6 +76,8 @@ async def publish_sse_event(sprint_id: str, payload: str) -> None:
         parsed = None
 
     if isinstance(parsed, dict):
+        parsed = {"event_id": str(uuid4()), **parsed}  # the daemon's have none
+        payload = json.dumps(parsed)
         recent_sse_events[sprint_id].append(parsed)
         if len(recent_sse_events[sprint_id]) > MAX_RECENT_SSE_EVENTS:
             recent_sse_events[sprint_id] = recent_sse_events[sprint_id][
@@ -206,7 +208,7 @@ def load_sprint_history(sprint_id: str) -> list[dict]:
                             }
                         )
                         continue
-                    author = c.get("author") or item.assignee or "Agent"
+                    author = c.get("author") or item.assignee or "System"
                     events.append(
                         {
                             "type": "message",
@@ -225,7 +227,6 @@ def load_sprint_history(sprint_id: str) -> list[dict]:
                             "status": item.status,
                         }
                     )
-                # Show current status for items without comments too
                 if not comments and item.status not in ("todo",):
                     events.append(
                         {

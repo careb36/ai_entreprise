@@ -20,8 +20,9 @@ agent-computer interface (``developer_tool_replies``):
 - ``workspace__run_tests``: the project's test command (or a narrower one
   within the same runner, ``test_commands``), or a check script committed under ``scripts/``
   that the task did not change (``check_scripts``), bounded output;
-- ``workspace__definition``, ``workspace__references`` and
-  ``workspace__lint`` where the step allows X (``workspace_navigation``, ``workspace_lint``).
+- read-only Git, documents, navigation and what the project declares
+  (``workspace_reads``); ``workspace__lint`` and ``workspace__docs_build``
+  where the step allows X (``workspace_reads.offer_runs``).
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
@@ -73,7 +74,6 @@ from services.tools import (
     test_commands,
     test_runs,
     workspace_edits,
-    workspace_lint,
     workspace_navigation,
     workspace_reads,
 )
@@ -563,8 +563,8 @@ def toolbox_for(
             )
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = loader
-            if tool_steps.RUN in allowed:  # ``workspace__lint`` is family X.
-                workspace_lint.offer(workspace, loader)
+            if tool_steps.RUN in allowed:  # Lint and docs build: family X.
+                workspace_reads.offer_runs(workspace, loader)
     # The research tools where the step allows them, whatever the role.
     research = None
     if tool_steps.RESEARCH in allowed:

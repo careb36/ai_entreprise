@@ -34,7 +34,7 @@ Set secrets in `.env` or a secret store, never in `docker-compose.yml`.
 | `AUDIT_SIGNING_KEY` | unset | HMAC key for audit rows and each company's audit hash chain. Unset, the chain is unkeyed and says so. |
 | `LLM_PROXY_INTERNAL_TOKEN` | `""` | Shared by backend and proxy. The proxy accepts a company's own provider connection (`conn:<id>:<model>`) only with it. Empty disables company connections. |
 | `SMTP_PASSWORD` | `""` | Mail server password. |
-| `GITHUB_TOKEN` | unset | Bearer token for the GitHub adapter's API reads, for rate-limit headroom. |
+| `GITHUB_TOKEN` | unset | Bearer token for the GitHub adapter's API reads, for rate-limit headroom. The owner action `close_issue` needs it, with permission to write issues on the repository the daemon's `origin` names (fine-grained: Issues read and write); unset, that action is unavailable. |
 | `OPENPROJECT_TOKEN_PO` | unset | The PO's OpenProject token. Without it, tickets are simulated locally. |
 
 How to generate them:
@@ -386,6 +386,7 @@ Read by `vscode-daemon/` on the computer that holds the projects. Protocol: [`vs
 | `FABRIQUE_COMMAND_DENY` | unset | Comma-separated command patterns the daemon always refuses; a request cannot relax it. |
 | `FABRIQUE_SELF_HOST_SOURCE` | the La Fabrique repository the daemon runs from | The repository `workspace.self_host.checkout` copies for an owner action (PROTOCOL.md §5.9). The request never names it. |
 | `FABRIQUE_SELF_HOST_ROOT` | `~/fabrique-self-host` | The folder the self-hosting snapshots go under; the request names only a folder inside it. |
+| `FABRIQUE_SELF_HOST_LAND_TIMEOUT` | `5400` | Seconds the owner action `land_branch` lets `scripts/land.sh` run on `FABRIQUE_SELF_HOST_SOURCE` (its `check.sh full` included) before the daemon kills its process group (PROTOCOL.md §5.11). land.sh runs without this daemon's own `LAND_*` variables, with `LAND_OWNER=1` only when the request asks, and with `PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring` unless the daemon's environment sets another, so the proxy's Poetry install in `check.sh full` never waits on a desktop keyring. `push_main` uses this machine's own git credentials for `origin` (an ssh key without a passphrase, an agent or a credential helper; nothing prompts). |
 | `FABRIQUE_EXEC_SHELL` | unset | Shell for host commands. Unset: `/bin/zsh` if present, else `/bin/sh`; on Windows `COMSPEC`. |
 | `FABRIQUE_DAEMON_STATE` | `~/.fabrique-daemon` (journal in `deliveries/`) | Queued delivery results, replayed on redelivery. |
 | `FABRIQUE_SNAPSHOT_STATE` | `~/.fabrique-daemon/snapshots` | Pre-delivery snapshots used to undo a delivery. |

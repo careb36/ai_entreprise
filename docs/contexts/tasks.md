@@ -9,7 +9,7 @@ has the detail.
 - **Folder:** `backend/app/services/tasks/`
 - **May import:** [contracts](contracts.md), [platform](platform.md).
 - **Interface:** `board`, `dependencies`, `progress_snapshot`, `relations`, `sprint_board`, `task_events`, `task_projection`, `task_records`.
-- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_projection`, `task_records`.
+- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_hold`, `task_projection`, `task_records`.
 
 ## How it works
 
@@ -91,6 +91,16 @@ that delivered before its dependencies closed.
 `sprint_board.py`: the short typed notes a sprint's tasks leave each other,
 checked by `contracts/board_notes`, each written with a `board_note` event. A
 person may mark one wrong. Design: [`SPRINT_BOARD.md`](../archive/design/SPRINT_BOARD.md).
+
+### What holds a task back
+
+`task_hold.py`: the board's `observed.hold` for each task, from its
+`TaskRecord` (issue #766): `frozen`, `risk_hold`, `dependency` (with
+`waiting_for`), `retry_pending`, `review_pending`, `person` (with the latest
+verdict as `reason`) for a blocked task; `dependency` or `run_window` for a
+`todo` one; `null` otherwise. `observed.waits_for_person` is true only for
+the holds a person releases (`frozen`, `risk_hold`, `person`), so a task that
+waits for another task is not shown as waiting for a person.
 
 ### Filters and saved views
 

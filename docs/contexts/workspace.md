@@ -90,8 +90,13 @@ with a JSON Schema and recorded fixtures per subject that both sides replay.
   commands and the application check. It composes requests and returns
   replies; the loop chooses the commands.
 - `stack_profiles.py`, `project_profile.py`: how to install, test, lint and
-  start a project, detected from the daemon's snapshot and overridden by the
-  deployment and the company. Configuration, never evidence.
+  start a project, and build its documentation, detected from the daemon's
+  snapshot and overridden by the deployment and the company. Configuration,
+  never evidence. `docs_build` is detected with or without a stack
+  (`stack_profiles.docs_build`): `mkdocs.yml`, a Sphinx `conf.py` under
+  `docs/` or `doc/` (or their `source/`), or `docusaurus.config.*` at the
+  root, in `website/` or `docs/`; the site goes to `/tmp`, never into the
+  project, and warnings do not fail it.
 - `stack_roots.py`, `folder_commands.py`: a profile per folder in a repository
   with several projects. Which suites run is decided from the daemon's write
   report, never the agent's list.
@@ -140,14 +145,19 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   `workspace.git.diff`: status, changed, one path's diff, log, and blame of
   a line range without names or e-mails; PROTOCOL.md §5.6), `local_merge.py`, `sprint_integration.py`,
   `platform_reviews.py`, `forge_gate.py`.
-- Owner actions: `self_host_checkout.py` (`workspace.self_host.checkout`, PROTOCOL.md §5.9): the self-hosting snapshot copied from this machine's `FABRIQUE_SELF_HOST_SOURCE` into a folder named by the request under its `FABRIQUE_SELF_HOST_ROOT` ([design](../design/owner-actions.md)).
+- Owner actions: `self_host_checkout.py` (`workspace.self_host.checkout`, PROTOCOL.md §5.9): the self-hosting snapshot copied from this machine's `FABRIQUE_SELF_HOST_SOURCE` into a folder named by the request under its `FABRIQUE_SELF_HOST_ROOT` ([design](../design/owner-actions.md)). `self_host_git.py` (`workspace.self_host.git`, `.land`, `.push`, PROTOCOL.md §5.11): read-only views of that source (branches, a land's preview, origin, a push's preview after a fetch, the commits naming an issue), `scripts/land.sh <branch>` as an argument list with `LAND_OWNER=1` only when the request asks, and a fast-forward push of the previewed `main` and land.sh's notes with this machine's own credentials, never forced.
 - Tools and producers: `workspace_read.py`, `document_text.py` (a DOCX's
   text for `workspace.read` with `extract: "text"`, standard library only, no
   DTD accepted; PDF refused for now; PROTOCOL.md §5.8), `workspace_edit.py`,
   `workspace_move.py` (move lines, delete an emptied file; a delivery's
   `delete` entry, committed and undone like a write; PROTOCOL.md §5.1.4), `repo_map.py`,
   `code_graph.py`, `code_lookup.py` (definition and references lookups on
-  `workspace.related`, PROTOCOL.md §5.7), `signatures.py` (see
+  `workspace.related`, PROTOCOL.md §5.7), `project_facts.py` and
+  `manifest_deps.py` (the API surface, the configuration variables and the
+  manifests' dependencies, read statically for the same subject's
+  `api_surface`, `config_vars` and `dependencies` lookups, each announced
+  apart; no `.env` file read, no server started; PROTOCOL.md §5.10),
+  `signatures.py` (see
   [tools](tools.md)); `console_run.py`
   (see [producers](producers.md); with `private_git: false` it prepares the
   task's worktree for the Developer's tools, keeping git's pointer,
