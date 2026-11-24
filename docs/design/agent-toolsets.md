@@ -90,6 +90,7 @@ What stays with the role, and is not a matter of tools:
 | Execute a task that delivers files | any role (developer roles, QA, Designer, TechWriter, SecOps, Architect, DataEngineer) | yes | yes | yes | yes | own task |
 | Architect brief before a task | Architect | yes | — | — | yes | own task |
 | QA review of a delivery | QA | yes | — | narrowed tests | — | own task |
+| Document a whole project (technical docs: architecture, modules, APIs, configuration, runbooks) | TechWriter, Architect | yes, at scale | docs only | docs build, link and snippet checks | licences, standards | the project's records |
 | PO plans a sprint | PO | yes | — | — | — | the company's board |
 | PO writes a specification, Architect an architecture | PO, Architect | yes | — | — | yes | — |
 | ScrumMaster decides on a blocked task, retrospective | ScrumMaster | yes | — | — | — | the sprint |
@@ -153,6 +154,28 @@ What stays with the role, and is not a matter of tools:
 9. **See the result.** Frontend and Designer tasks cannot look at what they
    built. Offer a sandboxed headless-browser screenshot of a local page of
    the project (no external hosts), recorded with its sha256.
+
+10. **Documenting whole projects.** The documentation pack compiles the
+    management documents from the records; documenting a project's code is a
+    different step, and it needs to see all of it, not a prompt's excerpt:
+    - **Read at scale:** the repository map and a deep bounded listing,
+      code navigation (6), and read-only Git history (`log`, and `blame` of
+      a line range) to say when and why a part changed.
+    - **Extract, do not guess:** the API surface (an OpenAPI document the
+      project serves or generates, a CLI's `--help`), the configuration
+      variables, the manifests' dependencies with their licences (research),
+      and the C4 code view from the stored code graph (`c4_code`).
+    - **Read the documents already there:** Markdown, and PDF or DOCX text
+      in the repository, through the daemon, bounded and redacted.
+    - **Write only documentation** in the task's worktree (paths under the
+      project's docs folders and README files; anything else refused).
+    - **Check what was written:** every internal link and anchor resolves,
+      every code name a snippet cites exists (navigation), runnable examples
+      run in the sandbox, and the project's docs build (mkdocs, Sphinx,
+      Docusaurus) passes, all as observations.
+    - **Cite what it read:** each statement about the code names the file
+      and the sha256 the daemon read, as the pack's `refs.py` does for
+      records; a statement with no citation is a claim and is shown as one.
 
 ## Threat model (STRIDE, the agent as the adversary)
 
