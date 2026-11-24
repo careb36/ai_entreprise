@@ -199,8 +199,8 @@ class WorkspaceToolbox:
             return observation, f"Error: malformed arguments ({exc})."
         if full_name not in self.tools:
             observation = self._observation(tool, arguments, round_no, True, 0, "")
-            observation["reason"] = "unknown tool"
-            return observation, mcp_tools.NO_TOOL_NOTE
+            observation.update(reason="unknown tool", requested=full_name[:200])
+            return observation, mcp_tools.unknown_tool_note(full_name, self.tools)
         started = time.monotonic()
         extra: dict[str, Any] = {}
         try:
@@ -556,7 +556,7 @@ def toolbox_for(
                 can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
-            workspace.can_move = workspace_edits.can_move(workspace.can_edit)
+            workspace_edits.offer_move(workspace)  # Move and delete, or why not.
             if workspace.can_edit:  # The linter after each edit, read once.
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine

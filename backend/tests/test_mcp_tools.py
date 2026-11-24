@@ -206,7 +206,7 @@ def test_a_failing_tool_an_unknown_tool_and_bad_arguments_are_error_results(tool
     assert observations[2]["reason"].startswith("malformed arguments")
     texts = [m["content"] for m in model.requests[1]["messages"] if m["role"] == "tool"]
     assert "Error executing tool boom" in texts[0]
-    assert texts[1] == mcp_tools.NO_TOOL_NOTE
+    assert texts[1].startswith("Unknown tool")
     assert texts[2].startswith("Error: malformed arguments")
 
 
