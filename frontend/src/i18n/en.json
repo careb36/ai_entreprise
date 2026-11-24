@@ -49,7 +49,8 @@
     "notifications": "Notifications",
     "auditTrail": "Audit trail",
     "modelCatalog": "Model catalog",
-    "routines": "Routines"
+    "routines": "Routines",
+    "ownerActions": "Owner actions"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -5103,5 +5104,94 @@
   "commentAuthor": {
     "unidentified": "Unidentified (no signed-in person)",
     "unrecorded": "A person (name not recorded)"
+  },
+  "ownerActions": {
+    "title": "Owner actions",
+    "subtitle": "Steps only you take, run by the platform after you confirm their cost and effect. One run at a time; each start, cancel and finish is in the company's audit chain.",
+    "noCompany": "Pick a company to see its owner actions.",
+    "ownerOnly": "Only the company's Owner can run owner actions.",
+    "loading": "Loading the owner actions…",
+    "loadError": "Could not load the owner actions: {{message}}",
+    "issue": "issue #{{issue}}",
+    "inboxTitle": "Steps you can run from the app",
+    "runFromApp": "Run from the app",
+    "earlierRuns_one": "{{count}} earlier run",
+    "earlierRuns_other": "{{count}} earlier runs",
+    "earlierRun": "Run {{id}}: {{status}}, started {{at}}",
+    "status": {
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "unavailable": {
+      "harness_not_found": "Unavailable: the backend cannot find scripts/self_host (set SELF_HOST_REPOSITORY_DIR).",
+      "daemon_lacks_checkout": "Unavailable: the workspace daemon does not announce workspace.self_host.checkout; update and restart it.",
+      "unknown": "Unavailable."
+    },
+    "form": {
+      "checkoutName": "Snapshot folder",
+      "checkoutHint": "One folder name, created under the daemon's own root (FABRIQUE_SELF_HOST_ROOT), never your checkout.",
+      "scope": "Sprint size",
+      "timeoutMinutes": "Wait for the sprint at most (minutes)",
+      "tokenBudget": "Token budget",
+      "urgent": "Mark the sprint urgent (it does not wait for the run window)",
+      "review": "Review cost and effect",
+      "oneAtATime": "A run is in progress"
+    },
+    "confirm": {
+      "title": "Run {{name}}?",
+      "effect": "What it does",
+      "cost": "What it costs",
+      "models": "Models called",
+      "tokenBudget": "Token budget (the run stops above it)",
+      "duration": "Longest it takes",
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes",
+      "budgetBetweenCalls": "The budget is checked between calls, so one model turn can pass it.",
+      "audited": "The start, a cancel and the finish are recorded in the company's audit chain under your name.",
+      "run": "Confirm and run"
+    },
+    "run": {
+      "label": "Run {{id}}",
+      "stopping": "stopping",
+      "cancel": "Cancel run",
+      "started": "Started {{at}}",
+      "finished": "finished {{at}}",
+      "steps": "Steps done: {{steps}}",
+      "sandbox": "Sandbox asked: {{asked}}; observed by the daemon: {{observed}}.",
+      "observed": "Recorded by the platform",
+      "copy": "Copy ids",
+      "copied": "Copied"
+    },
+    "ids": {
+      "run": "Run",
+      "company": "Company",
+      "sprint": "Sprint",
+      "specification": "Specification",
+      "architecture": "Architecture",
+      "agentRuns": "Agent runs",
+      "checkoutHead": "Snapshot commit",
+      "sourceHead": "Source commit",
+      "sandboxObserved": "Sandbox observed",
+      "containerMode": "Container mode",
+      "images": "Images",
+      "tokens": "Tokens observed",
+      "exitStatus": "Exit status"
+    },
+    "actions": {
+      "self_host_container_run": {
+        "title": "Self-hosting run in container mode",
+        "description": "Runs the self-hosting harness once with --container-mode (checkout, company, records, issue, wait, sandbox) and records the run's ids.",
+        "effect": {
+          "copy": "The daemon copies the La Fabrique repository into the folder {{name}} under its own root and commits it as a fresh repository.",
+          "company": "Creates or finds the \"La Fabrique\" company on that snapshot, with the container sandbox.",
+          "sprint": "Posts La Fabrique's records and the issue's specification, plans a sprint of size {{scope}} and starts it (models are called).",
+          "wait": "Waits up to {{minutes}} minutes for the sprint to complete.",
+          "sandbox": "Reads which sandbox the daemon reported for each test run, apart from the one asked.",
+          "urgent": "Marks the sprint urgent, so the run window does not hold it."
+        }
+      }
+    }
   }
 }

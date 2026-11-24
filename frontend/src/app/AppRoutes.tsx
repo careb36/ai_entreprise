@@ -50,6 +50,7 @@ import Specifications from '../pages/Specifications'
 import SpecificationDetail from '../pages/SpecificationDetail'
 import ArchitectureDetail from '../pages/ArchitectureDetail'
 import Bench from '../pages/Bench'
+import OwnerActions from '../pages/OwnerActions'
 
 // ── Legacy route redirects ────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ export function AppRoutes() {
         <Route path="/company/security-tests" element={<SecurityTests />} />
         <Route path="/company/execution" element={<ExecutionSettings />} />
         <Route path="/company/routines" element={<Routines />} />
+        <Route path="/company/owner-actions" element={<OwnerActions />} />
         <Route path="/company/mcp" element={<McpServers />} />
         <Route path="/company/self-improvement" element={<SelfImprovement />} />
         <Route path="/company/usage" element={<Usage />} />

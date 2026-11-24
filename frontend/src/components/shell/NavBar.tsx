@@ -160,6 +160,7 @@ export function NavBar() {
                   <Link role="menuitem" to="/account" className="menu-item">{t('nav.account')}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="menu-item">{t('nav.teams')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="menu-item">{t('nav.duties')}</Link>}
+                  {role === 'Owner' && <Link role="menuitem" to="/company/owner-actions" className="menu-item">{t('nav.ownerActions')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/usage" className="menu-item">{t('nav.usage')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="menu-item">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   <Link role="menuitem" to="/company/chat" className="menu-item">{t('nav.chatApprovals')}</Link>

@@ -28,6 +28,7 @@ import { systemEndpoints } from './api/system'
 import { dutiesEndpoints } from './api/duties'
 import { companyLimitsEndpoints } from './api/companyLimits'
 import { runWindowEndpoints } from './api/runWindow'
+import { ownerActionEndpoints } from './api/ownerActions'
 import { taskViewEndpoints } from './api/taskViews'
 import { taskRelationEndpoints } from './api/taskRelations'
 import { teamEndpoints } from './api/teams'
@@ -65,6 +66,7 @@ export * from './api/system'
 export * from './api/duties'
 export * from './api/companyLimits'
 export * from './api/runWindow'
+export * from './api/ownerActions'
 export * from './api/taskViews'
 export * from './api/taskRelations'
 export * from './api/teams'
@@ -106,6 +108,7 @@ const endpoints = {
   ...usageEndpoints(http),
   ...dutiesEndpoints(http),
   ...runWindowEndpoints(http),
+  ...ownerActionEndpoints(http),
   ...companyLimitsEndpoints(http),
   ...agentRevisionEndpoints(http),
   ...routineEndpoints(http),
