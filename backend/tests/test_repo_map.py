@@ -298,7 +298,7 @@ def test_the_architects_brief_carries_the_map(project, monkeypatch, sqlite_sessi
         def __init__(self, base_url=None):
             pass
 
-        def chat(self, messages, model, role, bu_id=None):
+        def chat(self, messages, model, role, bu_id=None, tools=None):
             prompts.append(messages[1]["content"])
             return {"choices": [{"message": {"content": "Use Store."}}]}
 

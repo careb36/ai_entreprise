@@ -455,6 +455,9 @@
       "test_architect.py": [
         "loop"
       ],
+      "test_architect_reads_the_repo.py": [
+        "loop"
+      ],
       "test_architecture_adr_files.py": [
         "loop"
       ],

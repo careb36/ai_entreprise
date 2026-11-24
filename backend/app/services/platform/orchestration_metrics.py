@@ -460,6 +460,7 @@ def record_agent_turn(
     result_type: str | None = None,
     result_preview: str | None = None,
     session=None,
+    tool_calls: list[dict[str, Any]] | None = None,
 ):
     """Persist one LLM turn to ``audit_log`` in the shape the KPI queries read.
 
@@ -468,6 +469,8 @@ def record_agent_turn(
     batch writers); otherwise a short-lived session is opened on the shared
     engine.  Failures are logged and swallowed so metrics never block work.
     Returns the persisted ``AuditLog`` row, or ``None`` when nothing was written.
+    ``tool_calls`` are the backend's observations of the turn's tool calls,
+    kept apart from the model's text (the preview, a claim).
     """
     try:
         from models import (
@@ -495,6 +498,8 @@ def record_agent_turn(
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]
+    if tool_calls:
+        result_payload["tool_calls"] = tool_calls
 
     row = AuditLog(
         company_id=company_id,
