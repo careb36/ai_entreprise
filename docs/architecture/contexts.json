@@ -1568,6 +1568,9 @@
       "test_tool_history.py": [
         "tools"
       ],
+      "test_tool_observability.py": [
+        "loop"
+      ],
       "test_trusted_proxies.py": [
         "platform"
       ],

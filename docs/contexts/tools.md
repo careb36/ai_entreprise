@@ -20,11 +20,24 @@ request without tools, so a task always ends in a deliverable. Tools are
 offered as `<server>__<tool>`; `workspace` and `research` are reserved server
 names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 
+The loop counts its own rounds: the answer carries `tool_loop`, and the run's
+evidence `rounds_used` (rounds in which the model called tools), `rounds_max`
+and `rounds_exhausted` (the limit was reached and the last request went
+without tools). When the final answer is only a tool call typed out as text
+(`contracts.tool_calls.written_as_text`), `tool_loop.not_a_deliverable` says
+so, and the worker takes it like an empty answer (`loop/answers.llm_failure`):
+no delivery, the task blocked with "the model's last answer was a tool call
+written as text; the tool budget had run out".
+
 ## Rules
 
 - Each call is an observation the backend made (tool, arguments, duration,
   sha256 of the result). The model's reading of a result is a claim. The tools
   never decide a verdict.
+- A failed call's observation carries `error`: the first 300 characters of
+  the error text the backend produced or received (what the model was
+  shown), secret-looking lines redacted as in a read and an MCP server's
+  secrets masked (`mcp_tools.error_excerpt`).
 - A workspace call NATS answered "no responders" (no daemon running) is marked
   `daemon_absent`; a run whose workspace calls all are is not delivered and
   pauses the sprint (`loop/daemon_gate.py`).
@@ -51,7 +64,9 @@ names. Each call is recorded on the Verifier's evidence as `tool_calls`.
 - Lint after an edit never writes: a command with an autofix or write option,
   or one the check cannot read, is refused.
 - Research fetches go only to allowed hosts, https unless named explicitly,
-  with no credential.
+  with no credential. A refused fetch sends nothing; the reply to the model
+  starts `Refused: host not allowed` with why, and the observation carries
+  `refused: host not allowed` and `allowed: false`.
 
 ## Components
 

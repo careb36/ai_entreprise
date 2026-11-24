@@ -81,6 +81,12 @@ the LangGraph graph is only an optional kickoff conversation.
    what the Verifier's records observed beside the files it names, and how
    to write a note (`services/loop/worker/sprint_notes.py`,
    [design](archive/design/SPRINT_BOARD.md)).
+   With tools, the call is the bounded tool loop
+   ([tools](contexts/tools.md)): the run's evidence records `rounds_used`,
+   `rounds_max` and `rounds_exhausted`, and a final answer that is only a tool
+   call written as text is no deliverable: like an empty answer, the task is
+   blocked with the reason ("the model's last answer was a tool call written
+   as text; the tool budget had run out").
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files, and only those (an answer without `path=` blocks or tool edits writes nothing and is text for QA; a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still

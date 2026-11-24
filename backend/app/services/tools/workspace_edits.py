@@ -295,7 +295,9 @@ def with_tool_edits(targets: list[dict[str, Any]], edited: Any) -> list[dict[str
 def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     """The tool loop's observations onto the run's evidence, apart from the
     claims: the tools offered and withheld (``tools_offered``), the calls
-    (``tool_calls``), the edited files' texts as the daemon
+    (``tool_calls``), the rounds the loop used, its limit and whether it was
+    reached (``rounds_used``, ``rounds_max``, ``rounds_exhausted``), the
+    edited files' texts as the daemon
     read them back (``tool_edit_files``, scanned by the standards check and
     read back by the acceptance guard) and the edits it left alone
     (``tool_edit_conflicts``). Updates *evidence* in place, so a later
@@ -320,8 +322,10 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     ]
     console = agent.get("console_run")  # A console producer's run (console_producer).
     offered_tools = agent.get("tools_offered")
+    loop = agent.get("tool_loop") or {}  # The tool loop's round count.
     if not (
         calls
+        or loop
         or offered_tools
         or files
         or deleted
@@ -344,4 +348,7 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     ):
         if value:
             evidence[key] = value
+    for key in ("rounds_used", "rounds_max", "rounds_exhausted"):
+        if key in loop:
+            evidence[key] = loop[key]
     return evidence

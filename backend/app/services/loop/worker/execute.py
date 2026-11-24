@@ -347,7 +347,7 @@ def _execute_task(
     finally:
         if toolbox is not None:
             toolbox.close()  # The tools' edits come back as files to deliver.
-    agent["tool_calls"] = tool_calls
+    agent["tool_calls"], agent["tool_loop"] = tool_calls, result.get("tool_loop")
     agent["tool_edits"] = getattr(toolbox, "edited_files", [])
 
     failure = _llm_failure(result, model)
