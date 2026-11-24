@@ -14,7 +14,6 @@ Moved out of ``task_worker``, which still re-exports these names.
 import asyncio
 import json
 from collections.abc import Callable
-from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -40,13 +39,12 @@ from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
-from services.loop.worker import messages, procedures_round
+from services.loop.worker import close_listing, messages, procedures_round
 from services.models import effort
 from services.planning import planner_fallback, spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
-    project_listing,
 )
 from services.platform import hooks, protected_paths_setting
 from services.platform.agent_service import AgentService
@@ -57,11 +55,6 @@ from services.tasks.board import SCRUM_MASTER_ROLE
 logger = setup_logger("fabrique-task-worker")
 
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
-# How long the closing thread waits for the daemon's listing of the project.
-LISTING_WAIT_SECONDS = 15.0
-_LISTING_OF: ContextVar[Callable[[str | None], str | None] | None] = ContextVar(
-    "listing_of", default=None
-)
 
 
 # ---------------------------------------------------------------------------
@@ -116,9 +109,9 @@ def _plan_follow_up(
     listing_of: Callable[[str | None], str | None] | None = None,
 ) -> tuple[dict[str, Any], str, str, list[dict[str, Any]]]:
     """The planner's follow-up sprint: its plan, objective, scope size and tasks.
-    *listing_of* (else the closing worker's, ``_LISTING_OF``) reads the
+    *listing_of* (else the closing worker's, ``close_listing``) reads the
     project's listing through the daemon (issue #766)."""
-    listing_of = listing_of or _LISTING_OF.get()
+    listing_of = listing_of or close_listing.current()
     # The agents carry their company, so a connection model routes with its key.
     _, agent_dicts, discovery = spec_planning.planning_context_of(session, company.id)
     detected_stack = _coerce_json_dict(discovery.detected_stack if discovery else None)
@@ -545,21 +538,8 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     # Build retrospective metrics before closing so the planner can use them.
     retro_metrics = await asyncio.to_thread(_build_sprint_retrospective, sprint_id)
 
-    loop = asyncio.get_running_loop()
-
-    def listing_of(path: str | None) -> str | None:
-        """The project's listing through the daemon, from the closing thread."""
-        future = asyncio.run_coroutine_threadsafe(
-            project_listing(nats_client, path), loop
-        )
-        try:
-            return future.result(LISTING_WAIT_SECONDS)
-        except Exception:  # noqa: BLE001 - The plan uses the backend's own listing.
-            future.cancel()
-            return None
-
     # ``asyncio.to_thread`` copies the context: the closing thread reads it.
-    _LISTING_OF.set(listing_of)
+    close_listing.bind(nats_client, asyncio.get_running_loop())
 
     result = await asyncio.to_thread(  # once across replicas (issue #328)
         replicas.close_once,
