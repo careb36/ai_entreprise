@@ -119,6 +119,20 @@ export interface PlannerFallback {
   recorded_at?: string | null
 }
 
+/** What the PO says is already done: its claim, in its words (`already_done.claim_of`). */
+export interface AlreadyDonePart {
+  part: string
+  evidence: string
+  paths: string[]
+}
+
+/** What the backend observed of the PO's planning reads: never the PO's word. */
+export interface AlreadyDoneObserved {
+  files_read: { path: string; sha256: string; bytes?: number | null; tool: string; round?: number | null }[]
+  searches: { tool: string; pattern?: string | null; path?: string | null; match_count?: number | null }[]
+  claimed_paths: { path: string; read: boolean; files: { path: string; sha256: string }[] }[]
+}
+
 export interface SprintPlanResponse {
   sprint_name: string
   goal: string
@@ -129,6 +143,8 @@ export interface SprintPlanResponse {
   uncovered?: string[]; suggested_team?: string[]; team_reasons?: Record<string, string>; hired_roles?: string[]; team_selection?: 'suggested' | 'automatic'
   /** The person's objective, whole; a fallback plan's reason and the id of the backend's record of it; items the scope left out. */
   objective?: string | null; planner_fallback?: PlannerFallback | null; plan_id?: string | null; unplanned_items?: string[]
+  /** The PO's claim of what is already done, apart from the platform's observations of its reads. */
+  already_done_claim?: AlreadyDonePart[] | null; already_done_observed?: AlreadyDoneObserved | null
 }
 
 export const sprintEndpoints = (api: Http) => ({
