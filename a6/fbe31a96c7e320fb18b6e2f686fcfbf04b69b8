@@ -1,0 +1,139 @@
+{
+  "account": {
+    "git_user_name": "Carolina Pereira",
+    "user": "caro"
+  },
+  "branch": {
+    "head": "2083cfcebf55137913acf9a3f8c19b4de9c345b6",
+    "name": "feat/po-checks-already-done"
+  },
+  "command": "scripts/check.sh full",
+  "commit": "a6fbe31a96c7e320fb18b6e2f686fcfbf04b69b8",
+  "duration_seconds": 869.0,
+  "exit_code": 0,
+  "finished_at": "2026-11-24T15:05:06Z",
+  "host": {
+    "name": "caro-HP-EliteBook-830-G7-Notebook-PC",
+    "system": "Linux 7.0.0-44-generic x86_64"
+  },
+  "log": {
+    "path": "fabrique/logs/a6fbe31a96c7e320fb18b6e2f686fcfbf04b69b8.20261124T145037Z.log",
+    "sha256": "5f5a3124d16d198ce688c7ec56de89282bebfc55884ce92332b767cf6fae883e"
+  },
+  "main_before": "c4e1193104fdc7de3ca89dd122e4851600e9686a",
+  "mode": "land",
+  "nature": "claim",
+  "owner_override": true,
+  "parents": [
+    "c4e1193104fdc7de3ca89dd122e4851600e9686a",
+    "2083cfcebf55137913acf9a3f8c19b4de9c345b6"
+  ],
+  "protected_paths": [
+    {
+      "path": "docs/architecture/contexts.json",
+      "pattern": "docs/architecture/contexts.json"
+    }
+  ],
+  "schema": "la-fabrique/verification-record/v1",
+  "script_blob": "6d008938b8feed1fca74aad30ec28bb227d8e0ef",
+  "started_at": "2026-11-24T14:50:37Z",
+  "statement": "The host and account below report that they ran the command on this commit with this result. It is a claim by that machine, not an independent observation, and it is not signed: confirm it with scripts/land.sh --verify on another machine, or with CI.",
+  "status": "passed",
+  "steps": [
+    {
+      "name": "backend environment",
+      "seconds": 3.0,
+      "status": "ok"
+    },
+    {
+      "name": "backend tests (-n auto)",
+      "seconds": 450.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff check",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "ruff format",
+      "seconds": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy environment",
+      "seconds": 2.0,
+      "status": "ok"
+    },
+    {
+      "name": "llm-proxy tests",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend dependencies",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "tsc",
+      "seconds": 70.0,
+      "status": "ok"
+    },
+    {
+      "name": "eslint",
+      "seconds": 11.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend tests",
+      "seconds": 232.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend build",
+      "seconds": 76.0,
+      "status": "ok"
+    },
+    {
+      "name": "actionlint",
+      "seconds": 0.0,
+      "status": "skipped: not installed"
+    },
+    {
+      "name": "backend dependency rule",
+      "seconds": 7.0,
+      "status": "ok"
+    },
+    {
+      "name": "frontend layer rule",
+      "seconds": 5.0,
+      "status": "ok"
+    },
+    {
+      "name": "file sizes",
+      "seconds": 0.0,
+      "status": "ok"
+    },
+    {
+      "name": "configuration in one place",
+      "seconds": 6.0,
+      "status": "ok"
+    },
+    {
+      "name": "changelog fragments",
+      "seconds": 0.0,
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "bash": "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)",
+    "git": "git version 2.53.0",
+    "node": "v24.17.0",
+    "npm": "12.0.2",
+    "poetry": "Poetry (version 2.5.1)",
+    "python3": "Python 3.14.4",
+    "ruff": "ruff 0.17.1"
+  },
+  "tree": "82189f9b1a2cdd0b83ad3aca76a37100b9d6d8e2"
+}
