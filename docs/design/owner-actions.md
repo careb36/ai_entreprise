@@ -420,6 +420,13 @@ previewed again, the override.
 4. A land waits for active sprints of every company (built): right, or only
    sprints whose project is the daemon's source?
 
+**The owner's answers (2026-11-24)** to questions 3 and 4, both as built:
+
+- 3: the step-up for an SSO account accepts a sign-in under five minutes old
+  (`backend/app/step_up.py`). No break-glass password is asked.
+- 4: a land waits for the active sprints of every company, not only those
+  whose project is the daemon's source.
+
 ## What is built
 
 - First slice: the catalogue and its routes, the in-process client and

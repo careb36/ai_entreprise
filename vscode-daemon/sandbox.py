@@ -33,8 +33,9 @@ In container mode the report also says which image ran (``image_identity``,
 daemon, the container run from that ID) and, with ``cache`` in the request,
 the project's dependency cache volume and its lifecycle (``cache``,
 ``sandbox_cache.py``). A request's ``purpose`` (``test``, ``install``,
-``check`` or ``assistant``) says what the command is for: a failed install
-resets the cache. A ``workspace.execute`` without ``sandbox`` is normalized as
+``check``, ``assistant`` or ``program``) says what the command is for: a failed
+install resets the cache; a ``program`` runs only in a container
+(``program_run.py``). A ``workspace.execute`` without ``sandbox`` is normalized as
 ``host`` (``shell_exec``), so the floor reaches it too.
 """
 
@@ -80,7 +81,10 @@ _BWRAP_RO = ("/usr", "/bin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/sbin"
 # ``assistant``: a console assistant's consultation, advice rather than
 # agent-written code; sent only by backends before issue #750 removed the
 # console assistants, and still accepted from them.
-PURPOSES = ("test", "install", "check", "assistant")
+# ``program``: a declared program of the project (``program_run.py``,
+# PROTOCOL.md §5.12): container only, network off, the worktree read-only.
+PURPOSES = ("test", "install", "check", "assistant", "program")
+PROGRAM = "program"
 
 
 class SandboxUnavailable(RuntimeError):
@@ -101,6 +105,9 @@ def normalize(request: Any) -> dict[str, Any]:
     mode = str(raw.get("mode") or "host").strip().lower()
     if mode not in MODES:
         raise SandboxUnavailable(f"unknown sandbox mode {mode!r}")
+    if str(raw.get("purpose") or "").strip().lower() == PROGRAM and mode != "container":
+        # Never raised to a container by the floor, and never bwrap (no limits).
+        raise SandboxUnavailable(f"a program runs only in container mode, not {mode}")
     required = os.getenv("FABRIQUE_SANDBOX_REQUIRED", "").strip().lower()
     forced = False
     if required in ("container", "bwrap") and mode == "host":
@@ -212,14 +219,16 @@ def git_mounts(cwd: str) -> list[str]:
 
 
 def container_command(
-    runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None, scratch_mb: int | None = None
+    runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None, scratch_mb: int | None = None,
+    read_only: bool = False, folder: str = "",
 ) -> list[str]:
     """The ``docker run`` (or ``podman run``) for one sandboxed command;
     *extra* (the cache volume's mount and variables) goes before the image.
     With *scratch_mb* the working directory is a tmpfs of that size (charged
     to the memory limit) instead of *cwd* mounted read-write, so nothing on
     the host's disk is writable (the bench's and the measure's grade,
-    ``scripts/bench/sandbox_grading.py``)."""
+    ``scripts/bench/sandbox_grading.py``). With *read_only* the worktree is
+    mounted ``:ro`` (a program run); *folder* is the working directory under it."""
     args = [
         runtime, "run", "--rm", "--name", name,
         "--network", "bridge" if box["network"] else "none",
@@ -233,9 +242,9 @@ def container_command(
         *(
             ["--tmpfs", f"{CONTAINER_WORKDIR}:rw,exec,size={int(scratch_mb)}m"]
             if scratch_mb
-            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:rw", *git_mounts(cwd)]
+            else ["-v", f"{os.path.abspath(cwd)}:{CONTAINER_WORKDIR}:{'ro' if read_only else 'rw'}", *git_mounts(cwd)]
         ),
-        "-w", CONTAINER_WORKDIR,
+        "-w", f"{CONTAINER_WORKDIR}/{folder}" if folder else CONTAINER_WORKDIR,
     ]
     if hasattr(os, "getuid"):
         if os.path.basename(runtime).startswith("podman") and os.getuid() != 0:

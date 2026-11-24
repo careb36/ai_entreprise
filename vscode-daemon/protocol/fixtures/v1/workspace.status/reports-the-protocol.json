@@ -80,6 +80,7 @@
         ],
         "workspace.execute": [
           "full_log",
+          "program",
           "purpose_assistant",
           "sandbox_environment",
           "sandbox_floor"
