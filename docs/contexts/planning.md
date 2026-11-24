@@ -83,6 +83,16 @@ from scratch. The planning prompt also says what each role can do
 (`roles.FILE_ROLES`) read the code and run the tests; the others write whole
 files in their answer but cannot read the project or run anything, so a task
 that runs scripts or a validation goes to the first kind.
+`fit_tasks`, which every plan passes through (from a prompt, self-improvement,
+from a specification), enforces it without a model: a task whose title runs,
+checks or changes the code, given to a role without the tools, moves to the
+closest file role on the team (QA for a validation that changes nothing,
+DevOps for deployment or CI, else a developer role), with `reassigned_from`
+and a note in its description. Only the title is read, since a description
+may quote the objective whole. A TechWriter's task moves only when the
+title's first word runs or checks something (its documents are whole files in
+its answer); an acceptance-test task, or a team without a file role, is left
+alone.
 
 ### The intake queue
 
@@ -99,8 +109,13 @@ because only the backend seals audit rows.
 
 `sprint_planner.py` makes the foundation, execution and self-improvement
 plans and re-exports the names of `sprint_prompts.py` (templates),
-`sprint_context.py` (roster, stack summary) and `sprint_fallbacks.py`
-(deterministic plans). The execution and self-improvement plans ask the PO
+`sprint_context.py` (roster, stack summary, the project's listing) and
+`sprint_fallbacks.py` (deterministic plans). The listing the PO sees comes from
+the workspace daemon (`project_listing`: `workspace.list` to depth 2, at most
+120 entries), read by the caller (`POST /v1/plan_sprint`, the self-improvement
+plan, the follow-up sprint at a close): the backend container does not mount
+the user's project. Without a daemon, the backend's own listing
+(`_list_root_files`) is said. The execution and self-improvement plans ask the PO
 for each task's `depends_on` (the titles of the tasks done first) and read it
 as `spec_planning.py` does, through `sprint_planner.with_dependencies`: by
 title or position, unknown ones and self dropped, a cycle broken; `start_sprint`
