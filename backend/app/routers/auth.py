@@ -352,8 +352,8 @@ def change_password(
     request: Request,
     req: PasswordChangeRequest,
     response: Response,
-    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """The signed-in person changes their own password.
 
@@ -363,7 +363,11 @@ def change_password(
     gets a new family in the answer's cookies, so only this browser stays
     signed in. Audited as ``password_changed``, with no password or hash.
     An API token, or an owner action acting for the person, is refused.
+    Anonymous is 401 even without ``AUTH_REQUIRED``: there is no one whose
+    password could change. The body is validated first (mass assignment).
     """
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     if (
         getattr(user, "_api_token_company_id", None) is not None
         or getattr(user, "_owner_action_run_id", None) is not None
