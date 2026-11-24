@@ -21,6 +21,7 @@ from services.evidence import (
     app_check,
     command_runs,
     criteria_tests,
+    doc_links,
     security_probe,
     standards,
 )
@@ -43,6 +44,8 @@ _GATE_PROBLEMS = {
     app_check.CHECK_E2E: "end-to-end tests failed",
     security_probe.CHECK_NAME: "security probe refuted",
     command_runs.CHECK_NAME: "required command failed",
+    doc_links.CHECK_LINKS: "broken documentation links",
+    doc_links.CHECK_CODE_PATHS: "documentation cites missing paths",
 }
 
 # The problems the code itself caused: the Developer fixes the code.
