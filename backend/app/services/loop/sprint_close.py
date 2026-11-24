@@ -17,6 +17,9 @@ from sqlmodel import Session
 from services.loop import board_moves
 
 RECLOSED = "reclosed_after_reopen"
+# A sprint that settled with nothing done pauses instead of completing
+# (owner, 2026-11-24: "que un sprint así se marque como bloqueado o se pause").
+NOTHING_DONE = "paused_nothing_done"
 # docs/design/rsi-loop.md, REQ-21: whatever AUTO_SELF_IMPROVEMENT_ENABLED says.
 PROTECTED_PATHS_ON = "protected_paths_enabled"
 
@@ -50,3 +53,21 @@ def describe_follow_up_reason(result: dict[str, Any]) -> str:
     if reason == "active_sprint_already_exists":
         return f"Autonomous follow-up skipped: sprint {result.get('blocking_sprint_id')} is still active or needs split."
     return _REASONS.get(str(reason), "Autonomous follow-up evaluation completed.")
+
+
+def nothing_done_reason(statuses: list[str | None]) -> str | None:
+    """Why a settled sprint pauses instead of completing, or ``None``.
+
+    Settled means every task is done, discarded or blocked until a person
+    acts. With no task done and at least one blocked, completing would read as
+    finished work; the sprint pauses with this reason, and a person resumes it
+    once the blocked tasks are unblocked, done or discarded.
+    """
+    if "done" in statuses or "blocked" not in statuses:
+        return None
+    blocked = statuses.count("blocked")
+    return (
+        f"No task of this sprint is done and {blocked} "
+        f"{'waits' if blocked == 1 else 'wait'} for a person: unblock, finish "
+        "or discard them, then resume the sprint."
+    )

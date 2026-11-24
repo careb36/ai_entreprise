@@ -20,6 +20,8 @@ The older spellings the frontend and the discovery wizard store (``Dev``,
 
 from __future__ import annotations
 
+from services.contracts import tool_steps
+
 PO, ARCHITECT, SCRUM_MASTER, DEVELOPER, QA, SECOPS, TECH_WRITER = (
     "PO",
     "Architect",
@@ -63,7 +65,8 @@ DEVELOPER_ROLES: tuple[str, ...] = (
     DEVOPS,
     DATA_ENGINEER,
 )
-# The roles given the workspace tools (read, search, edit, run the tests).
+# The roles given the workspace tools before the step set the ceiling
+# (``tool_steps``, 2026-11-24): kept as the catalogue's coding-and-design group.
 FILE_ROLES: tuple[str, ...] = (*DEVELOPER_ROLES, QA, DESIGNER)
 # The roles that research before deciding (the ``RESEARCH_ROLES`` default).
 RESEARCH_ROLES: tuple[str, ...] = (ARCHITECT, PO, SECOPS, TECH_WRITER, DESIGNER)
@@ -110,5 +113,7 @@ def is_developer(role: str | None) -> bool:
 
 
 def delivers_files(role: str | None) -> bool:
-    """Whether *role* gets the workspace tools."""
-    return canonical(role) in FILE_ROLES
+    """Whether *role*, executing a task, gets the workspace tools to read and
+    run (``tool_steps``: the execute step's ceiling, narrowed by the role)."""
+    allowed = tool_steps.families(tool_steps.EXECUTE, canonical(role))
+    return tool_steps.READ in allowed and tool_steps.RUN in allowed

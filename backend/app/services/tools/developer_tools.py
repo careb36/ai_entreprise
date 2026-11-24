@@ -1,22 +1,27 @@
-"""The Developer's workspace tools: read the project and run its tests before delivering.
+"""The workspace tools: read the project and run its tests before delivering.
 
-The roles that deliver files (the Developer roles, QA, the Designer) get these
-tools through the workspace daemon, beside the company's MCP tools in the same
+The step sets which families a turn gets and the role may only narrow them
+(``contracts/tool_steps``): every role executing a task reads (R), runs (X),
+researches (S) and edits where edits may go (W). The tools come through the
+workspace daemon, beside the company's MCP tools in the same
 loop (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
-- ``workspace__read``: a window of 100 numbered lines (``lines`` asks for up
-  to 400), paged with ``start_line``;
+- ``workspace__read``: a window of numbered lines, as many as fit the result
+  budget up to 400 (or ``lines``), paged with ``start_line``;
 - ``workspace__search``: the lines matching a pattern; past the bound, how many;
 - ``workspace__find_file``: files by name or glob; past the bound, how many;
 - ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
   existing file, applied by the daemon only if the file still parses
   (``vscode-daemon/workspace_edit.py``); offered only where the task's files
-  may be touched (its worktree, or a project without the Git workflow);
+  may be touched (the task's worktree, from the first turn: ``task_worktree``;
+  or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
-  within the same runner), or a check script committed under ``scripts/``
-  that the task did not change (``check_scripts``), bounded output.
+  within the same runner, ``test_commands``), or a check script committed under ``scripts/``
+  that the task did not change (``check_scripts``), bounded output;
+- ``workspace__definition``, ``workspace__references`` and
+  ``workspace__lint`` where the step allows X (``workspace_navigation``, ``workspace_lint``).
 
 Every call is an observation the backend made, recorded on the run's
 evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
@@ -31,10 +36,10 @@ after the delivery is (``delivery_checks.run_delivery_tests``).
 An edit is an observation with the file's sha256 before and after, and a working
 copy delivered with the answer's files (``services/workspace_edits.py``).
 
-The other tools are read-only on the project. ``run_tests`` executes the
-project's test command, which ``DELIVERY_TESTS_ENABLED`` already runs after
-every delivery; it is offered only when that setting is on, since it runs project
-code on the daemon's machine.
+The other tools are read-only on the project; ``read_tools`` offers those alone
+(the steps that only read: the Architect's brief, the PO's planning, the
+ScrumMaster's decision, ``review_tools.for_step``). ``run_tests`` runs project code on the daemon's machine,
+so only with ``DELIVERY_TESTS_ENABLED``, which runs it after each delivery anyway.
 
 A repository map (``services/repo_map.py``: the tree's top, the definitions by
 use) goes into the prompt on an existing project, so the model knows what to read.
@@ -54,17 +59,23 @@ from typing import Any
 
 from config import settings
 
-from services.contracts import roles
+from services.contracts import roles, tool_steps
 from services.tools import (
     check_scripts,
     developer_tool_replies,
     developer_tool_schemas,
+    docs_write_policy,
     edit_lint,
     mcp_tools,
     repo_map,
     research_tools,
+    task_worktree,
+    test_commands,
     test_runs,
     workspace_edits,
+    workspace_lint,
+    workspace_navigation,
+    workspace_reads,
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
@@ -73,31 +84,15 @@ from services.workspace.workspace_daemon import no_responders
 logger = logging.getLogger("fabrique-task-worker")
 
 SERVER = developer_tool_schemas.SERVER
-# The roles that deliver files (services/roles.py; aliases such as Dev read too).
-TOOL_ROLES = frozenset(roles.FILE_ROLES)
 READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
 RUN_TESTS = developer_tool_schemas.RUN_TESTS
 EDIT = developer_tool_schemas.EDIT
+# A run_tests command that was not run as asked (not the folder's runner).
+NOT_RUN = "not the folder's test runner or a committed check script"
 LIST_TIMEOUT_SECONDS = 20.0
 READ_TIMEOUT_SECONDS = 20.0
 SEARCH_TIMEOUT_SECONDS = 40.0
 MAP_MAX_CHARS = 2500
-# The command the model may narrow the test run to must start with the
-# project's own runner: never an arbitrary shell command.
-RUNNERS = (
-    "python -m pytest",
-    "pytest",
-    "npm test",
-    "npx vitest",
-    "npx jest",
-    "go test",
-    "cargo test",
-)
-
-# What may run a runner inside the project's environment: a narrower command
-# keeps the same one (``poetry run python -m pytest`` stays under Poetry).
-WRAPPERS = ("poetry run ", "pipenv run ", "uv run ")
-
 Requester = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
 
@@ -105,15 +100,15 @@ def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-def _runs_with(command: str, runner: str) -> bool:
-    """Whether *command* is *runner* itself or *runner* followed by arguments:
-    ``python -m pytest_custom`` is not ``python -m pytest``."""
-    return command == runner or command.startswith(runner + " ")
+_runs_with = test_commands.runs_with
 
 
-def offered_to(role: str | None) -> bool:
-    """Whether a role gets the workspace tools."""
-    return settings.DEVELOPER_TOOLS_ENABLED and roles.canonical(role) in TOOL_ROLES
+def offered_to(role: str | None, step: str = tool_steps.EXECUTE) -> bool:
+    """Whether a turn of *step* by *role* gets the workspace tools: the step
+    allows reading and the role keeps it (``contracts/tool_steps``)."""
+    return settings.DEVELOPER_TOOLS_ENABLED and tool_steps.allows(
+        step, roles.canonical(role), tool_steps.READ
+    )
 
 
 class WorkspaceToolbox:
@@ -134,29 +129,27 @@ class WorkspaceToolbox:
         edit_suffixes: set[str] | None = None,
     ) -> None:
         self.requester = requester
-        self.workspace_root = workspace_root
-        self.test_command = test_command
+        self.workspace_root, self.test_command = workspace_root, test_command
         # Each folder's (and the root's, under "") test and install commands
         # (``test_runs.detect``); the folders installed so far in this toolbox.
         self.folder_tests = dict(folder_tests or {})
         if test_command and test_runs.ROOT not in self.folder_tests:
             self.folder_tests[test_runs.ROOT] = {"test": test_command, "install": None}
         self.installed: set[str] = set()
-        # Where its test runs execute (services/sandbox.py): agent code.
-        self.sandbox = sandbox
-        # The company's sandbox could not be read: its test runs are refused.
-        self.sandbox_error = sandbox_error
+        # Where its test runs execute (services/sandbox.py): agent code; or why
+        # the company's sandbox could not be read (its test runs are refused).
+        self.sandbox, self.sandbox_error = sandbox, sandbox_error
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
         # The edit tool: where it may write, which file types a delivery takes,
         # the daemon's session for the originals, and what ``close`` brought back.
-        self.can_edit = can_edit
-        self.edit_suffixes = edit_suffixes
+        self.can_edit, self.edit_suffixes = can_edit, edit_suffixes
         self.edit_session = uuid.uuid4().hex
         self.edits_made, self.can_move = False, False
         self.edited_files: list[dict[str, Any]] = []
         self.finish_error: str | None = None
+        workspace_navigation.offer(self)  # Definition and references, when announced.
 
     @property
     def tools(self) -> dict[str, dict[str, Any]]:
@@ -177,7 +170,7 @@ class WorkspaceToolbox:
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
             schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
-        return schemas
+        return schemas + workspace_reads.schemas(self)  # Git, documents, navigation.
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -243,24 +236,16 @@ class WorkspaceToolbox:
                     "workspace_root": root,
                     "path": arguments.get("path"),
                     "start_line": arguments.get("start_line"),
-                    "lines": arguments.get("lines"),
+                    "lines": arguments.get("lines")
+                    or developer_tool_replies.READ_ASK_LINES,
                 },
                 READ_TIMEOUT_SECONDS,
             )
-            extra.update(
-                {
-                    "path": reply.get("path"),
-                    "sha256": reply.get("sha256"),
-                    "bytes": reply.get("bytes"),
-                    "lines": reply.get("lines"),
-                    "first_line": reply.get("first_line"),
-                    "last_line": reply.get("last_line"),
-                    "file_truncated": bool(reply.get("truncated")),
-                }
-            )
-            return developer_tool_replies.read_text(
+            text = developer_tool_replies.read_text(
                 str(arguments.get("path") or ""), reply, self.result_max_chars
             )
+            extra.update(developer_tool_replies.read_fields(reply, text))
+            return text
         if tool in ("search", developer_tool_schemas.FIND):
             subject = "workspace.search" if tool == "search" else "workspace.find"
             pattern = arguments.get("pattern")
@@ -278,6 +263,8 @@ class WorkspaceToolbox:
                 extra["files_scanned"] = reply.get("files_scanned")
                 return developer_tool_replies.search_text(str(pattern), reply)
             return developer_tool_replies.find_text(str(pattern), reply)
+        if tool in workspace_reads.TOOLS:
+            return workspace_reads.run(self, tool, arguments, extra)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool in (MOVE, DELETE) and self.can_move:
@@ -287,10 +274,15 @@ class WorkspaceToolbox:
             checked, why = check_scripts.attempt(self, arguments, extra)
             if checked is not None:
                 return checked
-            folder, plan = test_runs.target(self.folder_tests, arguments.get("folder"))
-            command = self._test_command(arguments.get("command"), plan.get("test"))
+            # A narrower command on the folder's runner (``test_commands``).
+            folder, plan, command, notes, refused = test_commands.resolve(
+                self.folder_tests, arguments
+            )
             extra["command"] = command
             extra["folder"] = folder
+            asked = str(arguments.get("command") or "").strip()
+            if not why and asked and asked != command and (refused or not notes):
+                extra["refused"] = refused or NOT_RUN  # Asked, not run: demand.
             if self.sandbox_error:
                 raise RuntimeError(f"tests not run: {self.sandbox_error}")
             if folder not in self.installed:
@@ -314,27 +306,10 @@ class WorkspaceToolbox:
                 self.result_max_chars,
                 arguments.get("command"),
                 command,
-                why,
+                why or refused,
+                notes,
             )
         raise RuntimeError("unknown tool")
-
-    def _test_command(self, requested: Any, base: str | None = None) -> str:
-        """The folder's test command, or a narrower one on the same runner."""
-        base = str(base if base is not None else self.test_command or "")
-        wanted = str(requested or "").strip()
-        if not wanted:
-            return base
-        wrapper = next((w for w in WRAPPERS if base.startswith(w)), "")
-        inner = base[len(wrapper) :]
-        runner = next((r for r in RUNNERS if _runs_with(inner, r)), None)
-        if (
-            runner
-            and wanted.startswith(wrapper)
-            and _runs_with(wanted[len(wrapper) :], runner)
-            and all(ch not in wanted for ch in ";&|`$><\n")
-        ):
-            return wanted
-        return base
 
     def close(self) -> None:
         """The edits' files to deliver come back; the originals go back on disk."""
@@ -482,16 +457,16 @@ def _detect_tests(
 def tool_root(
     company_id: int, item_id: int | None = None, *, engine: Any = None
 ) -> str | None:
-    """Where the tools look: the task's own worktree once it has delivered
-    there (the Git workflow; ``git_workflow.record_reply`` keeps it on the
-    evidence), else the company's project. On rework the reads and the test
-    run then see the previous delivery and the merged dependencies."""
+    """Where the tools look: the task's own worktree, prepared for this attempt
+    (``task_worktree``) or where it last delivered (``git_workflow.record_reply``
+    keeps it on the evidence), else the company's project: the reads and the
+    test run see the task's earlier deliveries and merged dependencies."""
+    if prepared := task_worktree.prepared_for(company_id, item_id):
+        return prepared
     try:
         root = _bridge["resolve_root"](company_id)
     except Exception as exc:  # noqa: BLE001 - No project path, no workspace tools.
-        logger.warning(
-            "Could not resolve the project path for company=%s: %s", company_id, exc
-        )
+        logger.warning("Could not resolve the project path for %s: %s", company_id, exc)
         return None
     if not root or item_id is None or engine is None:
         return root
@@ -505,6 +480,24 @@ def tool_root(
     evidence = (verification.evidence if verification is not None else None) or {}
     worktree = evidence.get("workspace_root") if evidence.get("git") else None
     return worktree if isinstance(worktree, str) and worktree else root
+
+
+def read_tools(company_id: int, item_id: Any = None, engine: Any = None) -> Any:
+    """Family R alone on the task's root (``tool_root``): list, read, search,
+    find_file, and read-only git and a document's text when announced
+    (``workspace_reads``); no edit, move, delete, lint or test run; ``None``
+    without the daemon or a root."""
+    root = tool_root(company_id, item_id, engine=engine) if "nats" in _bridge else None
+    box = WorkspaceToolbox(_request_from_thread, root) if root else None
+    workspace_reads.offer(box, company_id, engine)  # Nothing without a box.
+    return box
+
+
+def enter_task_worktree(company_id: Any, item_id: Any, *, engine: Any = None) -> Any:
+    """The task's worktree prepared as this attempt's tool root (``task_worktree``)."""
+    return task_worktree.enter(
+        _request_from_thread, _bridge.get("resolve_root"), company_id, item_id, engine
+    )
 
 
 def apply_limits(toolbox: Any, *, rounds: int, result_max_chars: int) -> None:
@@ -528,24 +521,29 @@ def toolbox_for(
     *,
     engine: Any = None,
     item_id: int | None = None,
+    step: str = tool_steps.EXECUTE,
 ) -> Any:
-    """The toolbox for a task: the company's MCP tools, plus the workspace
-    tools for a role that delivers files when a project path is known.
-    Returns ``None`` when there is nothing to offer, as the MCP loader does."""
+    """The toolbox for a turn of *step*: the company's MCP tools, plus what
+    the step allows and the role keeps (``contracts/tool_steps``) when a
+    project path is known: R the reads, X the tests and committed scripts,
+    W the edits where edits may go, S the research tools. Returns ``None``
+    when there is nothing to offer, as the MCP loader does."""
+    allowed = tool_steps.families(step, roles.canonical(role))
     mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
     workspace = None
-    if company_id is not None and offered_to(role) and "nats" in _bridge:
+    if company_id is not None and offered_to(role, step) and "nats" in _bridge:
         root = tool_root(company_id, item_id, engine=engine)
         if root:
-            box, box_error = None, None
-            try:
-                box = sandbox.request_for_company_id(company_id, engine)
-            except sandbox.PolicyUnavailable as e:
-                box_error = str(e)
-            # The project's sandbox image before the first test run, which
-            # would otherwise wait for its build (issue #766).
-            stack_image.prepare_from_thread(_request_from_thread, root, box)
-            root_test, folder_tests = _detect_tests(company_id, root, engine)
+            box, box_error, root_test, folder_tests = None, None, None, {}
+            if tool_steps.RUN in allowed:
+                try:
+                    box = sandbox.request_for_company_id(company_id, engine)
+                except sandbox.PolicyUnavailable as e:
+                    box_error = str(e)
+                # The project's sandbox image before the first test run, which
+                # would otherwise wait for its build (issue #766).
+                stack_image.prepare_from_thread(_request_from_thread, root, box)
+                root_test, folder_tests = _detect_tests(company_id, root, engine)
             workspace = WorkspaceToolbox(
                 _request_from_thread,
                 root,
@@ -553,16 +551,24 @@ def toolbox_for(
                 folder_tests=folder_tests,
                 sandbox=box,
                 sandbox_error=box_error,
-                can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
+                can_edit=tool_steps.WRITE in allowed
+                and workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
+            docs_write_policy.apply(workspace, role, step=step)  # Docs-only scope.
+            workspace_reads.offer(workspace, company_id, engine)  # Git, documents.
+            loader = functools.partial(
+                edit_lint.load_profile, _bridge, company_id, root, engine
+            )
             if workspace.can_edit:  # The linter after each edit, read once.
-                workspace.lint_profile = functools.partial(
-                    edit_lint.load_profile, _bridge, company_id, root, engine
-                )
-    # The research tools for the roles that decide (``services/research_tools.py``).
-    research = research_tools.toolbox_for(company_id, role, engine=engine)
+                workspace.lint_profile = loader
+            if tool_steps.RUN in allowed:  # ``workspace__lint`` is family X.
+                workspace_lint.offer(workspace, loader)
+    # The research tools where the step allows them, whatever the role.
+    research = None
+    if tool_steps.RESEARCH in allowed:
+        research = research_tools.company_toolbox(company_id, engine=engine)
     if workspace is None and research is None:
         return mcp
     return CombinedToolbox(workspace, mcp, research)

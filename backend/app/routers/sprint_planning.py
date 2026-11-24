@@ -21,7 +21,7 @@ import asyncio
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Company, User
 from schemas import (
     SCOPE_LIMITS,
@@ -33,6 +33,7 @@ from services.planning import planner_fallback, spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
+    project_listing,
 )
 from services.planning.sprint_planner import (
     plan_self_improvement_sprint as build_self_improvement_plan,
@@ -102,9 +103,19 @@ def _recorded(session: Session, company_id: int, kind: str, plan: dict) -> dict:
     }
 
 
+async def _listing(request: Request, discovery) -> str:
+    """The project's top levels for the PO, through the workspace daemon: the
+    backend does not see the user's files (``sprint_context.project_listing``)."""
+    return await project_listing(
+        getattr(request.app.state, "nats_client", None),
+        discovery.project_path if discovery else None,
+    )
+
+
 @router.post("/plan_sprint")
 async def plan_sprint(
     req: SprintPlanRequest,
+    request: Request,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -149,7 +160,11 @@ async def plan_sprint(
     if not req.prompt.strip():
         raise HTTPException(status_code=422, detail="Prompt is required")
 
-    plan = plan_execution_sprint(
+    # In a thread: the PO may read the project through the daemon, which is
+    # reached on this event loop (``planning_reads``).
+    listing = await _listing(request, discovery)
+    plan = await asyncio.to_thread(
+        plan_execution_sprint,
         company_name=company.company_name,
         objective=req.prompt,
         scope_size=scope_size,
@@ -157,6 +172,7 @@ async def plan_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
         project_path=discovery.project_path if discovery else None,
         team=team,
+        file_listing=listing,
     )
     plan = _recorded(session, req.company_id, "execution", plan)
     return _serialize_plan_response(
@@ -172,6 +188,7 @@ async def plan_sprint(
 @router.post("/plan_self_improvement_sprint")
 async def plan_self_improvement_sprint(
     req: SelfImprovementSprintRequest,
+    request: Request,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -193,7 +210,9 @@ async def plan_self_improvement_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
     )
 
-    plan = build_self_improvement_plan(
+    listing = await _listing(request, discovery)
+    plan = await asyncio.to_thread(  # In a thread, as plan_sprint's.
+        build_self_improvement_plan,
         company_name=company.company_name,
         objective=objective,
         scope_size=scope_size,
@@ -201,6 +220,7 @@ async def plan_self_improvement_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
         project_path=discovery.project_path if discovery else None,
         team=team,
+        file_listing=listing,
     )
     plan = _recorded(session, req.company_id, "self_improvement", plan)
 

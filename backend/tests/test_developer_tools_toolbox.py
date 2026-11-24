@@ -212,13 +212,14 @@ def test_the_combined_toolbox_dispatches_by_name_and_caps_the_rounds(
         mcp_config.normalize_server("workspace", {"url": "https://x.example/mcp"})
 
 
-def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
+def test_the_tools_go_to_every_executing_role_when_the_project_is_known(
     project, monkeypatch
 ):
     daemon = _load_daemon()
     monkeypatch.setattr(
         mcp_tools.Toolbox, "load", classmethod(lambda cls, *a, **k: None)
     )
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)  # Workspace alone.
     developer_tools.unbind()
     assert developer_tools.toolbox_for(1, "Developer") is None  # not bound: no daemon
     developer_tools.bind(
@@ -226,7 +227,11 @@ def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
     )
     try:
         monkeypatch.setattr(developer_tools, "_request_from_thread", _Requester(daemon))
-        assert developer_tools.toolbox_for(1, "PO") is None
+        # The step sets the ceiling (contracts/tool_steps): a PO executing a
+        # task reads too.
+        assert isinstance(
+            developer_tools.toolbox_for(1, "PO"), developer_tools.CombinedToolbox
+        )
         assert developer_tools.toolbox_for(2, "Developer") is None  # no project path
         box = developer_tools.toolbox_for(1, "Developer")
         assert isinstance(box, developer_tools.CombinedToolbox) and box.mcp is None
@@ -260,7 +265,8 @@ def test_the_prompt_carries_the_top_of_the_tree_as_the_repository_map(
             and "src/greet.py" in section
             and "node_modules" not in section
         )
-        assert developer_tools.repository_section(1, "ScrumMaster") == ""
+        # Every executing role has the tools, so every one gets the map.
+        assert "## Repository" in developer_tools.repository_section(1, "ScrumMaster")
         assert developer_tools.repository_section(None, "Developer") == ""
         monkeypatch.setattr(developer_tools, "MAP_MAX_CHARS", 20)
         assert developer_tools.repository_section(1, "Developer").endswith(
@@ -274,3 +280,38 @@ def test_the_prompt_carries_the_top_of_the_tree_as_the_repository_map(
         assert developer_tools.repository_section(1, "Developer") == ""
     finally:
         developer_tools.unbind()
+
+
+def test_a_read_without_lines_shows_as_many_lines_as_fit_the_result_budget(project):
+    """Issue #766: 601 of 1063 reads stopped at the 100-line default and the
+    Developers never got past line 500 of a 642-line file. Without ``lines``
+    the toolbox asks for 400 and keeps the whole lines that fit; an older
+    daemon that ignores ``lines`` still answers its 100."""
+    daemon = _load_daemon()
+    (project / "src" / "long.py").write_text(
+        "".join(f"v{i} = {i}\n" for i in range(642))
+    )
+    requester = _Requester(daemon)
+    box = developer_tools.WorkspaceToolbox(requester, str(project))
+    box.result_max_chars = 16000
+    observation, text = box.call(_call("workspace__read", path="src/long.py"), 1)
+    assert requester.calls[-1][1]["lines"] == 400
+    assert "[src/long.py: lines 1–400 of 642]" in text and "v399 = 399" in text
+    assert observation["last_line"] == 400
+    # A smaller budget: fewer whole lines, and the observation names the last
+    # one the model saw, not the daemon's.
+    box.result_max_chars = 2000
+    observation, text = box.call(_call("workspace__read", path="src/long.py"), 1)
+    shown = observation["last_line"]
+    assert 100 < shown < 400 and len(text) <= 2000
+    assert f"[src/long.py: lines 1–{shown} of 642]" in text
+    assert f"read on with start_line={shown + 1}" in text
+
+    def older(subject, payload, timeout):
+        return requester(subject, {**payload, "lines": None}, timeout)
+
+    box = developer_tools.WorkspaceToolbox(older, str(project))
+    box.result_max_chars = 16000
+    observation, text = box.call(_call("workspace__read", path="src/long.py"), 1)
+    assert "[src/long.py: lines 1–100 of 642]" in text
+    assert observation["last_line"] == 100

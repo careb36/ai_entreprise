@@ -8,7 +8,11 @@ Tasks are executed by the **task worker**, split by stage into `backend/app/serv
 the LangGraph graph is only an optional kickoff conversation.
 
 0. Before the sprint exists, `POST /v1/plan_sprint` asks the PO for a plan
-   (`services/planning/sprint_planner.py`). The objective the person wrote is
+   (`services/planning/sprint_planner.py`). The PO may first read the project
+   with the read-only workspace tools for `PLANNING_TOOL_ROUNDS` rounds
+   (`services/planning/planning_reads.py`; each call an observation on its
+   turn, the plan's `planning_reads`; without a daemon or project path, one
+   plain call). The objective the person wrote is
    never cut: the plan carries it whole as `objective`, apart from the
    model's one-line `goal`, and `start_sprint` stores it as
    `Sprint.objective` (TEXT, migration `0056`). When the planner's model does
@@ -54,6 +58,29 @@ the LangGraph graph is only an optional kickoff conversation.
    the run's evidence as `difficulty` and `routing`, beside the model the
    proxy reports serving (`AgentRun.model`, the observation); the request is
    never recorded as the served model. No policy: the role default, as before.
+   Before a design-sensitive, reworked or hard task the Architect writes a
+   brief for the prompt (`_consult_architect`). It may first read the project
+   with the workspace's read tools alone (list, read, search, find_file on the
+   task's root; no edit, move, delete or test run) for at most
+   `ARCHITECT_TOOL_ROUNDS` rounds, each call an observation on its turn in
+   `audit_log`, then answers within `BRIEF_MAX_TOKENS`. A tool call typed as
+   text is no brief; without the daemon it is one plain call
+   (`services/loop/worker/architect_brief.py`). Beside those tools it gets the
+   record tools, `board__task` and `board__evidence` (the task's history and
+   its runs' checks, read-only, scoped to the task and its dependencies;
+   `services/loop/worker/board_record.py`), and so does the Developer's turn
+   on a rework, beside its own tools.
+   With the company's Git workflow on, before the first turn the worker asks
+   the daemon for the task's worktree (`workspace.console.prepare` with
+   `private_git: false`: branch `fabrique/task-<id>` from the base, the done
+   prerequisites merged, put back at its head) and every tool of the attempt
+   (reads, the repository map, edits, move and delete, `run_tests`) runs
+   there, from the first attempt; the person's checkout is never written and
+   the delivery commits in that same worktree. Only when every daemon
+   announces the `private_git` feature; otherwise a first attempt reads the
+   person's checkout without the write tools, as before. The daemon's reply
+   is kept as `tools_offered.task_worktree`
+   ([design](design/first-attempt-in-task-worktree.md)).
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
    the **Project wiki**: the company's pages in force (not stale, not proposed)
@@ -73,6 +100,25 @@ the LangGraph graph is only an optional kickoff conversation.
    what the Verifier's records observed beside the files it names, and how
    to write a note (`services/loop/worker/sprint_notes.py`,
    [design](archive/design/SPRINT_BOARD.md)).
+   The tools follow the step, not the role (`services/contracts/tool_steps.py`):
+   an execution turn of any role (a TechWriter, SecOps, Architect or PO task
+   too) reads the project, runs the folder's tests and committed scripts,
+   researches registries and advisories, and edits where edits may go; a
+   role's profile may only drop families. A TechWriter, or a task whose kind
+   is documentation (the `documentation` step), writes documentation only,
+   with the edit tools and in the answer's own blocks alike (`write_scope`).
+   The run's `tools_offered` records the `step`, its `families` and any
+   `write_scope` beside the tools offered and withheld.
+   With tools, the call is the bounded tool loop
+   ([tools](contexts/tools.md)): the run's evidence records `rounds_used`,
+   `rounds_max` and `rounds_exhausted`, and a final answer that is only a tool
+   call written as text is no deliverable. The first time, the task is queued
+   again once (a `retried` event, "Final answer was a tool call written as
+   text, queued again with a fresh tool budget"), and its next attempt opens
+   a new toolbox; a second time it is blocked with the reason ("the model's
+   last answer was a tool call written as text; the tool budget had run out
+   (again, after one retry with a fresh tool budget)";
+   `services/loop/worker/intake.py`, `requeue_after_transient_failure`).
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files, and only those (an answer without `path=` blocks or tool edits writes nothing and is text for QA; a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
@@ -162,14 +208,22 @@ the LangGraph graph is only an optional kickoff conversation.
    ScrumMaster. A rework asks the agent to change only what the problem
    needs on the task branch, never every file in full. QA is shown the
    Verifier's checks and the end of the test output beside the branch
-   (`worker/review_evidence`). A sprint closes when every task is settled: done, or blocked
+   (`worker/review_evidence`), and before its verdict it may read the
+   delivery itself: the read-only workspace tools (list, read, search,
+   find_file) on the folder the verification recorded, for
+   `QA_REVIEW_TOOL_ROUNDS` rounds (default 3), each call an observation on its
+   turn (`worker/qa_review_reads`), and the record tools beside them. The verdict's form and parser do not
+   change; without a recorded delivery or a daemon the review is one call. A sprint closes when every task is settled: done, or blocked
    until a person acts (nothing the worker retries, re-reviews or an operator
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the
    spot, and each review cycle (every 30 seconds) closes every active sprint
    that has settled, whether its last open task got blocked or a person moved
-   it to Done or Discarded on the board. A paused, planned or cancelled
-   sprint is not closed.
+   it to Done or Discarded on the board. A sprint that settles with no task
+   done and at least one blocked pauses instead of completing, with the
+   reason on the sprint (`sprint_close.nothing_done_reason`); a person
+   resumes it once the blocked tasks are unblocked, done or discarded. A
+   paused, planned or cancelled sprint is not closed.
    `GET /v1/inbox` (Viewer, `routers/inbox.py`) lists what the company needs a
    person for: the tasks blocked until someone acts (not the ones the worker
    still retries or re-reviews), the procedure proposals waiting and how many
@@ -196,7 +250,10 @@ the LangGraph graph is only an optional kickoff conversation.
    from the boards of completed sprints, the same numbers the Sprints page
    shows) and decides, in a fixed `DECISION … END`
    format a parser checks, between another attempt with a brief for it or
-   leaving it to a person. The decision is a `decision` message that names
+   leaving it to a person. Before it decides it may read the task's files
+   with the read-only workspace tools for `SCRUM_TRIAGE_TOOL_ROUNDS` rounds
+   (`services/loop/worker/triage_reads.py`; each call an observation on its
+   turn; without a daemon or root, one plain call). The decision is a `decision` message that names
    the escalation it answers (written by the worker, not the model), a claim: the
    inbox shows it as `triage`, the brief travels with the carried task into
    its prompt (and into QA's review prompt, so the second attempt is judged
@@ -214,7 +271,9 @@ the LangGraph graph is only an optional kickoff conversation.
    - the handoff to QA, listing the declared files;
    - QA's decision or rework request, and the Verifier's;
    - escalations to the ScrumMaster when a task is blocked;
-   - the ScrumMaster's retrospective to the team when a sprint closes.
+   - the ScrumMaster's retrospective to the team when a sprint closes, with
+     the sprint's tool demand (unknown tool names, tool calls typed as text,
+     refused calls, spent rounds) counted from the platform's records.
 
    Messages are claims: comments still drive the review loop, and the evidence
    decides. So are the **sprint board's notes**: after a delivery is recorded,

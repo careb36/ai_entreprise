@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.related",
   "title": "workspace.related",
-  "description": "The files around a task's seeds and the names that tie them: paths, names and sha256, never contents (code_graph.py).",
+  "description": "The files around a task's seeds and the names that tie them: paths, names and sha256, never contents (code_graph.py); with lookup, where a name is defined or who uses it (code_lookup.py).",
   "x-protocol-version": 1,
   "x-subject": "workspace.related",
   "x-kind": "request",
@@ -26,6 +26,27 @@
         },
         "max_files": {
           "type": "integer"
+        },
+        "lookup": {
+          "type": "object",
+          "description": "Optional (feature `lookup`, \u00a75.7): a definition or references lookup instead of a walk from seeds.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "definition",
+                "references"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ]
         }
       },
       "required": [
@@ -90,6 +111,114 @@
           "items": {
             "type": "string"
           }
+        },
+        "lookup": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "definition",
+                "references"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "path_found": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "definitions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  },
+                  "depth": {
+                    "type": "integer"
+                  },
+                  "signature": {
+                    "type": "string"
+                  },
+                  "parameters": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "line",
+                  "signature"
+                ]
+              }
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "more_lines": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "names",
+                  "lines"
+                ]
+              }
+            },
+            "more": {
+              "type": "integer"
+            },
+            "common_name": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "definitions",
+            "references",
+            "more"
+          ]
         }
       },
       "required": [

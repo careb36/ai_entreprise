@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.console.prepare",
   "title": "workspace.console.prepare",
-  "description": "A console producer's task worktree, clean at its HEAD, and the guard taken before the run (console_run.py). A failure is `ok: false` with `error`.",
+  "description": "A task's worktree, clean at its HEAD, and the guard taken before the run (console_run.py): a console producer's, or the Developer's tools' with private_git false. A failure is `ok: false` with `error`.",
   "x-protocol-version": 1,
   "x-subject": "workspace.console.prepare",
   "x-kind": "request",
@@ -40,6 +40,10 @@
               "description": "The company's forge policy (issue #727, PROTOCOL.md section 5.3). Missing or unknown reads as none; capped by the daemon's FORGE_POLICY_MAX."
             }
           }
+        },
+        "private_git": {
+          "type": "boolean",
+          "description": "false: the worktree keeps git's own pointer and gets no private repository, for the Developer's tools on a task's first attempt (PROTOCOL.md section 5.1.5, announced as the private_git feature). Missing or true: a console producer's private repository, as before."
         }
       },
       "required": [
@@ -67,6 +71,9 @@
         "merged": {},
         "guard": {
           "type": "object"
+        },
+        "private_git": {
+          "type": "boolean"
         },
         "error": {
           "type": "string"

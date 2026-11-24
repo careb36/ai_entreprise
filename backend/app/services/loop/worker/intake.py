@@ -49,7 +49,7 @@ from services.loop import (
 from services.loop.worker import board_writes, deliver, execute, review, task_run
 from services.platform.glassroom import publish_glassroom
 from services.tasks import dependencies, task_events, task_projection
-from services.tools import developer_tools
+from services.tools import developer_tools, mcp_tools
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -260,17 +260,40 @@ TRANSIENT_LLM_MARKERS = (
 )
 TRANSIENT_RETRY_PREFIX = "Transient model failure, queued again"
 MAX_TRANSIENT_RETRIES = 3
+# A final answer that was only a tool call written as text
+# (``mcp_tools.TOOL_CALL_AS_TEXT``): the next attempt opens a new toolbox, a
+# fresh tool budget, so the task is queued again once; a second such answer
+# blocks it. Both stay on the task's events (the "retried" comment, then the
+# block's reason).
+TOOL_CALL_AS_TEXT_RETRY_PREFIX = (
+    "Final answer was a tool call written as text, queued again with a fresh "
+    "tool budget"
+)
+MAX_TOOL_CALL_AS_TEXT_RETRIES = 1
 
 
 def is_transient_llm_failure(message: str) -> bool:
     return any(marker in f" {message} " for marker in TRANSIENT_LLM_MARKERS)
 
 
+def _retry_policy(message: str) -> tuple[str, int] | None:
+    """The comment prefix that counts this kind of failure's retries and how
+    many it gets; ``None`` for a failure that is never retried."""
+    if mcp_tools.TOOL_CALL_AS_TEXT in message:
+        return TOOL_CALL_AS_TEXT_RETRY_PREFIX, MAX_TOOL_CALL_AS_TEXT_RETRIES
+    if is_transient_llm_failure(message):
+        return TRANSIENT_RETRY_PREFIX, MAX_TRANSIENT_RETRIES
+    return None
+
+
 def requeue_after_transient_failure(item_id: int, message: str) -> bool:
     """A task whose model call failed transiently goes back to ``todo``, at
-    most ``MAX_TRANSIENT_RETRIES`` times; ``False`` leaves it to be blocked."""
-    if not is_transient_llm_failure(message):
+    most ``MAX_TRANSIENT_RETRIES`` times, and one whose final answer was a
+    tool call written as text once; ``False`` leaves it to be blocked."""
+    policy = _retry_policy(message)
+    if policy is None:
         return False
+    prefix, limit = policy
     with Session(engine) as session:
         item = session.get(BacklogItem, item_id)
         if item is None:
@@ -278,9 +301,9 @@ def requeue_after_transient_failure(item_id: int, message: str) -> bool:
         done = sum(
             1
             for c in item.comments or []
-            if str(c.get("text") or "").startswith(TRANSIENT_RETRY_PREFIX)
+            if str(c.get("text") or "").startswith(prefix)
         )
-        if done >= MAX_TRANSIENT_RETRIES:
+        if done >= limit:
             return False
         task_events.record(
             session,
@@ -288,14 +311,19 @@ def requeue_after_transient_failure(item_id: int, message: str) -> bool:
             "retried",
             task_events.SYSTEM,
             status="todo",
-            text=(
-                f"{TRANSIENT_RETRY_PREFIX} ({done + 1}/{MAX_TRANSIENT_RETRIES}): "
-                f"{message[:400]}"
-            ),
+            text=f"{prefix} ({done + 1}/{limit}): {message[:400]}",
         )
         session.commit()
-    logger.warning("Transient model failure on item=%s; queued again", item_id)
+    logger.warning("Model failure on item=%s (%s); queued again", item_id, prefix)
     return True
+
+
+def blocked_reason(message: str) -> str:
+    """The block's text for a failed model call: a tool call written as text
+    after its one retry says it happened again."""
+    if mcp_tools.TOOL_CALL_AS_TEXT in message:
+        message = f"{message} (again, after one retry with a fresh tool budget)"
+    return message[:500]
 
 
 async def _record_failure(
@@ -342,7 +370,7 @@ async def _record_failure(
                 data["backlog_item_id"],
                 "blocked",
                 comment_text=(
-                    str(e)[:500]
+                    blocked_reason(str(e))
                     if isinstance(e, execute.LLMCallError)
                     else f"Agent error: {str(e)[:500]}"
                 ),

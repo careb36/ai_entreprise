@@ -57,7 +57,8 @@
           "security_probe"
         ],
         "workspace.console.prepare": [
-          "forge_policy"
+          "forge_policy",
+          "private_git"
         ],
         "workspace.edit": [
           "delete",
@@ -77,7 +78,9 @@
           "forge_policy"
         ],
         "workspace.git.diff": [
-          "forge_policy"
+          "forge_policy",
+          "view",
+          "blame"
         ],
         "workspace.git.integrate": [
           "forge_policy"
@@ -93,6 +96,12 @@
         ],
         "workspace.git.sync_base": [
           "forge_policy"
+        ],
+        "workspace.read": [
+          "document_text"
+        ],
+        "workspace.related": [
+          "lookup"
         ]
       }
     }

@@ -276,7 +276,8 @@ def test_the_tools_go_to_the_roles_that_decide_and_the_prompt_says_why(
     # ``research`` is a reserved MCP server name, like ``workspace``.
     with pytest.raises(mcp_config.McpConfigError, match="reserved"):
         mcp_config.normalize_server("research", {"url": "https://x.example/mcp"})
-    # The combined toolbox offers them without a workspace root.
+    # The combined toolbox offers them without a workspace root: an execution
+    # turn allows research whatever the role (``contracts/tool_steps``).
     box = developer_tools.toolbox_for(None, "Developer")
     assert [s["function"]["name"] for s in box.schemas()] == [
         "research__fetch",
@@ -285,7 +286,9 @@ def test_the_tools_go_to_the_roles_that_decide_and_the_prompt_says_why(
     ]
     assert box.max_rounds == settings.RESEARCH_TOOL_ROUNDS and box.unavailable == {}
     box.close()
-    assert developer_tools.toolbox_for(None, "Architect") is None
+    assert developer_tools.toolbox_for(None, "Architect") is not None
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)
+    assert developer_tools.toolbox_for(None, "Developer") is None
 
 
 def test_the_sources_check_names_the_dependencies_nobody_looked_up(enabled):

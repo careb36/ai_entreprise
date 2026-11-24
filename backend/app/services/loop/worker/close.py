@@ -13,6 +13,7 @@ Moved out of ``task_worker``, which still re-exports these names.
 
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -28,12 +29,17 @@ from sqlmodel import Session, select
 from services.learning import retrospective
 from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
-from services.loop.sprint_close import PROTECTED_PATHS_ON, RECLOSED
+from services.loop.sprint_close import (
+    NOTHING_DONE,
+    PROTECTED_PATHS_ON,
+    RECLOSED,
+    nothing_done_reason,
+)
 from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
-from services.loop.worker import messages, procedures_round
+from services.loop.worker import close_listing, messages, procedures_round
 from services.models import effort
 from services.planning import planner_fallback, spec_planning, sprint_team
 from services.planning.sprint_planner import (
@@ -97,9 +103,15 @@ def _build_sprint_kickoff_story(
 
 
 def _plan_follow_up(
-    session: Session, company: Company, retro_metrics: dict[str, Any] | None
+    session: Session,
+    company: Company,
+    retro_metrics: dict[str, Any] | None,
+    listing_of: Callable[[str | None], str | None] | None = None,
 ) -> tuple[dict[str, Any], str, str, list[dict[str, Any]]]:
-    """The planner's follow-up sprint: its plan, objective, scope size and tasks."""
+    """The planner's follow-up sprint: its plan, objective, scope size and tasks.
+    *listing_of* (else the closing worker's, ``close_listing``) reads the
+    project's listing through the daemon (issue #766)."""
+    listing_of = listing_of or close_listing.current()
     # The agents carry their company, so a connection model routes with its key.
     _, agent_dicts, discovery = spec_planning.planning_context_of(session, company.id)
     detected_stack = _coerce_json_dict(discovery.detected_stack if discovery else None)
@@ -121,6 +133,7 @@ def _plan_follow_up(
         agents=agent_dicts,
         detected_stack=detected_stack,
         project_path=project_path,
+        file_listing=listing_of(project_path) if listing_of else None,
     )
     return plan, objective, scope_size, plan.get("tasks") or []
 
@@ -273,6 +286,16 @@ def _complete_sprint_and_plan_follow_up(
         if not dependencies.sprint_settled(session, completed_sprint_id):
             session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
+
+        statuses = session.exec(
+            select(BacklogItem.status).where(
+                BacklogItem.sprint_id == completed_sprint_id
+            )
+        ).all()
+        why = nothing_done_reason(list(statuses))
+        if why and sprint_control.pause(session, sprint, why):
+            session.commit()
+            return {"completed": False, "auto_opened": False, "reason": NOTHING_DONE}
 
         if not replicas.mark_completed(session, sprint):
             return {"completed": False, "auto_opened": False, "reason": "not_active"}
@@ -514,6 +537,9 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     """Close a sprint once all cards are done and optionally open the next autonomous self-improvement sprint."""
     # Build retrospective metrics before closing so the planner can use them.
     retro_metrics = await asyncio.to_thread(_build_sprint_retrospective, sprint_id)
+
+    # ``asyncio.to_thread`` copies the context: the closing thread reads it.
+    close_listing.bind(nats_client, asyncio.get_running_loop())
 
     result = await asyncio.to_thread(  # once across replicas (issue #328)
         replicas.close_once,

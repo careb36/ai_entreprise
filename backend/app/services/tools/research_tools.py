@@ -9,7 +9,8 @@ the workspace and MCP tools (``mcp_tools.chat_with_tools``), let them check:
 - ``research__fetch``: one page, as text, bounded, from a host the company
   allows (``allowed_hosts``: the official documentation hosts of the common
   stacks, the registries and the advisory databases by default, plus what a
-  Manager adds); anything else is refused and the refusal recorded;
+  Manager adds); anything else is refused, the reply says so and why, and
+  the observation records ``refused: host not allowed``;
 - ``research__package``: a package's record at its registry (PyPI, npm,
   crates.io, the Go proxy) by the registries' own APIs: the latest version,
   when it was released, the last versions;
@@ -172,6 +173,25 @@ def host_allowed(url: str, hosts: set[str]) -> tuple[bool, str]:
     return False, host
 
 
+HOST_REFUSED = "host not allowed"
+
+
+def refusal_text(url: str, host: str, hosts: set[str]) -> str:
+    """The reply to a fetch the host allowlist refused: that it was refused,
+    that nothing was sent, and why."""
+    scheme = urlsplit(str(url or "").strip()).scheme
+    listed = bool(host) and (
+        host in hosts or any(host.endswith("." + h) for h in hosts)
+    )
+    if not host:
+        why = f"{str(url)[:200]!r} names no host"
+    elif not listed:
+        why = f"the host {host!r} is not on the company's list of sources; ask a Manager to add it"
+    else:
+        why = f"the host {host!r} is fetched over https only, not {scheme or 'no scheme'!r}"
+    return f"Refused: {HOST_REFUSED}; nothing was sent: {why}."
+
+
 def operator_named(host: str) -> bool:
     """Whether the deployment itself named *host* in ``RESEARCH_ALLOWED_HOSTS``:
     the only hosts a fetch may reach on a private address (a local mirror,
@@ -294,10 +314,8 @@ class ResearchToolbox:
                 }
             )
             if not allowed:
-                extra["status"] = None
-                raise ResearchError(
-                    f"The host {host or current!r} is not on the company's list of sources; ask a Manager to add it."
-                )
+                extra.update(status=None, refused=HOST_REFUSED)
+                raise ResearchError(refusal_text(current, host, self.hosts))
             status, headers, data = self.http(
                 "POST" if body is not None else "GET",
                 current,
@@ -532,9 +550,17 @@ def toolbox_for_request(role: str, request: dict[str, Any]) -> ResearchToolbox |
 def toolbox_for(
     company_id: int | None, role: str | None, *, engine: Any = None
 ) -> ResearchToolbox | None:
-    """The toolbox for a task of *role* in *company_id*, with the company's
-    hosts read from *engine*; ``None`` when the role does not get the tools."""
-    if not offered_to(role):
+    """The toolbox for a deciding turn of *role* in *company_id*, with the
+    company's hosts read from *engine*; ``None`` when the role does not get them."""
+    return company_toolbox(company_id, engine=engine) if offered_to(role) else None
+
+
+def company_toolbox(
+    company_id: int | None, *, engine: Any = None
+) -> ResearchToolbox | None:
+    """The toolbox whatever the role (a step that allows research, such as a
+    task's execution: ``contracts/tool_steps``); ``None`` when disabled."""
+    if not settings.RESEARCH_TOOLS_ENABLED:
         return None
     extra: list[str] = []
     if company_id is not None and engine is not None:

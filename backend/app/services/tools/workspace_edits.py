@@ -14,9 +14,10 @@ those texts with the answer's files (``with_tool_edits``) through
 tests and the Verifier see the change as any delivery's. An edit that never
 reaches a delivery never stays on disk.
 
-Where: only the task's own worktree, or a project without the Git workflow
-(where deliveries write anyway); never the person's checkout of a company
-that delivers on branches (``allowed``).
+Where: only the task's own worktree (prepared before the first turn,
+``task_worktree``), or a project without the Git workflow (where deliveries
+write anyway); never the person's checkout of a company that delivers on
+branches (``allowed``).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 from services.tools import (
     developer_tool_replies,
     developer_tool_schemas,
+    docs_write_policy,
     edit_lint,
     mcp_tools,
 )
@@ -65,6 +67,7 @@ def delivery_suffixes() -> set[str]:
 
 def _deliverable(box: Any, path: str) -> None:
     """Refuse a file a delivery would not write: the change would be dropped."""
+    docs_write_policy.check(box, path)  # A documentation task writes docs only.
     suffix = (
         "." + path.rsplit(".", 1)[-1].lower() if "." in path.rsplit("/", 1)[-1] else ""
     )
@@ -82,7 +85,8 @@ MOVE_ABILITIES = (
 )
 NOT_HERE = (
     "edits are not allowed here: the person's checkout of a company that "
-    "delivers on branches (the task's worktree exists after its first delivery)"
+    "delivers on branches (the task's worktree is prepared before the first "
+    "turn only when every daemon announces it, else made at its first delivery)"
 )
 NOT_ANNOUNCED = (
     "the workspace daemon does not announce move and delete (an older daemon: "
@@ -295,7 +299,9 @@ def with_tool_edits(targets: list[dict[str, Any]], edited: Any) -> list[dict[str
 def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     """The tool loop's observations onto the run's evidence, apart from the
     claims: the tools offered and withheld (``tools_offered``), the calls
-    (``tool_calls``), the edited files' texts as the daemon
+    (``tool_calls``), the rounds the loop used, its limit and whether it was
+    reached (``rounds_used``, ``rounds_max``, ``rounds_exhausted``), the
+    edited files' texts as the daemon
     read them back (``tool_edit_files``, scanned by the standards check and
     read back by the acceptance guard) and the edits it left alone
     (``tool_edit_conflicts``). Updates *evidence* in place, so a later
@@ -320,8 +326,10 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     ]
     console = agent.get("console_run")  # A console producer's run (console_producer).
     offered_tools = agent.get("tools_offered")
+    loop = agent.get("tool_loop") or {}  # The tool loop's round count.
     if not (
         calls
+        or loop
         or offered_tools
         or files
         or deleted
@@ -344,4 +352,7 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
     ):
         if value:
             evidence[key] = value
+    for key in ("rounds_used", "rounds_max", "rounds_exhausted"):
+        if key in loop:
+            evidence[key] = loop[key]
     return evidence

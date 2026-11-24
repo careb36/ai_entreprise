@@ -13,7 +13,11 @@ arguments, whether it erred, how long it took, the sha256 of what came back
 — and the Verifier shows them (``tools_used``); a tool without a read-only
 annotation raises the delivery's risk tier. What the model says it learned
 from a tool stays a claim. Tool results are masked for the server's own
-secrets and cut at ``result_max_chars`` before the model sees them.
+secrets and cut at ``result_max_chars`` before the model sees them. A failed
+call's observation keeps the start of the error text it got (``error``,
+secret-looking lines redacted), and the answer carries ``tool_loop``: the
+rounds used, the limit, whether it was reached, and ``not_a_deliverable``
+when the final answer is only a tool call typed out as text.
 
 A server the operator does not allow (``mcp_config.start_refusal``: a stdio
 command off ``MCP_STDIO_ALLOWED_COMMANDS``, a URL that is not public https)
@@ -37,7 +41,11 @@ from config import settings
 from database import engine as default_engine
 from sqlmodel import Session
 
-from services.contracts.tool_calls import summarize  # noqa: F401 - re-exported
+from services.contracts.tool_calls import (
+    summarize,  # noqa: F401 - re-exported
+    written_as_text,
+)
+from services.evidence.context_read import redact_secrets
 from services.tools import mcp_client, mcp_config, tool_history
 
 logger = logging.getLogger("fabrique-task-worker")
@@ -47,6 +55,43 @@ ROUNDS_EXHAUSTED_NOTE = (
     "The tool budget for this task is spent; answer now with the complete "
     "deliverable from what you already know."
 )
+# How much of a failed call's text its observation keeps as ``error``.
+ERROR_EXCERPT_CHARS = 300
+TOOL_CALL_AS_TEXT = "the model's last answer was a tool call written as text"
+BUDGET_SPENT = "the tool budget had run out"
+
+
+def error_excerpt(text: str) -> str:
+    """The start of a failed call's text, secret-looking lines redacted: what
+    the backend produced or received, kept on the observation as ``error``."""
+    redacted = redact_secrets("tool error", str(text or ""))
+    return redacted.strip()[:ERROR_EXCERPT_CHARS]
+
+
+def loop_record(
+    result: dict[str, Any], used: int, rounds: int, exhausted: bool
+) -> dict[str, Any]:
+    """*result* with ``tool_loop``: the rounds the loop ran with tool calls,
+    its limit and whether the limit was reached (the backend's own count),
+    and ``not_a_deliverable`` when the final answer is only a tool call typed
+    out as text (``tool_calls.written_as_text``), which the worker treats as
+    an empty answer (``loop.answers.llm_failure``)."""
+    record: dict[str, Any] = {
+        "rounds_used": used,
+        "rounds_max": rounds,
+        "rounds_exhausted": exhausted,
+    }
+    try:
+        content = result["choices"][0]["message"].get("content")
+    except (KeyError, IndexError, TypeError, AttributeError):
+        content = None
+    if isinstance(content, str) and written_as_text(content):
+        record["not_a_deliverable"] = (
+            f"{TOOL_CALL_AS_TEXT}; {BUDGET_SPENT}" if exhausted else TOOL_CALL_AS_TEXT
+        )
+    if isinstance(result, dict):
+        result["tool_loop"] = record
+    return result
 
 
 def unknown_tool_note(name: str, offered: Any) -> str:
@@ -304,12 +349,15 @@ def chat_with_tools(
     max_rounds: int | None = None,
     on_round: Callable[[dict[str, Any], list[dict[str, Any]]], None] | None = None,
     bu_id: int | None = None,
+    exhausted_note: str = ROUNDS_EXHAUSTED_NOTE,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The model's final answer and the observations of every tool call it made.
 
     Without a toolbox (or with one that found no tools) this is one plain
     ``client.chat`` call, as before. ``on_round`` sees each intermediate
     answer with the calls it made, so every round is recorded as a turn.
+    ``exhausted_note`` asks for the answer once the rounds are spent (QA's
+    review asks for its verdict, not a deliverable).
     """
     schemas = toolbox.schemas() if toolbox is not None else []
     billing = {"bu_id": bu_id} if bu_id else {}
@@ -325,20 +373,22 @@ def chat_with_tools(
     # (index in history, round, observation) of each tool result, so the old
     # ones go to the model as one line (``services/tool_history.py``).
     results: list[tuple[int, int, dict[str, Any]]] = []
-    keep = settings.TOOL_HISTORY_KEEP_ROUNDS
+    keep, budget = settings.TOOL_HISTORY_KEEP_ROUNDS, settings.TOOL_HISTORY_MAX_CHARS
     for round_no in range(1, rounds + 1):
-        tool_history.compress(history, results, round_no, keep)
+        tool_history.compress(history, results, round_no, keep, budget)
         result = client.chat(
             messages=history, model=model, role=role, tools=schemas, **billing
         )
         calls = tool_calls_of(result)
         if not calls or result.get("error"):
-            return result, observations
+            return loop_record(result, round_no - 1, rounds, False), observations
         if on_round is not None:
             on_round(result, calls)
         history.append(result["choices"][0]["message"])
         for call in calls:
             observation, text = toolbox.call(call, round_no)
+            if observation.get("is_error") and "error" not in observation:
+                observation["error"] = error_excerpt(text)
             observations.append(observation)
             results.append((len(history), round_no, observation))
             history.append(
@@ -348,8 +398,7 @@ def chat_with_tools(
                     "content": text,
                 }
             )
-    tool_history.compress(history, results, rounds + 1, keep)
-    history.append({"role": "user", "content": ROUNDS_EXHAUSTED_NOTE})
-    return client.chat(
-        messages=history, model=model, role=role, **billing
-    ), observations
+    tool_history.compress(history, results, rounds + 1, keep, budget)
+    history.append({"role": "user", "content": exhausted_note})
+    final = client.chat(messages=history, model=model, role=role, **billing)
+    return loop_record(final, rounds, rounds, True), observations

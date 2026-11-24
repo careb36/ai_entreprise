@@ -60,7 +60,13 @@ RESULT_NEEDS_WORK = "NEEDS_WORK"
 
 ACTION_EXECUTE_TASK = "execute_task"
 ACTION_QA_REVIEW = "qa_review"
+# A round of QA's reads before its verdict: priced, never counted as a review.
+ACTION_QA_REVIEW_READ = "qa_review_read"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
+# The reading turns of the steps that only read (contracts/tool_steps): the
+# PO's sprint planning and the ScrumMaster's decision on a blocked task.
+ACTION_PLAN_READ = "plan_read"
+ACTION_SCRUM_TRIAGE_READ = "scrum_triage_read"
 ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
 
 
@@ -460,6 +466,7 @@ def record_agent_turn(
     result_type: str | None = None,
     result_preview: str | None = None,
     session=None,
+    tool_calls: list[dict[str, Any]] | None = None,
 ):
     """Persist one LLM turn to ``audit_log`` in the shape the KPI queries read.
 
@@ -468,6 +475,9 @@ def record_agent_turn(
     batch writers); otherwise a short-lived session is opened on the shared
     engine.  Failures are logged and swallowed so metrics never block work.
     Returns the persisted ``AuditLog`` row, or ``None`` when nothing was written.
+    ``tool_calls`` are the backend's observations of the turn's tool calls,
+    kept in ``details`` beside the measured usage and apart from the model's
+    text (``result.preview``, a claim).
     """
     try:
         from models import (
@@ -492,6 +502,8 @@ def record_agent_turn(
     # The input/output split, the estimate apart and the provider: what
     # ``run_cost`` prices the turn from (``token_usage``).
     details.update(usage_fields(llm_result))
+    if tool_calls:
+        details["tool_calls"] = tool_calls
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]

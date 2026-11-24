@@ -68,19 +68,28 @@ SUBJECTS = (
 # §5.1, §5.1.1, §5.2, §5.3), per subject: an older daemon ignores them silently.
 _FORGE = ("forge_policy",)
 FEATURES = {
-    # The forge policy (§5.3, issue #727): enforced by this daemon.
-    "workspace.console.prepare": _FORGE,
+    # The forge policy (§5.3, issue #727): enforced by this daemon; and the
+    # task's worktree without a private repository, for the Developer's tools
+    # (§5.1.5, docs/design/first-attempt-in-task-worktree.md).
+    "workspace.console.prepare": _FORGE + ("private_git",),
     # An emptied file deleted by a delivery (docs/design/move-and-delete-files.md).
     "workspace.generate": _FORGE + ("delete",),
     "workspace.edit": ("delete", "move"),
     "workspace.git.base_status": _FORGE,
-    "workspace.git.diff": _FORGE,
+    # The agents' read-only views of a task's repository (git_view.py, §5.6),
+    # and the blame view, announced apart so an older daemon is never asked it.
+    "workspace.git.diff": _FORGE + ("view", "blame"),
     "workspace.git.integrate": _FORGE,
     "workspace.git.merge": _FORGE,
     "workspace.git.publish": _FORGE,
     "workspace.git.reviews": _FORGE,
     "workspace.git.sync_base": _FORGE,
+    # A document's text instead of its bytes (document_text.py, §5.8).
+    "workspace.read": ("document_text",),
     "workspace.execute": ("full_log", "purpose_assistant", "sandbox_environment", "sandbox_floor"),
+    # Where a name is defined and who uses it (code_lookup.py, §5.7), for
+    # the agents' navigation tools.
+    "workspace.related": ("lookup",),
     "workspace.app.check": ("browser_probe", "cache", "full_log", "sandbox_environment", "security_probe"),
 }
 

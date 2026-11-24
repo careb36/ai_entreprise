@@ -8,8 +8,8 @@ has the detail.
 
 - **Folder:** `backend/app/services/tasks/`
 - **May import:** [contracts](contracts.md), [platform](platform.md).
-- **Interface:** `board`, `dependencies`, `progress_snapshot`, `relations`, `sprint_board`, `task_events`, `task_projection`.
-- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_projection`.
+- **Interface:** `board`, `dependencies`, `progress_snapshot`, `relations`, `sprint_board`, `task_events`, `task_projection`, `task_records`.
+- **Modules:** `board`, `dependencies`, `events`, `progress`, `progress_snapshot`, `relations`, `saved_views`, `similarity`, `sprint_board`, `task_events`, `task_filter`, `task_projection`, `task_records`.
 
 ## How it works
 
@@ -20,6 +20,15 @@ carry-over, sprint control, a person's review and the Manager agent all write
 through it. `TaskRecord` (in `task_projection.py`) reads a task's comments and
 events once and answers every question a decision asks: the deliverable, the
 pending rework, the block reason, whether it waits for a person.
+
+`task_records.py` reads a task's record for the record tools
+(`tools/board_tools`: `board__task`, `board__evidence`; moved from
+`loop/worker/board_record`): `read_task` (the task's events and comments) and
+`read_evidence` (a run's verification), each split into observations and
+claims and bounded, `None` for a task that is not the company's; and the
+scopes' task ids (`task_ids`: the task and its dependencies;
+`sprint_task_ids`: the task's sprint). The loop's and planning's turns
+compose the tools from them.
 
 ## Rules
 

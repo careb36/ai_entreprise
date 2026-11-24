@@ -139,6 +139,8 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 # The decisions on this task read its events (issue #324).
                 "events": task_projection.snapshot(session, item),
                 "covers": item.covers if isinstance(item.covers, list) else [],
+                # A documentation task is the documentation step (tool_steps).
+                "kind": item.kind,
             },
             "sprint": {
                 "id": sprint.id,

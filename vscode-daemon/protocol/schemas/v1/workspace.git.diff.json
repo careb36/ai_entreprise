@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.git.diff",
   "title": "workspace.git.diff",
-  "description": "The diff a sprint's integration brings into its base: the files between the merge base of base and the pinned commit, their hunks and the sha256 of each side, read-only (git_diff.py).",
+  "description": "The diff a sprint's integration brings into its base: the files between the merge base of base and the pinned commit, their hunks and the sha256 of each side, read-only (git_diff.py). With view, one of the agents' fixed read-only views of a task's repository instead (git_view.py, PROTOCOL.md section 5.6).",
   "x-protocol-version": 1,
   "x-subject": "workspace.git.diff",
   "x-kind": "request",
@@ -29,11 +29,53 @@
             "publish"
           ],
           "description": "The company's forge policy (issue #727, PROTOCOL.md section 5.3). Missing or unknown reads as none; capped by the daemon's FORGE_POLICY_MAX."
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "status",
+            "changed",
+            "diff",
+            "log",
+            "blame"
+          ],
+          "description": "An agent's read-only view instead of the integration diff (git_view.py, PROTOCOL.md section 5.6); announced as the view feature of this subject. The blame view is announced as the blame feature."
+        },
+        "path": {
+          "type": "string",
+          "description": "With view diff or blame: a path relative to workspace_root, inside it, never VCS metadata or a file that may hold secrets."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "With view log: how many commits (default 10)."
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "With view blame: the first line (default 1)."
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "With view blame: the last line (default start_line + 99; at most 200 lines, never past the end)."
         }
       },
       "required": [
-        "workspace_root",
-        "commit"
+        "workspace_root"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "commit"
+          ]
+        },
+        {
+          "required": [
+            "view"
+          ]
+        }
       ]
     },
     "file": {
@@ -115,6 +157,142 @@
         },
         "truncated": {
           "type": "boolean"
+        },
+        "view": {
+          "type": "string"
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "path"
+            ]
+          }
+        },
+        "count": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "untracked": {
+          "type": "boolean"
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "commit",
+              "subject"
+            ]
+          }
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "patch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "With view diff: the path's diff against the merge base, bounded."
+        },
+        "start_line": {
+          "type": "integer"
+        },
+        "end_line": {
+          "type": "integer"
+        },
+        "file_lines": {
+          "type": "integer"
+        },
+        "groups": {
+          "type": "array",
+          "description": "With view blame: each run of consecutive lines last changed by one commit. Never an author's or committer's name or e-mail.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "start_line": {
+                "type": "integer"
+              },
+              "end_line": {
+                "type": "integer"
+              },
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subject": {
+                "type": "string"
+              },
+              "uncommitted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "commit",
+              "start_line",
+              "end_line",
+              "subject"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "author"
+                  ]
+                },
+                {
+                  "required": [
+                    "author_mail"
+                  ]
+                },
+                {
+                  "required": [
+                    "committer"
+                  ]
+                },
+                {
+                  "required": [
+                    "email"
+                  ]
+                }
+              ]
+            }
+          }
         }
       },
       "required": [

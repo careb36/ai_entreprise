@@ -204,6 +204,42 @@ def profile(session: Session, company_id: int) -> tuple[str, str | None]:
     return model, (scrum_master.system_prompt if scrum_master else None) or None
 
 
+def client_for(
+    *,
+    timeout: float = TIMEOUT_SECONDS,
+    retries: int | None = None,
+    company_id: int | None = None,
+) -> LLMProxyClient:
+    """The proxy client for a ScrumMaster question; *retries* ``None`` keeps
+    the client's default (``LLM_PROXY_MAX_RETRIES``)."""
+    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
+    client.timeout = timeout
+    client.company_id = company_id
+    client.max_tokens = ANSWER_MAX_TOKENS
+    if retries is not None:
+        client.max_retries = retries
+    return client
+
+
+def messages_for(system_prompt: str | None, prompt: str) -> list[dict[str, str]]:
+    """The question as messages: the ScrumMaster's system prompt, if any, first."""
+    messages = [{"role": "user", "content": prompt}]
+    if system_prompt:
+        messages.insert(0, {"role": "system", "content": system_prompt})
+    return messages
+
+
+def content_of(result: Any) -> str:
+    """The answer's text; ``ScrumMasterError`` for a failed or empty call."""
+    if not isinstance(result, dict) or result.get("error"):
+        raise ScrumMasterError(f"LLM call failed: {result!r}"[:500])
+    choices = result.get("choices") or [{}]
+    content = ((choices[0] or {}).get("message") or {}).get("content") or ""
+    if not str(content).strip():
+        raise ScrumMasterError("LLM call failed: empty response")
+    return str(content).strip()
+
+
 def ask_model(
     model: str,
     system_prompt: str | None,
@@ -217,23 +253,13 @@ def ask_model(
 
     *retries* ``None`` keeps the client's default (``LLM_PROXY_MAX_RETRIES``).
     """
-    messages = [{"role": "user", "content": prompt}]
-    if system_prompt:
-        messages.insert(0, {"role": "system", "content": system_prompt})
-    client = LLMProxyClient(base_url=settings.LLM_PROXY_URL)
-    client.timeout = timeout
-    client.company_id = company_id
-    client.max_tokens = ANSWER_MAX_TOKENS
-    if retries is not None:
-        client.max_retries = retries
-    result = client.chat(messages=messages, model=model, role=SCRUM_MASTER_ROLE)
-    if not isinstance(result, dict) or result.get("error"):
-        raise ScrumMasterError(f"LLM call failed: {result!r}"[:500])
-    choices = result.get("choices") or [{}]
-    content = ((choices[0] or {}).get("message") or {}).get("content") or ""
-    if not str(content).strip():
-        raise ScrumMasterError("LLM call failed: empty response")
-    return str(content).strip()
+    client = client_for(timeout=timeout, retries=retries, company_id=company_id)
+    result = client.chat(
+        messages=messages_for(system_prompt, prompt),
+        model=model,
+        role=SCRUM_MASTER_ROLE,
+    )
+    return content_of(result)
 
 
 def ask(

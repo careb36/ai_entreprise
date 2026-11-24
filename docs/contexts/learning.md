@@ -42,7 +42,16 @@ reverts a procedure under which it grew by more than `GAP_TOLERANCE`.
 ### The retrospective and triage
 
 - `retrospective.py`: the lessons in the prompt and the message to the team
-  (steps 2 and 7). Board notes it carries forward stay claims.
+  (steps 2 and 7). Board notes it carries forward stay claims. Its numbers
+  include the sprint's tool demand (`demand_of`, counted by the pure
+  `contracts/tool_demand.count`): unknown tool names asked, final answers that
+  were a tool call written as text, refused calls (a fetch to a host not
+  allowed, a `run_tests` command not run as asked, a check script that may
+  not run, a record outside the turn's scope) and runs that spent their tool
+  rounds. It reads only the platform's records (each task run's latest
+  verification, the audit turns' `tool_calls`, the system's retry and block
+  texts), and the summary shows the line beside the other numbers, labelled as
+  observations. The progress snapshot does not seal it.
 - `scrum_master.py`: the triage of an escalation (step 6).
 
 ### Findings

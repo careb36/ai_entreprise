@@ -57,7 +57,8 @@
         "relations",
         "sprint_board",
         "task_events",
-        "task_projection"
+        "task_projection",
+        "task_records"
       ],
       "modules": []
     },
@@ -141,13 +142,16 @@
         "workspace"
       ],
       "public": [
+        "board_tools",
         "code_graph",
         "code_level",
         "developer_tools",
         "mcp_tools",
         "registry_lookup",
         "research_tools",
+        "review_tools",
         "signature_lookup",
+        "task_worktree",
         "workspace_edits"
       ],
       "modules": []
@@ -455,6 +459,9 @@
       "test_architect.py": [
         "loop"
       ],
+      "test_architect_reads_the_repo.py": [
+        "loop"
+      ],
       "test_architecture_adr_files.py": [
         "loop"
       ],
@@ -559,6 +566,12 @@
       "test_board_observed.py": [
         "evidence",
         "loop"
+      ],
+      "test_board_record.py": [
+        "loop"
+      ],
+      "test_board_tools.py": [
+        "tools"
       ],
       "test_brief_mail.py": [
         "management"
@@ -750,6 +763,23 @@
       "test_discovery_team_models.py": [
         "planning"
       ],
+      "test_doc_links.py": [
+        "evidence"
+      ],
+      "test_docs_write_policy.py": [
+        "tools"
+      ],
+      "test_docs_write_scope.py": [
+        "contracts",
+        "loop",
+        "tools"
+      ],
+      "test_read_steps_tools.py": [
+        "loop",
+        "planning",
+        "tasks",
+        "tools"
+      ],
       "test_documentation_export_router.py": [
         "planning"
       ],
@@ -799,6 +829,9 @@
       ],
       "test_findings_retry.py": [
         "learning"
+      ],
+      "test_first_attempt_worktree.py": [
+        "loop"
       ],
       "test_forge_policy.py": [
         "release"
@@ -1042,6 +1075,9 @@
       "test_planner_fallback.py": [
         "release"
       ],
+      "test_plans_see_repo_and_tools.py": [
+        "loop"
+      ],
       "test_playwright_pin.py": [
         "workspace"
       ],
@@ -1137,6 +1173,10 @@
       "test_proxy_connections.py": [
         "learning",
         "planning"
+      ],
+      "test_qa_review_reads.py": [
+        "evidence",
+        "loop"
       ],
       "test_quality_gate.py": [
         "loop"
@@ -1271,6 +1311,9 @@
       ],
       "test_run_cost.py": [
         "loop"
+      ],
+      "test_run_tests_narrows.py": [
+        "tools"
       ],
       "test_run_window.py": [
         "management"
@@ -1562,7 +1605,19 @@
       "test_token_diet.py": [
         "management"
       ],
+      "test_tool_demand.py": [
+        "learning",
+        "tools"
+      ],
       "test_tool_history.py": [
+        "tools"
+      ],
+      "test_tool_observability.py": [
+        "loop"
+      ],
+      "test_tools_follow_the_step.py": [
+        "loop",
+        "planning",
         "tools"
       ],
       "test_trusted_proxies.py": [
@@ -1602,13 +1657,32 @@
       "test_workspace_delete_delivery.py": [
         "workspace"
       ],
+      "test_workspace_git_blame.py": [
+        "tools",
+        "workspace"
+      ],
+      "test_workspace_git_tool.py": [
+        "tools",
+        "workspace"
+      ],
       "test_workspace_host.py": [
         "release"
       ],
       "test_workspace_isolation.py": [
         "workspace"
       ],
+      "test_workspace_lint.py": [
+        "tools"
+      ],
       "test_workspace_move.py": [
+        "tools",
+        "workspace"
+      ],
+      "test_workspace_navigation.py": [
+        "tools",
+        "workspace"
+      ],
+      "test_workspace_read_document.py": [
         "tools",
         "workspace"
       ],

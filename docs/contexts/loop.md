@@ -9,13 +9,15 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
 `task_worker.py` is the `task.assign` consumer the lifespan starts; it
 re-exports the stages in `worker/`. `worker/intake` claims a task under its
-lock; `worker/task_run` gathers context, `worker/execute` calls the model,
+lock; `worker/task_run` gathers context, `worker/execute` prepares the task's
+worktree under the Git workflow (`developer_tools.enter_task_worktree`, so a
+first attempt's tools run there) and calls the model,
 `worker/deliver` sends the files to the daemon and `worker/record` ingests the
 run and has the Verifier judge it. `worker/review` runs the review cycle (one
 replica at a time) that sends delivered tasks to QA, and `worker/close`
@@ -132,7 +134,9 @@ revisions and variables (MIT).
 `sprint_control.py`: start, pause, resume, stop and dispatch (all Manager).
 A provider out of credit pauses the sprint with a `pause_reason` and puts the
 task back to `todo`; a transient model failure re-queues it at most
-`MAX_TRANSIENT_RETRIES` (3) times, then blocks it. Autonomy (Manager to change):
+`MAX_TRANSIENT_RETRIES` (3) times, then blocks it, and a final answer that was
+only a tool call written as text re-queues it once (`MAX_TOOL_CALL_AS_TEXT_RETRIES`,
+a new attempt with a fresh tool budget), then blocks it. Autonomy (Manager to change):
 at 1 every QA-approved task waits for a person, at 2 only high-risk ones, at 3
 follow-ups and procedures also run on their own.
 
@@ -194,11 +198,48 @@ instead, stays readable by id, and an Owner may unarchive it.
   estimate is an `estimated` event and goes on the run's evidence.
 - `edit_plan.py`: the Architect's edit plan in architect/editor mode (off by
   default; [models](models.md)).
+- `worker/architect_brief`: the Architect's brief (`worker/execute`,
+  `_consult_architect`) runs through the tool loop with the workspace's read
+  tools (`review_tools.for_step` for the `architect_brief` step: list,
+  read, search, find_file, read-only Git and a document's text when
+  announced, on the task's root; no edit, move, delete, lint or test run)
+  and, since the step allows research (R and S), the research tools beside
+  them (`research__package`, `research__advisories`, a fetch of the allowed
+  hosts: `research_tools.company_toolbox`, attached with
+  `board_tools.attach` within the same rounds; never without the reads),
+  for at most
+  `ARCHITECT_TOOL_ROUNDS` rounds. Each call is an observation on its turns in
+  `audit_log` (`details.tool_calls`); the brief is a claim, and a tool call
+  typed as text is no brief. Without the daemon it is one plain call. It also
+  builds the Architect's agent and system prompt from its row
+  (`architect_agent`, `system_prompt`).
+- `worker/execute_tools`: the execution turn's toolbox, moved out of
+  `worker/execute`: the task's step (`tool_steps.execution_step`: a
+  documentation task is the `documentation` step), `toolbox_for` for that
+  step and the role within the model's limits, the record tools on a rework,
+  and `tools_offered` with the step, its families and its write scope.
+- `worker/board_record`: the record tools' scopes and offer
+  (`tools/board_tools`: `board__task`, `board__evidence`; the readers moved
+  to `tasks/task_records`, so planning reads them too). The scope is the
+  turn's company and its task plus the tasks it depends on (`task_scope`), or
+  for the ScrumMaster's triage the task's sprint (`sprint_scope`), read from
+  the database; the readers split each record into observations (events' kinds,
+  actors, statuses and times, the system's and gates' own text, the
+  Verifier's checks, the files' sha256, `tools_offered`, the round count) and
+  claims (comments, verdicts, rework requests, the plan's words, the
+  producer's model, claims and deliverable). `offer` puts them beside the QA
+  review's reads and the Architect's brief tools, and `on_rework` beside an
+  execution turn's tools on a rework, within the turn's rounds; a turn
+  offered no tools gets none.
 
 ### Delivery and QA
 
 - `worker/deliver`: the files to the daemon (`workspace.generate`, or queued on
-  `workspace.deliver`).
+  `workspace.deliver`). A documentation turn's answer delivers documentation
+  only (`docs_scope`, `contracts/tool_steps.writable`: a TechWriter, or a task
+  whose kind is documentation): a block naming another path is left out, the
+  review payload says so, and the run's evidence records `docs_write`
+  (`refused`, `reason`), the backend's decision.
 - `refuted_undo.py`: without Git, a delivery the Verifier refutes is undone at
   once from the daemon's snapshot (`workspace.undo`, audited as
   `run_delivery_undone`), so the shared folder holds only verified work; a
@@ -228,8 +269,27 @@ instead, stays readable by id, and an Owner may unarchive it.
 - `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold
   for a person, and the one rework budget per task (`MAX_REWORKS`, or the
   company's `max_reworks`).
+- `worker/qa_review_reads`: before the verdict, QA may read the delivery with
+  the read-only workspace tools (`tools/review_tools`) through the Developer's
+  tool loop, for `QA_REVIEW_TOOL_ROUNDS` rounds. The verdict keeps the same
+  messages, client and parser; an answer without a verdict falls back to the
+  single tool-less call unchanged, and so does a review with no recorded
+  delivery or no daemon. Each reading round is a `qa_review_read` audit turn,
+  priced but outside the QA rate; the calls' observations go on the verdict's
+  turn (`tool_calls`). The record tools (`worker/board_record`) go beside the
+  reads.
 - `worker/messages`: hand-over messages (claims) and the ScrumMaster's triage of
   an escalation.
+- `worker/triage_reads`: before its decision on a blocked task, the
+  ScrumMaster may read the task's root with the read-only workspace tools
+  (`review_tools.for_step`, step `scrum_decision`: read only) for
+  `SCRUM_TRIAGE_TOOL_ROUNDS` rounds. Each reading round is a
+  `scrum_triage_read` audit turn and the final one carries the calls'
+  observations (`tool_calls`); the decision stays a claim, parsed as before.
+  No daemon or root, 0 rounds, or no decision after the reads: today's single
+  call (`scrum_master.ask_triage`). The record tools go beside the reads
+  (`board_record.offer(..., sprint=True)`), scoped to the blocked task's
+  sprint (`sprint_scope`); never without the reads.
 
 ### Closing a sprint
 
@@ -237,6 +297,10 @@ instead, stays readable by id, and an Owner may unarchive it.
 close the procedures round (`worker/procedures_round`: keep or revert
 procedures by the board's numbers) and the wiki compile (`wiki_close.py`, which
 never raises).
+`worker/close_listing` lets the closing thread read the project's listing
+through the daemon for the follow-up plan (`bind` before the close, `current`
+in `_plan_follow_up`; at most `LISTING_WAIT_SECONDS`, else the backend's own
+listing).
 
 Who closes: a worker approval closes its sprint on the spot, and the review
 cycle (`worker/review._closing_candidates`) looks at every `active` sprint and

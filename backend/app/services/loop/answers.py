@@ -49,7 +49,8 @@ def llm_failure(result: dict[str, Any], model: str) -> str | None:
     proxy reports provider errors as ``{"provider", "status", "message"}``;
     errors of the proxy itself (unknown model, quota) name ``llm-proxy`` and
     the HTTP status.  A 2xx answer with empty content is a failure too, so it
-    never reaches the word-count gate as an empty deliverable.
+    never reaches the word-count gate as an empty deliverable; so is a final
+    answer the tool loop found to be only a tool call written as text.
     """
     if result.get("error"):
         detail = result.get("detail")
@@ -58,6 +59,12 @@ def llm_failure(result: dict[str, Any], model: str) -> str | None:
         status = detail.get("status") or result.get("status_code") or "unreachable"
         message = detail.get("message") or detail.get("error") or result["error"]
         return f"LLM call failed: {provider} {status} {message}"
+    # The tool loop's reading of the final answer (``mcp_tools.loop_record``):
+    # only a tool call typed out as text is no deliverable, like an empty one.
+    no_deliverable = (result.get("tool_loop") or {}).get("not_a_deliverable")
+    if no_deliverable:
+        served = result.get("served_model") or model
+        return f"No deliverable from {served}: {no_deliverable}"
     if not llm_content(result):
         provider = result.get("provider") or "llm-proxy"
         served = result.get("served_model") or model

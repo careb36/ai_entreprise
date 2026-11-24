@@ -207,6 +207,7 @@ Model choice, most specific first: an agent's own model, the company's model for
 | `RUN_WINDOW_RECHECK_SECONDS` | `300` | Longest sleep of the run-window worker (at least 60). The window itself is a company setting. |
 | `WORKSPACE_WRITE_TIMEOUT_SECONDS` | `30` | How long the task worker waits for the daemon to confirm writes. |
 | `ARCHITECT_CONSULT_ENABLED` | `true` | Consult the Architect before high-priority, design-sensitive or reworked tasks. |
+| `ARCHITECT_TOOL_ROUNDS` | `6` | Rounds of read-only workspace tools (list, read, search, find_file; read-only Git and a document's text when announced) the Architect may use before its brief, with the research tools (when `RESEARCH_TOOLS_ENABLED`) and the task's record tools beside them. `0` asks in one call without tools. |
 | `ARCHITECT_EDITOR_MODE` | `false` | A hard Developer task gets a numbered edit plan from the Architect. Needs `ARCHITECT_CONSULT_ENABLED`. |
 | `ARCHITECT_EDITOR_MIN_DIFFICULTY` | `4` | Lowest difficulty (1–5) for editor mode. |
 | `AGENT_GRAPH_ENABLED` | `false` | The internal LangGraph producer. Off, `POST /v1/generate` answers 409. Compose default `false`. |
@@ -268,6 +269,10 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 |---|---|---|
 | `DEVELOPER_TOOLS_ENABLED` | `true` | The Developer's workspace tools (list, read, search, run tests). |
 | `DEVELOPER_TOOL_ROUNDS` | `5` | Tool rounds before delivering. Ceiling 50. |
+| `QA_REVIEW_TOOL_ROUNDS` | `3` | QA's read-only tool rounds (list, read, search, find_file) on the delivery before its verdict. `0`: one call without tools. |
+| `PLANNING_TOOL_ROUNDS` | `3` | The PO's read-only tool rounds (list, read, search, find_file) on the project before its sprint plan (`contracts/tool_steps`, step `plan`). `0`, or no daemon or project path: one call without tools. |
+| `SCRUM_TRIAGE_TOOL_ROUNDS` | `3` | The ScrumMaster's read-only tool rounds (list, read, search, find_file) on the blocked task's root before its decision (`contracts/tool_steps`, step `scrum_decision`). `0`, or no daemon or project path: one call without tools. |
+| `BOARD_TOOLS_ENABLED` | `true` | The record tools `board__task` (a task's history) and `board__evidence` (a run's checks, files and tools offered), read-only and scoped to the turn's task and its dependencies (the QA review, the Architect's brief, a rework), the blocked task's sprint (the ScrumMaster's triage) or the company's board (the PO's sprint plan). They share the turn's rounds and are never offered to a turn without its reads. |
 | `DEVELOPER_MAX_OUTPUT_TOKENS` | `0` | Cap on the Developer's answer. `0`: the provider's default. Never above the model's limit. |
 | `MCP_MAX_TOOL_ROUNDS` | `6` | MCP tool rounds before the model must answer. |
 | `MCP_TOOL_TIMEOUT_SECONDS` | `60` | One MCP call. |
@@ -276,7 +281,8 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 | `MCP_STDIO_ALLOWED_COMMANDS` | `""` | Absolute paths a company's stdio MCP server may spawn. Empty disables stdio servers. |
 | `MCP_HTTP_ALLOWED_HOSTS` | `""` | Hosts an MCP server may reach over plain http. |
 | `TOOL_HISTORY_KEEP_ROUNDS` | `3` | Older tool results go to the model as one line each. `0` keeps all whole. |
-| `EDIT_LINT_ENABLED` | `true` | Lint a file after `workspace__edit`. |
+| `TOOL_HISTORY_MAX_CHARS` | `120000` | An old `workspace__read` still the latest view of its lines stays whole while all tool results in the history fit this many characters; past it the oldest reads become one line. `0`: no bound. |
+| `EDIT_LINT_ENABLED` | `true` | Lint a file after `workspace__edit`, and offer `workspace__lint` in execution turns. |
 | `EDIT_LINT_TIMEOUT_SECONDS` | `60` | Timeout of that lint. |
 | `REPO_MAP_MAX_CHARS` | `3000` | Repository map in prompts. `0` leaves it out. |
 | `CODE_GRAPH_MAX_CHARS` | `2500` | "Related code" section. `0` leaves it out. |

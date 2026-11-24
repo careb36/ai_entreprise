@@ -235,6 +235,16 @@ class Settings(BaseSettings):
     # and 02 did not fit a million tokens; with 5 both did, every criterion
     # passed, and spec 01 cost a third less (DeepSeek) to three fifths less (Qwen).
     DEVELOPER_TOOL_ROUNDS: int = 5
+    QA_REVIEW_TOOL_ROUNDS: int = 3  # QA's read-only rounds before its verdict
+    # The read-only rounds of the steps that only read (contracts/tool_steps):
+    # the PO's sprint planning and the ScrumMaster's decision on a blocked
+    # task. 0: one call without tools, as before.
+    PLANNING_TOOL_ROUNDS: int = 3
+    SCRUM_TRIAGE_TOOL_ROUNDS: int = 3
+    # The record tools (services/tools/board_tools.py): board__task and
+    # board__evidence, read-only, for the QA review, the Architect's brief, a
+    # rework, the ScrumMaster's triage (the sprint) and the PO's plan (the board).
+    BOARD_TOOLS_ENABLED: bool = True
     # The cap on the Developer's answer in tokens; 0 sends none, and the
     # provider's own default applies (issue #766). Never above the model's
     # output limit (services/models/model_profile.py).
@@ -276,10 +286,11 @@ class Settings(BaseSettings):
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
     EDIT_LINT_TIMEOUT_SECONDS: float = 60.0
-    # The tool loop (``services/tool_history.py``): results older than the
-    # last this many rounds go to the model as one line each; the evidence
-    # keeps them whole. 0 keeps every result whole.
+    # The tool loop (``tools/tool_history.py``): results older than the last KEEP
+    # rounds go to the model as one line (0: none); an old read that is still the
+    # latest view stays whole while all results fit MAX_CHARS (0: no bound).
     TOOL_HISTORY_KEEP_ROUNDS: int = 3
+    TOOL_HISTORY_MAX_CHARS: int = 120000
     # Named sections of the Developer's task prompt left out of every prompt,
     # comma-separated (``services/loop/worker/prompt_budget.py``, issue #443):
     # a with/without comparison for the bench. Empty: nothing is off.
@@ -313,12 +324,13 @@ class Settings(BaseSettings):
     RESEARCH_CRATES_URL: str = "https://crates.io/api/v1/crates"
     RESEARCH_GO_URL: str = "https://proxy.golang.org"
     RESEARCH_OSV_URL: str = "https://api.osv.dev"
-    # Consult the Architect agent, on the team's own model (its role default
-    # from model_factory, DeepSeek Pro unless overridden), before a
-    # high-priority, design-sensitive or QA-reworked task of a coding role, QA,
-    # PO or ScrumMaster: the team's second opinion (issue #750). Emits
-    # ``ARCHITECT_CONSULTED:`` comments for analytics.
+    # Consult the Architect, on the team's own model, before a high-priority,
+    # design-sensitive or reworked task of a coding role, QA, PO or ScrumMaster
+    # (issue #750; ``ARCHITECT_CONSULTED:`` comments). It may read the project
+    # first with the read-only workspace tools for at most ARCHITECT_TOOL_ROUNDS
+    # rounds (services/loop/worker/architect_brief.py); 0 asks in one call.
     ARCHITECT_CONSULT_ENABLED: bool = True
+    ARCHITECT_TOOL_ROUNDS: int = 6
     # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.
     AGENT_GRAPH_ENABLED: bool = False
     # How long a console producer's CLI cools down after a quota stop whose
@@ -328,7 +340,7 @@ class Settings(BaseSettings):
     # Removed with the console assistants (issue #750): the team's Architect
     # gives the second opinion. Never read; declared so a .env that still sets
     # one does not stop the backend (the settings refuse unknown keys from that
-    # file), and named once at startup (lifecycle, ``removed_settings_in_use``).
+    # file), and named once at startup (``removed_settings.py``).
     CONSOLE_ASSISTANTS_ENABLED: str | None = None
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: str | None = None
     CONSOLE_ASSISTANT_STRATEGY: str | None = None
@@ -567,32 +579,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
-
-
-# Settings that no longer do anything, kept declared so an old .env still loads.
-REMOVED_SETTINGS: dict[str, str] = {
-    name: "the console assistants were removed (issue #750); the team's Architect gives the second opinion"
-    for name in (
-        "CONSOLE_ASSISTANTS_ENABLED",
-        "CONSOLE_ASSISTANT_TIMEOUT_SECONDS",
-        "CONSOLE_ASSISTANT_STRATEGY",
-        "CONSOLE_ASSISTANT_ALLOWED_ROLES",
-        "COPILOT_CLI_COMMAND_TEMPLATE",
-        "CLAUDE_CLI_COMMAND_TEMPLATE",
-        "CLAUDE_CLI_ALLOWED_TOOLS",
-        "CLAUDE_CLI_APPEND_SYSTEM_PROMPT",
-        "CLAUDE_CLI_HIGH_VALUE_ROLES",
-    )
-}
-
-
-def removed_settings_in_use(current: "Settings") -> list[str]:
-    """The removed settings this environment or .env still sets, one warning line each."""
-    return [
-        f"{name} is set but no longer does anything: {why}. Remove it from the environment or .env."
-        for name, why in REMOVED_SETTINGS.items()
-        if name in current.model_fields_set
-    ]
 
 
 # Module-level singleton; import this object rather than instantiating Settings directly.

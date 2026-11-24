@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.read",
   "title": "workspace.read",
-  "description": "A text file as it is on disk, numbered lines from start_line, with the whole file's sha256 (workspace_read.py).",
+  "description": "A text file as it is on disk, numbered lines from start_line, with the whole file's sha256 (workspace_read.py). With extract text, a DOCX document's text instead (document_text.py, PROTOCOL.md section 5.8).",
   "x-protocol-version": 1,
   "x-subject": "workspace.read",
   "x-kind": "request",
@@ -23,6 +23,20 @@
             "integer",
             "null"
           ]
+        },
+        "lines": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "How many lines to show: 100 when absent, at most 400 (READ_LINES_CEILING), still bounded by READ_MAX_BYTES."
+        },
+        "extract": {
+          "type": "string",
+          "enum": [
+            "text"
+          ],
+          "description": "A document's text instead of its bytes (DOCX; PDF refused for now); announced as the document_text feature of this subject."
         }
       },
       "required": [
@@ -66,6 +80,18 @@
         },
         "truncated": {
           "type": "boolean"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "docx",
+            "pdf"
+          ],
+          "description": "With extract text: the document's format."
+        },
+        "extracted": {
+          "type": "boolean",
+          "description": "With extract text: the text was extracted from the document; sha256 and bytes are the file's."
         }
       },
       "required": [

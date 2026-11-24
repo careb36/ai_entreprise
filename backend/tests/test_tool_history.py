@@ -47,7 +47,11 @@ class _Requester:
         root, resolve = payload["workspace_root"], self.daemon._resolve_target_path
         if subject == "workspace.read":
             return workspace_read.read_file(
-                root, payload.get("path"), payload.get("start_line"), resolve
+                root,
+                payload.get("path"),
+                payload.get("start_line"),
+                resolve,
+                payload.get("lines"),
             )
         if subject == "workspace.search":
             return workspace_read.search(
@@ -100,6 +104,8 @@ def test_old_results_go_to_the_model_as_one_line_and_the_evidence_stays_whole(
     project, monkeypatch
 ):
     monkeypatch.setattr(settings, "TOOL_HISTORY_KEEP_ROUNDS", 2)
+    # A budget nothing fits: old reads are summarized too.
+    monkeypatch.setattr(settings, "TOOL_HISTORY_MAX_CHARS", 1)
     box = developer_tools.WorkspaceToolbox(_Requester(_load_daemon()), str(project))
     model = _Model(
         [
@@ -123,7 +129,8 @@ def test_old_results_go_to_the_model_as_one_line_and_the_evidence_stays_whole(
     first = observations[0]
     assert round4[0]["content"] == (
         tool_history.PREFIX
-        + f"read src/m1.py lines 1–100 of 150 (sha256 {first['sha256'][:12]}…)"
+        + f"read src/m1.py lines 1–150 of 150 (sha256 {first['sha256'][:12]}…); "
+        "workspace__read path=src/m1.py start_line=1 lines=150 shows it again"
     )
     assert "src/m2.py:78: value_2_77 = 77" in round4[1]["content"]
     # The final request: round 2 is old too, but its result is shorter than
@@ -140,7 +147,7 @@ def test_old_results_go_to_the_model_as_one_line_and_the_evidence_stays_whole(
     # The evidence keeps every observation as the call made it.
     assert [o["tool"] for o in observations] == ["read", "search", "read", "read"]
     assert observations[0]["result_chars"] > len(round4[0]["content"])
-    assert observations[0]["sha256"] and observations[0]["last_line"] == 100
+    assert observations[0]["sha256"] and observations[0]["last_line"] == 150
 
 
 def test_with_zero_every_result_stays_whole_and_the_exhausted_loop_compresses_too(
@@ -161,6 +168,7 @@ def test_with_zero_every_result_stays_whole_and_the_exhausted_loop_compresses_to
         for m in _tool_messages(model.requests[-1])
     )
     monkeypatch.setattr(settings, "TOOL_HISTORY_KEEP_ROUNDS", 1)
+    monkeypatch.setattr(settings, "TOOL_HISTORY_MAX_CHARS", 1)
     model = _Model(list(answers))
     mcp_tools.chat_with_tools(
         model, [{"role": "user", "content": "go"}], "m", "QA", box
@@ -263,6 +271,7 @@ def test_a_compressed_history_keeps_each_tool_call_s_extra_content(
     (``extra_content.google.thought_signature``); a replayed call without it
     is refused, so compression never touches the assistant messages."""
     monkeypatch.setattr(settings, "TOOL_HISTORY_KEEP_ROUNDS", 1)
+    monkeypatch.setattr(settings, "TOOL_HISTORY_MAX_CHARS", 1)
     box = developer_tools.WorkspaceToolbox(_Requester(_load_daemon()), str(project))
     signed = []
     answers = []
@@ -286,3 +295,77 @@ def test_a_compressed_history_keeps_each_tool_call_s_extra_content(
     assert assistants[0]["tool_calls"][0]["extra_content"] == {
         "google": {"thought_signature": "sig-1=="}
     }
+
+
+def test_old_reads_stay_whole_within_the_budget_and_other_results_go_first(
+    project, monkeypatch
+):
+    """Issue #766: 16% of 1063 reads re-read the very window the history had
+    summarized. A read that is still the latest view of its lines stays whole
+    while every result fits ``TOOL_HISTORY_MAX_CHARS``; a search does not."""
+    monkeypatch.setattr(settings, "TOOL_HISTORY_KEEP_ROUNDS", 1)
+    box = developer_tools.WorkspaceToolbox(_Requester(_load_daemon()), str(project))
+    answers = [
+        _calls(_call(1, "workspace__read", path="src/m1.py")),
+        _calls(_call(2, "workspace__search", pattern="value_2_")),
+        _calls(_call(3, "workspace__read", path="src/m3.py")),
+        _final(),
+    ]
+    model = _Model(list(answers))
+    mcp_tools.chat_with_tools(
+        model, [{"role": "user", "content": "go"}], "m", "Developer", box
+    )
+    final = _tool_messages(model.requests[-1])
+    assert "value_1_149 = 149" in final[0]["content"]
+    assert final[1]["content"].startswith(tool_history.PREFIX + "searched 'value_2_'")
+    assert "value_3_149 = 149" in final[2]["content"]
+    # Past the budget the oldest read goes first, its line saying how to
+    # read it again; the next one fits and stays whole.
+    whole = sum(len(m["content"]) for m in final)
+    monkeypatch.setattr(settings, "TOOL_HISTORY_MAX_CHARS", whole - 1)
+    model = _Model(list(answers))
+    mcp_tools.chat_with_tools(
+        model, [{"role": "user", "content": "go"}], "m", "Developer", box
+    )
+    final = _tool_messages(model.requests[-1])
+    assert final[0]["content"].startswith(tool_history.PREFIX + "read src/m1.py")
+    assert final[0]["content"].endswith(
+        "workspace__read path=src/m1.py start_line=1 lines=150 shows it again"
+    )
+    assert "value_3_149 = 149" in final[2]["content"]
+
+
+def test_a_read_made_stale_or_repeated_by_a_later_call_is_summarized():
+    def read(path, first, last):
+        return {
+            "server": "workspace",
+            "tool": "read",
+            "path": path,
+            "first_line": first,
+            "last_line": last,
+            "lines": 300,
+        }
+
+    observations = [
+        (1, read("a.py", 1, 100)),
+        (1, read("b.py", 1, 50)),
+        (1, read("c.py", 1, 80)),
+        (1, read("d.py", 1, 80)),
+        (2, {"server": "workspace", "tool": "edit", "path": "a.py"}),
+        (2, {"server": "workspace", "tool": "edit", "path": "c.py", "is_error": True}),
+        (2, read("b.py", 1, 200)),
+        (2, read("d.py", 50, 200)),
+        (2, {"server": "workspace", "tool": "move", "path": "e.py", "to_path": "d.py"}),
+    ]
+    history = [{"role": "tool", "content": "x" * 5000} for _ in observations]
+    results = [(i, r, o) for i, (r, o) in enumerate(observations)]
+    assert tool_history.compress(history, results, 4, 1, 10**9) > 0
+    texts = [m["content"] for m in history]
+    assert texts[0].endswith("shows it again (the file changed after this read)")
+    assert texts[1].endswith("shows it again (a later read shows these lines)")
+    # A failed edit changes nothing: c.py's read is still the latest view.
+    assert texts[2] == "x" * 5000
+    # d.py lines 50–200 do not cover 1–80, but the move into d.py does.
+    assert texts[3].endswith("(the file changed after this read)")
+    assert texts[6] == "x" * 5000
+    assert texts[4].startswith(tool_history.PREFIX + "edited a.py")

@@ -277,7 +277,7 @@ async def startup(app):
     if bind_warning:
         logger.warning(bind_warning)
     log_prompt_sections_off()
-    from config import removed_settings_in_use
+    from removed_settings import removed_settings_in_use
 
     for warning in removed_settings_in_use(settings):
         logger.warning(warning)
