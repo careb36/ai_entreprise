@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `changelog_observe`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `docs_checks`, `edit_plan`, `folder_baseline`, `foundation_setup`, `in_flight`, `live_state`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/changelog_prompt`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `changelog_observe`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `docs_checks`, `edit_plan`, `folder_baseline`, `foundation_setup`, `in_flight`, `live_state`, `platform_hold`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/changelog_prompt`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
@@ -111,6 +111,24 @@ handed to review. Either way the sprint pauses with the reason (run
 the incident once per pause, and the Glassroom shows
 `sprint.paused_daemon_absent`. Mirrors `sprint_budget.py`.
 
+### A test command that found no tests holds the task
+
+`platform_hold.py`: when the delivery gate names a platform problem
+(`delivery_gate.PLATFORM_PROBLEMS`, today `TESTS_NOT_FOUND`: the Verifier's
+`tests_run` check is unverifiable with `cause: "no_tests"`, read from the
+daemon's exit status and output), the review stage does not send the task
+back. It blocks it with the gate's observation and "blocked for manual
+triage": no `NEEDS WORK:`, no rework counted, nothing the worker retries or
+reviews again, and no ScrumMaster triage. When every task of the sprint that
+delivered is held for that same problem, the sprint pauses with the reason
+(`No delivery of this sprint could run its tests: …`, `pause_kind`
+`tests_not_found`), a `sprint_tests_not_found` audit row records it once, and
+the Glassroom shows `sprint.paused_tests_not_found`. A sprint where another
+delivery's tests did run goes on. A person fixes the test command or where
+the tests are, sends the held tasks back and resumes. Run 2 of the
+self-hosting owner action (2026-11-24) spent its 2M-token budget on code
+reworks for a test command that looked in the wrong folder.
+
 ### Routines
 
 `routines.py`: a Manager writes a routine (a title, a description, the hired
@@ -156,7 +174,7 @@ statuses from the records (issue #766).
   (`locks.is_held`, read from `pg_locks`) counts too, with `since: null`.
 - `pause_kind`: why a paused sprint is paused, read from the reason its pauser
   wrote: `person` (none, or "Paused by"), `no_credit`, `nothing_done`,
-  `budget`, `acknowledgement`, `daemon`, else `other`. The board's sprint has
+  `budget`, `acknowledgement`, `daemon`, `tests_not_found`, else `other`. The board's sprint has
   it too.
 - `closed_at`: a completed or cancelled sprint's latest sealed progress
   snapshot (naive UTC).

@@ -241,8 +241,8 @@ def check_tests_run(evidence: dict) -> dict:
     Exit 0 passes, any other exit code refutes. A command that hung refutes too,
     and says so: it was asked to finish and did not. Only a run that never
     happened (no test command, daemon silent, command error) is unverifiable —
-    the code was not shown to work, which is different from it failing; so is
-    one that found no tests (``test_collection``, ``cause: no_tests``).
+    the code was not shown to work, which is different from it failing, as is
+    one that found no tests (``test_collection``).
 
     When the daemon had to cut the output, the observation says it, so a
     truncated tail is never read as the whole story. When the output named
@@ -263,19 +263,15 @@ def check_tests_run(evidence: dict) -> dict:
         )
     if run.get("timed_out"):
         timeout = run.get("timeout_seconds")
-        if isinstance(timeout, (int, float)) and not isinstance(timeout, bool):
-            return {
-                "name": "tests_run",
-                "outcome": VERDICT_REFUTED,
-                "observation": (
-                    f"{target} did not finish within {timeout:g}s "
-                    f"(timed out, killed){truncated}"
-                ),
-            }
+        killed = (
+            f"did not finish within {timeout:g}s (timed out, killed)"
+            if isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
+            else "timed out and was killed"
+        )
         return {
             "name": "tests_run",
             "outcome": VERDICT_REFUTED,
-            "observation": f"{target} timed out and was killed{truncated}",
+            "observation": f"{target} {killed}{truncated}",
         }
     if found := test_collection.no_tests_in(evidence):  # configuration, not code
         return test_collection.check(target, found, truncated)

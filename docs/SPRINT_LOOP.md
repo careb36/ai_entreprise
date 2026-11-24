@@ -212,7 +212,14 @@ the LangGraph graph is only an optional kickoff conversation.
    the base already had, is the regression case.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
-   `APPROVED:` closes the task. The Verifier also records a `risk_tier` check
+   `APPROVED:` closes the task. A test run that found no tests (pytest exit 5,
+   exit 4 for a path that does not exist, jest's or vitest's "no tests found";
+   `services/evidence/test_collection.py`) is not a failed test run: `tests_run`
+   is unverifiable with the reason "the test command found no tests at <path>",
+   the gate names it `test command found no tests`, and the task is blocked for
+   a person with no rework spent and no retry; once every delivery of the
+   sprint is held for it, the sprint pauses with the reason
+   (`services/loop/platform_hold.py`), as for an absent daemon. The Verifier also records a `risk_tier` check
    (`services/evidence/risk.py`: high for authentication, secrets, payments or the CI
    pipeline, medium for shell scripts, migrations, dependency manifests or
    container files, from the paths the daemon wrote and the producer declared;
