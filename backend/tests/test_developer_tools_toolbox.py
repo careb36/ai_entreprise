@@ -212,13 +212,14 @@ def test_the_combined_toolbox_dispatches_by_name_and_caps_the_rounds(
         mcp_config.normalize_server("workspace", {"url": "https://x.example/mcp"})
 
 
-def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
+def test_the_tools_go_to_every_executing_role_when_the_project_is_known(
     project, monkeypatch
 ):
     daemon = _load_daemon()
     monkeypatch.setattr(
         mcp_tools.Toolbox, "load", classmethod(lambda cls, *a, **k: None)
     )
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)  # Workspace alone.
     developer_tools.unbind()
     assert developer_tools.toolbox_for(1, "Developer") is None  # not bound: no daemon
     developer_tools.bind(
@@ -226,7 +227,11 @@ def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
     )
     try:
         monkeypatch.setattr(developer_tools, "_request_from_thread", _Requester(daemon))
-        assert developer_tools.toolbox_for(1, "PO") is None
+        # The step sets the ceiling (contracts/tool_steps): a PO executing a
+        # task reads too.
+        assert isinstance(
+            developer_tools.toolbox_for(1, "PO"), developer_tools.CombinedToolbox
+        )
         assert developer_tools.toolbox_for(2, "Developer") is None  # no project path
         box = developer_tools.toolbox_for(1, "Developer")
         assert isinstance(box, developer_tools.CombinedToolbox) and box.mcp is None
@@ -260,7 +265,8 @@ def test_the_prompt_carries_the_top_of_the_tree_as_the_repository_map(
             and "src/greet.py" in section
             and "node_modules" not in section
         )
-        assert developer_tools.repository_section(1, "ScrumMaster") == ""
+        # Every executing role has the tools, so every one gets the map.
+        assert "## Repository" in developer_tools.repository_section(1, "ScrumMaster")
         assert developer_tools.repository_section(None, "Developer") == ""
         monkeypatch.setattr(developer_tools, "MAP_MAX_CHARS", 20)
         assert developer_tools.repository_section(1, "Developer").endswith(

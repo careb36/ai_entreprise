@@ -18,6 +18,7 @@ import worker_stages
 from factories import enforcement as auth_on  # noqa: F401 - the fixture, by name
 from factories import member_headers as _member
 from models import Agent, BacklogItem, Company, Sprint
+from services.contracts import tool_steps
 from services.loop.worker import close as worker_close
 from services.loop.worker import task_run
 from services.planning import spec_planning, sprint_planner, sprint_team
@@ -551,7 +552,25 @@ def test_start_sprint_refuses_a_carried_task_off_its_team_before_marking_it(
 # ── What each role can do, in the planning prompt (issue #766) ───────────────
 
 
-def test_the_plan_prompt_says_which_roles_can_read_the_code_and_run_tests():
+@pytest.fixture
+def roles_without_tools(monkeypatch):
+    """The roles that had no workspace tools deny writing and running
+    (``contracts/tool_steps``: a role may only narrow its step)."""
+    deny = frozenset({tool_steps.WRITE, tool_steps.RUN})
+    names = ("PO", "Architect", "SecOps", "TechWriter", "ScrumMaster")
+    monkeypatch.setattr(tool_steps, "ROLE_DENY", dict.fromkeys(names, deny))
+
+
+def test_with_the_step_s_ceiling_every_executing_role_reads_and_runs():
+    section = sprint_team.capabilities_section(["PO", "Architect", "TechWriter"])
+
+    assert "edit them and run its tests: PO, Architect, TechWriter." in section
+    assert "cannot read" not in section
+
+
+def test_the_plan_prompt_says_which_roles_can_read_the_code_and_run_tests(
+    roles_without_tools,
+):
     section = sprint_team.prompt_section(["PO", "Architect", "Dev", "QA"], None)
 
     assert "## What each role can do" in section
@@ -561,7 +580,7 @@ def test_the_plan_prompt_says_which_roles_can_read_the_code_and_run_tests():
     assert "runs anything (tests, scripts, a validation, a build)" in section
 
 
-def test_a_chosen_team_is_described_rather_than_the_whole_company():
+def test_a_chosen_team_is_described_rather_than_the_whole_company(roles_without_tools):
     section = sprint_team.capabilities_section(["Architect", "Security"])
 
     assert "Dev" not in section and "read the project's files, edit" not in section
@@ -570,7 +589,7 @@ def test_a_chosen_team_is_described_rather_than_the_whole_company():
     assert sprint_team.capabilities_section([]) == ""
 
 
-def test_an_alias_is_described_as_its_catalogue_role():
+def test_an_alias_is_described_as_its_catalogue_role(roles_without_tools):
     section = sprint_team.capabilities_section(["Data", "Tester", "TechWriter"])
 
     assert "edit them and run its tests: Data, Tester." in section

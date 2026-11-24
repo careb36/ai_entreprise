@@ -160,7 +160,11 @@ async def plan_sprint(
     if not req.prompt.strip():
         raise HTTPException(status_code=422, detail="Prompt is required")
 
-    plan = plan_execution_sprint(
+    # In a thread: the PO may read the project through the daemon, which is
+    # reached on this event loop (``planning_reads``).
+    listing = await _listing(request, discovery)
+    plan = await asyncio.to_thread(
+        plan_execution_sprint,
         company_name=company.company_name,
         objective=req.prompt,
         scope_size=scope_size,
@@ -168,7 +172,7 @@ async def plan_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
         project_path=discovery.project_path if discovery else None,
         team=team,
-        file_listing=await _listing(request, discovery),
+        file_listing=listing,
     )
     plan = _recorded(session, req.company_id, "execution", plan)
     return _serialize_plan_response(
@@ -206,7 +210,9 @@ async def plan_self_improvement_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
     )
 
-    plan = build_self_improvement_plan(
+    listing = await _listing(request, discovery)
+    plan = await asyncio.to_thread(  # In a thread, as plan_sprint's.
+        build_self_improvement_plan,
         company_name=company.company_name,
         objective=objective,
         scope_size=scope_size,
@@ -214,7 +220,7 @@ async def plan_self_improvement_sprint(
         detected_stack=discovery.detected_stack if discovery else None,
         project_path=discovery.project_path if discovery else None,
         team=team,
-        file_listing=await _listing(request, discovery),
+        file_listing=listing,
     )
     plan = _recorded(session, req.company_id, "self_improvement", plan)
 

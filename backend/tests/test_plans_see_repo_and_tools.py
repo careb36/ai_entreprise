@@ -8,11 +8,18 @@ role, with ``reassigned_from`` and a note saying why. And the PO's listing of
 the project was read from the backend container, where the user's project is
 not mounted ("(project path not accessible)"); it now comes from the
 workspace daemon (``sprint_context.project_listing``), as the Architect's.
+
+Since the step sets the tool ceiling (``contracts/tool_steps``, 2026-11-24)
+every role executing a task gets the workspace tools, and the move is the
+fallback for a role whose profile denies them: these tests deny reading's
+companions (write and run) to the roles that had no tools before.
 """
 
 import asyncio
 import json
 
+import pytest
+from services.contracts import tool_steps
 from services.planning import (
     spec_author,
     spec_planning,
@@ -21,6 +28,15 @@ from services.planning import (
     sprint_team,
 )
 from services.workspace import workspace_daemon
+
+
+@pytest.fixture(autouse=True)
+def _roles_without_tools(monkeypatch):
+    """The roles that had no workspace tools deny writing and running."""
+    deny = frozenset({tool_steps.WRITE, tool_steps.RUN})
+    names = ("PO", "Architect", "SecOps", "TechWriter", "ScrumMaster")
+    monkeypatch.setattr(tool_steps, "ROLE_DENY", dict.fromkeys(names, deny))
+
 
 HIRED = ["PO", "Architect", "Security", "TechWriter", "Developer", "QA", "DevOps"]
 

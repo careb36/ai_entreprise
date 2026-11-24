@@ -123,9 +123,9 @@ def team_agents(
 def capabilities_section(roles: list[str]) -> str:
     """What each of *roles* can do with the project, for the planning prompt.
 
-    Only the roles given the workspace tools (``roles.FILE_ROLES``: read,
-    search, edit, run the project's tests) can look at the project or run
-    anything; the others can still deliver whole files in their answer (the
+    Only the roles whose execution turn reads and runs (``roles.delivers_files``,
+    from ``contracts/tool_steps``: every role unless its profile denies them)
+    can look at the project or run anything; the others can still deliver whole files in their answer (the
     ``path=`` manifest) but see only what the prompt shows them. The plan used
     to give the Architect a task that ran validation scripts it had no tool to
     run (issue #766). Empty for no roles.

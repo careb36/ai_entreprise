@@ -1,7 +1,9 @@
-"""The Developer's workspace tools: read the project and run its tests before delivering.
+"""The workspace tools: read the project and run its tests before delivering.
 
-The roles that deliver files (the Developer roles, QA, the Designer) get these
-tools through the workspace daemon, beside the company's MCP tools in the same
+The step sets which families a turn gets and the role may only narrow them
+(``contracts/tool_steps``): every role executing a task reads (R), runs (X),
+researches (S) and edits where edits may go (W). The tools come through the
+workspace daemon, beside the company's MCP tools in the same
 loop (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
 
@@ -33,7 +35,8 @@ An edit is an observation with the file's sha256 before and after, and a working
 copy delivered with the answer's files (``services/workspace_edits.py``).
 
 The other tools are read-only on the project; ``read_tools`` offers those alone
-(the Architect's brief). ``run_tests`` runs project code on the daemon's machine,
+(the steps that only read: the Architect's brief, the PO's planning, the
+ScrumMaster's decision, ``review_tools.for_step``). ``run_tests`` runs project code on the daemon's machine,
 so only with ``DELIVERY_TESTS_ENABLED``, which runs it after each delivery anyway.
 
 A repository map (``services/repo_map.py``: the tree's top, the definitions by
@@ -54,7 +57,7 @@ from typing import Any
 
 from config import settings
 
-from services.contracts import roles
+from services.contracts import roles, tool_steps
 from services.tools import (
     check_scripts,
     developer_tool_replies,
@@ -76,8 +79,6 @@ from services.workspace.workspace_daemon import no_responders
 logger = logging.getLogger("fabrique-task-worker")
 
 SERVER = developer_tool_schemas.SERVER
-# The roles that deliver files (services/roles.py; aliases such as Dev read too).
-TOOL_ROLES = frozenset(roles.FILE_ROLES)
 READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
 RUN_TESTS = developer_tool_schemas.RUN_TESTS
 EDIT = developer_tool_schemas.EDIT
@@ -95,9 +96,12 @@ def _sha256(text: str) -> str:
 _runs_with = test_commands.runs_with
 
 
-def offered_to(role: str | None) -> bool:
-    """Whether a role gets the workspace tools."""
-    return settings.DEVELOPER_TOOLS_ENABLED and roles.canonical(role) in TOOL_ROLES
+def offered_to(role: str | None, step: str = tool_steps.EXECUTE) -> bool:
+    """Whether a turn of *step* by *role* gets the workspace tools: the step
+    allows reading and the role keeps it (``contracts/tool_steps``)."""
+    return settings.DEVELOPER_TOOLS_ENABLED and tool_steps.allows(
+        step, roles.canonical(role), tool_steps.READ
+    )
 
 
 class WorkspaceToolbox:
@@ -502,24 +506,29 @@ def toolbox_for(
     *,
     engine: Any = None,
     item_id: int | None = None,
+    step: str = tool_steps.EXECUTE,
 ) -> Any:
-    """The toolbox for a task: the company's MCP tools, plus the workspace
-    tools for a role that delivers files when a project path is known.
-    Returns ``None`` when there is nothing to offer, as the MCP loader does."""
+    """The toolbox for a turn of *step*: the company's MCP tools, plus what
+    the step allows and the role keeps (``contracts/tool_steps``) when a
+    project path is known: R the reads, X the tests and committed scripts,
+    W the edits where edits may go, S the research tools. Returns ``None``
+    when there is nothing to offer, as the MCP loader does."""
+    allowed = tool_steps.families(step, roles.canonical(role))
     mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
     workspace = None
-    if company_id is not None and offered_to(role) and "nats" in _bridge:
+    if company_id is not None and offered_to(role, step) and "nats" in _bridge:
         root = tool_root(company_id, item_id, engine=engine)
         if root:
-            box, box_error = None, None
-            try:
-                box = sandbox.request_for_company_id(company_id, engine)
-            except sandbox.PolicyUnavailable as e:
-                box_error = str(e)
-            # The project's sandbox image before the first test run, which
-            # would otherwise wait for its build (issue #766).
-            stack_image.prepare_from_thread(_request_from_thread, root, box)
-            root_test, folder_tests = _detect_tests(company_id, root, engine)
+            box, box_error, root_test, folder_tests = None, None, None, {}
+            if tool_steps.RUN in allowed:
+                try:
+                    box = sandbox.request_for_company_id(company_id, engine)
+                except sandbox.PolicyUnavailable as e:
+                    box_error = str(e)
+                # The project's sandbox image before the first test run, which
+                # would otherwise wait for its build (issue #766).
+                stack_image.prepare_from_thread(_request_from_thread, root, box)
+                root_test, folder_tests = _detect_tests(company_id, root, engine)
             workspace = WorkspaceToolbox(
                 _request_from_thread,
                 root,
@@ -527,7 +536,8 @@ def toolbox_for(
                 folder_tests=folder_tests,
                 sandbox=box,
                 sandbox_error=box_error,
-                can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
+                can_edit=tool_steps.WRITE in allowed
+                and workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
@@ -536,8 +546,10 @@ def toolbox_for(
                 workspace.lint_profile = functools.partial(
                     edit_lint.load_profile, _bridge, company_id, root, engine
                 )
-    # The research tools for the roles that decide (``services/research_tools.py``).
-    research = research_tools.toolbox_for(company_id, role, engine=engine)
+    # The research tools where the step allows them, whatever the role.
+    research = None
+    if tool_steps.RESEARCH in allowed:
+        research = research_tools.company_toolbox(company_id, engine=engine)
     if workspace is None and research is None:
         return mcp
     return CombinedToolbox(workspace, mcp, research)

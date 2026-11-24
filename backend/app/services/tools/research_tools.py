@@ -550,9 +550,17 @@ def toolbox_for_request(role: str, request: dict[str, Any]) -> ResearchToolbox |
 def toolbox_for(
     company_id: int | None, role: str | None, *, engine: Any = None
 ) -> ResearchToolbox | None:
-    """The toolbox for a task of *role* in *company_id*, with the company's
-    hosts read from *engine*; ``None`` when the role does not get the tools."""
-    if not offered_to(role):
+    """The toolbox for a deciding turn of *role* in *company_id*, with the
+    company's hosts read from *engine*; ``None`` when the role does not get them."""
+    return company_toolbox(company_id, engine=engine) if offered_to(role) else None
+
+
+def company_toolbox(
+    company_id: int | None, *, engine: Any = None
+) -> ResearchToolbox | None:
+    """The toolbox whatever the role (a step that allows research, such as a
+    task's execution: ``contracts/tool_steps``); ``None`` when disabled."""
+    if not settings.RESEARCH_TOOLS_ENABLED:
         return None
     extra: list[str] = []
     if company_id is not None and engine is not None:

@@ -278,14 +278,16 @@ def _plan_with_po(
     *file_listing* is the project's listing the caller read through the daemon
     (``project_listing``); without one, the backend's own (``_list_root_files``).
     A task that needs the workspace tools never stays with a role without them
-    (``sprint_team.fit_tasks``).
+    (``sprint_team.fit_tasks``). The PO may read the project first through the
+    read-only tools (``planning_reads``); the observations of its reads are
+    the plan's ``planning_reads``.
 
     The plan carries ``objective`` (what the person wrote, never cut) apart
     from the model's ``goal``, and ``planner_fallback``: None when the model
     answered usably, else ``{"reason", "detail"}`` as the backend observed it
     (``no_model``, ``model_error``, ``unparseable``, ``too_few_tasks``,
     ``unexpected_error``)."""
-    from services.planning import sprint_team
+    from services.planning import planning_reads, sprint_team
 
     everyone = _ensure_execution_team(agents)
     po = _find_po_agent(everyone)
@@ -296,6 +298,7 @@ def _plan_with_po(
     available_roles = sprint_team.planning_roles(hired, team)
     roster = sprint_team.team_agents(everyone, team) or everyone
     parsed: Any = None
+    reads: list[dict[str, Any]] = []  # The PO's reads, as the backend observed them.
 
     def finish(plan: dict[str, Any]) -> dict[str, Any]:
         plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], available_roles)
@@ -307,6 +310,7 @@ def _plan_with_po(
             "planner_fallback": None,
             "suggested_team": suggested,
             "team_reasons": reasons,
+            "planning_reads": list(reads),
         }
 
     def fell_back(reason: str, detail: str) -> dict[str, Any]:
@@ -340,9 +344,10 @@ def _plan_with_po(
     )
     raw = ""
     try:
-        result = _client(po).chat(
-            messages=[{"role": "user", "content": prompt}], model=po_model, role="PO"
+        result, observed = planning_reads.answer(
+            _client(po), prompt, po_model, po.get("company_id")
         )
+        reads.extend(observed)
         failure = _model_failure(result)
         if failure:
             return fell_back("model_error", failure)

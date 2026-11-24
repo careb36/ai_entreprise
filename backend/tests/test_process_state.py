@@ -27,6 +27,7 @@ CACHES = {"lru_cache", "cache"}
 
 # What a module keeps that no later test can read as its own.
 SAFE = {
+    "services.contracts.tool_steps.ROLE_DENY": "a constant table of the code; tests change it only through monkeypatch",
     "services.evidence.protected_check.patterns_in_force": "the backend's own protected list and test map, shipped with the code",
     "services.platform.hooks._HANDLERS": "handlers installed once a process, by event name",
     "services.platform.wstg_catalogue.catalogue": "a cache of a file shipped with the code",

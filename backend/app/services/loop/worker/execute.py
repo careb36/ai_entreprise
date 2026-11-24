@@ -21,7 +21,7 @@ from models import Agent
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
-from services.contracts import tool_calls
+from services.contracts import roles, tool_calls, tool_steps
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
 from services.loop import edit_plan, sprint_control, task_routing
@@ -334,6 +334,10 @@ def _execute_task(
     # The tools offered (and withheld, with why) go on the evidence; a split
     # is pointed to the move tool when it is offered.
     agent["tools_offered"] = workspace_edits.offered(toolbox)
+    if agent["tools_offered"]:  # The step and the families it allows (tool_steps).
+        agent["tools_offered"].update(
+            tool_steps.record(tool_steps.EXECUTE, roles.canonical(role))
+        )
     if prepared:  # The daemon's reply: where this attempt's tools ran, or why not.
         agent["tools_offered"]["task_worktree"] = prepared
     user_prompt += workspace_edits.move_note(agent["tools_offered"])
