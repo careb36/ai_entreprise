@@ -180,6 +180,28 @@ describe('a plan made without the planner model', () => {
     expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ objective, plan_id: 'abc123', goal: objective }))
   })
 
+  it('shows what the PO says is already done on the preview, and launches with the plan id', async () => {
+    const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(usePlanSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue({
+      sprint_name: 'Sprint - greet', goal: 'Verify', scope_size: 'S', planner_fallback: null, plan_id: 'def456',
+      tasks: [{ title: 'Verify that the objective is already met', description: 'Run the tests', assignee: 'QA', priority: 'high', depends_on: [] }],
+      already_done_claim: [{ part: 'the option', evidence: '', paths: ['src/cli.py'] }],
+      already_done_observed: { files_read: [], searches: [], claimed_paths: [{ path: 'src/cli.py', read: false, files: [] }] },
+    }) }) as never)
+    vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
+    renderPlanner()
+
+    fireEvent.change(screen.getByPlaceholderText('Describe the sprint goal…'), { target: { value: 'Add the option' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Plan' }))
+    const note = await screen.findByRole('region', { name: 'The PO says part of this objective is already done' })
+    expect(within(note).getByText('not read').closest('code')).toHaveTextContent('src/cli.py')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Sprint' }))
+    expect(await screen.findByTestId('board')).toBeInTheDocument()
+    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ plan_id: 'def456' }))
+  })
+
   it('starts from the objective a board hands back for planning again', () => {
     vi.mocked(usePlanSprint).mockReturnValue(mutation() as never)
     vi.mocked(useStartSprint).mockReturnValue(mutation() as never)

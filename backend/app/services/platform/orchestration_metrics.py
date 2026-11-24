@@ -64,9 +64,12 @@ ACTION_QA_REVIEW = "qa_review"
 ACTION_QA_REVIEW_READ = "qa_review_read"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
 # The reading turns of the steps that only read (contracts/tool_steps): the
-# PO's sprint planning and the ScrumMaster's decision on a blocked task.
+# PO's sprint planning and the ScrumMaster's decision on a blocked task; the
+# PO writing a specification and the Architect writing an architecture.
 ACTION_PLAN_READ = "plan_read"
 ACTION_SCRUM_TRIAGE_READ = "scrum_triage_read"
+ACTION_SPEC_AUTHOR_READ = "spec_author_read"
+ACTION_ARCH_AUTHOR_READ = "arch_author_read"
 ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
 
 

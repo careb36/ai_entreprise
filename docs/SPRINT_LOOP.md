@@ -12,7 +12,13 @@ the LangGraph graph is only an optional kickoff conversation.
    with the read-only workspace tools for `PLANNING_TOOL_ROUNDS` rounds
    (`services/planning/planning_reads.py`; each call an observation on its
    turn, the plan's `planning_reads`; without a daemon or project path, one
-   plain call). The objective the person wrote is
+   plain call). With the reads the PO checks first what is already done and
+   plans tasks only for what is missing: its `already_done_claim` stays apart
+   from the files it read (`already_done_observed`, with the daemon's sha256,
+   a claimed path it did not read flagged), and a plan with every part
+   claimed done is one QA task that verifies it with the tests
+   (`services/planning/already_done.py`); the plan from an approved
+   specification reads and checks the same way. The objective the person wrote is
    never cut: the plan carries it whole as `objective`, apart from the
    model's one-line `goal`, and `start_sprint` stores it as
    `Sprint.objective` (TEXT, migration `0056`). When the planner's model does
@@ -177,7 +183,10 @@ the LangGraph graph is only an optional kickoff conversation.
    The PO's and the Architect's calls to the proxy (`spec_author`,
    `arch_author`, `spec_planning`) are `prepare`d with the request's session
    and run in a thread as plain values (`draft_from`, `plan_from`): a session
-   never crosses a thread. The Developer's
+   never crosses a thread. In that thread they may read the project with the
+   read-only workspace tools (the drafts beside their research tools; the
+   plan from a specification with the already-done check,
+   `services/planning/planning_reads.py`), each round an audit turn. The Developer's
    prompt names the test files and test names to make pass
    (`acceptance.section`), the specification's coverage says per criterion
    `verified` (its test passed in an observed run of an implementation task)

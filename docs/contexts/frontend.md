@@ -91,6 +91,10 @@ in `backend/tests/test_check_frontend_architecture.py`).
 - **The sprint board:** `components/KanbanBoard.tsx` and `components/board/`;
   saved views and filters in `SprintTaskViews`. A card's signals keep
   **Observed** and **Reported** apart.
+- **The sprint planner:** `components/QuickLaunch.tsx` (the plan preview),
+  with `PlannerFallback` (a plan made without the model) and `AlreadyDoneNote`
+  (what the PO says is already done, labelled as its claim, beside the files
+  the platform saw it read, a claimed path it did not read flagged "not read").
 - **The live view:** `components/GlassRoom.tsx` and `components/glassroom/`,
   over SSE (`services/api/stream.ts`).
 - **The desktop app:** `frontend/electron/`, outside the layers. The packaged

@@ -3012,6 +3012,16 @@
       "all": "Sin equipo elegido: todos los roles que contrató la empresa."
     }
   },
+  "alreadyDone": {
+    "title": "El PO dice que parte de este objetivo ya está hecha",
+    "claimLabel": "Lo que afirma el PO (sus palabras, sin verificar):",
+    "evidence": "— {{evidence}}",
+    "sha256": "sha256 {{sha256}}",
+    "notRead": "no leído",
+    "observedLabel_one": "Leído por la plataforma en esta planificación ({{count}} archivo, con el sha256 que informó el daemon):",
+    "observedLabel_other": "Leído por la plataforma en esta planificación ({{count}} archivos, con el sha256 que informó el daemon):",
+    "verify": "Una afirmación no es una comprobación: el PO no abrió durante la planificación las rutas marcadas \"no leído\". Cuando no queda nada por construir, el plan es una única tarea de QA que ejecuta las pruebas para confirmarlo."
+  },
   "plannerFallback": {
     "title": "El modelo del planificador no respondió; este es un plan genérico.",
     "reasons": {

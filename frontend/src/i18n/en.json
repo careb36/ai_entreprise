@@ -3012,6 +3012,16 @@
       "all": "No team chosen: every role the company hired."
     }
   },
+  "alreadyDone": {
+    "title": "The PO says part of this objective is already done",
+    "claimLabel": "The PO's claim (its words, not verified):",
+    "evidence": "— {{evidence}}",
+    "sha256": "sha256 {{sha256}}",
+    "notRead": "not read",
+    "observedLabel_one": "Read by the platform in this planning turn ({{count}} file, with the sha256 the daemon reported):",
+    "observedLabel_other": "Read by the platform in this planning turn ({{count}} files, with the sha256 the daemon reported):",
+    "verify": "A claim is not a check: a path marked \"not read\" was not opened by the PO while planning. When nothing is left to build, the plan is one QA task that runs the tests to confirm it."
+  },
   "plannerFallback": {
     "title": "The planner's model did not answer; this is a generic plan.",
     "reasons": {

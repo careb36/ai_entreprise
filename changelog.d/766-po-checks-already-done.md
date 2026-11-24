@@ -1,0 +1,3 @@
+Added
+
+* **The PO checks the code for what is already done before it plans (issue #766).** Where it reads the project before its sprint plan, the PO is asked to check first whether each part of the objective already exists and to plan tasks only for what is missing. What it says is done is its claim (`already_done_claim`), kept apart from what the platform observed of its reads (`already_done_observed`: the files read with the daemon's sha256, and each claimed path it did not read flagged "not read"). A plan whose every part is claimed done is one QA task that verifies it with the tests. Both are recorded under the plan's `plan_id` and carried to the sprint's planning record; the plan preview shows them, labelled apart. Without reads, planning is unchanged.
