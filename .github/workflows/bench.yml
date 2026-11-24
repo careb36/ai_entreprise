@@ -231,6 +231,10 @@ jobs:
           # A proxy already running on the runner, preferred when set.
           PROXY_URL: ${{ vars.BENCH_LLM_URL }}
           # The names the proxy reads (llm-proxy/app.py, docker-compose.yml).
+          # DEEPSEEK_API_KEY is mandatory in this job; the optional provider
+          # keys are only forwarded to the container when the matching
+          # repository secret is set, so a missing key never reaches the
+          # proxy as an empty placeholder.
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
         run: |
@@ -253,8 +257,10 @@ jobs:
           fi
           docker build -q -t "llm-proxy-bench:$GITHUB_RUN_ID" llm-proxy >/dev/null
           # -e NAME passes the value from this step's environment, never on the command line.
+          provider_env=(-e DEEPSEEK_API_KEY)
+          [ -n "${QWEN_API_KEY:-}" ] && provider_env+=(-e QWEN_API_KEY)
           docker run -d --name "llm-proxy-bench-$GITHUB_RUN_ID" -p "127.0.0.1::5100" \
-            -e DEEPSEEK_API_KEY -e QWEN_API_KEY \
+            "${provider_env[@]}" \
             -e PROXY_PORT=5100 -e OTEL_SDK_DISABLED=true \
             "llm-proxy-bench:$GITHUB_RUN_ID" >/dev/null
           port="$(docker port "llm-proxy-bench-$GITHUB_RUN_ID" 5100/tcp | head -1 | sed 's/.*://')"
