@@ -26,6 +26,7 @@ from services.evidence import (
     sources,
     standards,
     test_baseline,
+    tests_removed,
     unwritten_code,
     wstg_tests,
 )
@@ -528,9 +529,16 @@ def verify_agent_run(
         except protected_check.ProtectedListUnavailable as exc:
             guard = protected_check.unavailable(str(exc))
         checks.append(guard)
+    # Test definitions the delivery removed and added back nowhere, counted
+    # from the daemon's diffs (``tests_removed``): a person decides.
+    lost_tests = tests_removed.check(evidence)
+    if lost_tests:
+        checks.append(lost_tests)
     tier_check = check_risk_tier(run, evidence, protected)
     if guard is not None and guard["outcome"] == VERDICT_UNVERIFIABLE:
         tier_check = risk.held_for_a_person(tier_check, protected_check.UNAVAILABLE)
+    if reason := tests_removed.hold_reason(lost_tests):
+        tier_check = risk.held_for_a_person(tier_check, reason, tests_removed.HOLD_AREA)
     checks.append(tier_check)
     # What the delivery had to show, whatever ran (``required_checks``): a
     # required check that did not run is unverifiable, never a silent pass.

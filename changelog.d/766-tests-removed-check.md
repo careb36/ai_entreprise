@@ -1,0 +1,3 @@
+Added
+
+* **The Verifier counts the tests a delivery removed (issue #766).** A new `tests_removed` check reads the daemon's diff of every test file a delivery wrote or deleted (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`) and counts the test definitions on its removed and added lines, over the whole delivery. A test name removed and not added back anywhere raises the risk tier to `high`, so a person decides; a test moved to another file of the same delivery passes, and a test file with no diff to count is unverifiable. The daemon's report of a deleted file now carries the diff of the bytes it removed. In sprint 6 a Developer had emptied a 642-line test file and rewritten two others from memory, and nothing counted the tests that went.
