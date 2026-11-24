@@ -100,7 +100,11 @@ because only the backend seals audit rows.
 `sprint_planner.py` makes the foundation, execution and self-improvement
 plans and re-exports the names of `sprint_prompts.py` (templates),
 `sprint_context.py` (roster, stack summary) and `sprint_fallbacks.py`
-(deterministic plans). `objective_text.py` reads an objective's explicit items
+(deterministic plans). The execution and self-improvement plans ask the PO
+for each task's `depends_on` (the titles of the tasks done first) and read it
+as `spec_planning.py` does, through `sprint_planner.with_dependencies`: by
+title or position, unknown ones and self dropped, a cycle broken; `start_sprint`
+then holds a task until those are done. `objective_text.py` reads an objective's explicit items
 without a model; `planner_fallback.py` records why a plan fell back
 (`no_model`, `model_error`, `unparseable`…).
 

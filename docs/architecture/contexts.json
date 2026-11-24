@@ -778,6 +778,9 @@
       "test_events.py": [
         "tasks"
       ],
+      "test_execution_plan_dependencies.py": [
+        "release"
+      ],
       "test_factories.py": [
         "platform"
       ],

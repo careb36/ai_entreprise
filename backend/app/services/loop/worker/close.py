@@ -128,8 +128,12 @@ def _plan_follow_up(
 def _add_follow_up_tasks(
     session: Session, next_sprint: Sprint, tasks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """One backlog item and one ``task.assign`` outbox event per planned task."""
+    """One backlog item per planned task; a ``task.assign`` outbox event for
+    each one that waits for nothing. A task with ``depends_on`` (positions in
+    *tasks*, ``sprint_planner.with_dependencies``) waits until those are done,
+    as in ``start_sprint`` (``services/tasks/dependencies.py``)."""
     backlog_payloads: list[dict[str, Any]] = []
+    rows: list[BacklogItem] = []
     for task in tasks:
         backlog_item = BacklogItem(
             sprint_id=next_sprint.id,
@@ -140,8 +144,19 @@ def _add_follow_up_tasks(
         )
         session.add(backlog_item)
         session.flush()
+        rows.append(backlog_item)
         backlog_payloads.append(task)
-
+    for task, backlog_item in zip(tasks, rows, strict=True):
+        deps = [
+            rows[p]
+            for p in task.get("depends_on") or []
+            if isinstance(p, int) and 0 <= p < len(rows) and rows[p] is not backlog_item
+        ]
+        if deps:
+            backlog_item.depends_on = [d.id for d in deps]
+            dependencies.note(session, backlog_item, dependencies.waiting_note(deps))
+            session.add(backlog_item)
+            continue
         session.add(
             OutboxEvent(
                 aggregate_type="backlog_item",
