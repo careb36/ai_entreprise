@@ -49,6 +49,7 @@ Trust boundaries:
 9. **Backend ↔ Slack and Teams:** forged or replayed interactions (`docs/archive/design/CHAT_APPROVALS.md`).
 10. **Local software ↔ the desktop app's local server:** DNS rebinding, cross-origin calls (`docs/archive/design/SESSIONS.md`).
 11. **Backend ↔ timestamping authority and customer anchors:** an insider re-signing the audit chain (`docs/archive/design/AUDIT_ANCHORS.md`).
+12. **An owner action's job ↔ the API, in-process:** a background job acts as the Owner who started it without a token, through an `InProcessPrincipal` in the ASGI scope that a request cannot forge and that holds only while the run is live; only catalogue code with typed parameters runs, a signed-in Owner starts it after a confirmation, and start, cancel and finish are audited (`docs/design/owner-actions.md`, B15).
 
 Frameworks: OWASP Top 10 for LLM Applications, OWASP ASVS 4.0, NIST SSDF.
 The generated threat model is `docs/threat_model.md`.

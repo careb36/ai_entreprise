@@ -60,6 +60,7 @@ from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.model_settings import router as model_settings_router
 from routers.notifications import router as notifications_router
+from routers.owner_actions import router as owner_actions_router
 from routers.person_sections import router as person_sections_router
 from routers.procedures import router as procedures_router
 from routers.protected_paths import router as protected_paths_router
@@ -208,6 +209,7 @@ app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)
 app.include_router(inbox_router)
+app.include_router(owner_actions_router)
 app.include_router(intake_router)
 app.include_router(integration_router)
 app.include_router(integration_reviews_router)

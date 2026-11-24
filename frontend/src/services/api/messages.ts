@@ -74,6 +74,8 @@ export interface InboxBlockedTask {
   frozen: boolean
   /** Approved by QA but high risk: waits for a person to accept it (mark it done) or send it back. */
   risk_hold?: boolean
+  /** A step only the Owner takes that the app can run (issue #701): the action's name. */
+  owner_action?: string | null
   updated_at: string | null
 }
 
@@ -95,6 +97,8 @@ export interface Inbox {
   intake_pending?: number
   /** Sprints whose work waits for the company's run window (issue #736): shown, not counted in `total`. */
   run_window_waiting?: { sprint_id: number; sprint_name: string; until: string; until_local: string; timezone: string }[]
+  /** What the Owner can run from the app (issue #701): listed for an Owner only, not counted in `total`. */
+  owner_actions?: { name: string; issue: number }[]
   total: number
 }
 
