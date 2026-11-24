@@ -11,6 +11,9 @@ specification, and the team it suggests for the request.
   when the planner's model did not answer usably, the reason as observed and
   a ``plan_id`` the backend recorded (``services/planning/planner_fallback.py``);
   ``start_sprint`` with that ``plan_id`` records it on the sprint.
+- ``already_done_claim`` (what the PO says is already done) and
+  ``already_done_observed`` (what the backend observed of its reads), kept
+  apart and recorded under the same ``plan_id`` (``already_done``).
 - ``GET``/``PUT /v1/companies/{id}/team_selection`` (Viewer / Manager): how a
   sprint's team is chosen, ``suggested`` (the default) or ``automatic``.
 
@@ -29,7 +32,12 @@ from schemas import (
     SelfImprovementSprintRequest,
     SprintPlanRequest,
 )
-from services.planning import planner_fallback, spec_planning, sprint_team
+from services.planning import (
+    already_done,
+    planner_fallback,
+    spec_planning,
+    sprint_team,
+)
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -91,15 +99,22 @@ def _serialize_plan_response(
         "plan_id": plan.get("plan_id"),
         # Items of the objective the scope left out of a fallback plan.
         "unplanned_items": plan.get("unplanned_items", []),
+        # What the PO says is already done (its claim), apart from what the
+        # backend observed of its reads (``services/planning/already_done.py``).
+        "already_done_claim": plan.get("already_done_claim"),
+        "already_done_observed": plan.get("already_done_observed"),
     }
 
 
 def _recorded(session: Session, company_id: int, kind: str, plan: dict) -> dict:
-    """*plan* with the ``plan_id`` of its fallback record, when it fell back."""
-    fallback = plan.get("planner_fallback")
+    """*plan* with the ``plan_id`` of its records: its fallback, when it fell
+    back, and the PO's already-done claim with its observed reads."""
+    fallback = planner_fallback.record_plan(
+        session, company_id, kind, plan.get("planner_fallback")
+    )
     return {
         **plan,
-        "plan_id": planner_fallback.record_plan(session, company_id, kind, fallback),
+        "plan_id": already_done.record_plan(session, company_id, kind, plan, fallback),
     }
 
 

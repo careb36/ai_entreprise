@@ -12,7 +12,12 @@ the LangGraph graph is only an optional kickoff conversation.
    with the read-only workspace tools for `PLANNING_TOOL_ROUNDS` rounds
    (`services/planning/planning_reads.py`; each call an observation on its
    turn, the plan's `planning_reads`; without a daemon or project path, one
-   plain call). The objective the person wrote is
+   plain call). With the reads the PO checks first what is already done and
+   plans tasks only for what is missing: its `already_done_claim` stays apart
+   from the files it read (`already_done_observed`, with the daemon's sha256,
+   a claimed path it did not read flagged), and a plan with every part
+   claimed done is one QA task that verifies it with the tests
+   (`services/planning/already_done.py`). The objective the person wrote is
    never cut: the plan carries it whole as `objective`, apart from the
    model's one-line `goal`, and `start_sprint` stores it as
    `Sprint.objective` (TEXT, migration `0056`). When the planner's model does

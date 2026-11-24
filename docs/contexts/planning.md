@@ -9,7 +9,7 @@ it never runs a task. Read this before changing
 - **Folder:** `backend/app/services/planning/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md).
 - **Interface:** `arch_author`, `arch_check`, `document_approval`, `spec_check`, `spec_planning`, `sprint_planner`, `sprint_team`, `stack_detection`.
-- **Modules:** `adr_docs`, `arch_author`, `arch_check`, `arch_versions`, `company_standards_import`, `discovery_service`, `discovery_team`, `document_approval`, `intake_queue`, `intake_records`, `objective_text`, `planner_fallback`, `planning_reads`, `project_docs/`, `project_docs/c4`, `project_docs/c4_code`, `project_docs/checks`, `project_docs/closure`, `project_docs/collect`, `project_docs/collect_checks`, `project_docs/collect_code`, `project_docs/collect_plans`, `project_docs/collect_release`, `project_docs/collect_stakeholders`, `project_docs/collect_status`, `project_docs/collect_transition`, `project_docs/comms_docs`, `project_docs/control_docs`, `project_docs/domain_checks`, `project_docs/export`, `project_docs/export_docx`, `project_docs/export_markdown`, `project_docs/export_pdf`, `project_docs/final_docs`, `project_docs/iterations`, `project_docs/layout`, `project_docs/log_docs`, `project_docs/pack`, `project_docs/pack_manifest`, `project_docs/performance`, `project_docs/plan_checks`, `project_docs/quality_docs`, `project_docs/refs`, `project_docs/release_docs`, `project_docs/sanitize`, `project_docs/scope_docs`, `project_docs/security_docs`, `project_docs/specs`, `project_docs/stakeholder_docs`, `project_docs/statements`, `project_docs/status_docs`, `project_docs/texts`, `project_docs/texts_checks_en`, `project_docs/texts_checks_es`, `project_docs/texts_en`, `project_docs/texts_es`, `project_docs/texts_final_en`, `project_docs/texts_final_es`, `project_docs/texts_plans_en`, `project_docs/texts_plans_es`, `project_docs/texts_release_en`, `project_docs/texts_release_es`, `project_docs/texts_stakeholders_en`, `project_docs/texts_stakeholders_es`, `project_docs/texts_status_en`, `project_docs/texts_status_es`, `project_docs/texts_transition_en`, `project_docs/texts_transition_es`, `project_docs/texts_wstg_en`, `project_docs/texts_wstg_es`, `project_docs/transition`, `project_docs/transition_docs`, `project_docs/wstg_status`, `spec_author`, `spec_check`, `spec_diff`, `spec_impact`, `spec_planning`, `sprint_context`, `sprint_fallbacks`, `sprint_planner`, `sprint_prompts`, `sprint_team`, `stack_detection`, `wstg_plan`
+- **Modules:** `adr_docs`, `already_done`, `arch_author`, `arch_check`, `arch_versions`, `company_standards_import`, `discovery_service`, `discovery_team`, `document_approval`, `intake_queue`, `intake_records`, `objective_text`, `planner_fallback`, `planning_reads`, `project_docs/`, `project_docs/c4`, `project_docs/c4_code`, `project_docs/checks`, `project_docs/closure`, `project_docs/collect`, `project_docs/collect_checks`, `project_docs/collect_code`, `project_docs/collect_plans`, `project_docs/collect_release`, `project_docs/collect_stakeholders`, `project_docs/collect_status`, `project_docs/collect_transition`, `project_docs/comms_docs`, `project_docs/control_docs`, `project_docs/domain_checks`, `project_docs/export`, `project_docs/export_docx`, `project_docs/export_markdown`, `project_docs/export_pdf`, `project_docs/final_docs`, `project_docs/iterations`, `project_docs/layout`, `project_docs/log_docs`, `project_docs/pack`, `project_docs/pack_manifest`, `project_docs/performance`, `project_docs/plan_checks`, `project_docs/quality_docs`, `project_docs/refs`, `project_docs/release_docs`, `project_docs/sanitize`, `project_docs/scope_docs`, `project_docs/security_docs`, `project_docs/specs`, `project_docs/stakeholder_docs`, `project_docs/statements`, `project_docs/status_docs`, `project_docs/texts`, `project_docs/texts_checks_en`, `project_docs/texts_checks_es`, `project_docs/texts_en`, `project_docs/texts_es`, `project_docs/texts_final_en`, `project_docs/texts_final_es`, `project_docs/texts_plans_en`, `project_docs/texts_plans_es`, `project_docs/texts_release_en`, `project_docs/texts_release_es`, `project_docs/texts_stakeholders_en`, `project_docs/texts_stakeholders_es`, `project_docs/texts_status_en`, `project_docs/texts_status_es`, `project_docs/texts_transition_en`, `project_docs/texts_transition_es`, `project_docs/texts_wstg_en`, `project_docs/texts_wstg_es`, `project_docs/transition`, `project_docs/transition_docs`, `project_docs/wstg_status`, `spec_author`, `spec_check`, `spec_diff`, `spec_impact`, `spec_planning`, `sprint_context`, `sprint_fallbacks`, `sprint_planner`, `sprint_prompts`, `sprint_team`, `stack_detection`, `wstg_plan`
 
 ## How it works
 
@@ -115,6 +115,31 @@ after the reads: today's single call. The reads also offer read-only Git
 `board__evidence`, `board`): scoped to the company's board (any task of the
 company, never another's), read by `tasks/task_records`, off with
 `BOARD_TOOLS_ENABLED`, and never without the reads.
+
+### The PO checks what is already done
+
+`already_done.py` (owner, 2026-11-24: sprint 8 planned four tasks for an
+issue whose option, tests and docs were already on main). Beside the reads,
+the PO is asked to check first whether each part of the objective already
+exists (search the named flags, functions and files, read them and their
+tests), to plan tasks only for what is missing, and to name what is done in
+an optional `already_done` key (`part`, `evidence`, `paths`). The plan keeps
+two fields, never one: `already_done_claim` (the PO's words, paths it named
+or path-like words of its evidence) and `already_done_observed` (from the
+reads' observations: `files_read` with the sha256 the daemon reported, or the
+backend hashed for `git show_base`; `searches`; and `claimed_paths`, per
+claimed path whether the PO read it in this planning turn, `read: false`
+being "not read"). When the PO claims parts done and plans no task, the plan
+is one QA task, "Verify that <objective> is already met: run the tests that
+cover it and check each criterion", depending on nothing; with a claim, one
+task left is a plan (not `too_few_tasks`). Without reads (no daemon, no root,
+0 rounds) the PO is not asked and a claim in its answer is ignored. The
+plan endpoints record both under the plan's ref (`plan:<company>:<plan_id>`,
+action `already_done_claim`: the claim in `result`, the observations in
+`details`), sharing the `plan_id` of a fallback record; `start_sprint` with
+that `plan_id` copies the row to `sprint:<id>:planning`, which records no
+work. The `Sprint` row has no column for plan metadata. The specification
+plan (`spec_planning`) has no reads, so it is not asked.
 
 ### The intake queue
 

@@ -1081,6 +1081,9 @@
       "test_playwright_pin.py": [
         "workspace"
       ],
+      "test_po_already_done.py": [
+        "loop"
+      ],
       "test_procedures.py": [
         "loop"
       ],

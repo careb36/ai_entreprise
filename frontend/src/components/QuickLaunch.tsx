@@ -17,6 +17,7 @@ import { useSpecifications } from '../services/specifications'
 import { SprintTeamChips, SprintTeamPicker } from './SprintTeam'
 import { planFitsTeam, sameTeam, useRoleLabel } from '../lib/sprintTeam'
 import { ObjectiveText, PlannerFallbackNote } from './PlannerFallback'
+import { AlreadyDoneNote } from './AlreadyDoneNote'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -376,6 +377,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
             onRetry={planSource === 'autonomous' ? generateAutonomousPlan : generatePlan}
             busy={busy}
           />
+          <AlreadyDoneNote claim={plannedSprint.already_done_claim} observed={plannedSprint.already_done_observed} />
 
           <p className="text-xs text-gray-400 line-clamp-3 whitespace-pre-wrap">{plannedSprint.goal}</p>
           {plannedSprint.objective && <ObjectiveText objective={plannedSprint.objective} />}

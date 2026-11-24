@@ -280,14 +280,17 @@ def _plan_with_po(
     A task that needs the workspace tools never stays with a role without them
     (``sprint_team.fit_tasks``). The PO may read the project first through the
     read-only tools (``planning_reads``); the observations of its reads are
-    the plan's ``planning_reads``.
+    the plan's ``planning_reads``. With the reads, what the PO says is
+    already done is the plan's ``already_done_claim``, apart from what the
+    backend observed of its reads (``already_done_observed``); a plan whose
+    every part is claimed done is one QA verification task (``already_done``).
 
     The plan carries ``objective`` (what the person wrote, never cut) apart
     from the model's ``goal``, and ``planner_fallback``: None when the model
     answered usably, else ``{"reason", "detail"}`` as the backend observed it
     (``no_model``, ``model_error``, ``unparseable``, ``too_few_tasks``,
     ``unexpected_error``)."""
-    from services.planning import planning_reads, sprint_team
+    from services.planning import already_done, planning_reads, sprint_team
 
     everyone = _ensure_execution_team(agents)
     po = _find_po_agent(everyone)
@@ -299,6 +302,7 @@ def _plan_with_po(
     roster = sprint_team.team_agents(everyone, team) or everyone
     parsed: Any = None
     reads: list[dict[str, Any]] = []  # The PO's reads, as the backend observed them.
+    claim: list[dict[str, Any]] = []  # What the PO says is already done: a claim.
 
     def finish(plan: dict[str, Any]) -> dict[str, Any]:
         plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], available_roles)
@@ -311,7 +315,14 @@ def _plan_with_po(
             "suggested_team": suggested,
             "team_reasons": reasons,
             "planning_reads": list(reads),
-        }
+        } | (
+            {
+                "already_done_claim": claim,
+                "already_done_observed": already_done.observed(reads, claim),
+            }
+            if claim
+            else {}
+        )
 
     def fell_back(reason: str, detail: str) -> dict[str, Any]:
         """The deterministic plan, with why the backend saw no usable answer."""
@@ -344,7 +355,7 @@ def _plan_with_po(
     )
     raw = ""
     try:
-        result, observed = planning_reads.answer(
+        result, observed, offered = planning_reads.answer(
             _client(po), prompt, po_model, po.get("company_id")
         )
         reads.extend(observed)
@@ -358,6 +369,8 @@ def _plan_with_po(
         if cleaned.endswith("```"):
             cleaned = cleaned.rsplit("```", 1)[0]
         parsed = json.loads(cleaned.strip())
+        # Asked only beside the reads; without them, today's plan, no claim.
+        claim.extend(already_done.claim_of(parsed) if offered else [])
         valid_roles = set(available_roles)
         validated = []
         originals: list[str] = []  # the PO's titles as given, for depends_on
@@ -381,7 +394,9 @@ def _plan_with_po(
         validated = with_dependencies(
             validated[:item_limit], originals, named[:item_limit]
         )
-        if len(validated) < 2:
+        if claim and not validated:  # Every part claimed done: tests confirm it.
+            validated = [already_done.verification_task(objective, claim)]
+        if len(validated) < (1 if claim else 2):
             return fell_back(
                 "too_few_tasks",
                 f"The answer held {len(validated)} usable task(s); a plan needs 2.",

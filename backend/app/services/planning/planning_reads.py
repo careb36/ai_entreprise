@@ -18,10 +18,13 @@ off with ``BOARD_TOOLS_ENABLED``.
 Each reading round is an audit turn (``ACTION_PLAN_READ``) and the final
 answer's turn carries every call's observation (``tool_calls``): what the
 PO says it read is a claim, the observations are the backend's. The answer
-keeps today's form and parser. Without a toolbox (rounds 0, no daemon or
+keeps today's form and parser, with one optional key: with the reads the PO
+is asked to check first what is already done (``already_done.NOTE``) and to
+name it in ``already_done``. Without a toolbox (rounds 0, no daemon or
 root, or a call made on an event loop, where a daemon request from here
 would wait on that same loop) and when the loop's answer failed or came
-back empty, the plan is today's single call.
+back empty, the plan is today's single call; ``answer`` says whether the
+reads were offered, so a claim is kept only where it was asked for.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from database import engine
 from logging_config import logger
 
 from services.contracts import roles, tool_steps
+from services.planning import already_done
 from services.platform.orchestration_metrics import ACTION_PLAN_READ, record_agent_turn
 from services.tasks import task_records
 from services.tools import board_tools, mcp_tools, review_tools
@@ -87,12 +91,13 @@ def _content(result: Any) -> str:
 
 def answer(
     client: Any, prompt: str, model: str, company_id: int | None
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The PO's answer to the planning *prompt* and the observations of its reads."""
+) -> tuple[dict[str, Any], list[dict[str, Any]], bool]:
+    """The PO's answer to the planning *prompt*, the observations of its
+    reads, and whether the reads (and the already-done check) were offered."""
     messages = [{"role": "user", "content": prompt}]
     box = toolbox(company_id)
     if box is None:
-        return client.chat(messages=messages, model=model, role=roles.PO), []
+        return client.chat(messages=messages, model=model, role=roles.PO), [], False
     agent = {"role": roles.PO, "name": roles.PO}
 
     def record(result: dict[str, Any], preview: str, calls: Any = None) -> None:
@@ -107,7 +112,7 @@ def answer(
             tool_calls=calls,
         )
 
-    note = READ_NOTE.format(rounds=box.max_rounds)
+    note = READ_NOTE.format(rounds=box.max_rounds) + already_done.NOTE
     if board_tools.has_board(box):  # The record tools, said once.
         note += " " + board_tools.NOTE
     try:
@@ -129,5 +134,5 @@ def answer(
         record(result, f"plan after {len(reads)} read(s)", reads)
     if not _content(result).strip():
         logger.info("The PO's plan after its reads was unusable; asking once more")
-        return client.chat(messages=messages, model=model, role=roles.PO), reads
-    return result, reads
+        return client.chat(messages=messages, model=model, role=roles.PO), reads, True
+    return result, reads, True
