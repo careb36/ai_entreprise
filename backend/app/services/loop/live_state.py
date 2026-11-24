@@ -28,7 +28,7 @@ from models.progress import SprintProgressSnapshot
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, func, select
 
-from services.loop import daemon_gate, in_flight, preconditions
+from services.loop import daemon_gate, in_flight, platform_hold, preconditions
 from services.platform import locks
 from services.tasks import task_events, task_projection
 from services.workspace import daemon_liveness
@@ -44,7 +44,8 @@ NOT_AGENTS = (task_events.SYSTEM, task_events.GATE, task_events.PERSON)
 # Why a sprint is paused, by the start of the reason its pauser wrote
 # (``sprint_control.credit_reason``, ``sprint_close.nothing_done_reason``,
 # ``sprint_budget.reason_reached`` and ``reason_unknown``,
-# ``preconditions.pause_reason``, ``daemon_gate.REASON``).
+# ``preconditions.pause_reason``, ``daemon_gate.REASON``,
+# ``platform_hold.reason``).
 _PAUSE_PREFIXES = (
     ("No credit at ", "no_credit"),
     ("No task of this sprint is done", "nothing_done"),
@@ -52,12 +53,14 @@ _PAUSE_PREFIXES = (
     ("The sprint has a ", "budget"),
     (preconditions.PAUSE_PREFIX, "acknowledgement"),
     (daemon_gate.REASON[:40], "daemon"),
+    (platform_hold.REASON_PREFIX, "tests_not_found"),
 )
 
 
 def pause_kind(status: str | None, reason: str | None) -> str | None:
     """``person`` (a Manager paused it), ``no_credit``, ``nothing_done``,
-    ``budget``, ``acknowledgement``, ``daemon`` or ``other``; ``None`` when
+    ``budget``, ``acknowledgement``, ``daemon``, ``tests_not_found`` or
+    ``other``; ``None`` when
     the sprint is not paused."""
     if status != "paused":
         return None

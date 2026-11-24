@@ -171,7 +171,11 @@ the LangGraph graph is only an optional kickoff conversation.
    guarded files are its lineage's (`acceptance.branch_lineage`), a sibling
    task's test file is guarded only when it is on the branch's disk, one that
    is not is recorded in `acceptance.not_on_branch` and neither restored nor
-   run, and the sprint's integration runs the whole suite (#329
+   run, and one the branch holds in the base's earlier version, which the
+   delivery did not write (the daemon's report of its writes and tool edits),
+   is recorded in `acceptance.base_version`, never restored and never an edit
+   (run 2 of the self-hosting owner action refuted a task that never touched
+   it), and the sprint's integration runs the whole suite (#329
    retrospective). `services/evidence/criteria_tests.py`
    holds the reading of the runner's output and the two checks. The same
    output is read for tests named after an OWASP WSTG test
@@ -212,7 +216,14 @@ the LangGraph graph is only an optional kickoff conversation.
    the base already had, is the regression case.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
-   `APPROVED:` closes the task. The Verifier also records a `risk_tier` check
+   `APPROVED:` closes the task. A test run that found no tests (pytest exit 5,
+   exit 4 for a path that does not exist, jest's or vitest's "no tests found";
+   `services/evidence/test_collection.py`) is not a failed test run: `tests_run`
+   is unverifiable with the reason "the test command found no tests at <path>",
+   the gate names it `test command found no tests`, and the task is blocked for
+   a person with no rework spent and no retry; once every delivery of the
+   sprint is held for it, the sprint pauses with the reason
+   (`services/loop/platform_hold.py`), as for an absent daemon. The Verifier also records a `risk_tier` check
    (`services/evidence/risk.py`: high for authentication, secrets, payments or the CI
    pipeline, medium for shell scripts, migrations, dependency manifests or
    container files, from the paths the daemon wrote and the producer declared;

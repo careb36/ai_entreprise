@@ -2323,6 +2323,10 @@
         "title": "Pausado: el daemon del workspace no responde",
         "action": "Iniciá el daemon en la computadora que tiene los proyectos y reanudá el sprint."
       },
+      "tests_not_found": {
+        "title": "Pausado: el comando de tests no encontró tests",
+        "action": "Corregí el comando de tests de la empresa (perfil de stack) o dónde están los tests, devolvé a trabajo las tareas retenidas y reanudá el sprint."
+      },
       "other": {
         "title": "Este sprint está pausado",
         "action": "Leé el motivo registrado abajo y reanudá el sprint."

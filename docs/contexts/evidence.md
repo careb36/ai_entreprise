@@ -8,7 +8,7 @@ module's docstring has the detail.
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
 - **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_snippets`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_links`, `doc_snippets`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `metric_matches`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `changelog_diff`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_links`, `doc_snippets`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `metric_matches`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `test_collection`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -58,6 +58,21 @@ tests fail, the observation the task goes back with lists the failing tests
 (at most 20, then `(and N more)`), the criteria results when recorded, and the
 end of the output. Every part comes from the daemon's reply. A run that named
 no test keeps the old wording `<command> exited <code>: <tail>`.
+
+A test command that found no tests is not a failed test run
+(`test_collection.py`): from the daemon's exit status and output, pytest's
+exit 5 (no tests collected), its exit 4 when a path it was given does not
+exist (`file or directory not found`) or the command line was refused, and
+jest's `No tests found` or vitest's `No test files found`, make `tests_run`
+`unverifiable` with `cause: "no_tests"` and the reason "the test command found
+no tests at <path>" (the command's paths, under the suite's folder for a
+folder's suite, which `required_commands` marks unverifiable too). Exit 4 for
+a `conftest.py` that does not import stays the code's. The gate returns it
+first, as `TESTS_NOT_FOUND`, one of `PLATFORM_PROBLEMS`: never a code rework
+(`CODE_PROBLEMS`). The loop holds the task for a person
+(`loop/platform_hold.py`). In the self-hosting owner action's run 2
+(2026-11-24) the root command looked in `tests` while the plan's tests were in
+`backend/tests`, and every delivery was sent back as "tests failed".
 
 Without Git the tasks share one folder, so `test_baseline.explain` excuses a
 failing test that already failed in the folder's latest run for another task

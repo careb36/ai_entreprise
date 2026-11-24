@@ -1122,6 +1122,10 @@
       "test_plans_see_repo_and_tools.py": [
         "loop"
       ],
+      "test_platform_hold.py": [
+        "evidence",
+        "loop"
+      ],
       "test_playwright_pin.py": [
         "workspace"
       ],
@@ -1581,6 +1585,9 @@
       ],
       "test_one_rework_budget.py": [
         "loop"
+      ],
+      "test_tests_not_found.py": [
+        "evidence"
       ],
       "test_tests_on.py": [
         "evidence",

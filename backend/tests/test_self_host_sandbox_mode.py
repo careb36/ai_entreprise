@@ -204,15 +204,46 @@ def test_no_sprint_is_not_observed(tmp_path, monkeypatch, capsys):
     )
 
 
-def test_container_mode_configures_the_run_as_the_e2e_container_job_does():
+def _runs(profile: dict, path: str) -> bool:
+    """Whether a delivery that writes the test *path* gets it run: a folder's
+    suite over its ``tests``, or the root command over a path it names."""
+    for name, folder in (profile.get("folders") or {}).items():
+        if path.startswith(f"{name}/") and " tests" in (folder.get("test") or ""):
+            return path.startswith(f"{name}/tests/")
+    root = (profile.get("test") or "").split()
+    return any(
+        path.startswith(f"{a.rstrip('/')}/") for a in root if not a.startswith("-")
+    )
+
+
+def test_container_mode_runs_the_tests_where_the_plan_puts_them():
+    """Run 2 (2026-11-24): container mode forced the root command over
+    ``tests`` while the plan's tests went to ``backend/tests``; every delivery
+    found no tests. Container mode now keeps the folders' suites."""
     parser = self_host.argparse.ArgumentParser()
     sandbox_mode.add_arguments(parser)
     parser.add_argument("--steps", default="all")
     args = parser.parse_args(["--container-mode"])
     steps = sandbox_mode.apply(parser, args, self_host.STEPS)
-    assert (args.sandbox, args.profile) == ("container", "sprint-tests")
-    # The image's own python, as scripts/e2e/run.sh's TEST_COMMAND in container mode.
-    assert args.test_command == "python -m pytest -q -p no:cacheprovider tests"
+    assert (args.sandbox, args.profile) == ("container", "folders")
+    profile = self_host.company_profile(args.profile, args.test_command)
+    for planned in (
+        "backend/tests/test_saved_view_filters.py",  # run 2, task 38
+        "backend/tests/test_task_view_filter.py",  # run 2, task 39
+    ):
+        assert _runs(profile, planned), planned
+    root_only = self_host.company_profile("sprint-tests", args.test_command)
+    assert not _runs(root_only, "backend/tests/test_task_view_filter.py")
+    # The e2e names sprint-tests itself: the image's own python over tests/.
+    e2e = parser.parse_args(["--container-mode", "--profile", "sprint-tests"])
+    sandbox_mode.apply(parser, e2e, self_host.STEPS)
+    assert (e2e.profile, e2e.test_command) == (
+        "sprint-tests",
+        "python -m pytest -q -p no:cacheprovider tests",
+    )
+    assert _runs(
+        self_host.company_profile(e2e.profile, e2e.test_command), "tests/test_a.py"
+    )
     assert steps.index("sandbox") == steps.index("wait") + 1
     named = parser.parse_args(["--container-mode", "--steps", "issue,wait,review"])
     assert sandbox_mode.apply(parser, named, self_host.STEPS) == (

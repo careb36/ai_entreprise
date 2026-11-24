@@ -129,11 +129,13 @@
 /backend/tests/test_mcp_tools.py                 @careb36
 /backend/tests/test_metric_matches.py            @careb36
 /backend/tests/test_output_tail.py               @careb36
+/backend/tests/test_platform_hold.py             @careb36
 /backend/tests/test_qa_review_reads.py           @careb36
 /backend/tests/test_required_checks.py           @careb36
 /backend/tests/test_review_changes.py            @careb36
 /backend/tests/test_risk_tier.py                 @careb36
 /backend/tests/test_roles.py                     @careb36
+/backend/tests/test_tests_not_found.py           @careb36
 /backend/tests/test_tests_on.py                  @careb36
 /backend/tests/test_tests_removed.py             @careb36
 /backend/tests/test_sandbox.py                   @careb36

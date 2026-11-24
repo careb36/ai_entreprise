@@ -27,6 +27,7 @@ from services.evidence import (
     metric_matches,
     security_probe,
     standards,
+    test_collection,
 )
 
 _TASK_WORKER = "le-fabrique-task-worker"
@@ -55,6 +56,12 @@ _GATE_PROBLEMS = {
     metric_matches.CHECK_THRESHOLD: "metric outside its declared threshold",
 }
 
+# The test command found no tests (``test_collection``): the company's
+# configuration, not the delivery. The loop holds the task for a person and
+# spends no rework on it (``services/loop/platform_hold.py``).
+TESTS_NOT_FOUND = "test command found no tests"
+PLATFORM_PROBLEMS = frozenset({TESTS_NOT_FOUND})
+
 # The problems the code itself caused: the Developer fixes the code.
 CODE_PROBLEMS = frozenset(
     {
@@ -78,7 +85,9 @@ def gate(engine: Engine, company_id: int, item_id: int) -> tuple[str, str] | Non
     an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
     test run that failed.  A delivery queued for an offline daemon returns
     ``DELIVERY_QUEUED``: the task waits, neither reviewed nor reworked, until
-    the daemon reports what it wrote.  Other checks — an unevidenced "tests pass" claim, a
+    the daemon reports what it wrote.  A test run that found no tests returns
+    ``TESTS_NOT_FOUND`` first, a platform problem (``PLATFORM_PROBLEMS``) the
+    loop holds for a person.  Other checks — an unevidenced "tests pass" claim, a
     test run that could not happen — are left to the evidence page, so an
     honest claim never forces a rework.
 
@@ -92,6 +101,13 @@ def gate(engine: Engine, company_id: int, item_id: int) -> tuple[str, str] | Non
     if (verification.evidence or {}).get("delivery_queued"):
         return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
     checks = list(verification.checks or [])
+    for check in checks:
+        # Before any other reason: no rework helps while no test can run.
+        if (
+            check.get("name") == "tests_run"
+            and check.get("cause") == test_collection.CAUSE
+        ):
+            return TESTS_NOT_FOUND, check.get("observation", "")
     # An edited acceptance test is the reason to give first: the tests that
     # then fail are QA's, restored.
     checks.sort(key=lambda c: c.get("name") != criteria_tests.CHECK_UNTOUCHED)

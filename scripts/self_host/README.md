@@ -62,14 +62,34 @@ The first run used the host (retrospective F8), and its report could not have
 said otherwise: `company.sandbox` is the mode the harness asked the company
 for, configuration rather than what ran. `--container-mode` runs the harness
 the way the e2e's `e2e (container)` job does (`E2E_SANDBOX=container
-scripts/e2e/run.sh`): the company's sandbox `container`, `--profile
-sprint-tests` with the sandbox image's own `python` (`python -m pytest -q -p
-no:cacheprovider tests`; `--profile` and `--test-command` still override), and
-the `sandbox` step after `wait`. The stack's side is the owner's, as in the
-e2e: `DELIVERY_SANDBOX=container` and `DELIVERY_SANDBOX_IMAGE` on the backend,
-and the image on the daemon's computer (the e2e builds `fabrique-e2e-sandbox:1`
-with `printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n'
-| docker build -t fabrique-e2e-sandbox:1 -`).
+scripts/e2e/run.sh`): the company's sandbox `container` and the `sandbox` step
+after `wait`. It keeps the stack profile `--profile` names, `folders` by
+default, so a delivery runs the suite of the folder the daemon saw it write
+in: the tests a real plan puts in `backend/tests` are the tests the Verifier
+runs, by construction. `--profile sprint-tests` (one root command, `python -m
+pytest -q -p no:cacheprovider tests` with the sandbox image's own `python`, or
+`--test-command`) fits only a plan that writes its tests under `tests/` at the
+root, as the e2e's fake model does; the e2e passes it itself. Until
+2026-11-24 container mode switched to `sprint-tests` on its own: in the owner
+action's run 2 (sprint 9 of company 3) the plan's tests were in
+`backend/tests`, every delivery's test run found no tests (pytest exit 4, `file
+or directory not found: tests`), and the run spent its 2M-token budget in 11
+minutes on reworks. The stack's side is the owner's: `DELIVERY_SANDBOX=container`
+on the backend, and on the daemon's computer the stack image the daemon
+builds from the snapshot's toolchains (`vscode-daemon/stack_image.py`: Python
+with Poetry and pytest, Node, git); the folders' installs fill the company's
+environment volume with the network `DELIVERY_INSTALL_NETWORK` allows. The e2e
+builds `fabrique-e2e-sandbox:1` with `printf 'FROM python:3.12-slim\nRUN pip
+install --no-cache-dir pytest\n' | docker build -t fabrique-e2e-sandbox:1 -`,
+enough for its root command.
+
+A test command that collects no test is never read as failed tests: the
+Verifier marks `tests_run` unverifiable (`cause: no_tests`, pytest exit 5, or
+exit 4 for a path that does not exist), the gate holds the task for a person
+without a rework, and when every delivery of the sprint is held for it the
+sprint pauses with the reason (`services/loop/platform_hold.py`), so a
+misconfigured run stops after its first delivery instead of spending its
+budget.
 
 The report's `sandbox` keeps `asked` (the company's setting) and `observed`
 (from the daemon's replies, `observed_by: daemon`) in separate fields:
