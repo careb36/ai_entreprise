@@ -211,9 +211,10 @@ off until the owner turns it on.
 
 - **Turning it on.** Set the repository variable `BENCH_REAL_MODELS` to
   `true`. Give the job the provider keys as repository secrets, under the
-  names the LLM proxy reads; a missing required key fails the job by name.
-  Or set the variable `BENCH_LLM_URL` to a proxy already running on the
-  runner.
+  names the LLM proxy reads. Only `DEEPSEEK_API_KEY` is required: without it
+  the job fails by name. `QWEN_API_KEY` is optional and reaches the proxy
+  only when its secret is set. Or set the variable `BENCH_LLM_URL` to a
+  proxy already running on the runner.
 - **Budget.** The repository variable `BENCH_TOKEN_BUDGET` (5000000 when
   unset: the six specs' DeepSeek arm used 2.79M on 2026-11-22, and a tight
   cap cuts the run and wastes what it spent) caps reported tokens for the run. Past it, the running sprint is
