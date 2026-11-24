@@ -60,6 +60,8 @@ RESULT_NEEDS_WORK = "NEEDS_WORK"
 
 ACTION_EXECUTE_TASK = "execute_task"
 ACTION_QA_REVIEW = "qa_review"
+# A round of QA's reads before its verdict: priced, never counted as a review.
+ACTION_QA_REVIEW_READ = "qa_review_read"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
 ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
 
@@ -470,7 +472,8 @@ def record_agent_turn(
     engine.  Failures are logged and swallowed so metrics never block work.
     Returns the persisted ``AuditLog`` row, or ``None`` when nothing was written.
     ``tool_calls`` are the backend's observations of the turn's tool calls,
-    kept apart from the model's text (the preview, a claim).
+    kept in ``details`` beside the measured usage and apart from the model's
+    text (``result.preview``, a claim).
     """
     try:
         from models import (
@@ -495,11 +498,11 @@ def record_agent_turn(
     # The input/output split, the estimate apart and the provider: what
     # ``run_cost`` prices the turn from (``token_usage``).
     details.update(usage_fields(llm_result))
+    if tool_calls:
+        details["tool_calls"] = tool_calls
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]
-    if tool_calls:
-        result_payload["tool_calls"] = tool_calls
 
     row = AuditLog(
         company_id=company_id,

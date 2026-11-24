@@ -7,8 +7,8 @@ code and the research tools. Read this before changing
 
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
-- **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `signature_lookup`, `workspace_edits`.
-- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
+- **Interface:** `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `workspace_edits`.
+- **Modules:** `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `test_commands`, `test_runs`, `tool_history`, `workspace_edits`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -103,6 +103,11 @@ written as text; the tool budget had run out".
   `repository_section` puts the tree and the map into the task prompt.
   `read_tools` offers the four read tools alone, to any role (the Architect's
   brief, `loop/worker/architect_brief`).
+- `review_tools.py`: QA's read-only toolbox (`list`, `read`, `search`,
+  `find_file`; never `edit`, `move`, `delete` or `run_tests`) on the
+  `workspace_root` the task's latest verification recorded, for
+  `QA_REVIEW_TOOL_ROUNDS` rounds before the verdict. No recorded delivery or
+  no daemon: no toolbox.
 - `developer_tool_schemas.py`: the schemas. `developer_tool_replies.py`: what
   the model sees, after SWE-agent's interface (a numbered window per read, a
   count instead of a silent cut). A read without `lines` asks the daemon for

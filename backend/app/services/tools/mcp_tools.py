@@ -349,12 +349,15 @@ def chat_with_tools(
     max_rounds: int | None = None,
     on_round: Callable[[dict[str, Any], list[dict[str, Any]]], None] | None = None,
     bu_id: int | None = None,
+    exhausted_note: str = ROUNDS_EXHAUSTED_NOTE,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The model's final answer and the observations of every tool call it made.
 
     Without a toolbox (or with one that found no tools) this is one plain
     ``client.chat`` call, as before. ``on_round`` sees each intermediate
     answer with the calls it made, so every round is recorded as a turn.
+    ``exhausted_note`` asks for the answer once the rounds are spent (QA's
+    review asks for its verdict, not a deliverable).
     """
     schemas = toolbox.schemas() if toolbox is not None else []
     billing = {"bu_id": bu_id} if bu_id else {}
@@ -396,6 +399,6 @@ def chat_with_tools(
                 }
             )
     tool_history.compress(history, results, rounds + 1, keep, budget)
-    history.append({"role": "user", "content": ROUNDS_EXHAUSTED_NOTE})
+    history.append({"role": "user", "content": exhausted_note})
     final = client.chat(messages=history, model=model, role=role, **billing)
     return loop_record(final, rounds, rounds, True), observations

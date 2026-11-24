@@ -269,6 +269,7 @@ Design: [`docs/design/rsi-loop.md`](design/rsi-loop.md). Both need the company t
 |---|---|---|
 | `DEVELOPER_TOOLS_ENABLED` | `true` | The Developer's workspace tools (list, read, search, run tests). |
 | `DEVELOPER_TOOL_ROUNDS` | `5` | Tool rounds before delivering. Ceiling 50. |
+| `QA_REVIEW_TOOL_ROUNDS` | `3` | QA's read-only tool rounds (list, read, search, find_file) on the delivery before its verdict. `0`: one call without tools. |
 | `DEVELOPER_MAX_OUTPUT_TOKENS` | `0` | Cap on the Developer's answer. `0`: the provider's default. Never above the model's limit. |
 | `MCP_MAX_TOOL_ROUNDS` | `6` | MCP tool rounds before the model must answer. |
 | `MCP_TOOL_TIMEOUT_SECONDS` | `60` | One MCP call. |

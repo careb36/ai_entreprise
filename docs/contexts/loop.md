@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `edit_plan`, `folder_baseline`, `foundation_setup`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_writes`, `worker/close`, `worker/deliver`, `worker/execute`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/wiki_section`.
 
 ## How it works
 
@@ -199,7 +199,7 @@ instead, stays readable by id, and an Owner may unarchive it.
   tools alone (`developer_tools.read_tools`: list, read, search, find_file on
   the task's root; no edit, move, delete or test run), for at most
   `ARCHITECT_TOOL_ROUNDS` rounds. Each call is an observation on its turns in
-  `audit_log` (`result.tool_calls`); the brief is a claim, and a tool call
+  `audit_log` (`details.tool_calls`); the brief is a claim, and a tool call
   typed as text is no brief. Without the daemon it is one plain call.
 
 ### Delivery and QA
@@ -235,6 +235,14 @@ instead, stays readable by id, and an Owner may unarchive it.
 - `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold
   for a person, and the one rework budget per task (`MAX_REWORKS`, or the
   company's `max_reworks`).
+- `worker/qa_review_reads`: before the verdict, QA may read the delivery with
+  the read-only workspace tools (`tools/review_tools`) through the Developer's
+  tool loop, for `QA_REVIEW_TOOL_ROUNDS` rounds. The verdict keeps the same
+  messages, client and parser; an answer without a verdict falls back to the
+  single tool-less call unchanged, and so does a review with no recorded
+  delivery or no daemon. Each reading round is a `qa_review_read` audit turn,
+  priced but outside the QA rate; the calls' observations go on the verdict's
+  turn (`tool_calls`).
 - `worker/messages`: hand-over messages (claims) and the ScrumMaster's triage of
   an escalation.
 

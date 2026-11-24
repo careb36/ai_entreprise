@@ -147,6 +147,7 @@
         "mcp_tools",
         "registry_lookup",
         "research_tools",
+        "review_tools",
         "signature_lookup",
         "workspace_edits"
       ],
@@ -1140,6 +1141,9 @@
       "test_proxy_connections.py": [
         "learning",
         "planning"
+      ],
+      "test_qa_review_reads.py": [
+        "loop"
       ],
       "test_quality_gate.py": [
         "loop"
