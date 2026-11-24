@@ -127,11 +127,12 @@ def test_a_removed_setting_in_the_environment_is_named_once_and_does_not_stop_st
     """The console assistants' settings were removed (issue #750); a .env that
     still sets one loads, and startup says it no longer does anything."""
     import config
+    from removed_settings import removed_settings_in_use
 
     monkeypatch.setenv("CONSOLE_ASSISTANTS_ENABLED", "true")
     monkeypatch.setenv("CLAUDE_CLI_COMMAND_TEMPLATE", "claude -p {prompt}")
     current = config.Settings()
-    warnings = config.removed_settings_in_use(current)
+    warnings = removed_settings_in_use(current)
     assert len(warnings) == 2
     assert all("no longer does anything" in w and "#750" in w for w in warnings)
     assert {w.split(" ")[0] for w in warnings} == {
@@ -140,7 +141,7 @@ def test_a_removed_setting_in_the_environment_is_named_once_and_does_not_stop_st
     }
     monkeypatch.delenv("CONSOLE_ASSISTANTS_ENABLED")
     monkeypatch.delenv("CLAUDE_CLI_COMMAND_TEMPLATE")
-    assert config.removed_settings_in_use(config.Settings()) == []
+    assert removed_settings_in_use(config.Settings()) == []
     # The console producers' quota cooldown is still read.
     assert isinstance(current.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES, int)
 
