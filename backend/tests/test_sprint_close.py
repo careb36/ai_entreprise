@@ -139,9 +139,36 @@ def test_a_blocked_task_settles_only_when_a_person_must_act(db, comments, settle
     assert db.get(Sprint, sprint.id).status == ("completed" if settled else "active")
 
 
-def test_a_sprint_with_every_task_blocked_still_closes(db):
+def test_a_sprint_with_every_task_blocked_pauses_instead_of_completing(db):
+    """Sprint 7 (2026-11-24) closed as completed with all four tasks blocked."""
     sprint = _sprint(db)
+    for _ in range(2):
+        _item(
+            db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}]
+        )
+
+    result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
+
+    db.expire_all()
+    paused = db.get(Sprint, sprint.id)
+    assert result["completed"] is False and result["reason"] == "paused_nothing_done"
+    assert paused.status == "paused"
+    assert "No task of this sprint is done and 2 wait" in paused.pause_reason
+
+
+def test_blocked_and_discarded_with_nothing_done_still_pause(db):
+    sprint = _sprint(db)
+    _item(db, sprint, "discarded")
     _item(db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}])
+
+    assert not worker_close._complete_sprint_and_plan_follow_up(sprint.id)["completed"]
+    db.expire_all()
+    assert db.get(Sprint, sprint.id).status == "paused"
+
+
+def test_only_discarded_tasks_complete_the_sprint(db):
+    sprint = _sprint(db)
+    _item(db, sprint, "discarded")
 
     assert worker_close._complete_sprint_and_plan_follow_up(sprint.id)["completed"]
 
@@ -359,7 +386,7 @@ def test_a_rejected_deliverable_goes_back_with_the_reason(llm, db, monkeypatch):
     )
 
 
-def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
+def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_pauses(
     llm, db, monkeypatch
 ):
     _short_answer(llm)
@@ -391,15 +418,15 @@ def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
     asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
     db.expire_all()
-    assert db.get(Sprint, sprint.id).status == "completed"
+    # Nothing done: the sprint pauses for a person instead of completing.
+    assert db.get(Sprint, sprint.id).status == "paused"
     assert db.get(BacklogItem, item.id).status == "blocked"
     retro = db.exec(
         select(AgentMessage).where(
             AgentMessage.sprint_id == sprint.id, AgentMessage.kind == "retrospective"
         )
-    ).one()
-    assert "Completed 0/1 tasks" in retro.body
-    assert "blocked for manual triage" in retro.body
+    ).all()
+    assert retro == []
 
 
 def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
