@@ -260,7 +260,8 @@ def run(command: str, cwd: str, request: Any, timeout: Any, keep_full: bool = Fa
     free = free_mb(root)
     if free < floor:
         return _refused(f"only {free:.0f} MiB free under the artifacts root, below the floor of {floor:.0f} MiB")
-    scope = (box.get("scope") or "default").replace(":", "-")
+    # One plain folder name per company: never "." or ".." (clean_scope allows dots).
+    scope = re.sub(r"[^A-Za-z0-9_-]", "-", box.get("scope") or "default")
     run_id = uuid.uuid4().hex[:16]
     folder_path = root / scope / run_id
     folder_path.mkdir(parents=True, mode=0o700)

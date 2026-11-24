@@ -239,6 +239,13 @@ def test_a_command_that_is_not_plain_words_is_refused(docker, tmp_path, command)
     assert reply["refused"] is True and _runs(docker) == []
 
 
+def test_a_scope_of_dots_stays_under_the_artifacts_root(docker, tmp_path):
+    reply = _run(tmp_path, "true", scope="..")
+    run = _runs(docker)[-1]
+    artifacts = next(run[i + 1] for i, a in enumerate(run) if a == "-v" and ":/artifacts:" in run[i + 1])
+    assert artifacts.startswith(str(tmp_path / "artifacts" / "--")) and reply["exit_code"] == 0
+
+
 def test_a_folder_that_leaves_the_worktree_is_refused(docker, tmp_path):
     reply = _run(tmp_path, "true", program={"folder": "../up"})
     assert reply["refused"] is True and _runs(docker) == []
