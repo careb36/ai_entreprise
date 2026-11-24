@@ -27,6 +27,7 @@
         "forge_policy_setting",
         "glassroom",
         "hooks",
+        "in_process_principal",
         "locks",
         "mail",
         "memory_graph",
@@ -1079,6 +1080,12 @@
         "release"
       ],
       "test_output_tail.py": ["evidence", "workspace"],
+      "test_owner_action_runner.py": [
+        "management"
+      ],
+      "test_owner_actions_router.py": [
+        "management"
+      ],
       "test_password_rule.py": [
         "platform"
       ],

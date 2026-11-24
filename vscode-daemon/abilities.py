@@ -59,6 +59,7 @@ SUBJECTS = (
     "workspace.sandbox.image",
     "workspace.sandbox.reset",
     "workspace.search",
+    "workspace.self_host.checkout",
     "workspace.signatures",
     "workspace.status",
     "workspace.undo",

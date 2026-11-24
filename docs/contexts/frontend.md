@@ -162,6 +162,7 @@ component is named.
 | `/company/usage`, `/company/quotas`, `/company/models`, `/company/model-catalog` | `Usage`, `components/QuotaPanel`, `Models`, `ModelCatalog` |
 | `/company/project`, `/company/execution`, `/company/mcp` | `ProjectSettings` (with the Owner's company export), `ExecutionSettings`, `McpServers` |
 | `/company/routines` | `Routines` (with `pages/routines/`): the company's scheduled tasks, run now with values, revisions and restore |
+| `/company/owner-actions` | `OwnerActions` (with `pages/ownerActions/`): the Owner's catalogue of actions, the confirmation dialog with cost and effect (`ConfirmDialog`, which sends back the preview's digest), a run's live status, cancel, and the ids it recorded with a copy button (`RunPanel`); [design](../design/owner-actions.md) |
 | `/company/notifications`, `/company/api-tokens` | `Notifications` (the webhook), `ApiTokens` |
 | `/company/audit-trail`, `/company/audit-anchors` | `AuditTrail`, `AuditAnchors` |
 | `/company/procedures`, `/company/wiki`, `/company/documentation` | `Procedures`, `Wiki`, `Documentation` |

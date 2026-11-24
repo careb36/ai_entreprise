@@ -253,7 +253,7 @@ the LangGraph graph is only an optional kickoff conversation.
    and kickoff runs, `IN_HOUSE_PRODUCERS`, are decided by the review loop;
    `GET /v1/agent_runs?exclude_in_house=true` lists the rest; with
    `REVIEWER_AGENT_ENABLED` the Reviewer agent suggests a decision on each,
-   kept on the run apart from the approval). The Review page shows them (a Manager can send a
+   kept on the run apart from the approval). For an Owner it also lists `owner_actions`, the steps she can run from the app (`routers/owner_actions.py`, [design](design/owner-actions.md)), and a blocked task whose text names one carries `owner_action`; neither counts in `total`. The Review page shows them (a Manager can send a
    blocked task back to work, with how earlier second attempts went beside them) and the navigation counts them. A blocked task
    can also get another attempt in the next sprint (`services/loop/carry_over.py`):
    `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the

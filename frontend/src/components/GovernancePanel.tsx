@@ -67,6 +67,11 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask & { suggestio
           </p>
         )}
         {task.reason && <p className="break-words text-xs text-gray-400">{task.reason}</p>}
+        {task.owner_action && (
+          <Link to="/company/owner-actions" className="text-xs font-semibold text-sky-300 underline">
+            {t('ownerActions.runFromApp')}
+          </Link>
+        )}
         <ManagerSuggestion suggestion={task.suggestion} />
         {task.triage && (
           <p className="break-words text-xs text-sky-200/80">
@@ -223,6 +228,18 @@ function Inbox({ companyId }: { companyId: number }) {
           <span>{t('inbox.loadError', { message: errorDetail(inbox.error), defaultValue: 'Could not load what needs you: {{message}}' })}</span>
           <button onClick={() => inbox.refetch()} className="btn-ghost btn-sm"><RefreshCw size={14} />{t('common.refresh')}</button>
         </div>
+      )}
+      {(inbox.data?.owner_actions ?? []).length > 0 && (
+        <Section id="owner-actions" title={t('ownerActions.inboxTitle')} count={0}>
+          <ul className="space-y-1 text-sm text-gray-300">
+            {(inbox.data?.owner_actions ?? []).map(action => (
+              <li key={action.name}>
+                <Link to="/company/owner-actions" className="underline">{t(`ownerActions.actions.${action.name}.title`)}</Link>{' '}
+                <span className="text-xs text-gray-500">{t('ownerActions.runFromApp')}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
       {(inbox.data?.run_window_waiting ?? []).length > 0 && (
         <Section id="run-window" title={t('runWindow.inboxTitle')} count={0}>

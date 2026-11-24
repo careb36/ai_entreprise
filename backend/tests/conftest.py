@@ -400,13 +400,13 @@ def no_scrum_master_proxy(monkeypatch):
         monkeypatch.setattr(module, "LLMProxyClient", _NoProxy)
 
     when_loaded("services.learning.scrum_master", no_proxy)
-    # The wiki's compilation at sprint close (#445) asks the same way.
-    when_loaded("services.learning.wiki_compile", no_proxy)
+    when_loaded("services.learning.wiki_compile", no_proxy)  # the wiki at close (#445)
 
 
 SQLModel.metadata.create_all(
     _engine,
     tables=[
+        TaskRelation.metadata.tables["owner_action_runs"],
         Company.__table__,
         User.__table__,
         CompanyMember.__table__,

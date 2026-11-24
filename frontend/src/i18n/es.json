@@ -49,7 +49,8 @@
     "notifications": "Notificaciones",
     "auditTrail": "Registro de auditoría",
     "modelCatalog": "Catálogo de modelos",
-    "routines": "Rutinas"
+    "routines": "Rutinas",
+    "ownerActions": "Acciones del propietario"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -5180,6 +5181,95 @@
       "frozen": "Un operador la sacó de la automatización; una persona la descongela.",
       "risk_hold": "Aprobada, retenida hasta que una persona acepte el riesgo.",
       "run_window": "Lista, retenida hasta que abra la ventana de ejecución de la empresa."
+    }
+  },
+  "ownerActions": {
+    "title": "Acciones del propietario",
+    "subtitle": "Pasos que solo das tú, que la plataforma ejecuta después de que confirmes su costo y su efecto. Una ejecución por vez; cada inicio, cancelación y fin queda en la cadena de auditoría de la empresa.",
+    "noCompany": "Elige una empresa para ver sus acciones del propietario.",
+    "ownerOnly": "Solo el propietario (Owner) de la empresa puede ejecutar estas acciones.",
+    "loading": "Cargando las acciones…",
+    "loadError": "No se pudieron cargar las acciones: {{message}}",
+    "issue": "issue #{{issue}}",
+    "inboxTitle": "Pasos que puedes ejecutar desde la app",
+    "runFromApp": "Ejecutar desde la app",
+    "earlierRuns_one": "{{count}} ejecución anterior",
+    "earlierRuns_other": "{{count}} ejecuciones anteriores",
+    "earlierRun": "Ejecución {{id}}: {{status}}, iniciada {{at}}",
+    "status": {
+      "running": "En curso",
+      "succeeded": "Correcta",
+      "failed": "Fallida",
+      "cancelled": "Cancelada"
+    },
+    "unavailable": {
+      "harness_not_found": "No disponible: el backend no encuentra scripts/self_host (configura SELF_HOST_REPOSITORY_DIR).",
+      "daemon_lacks_checkout": "No disponible: el daemon del workspace no anuncia workspace.self_host.checkout; actualízalo y reinícialo.",
+      "unknown": "No disponible."
+    },
+    "form": {
+      "checkoutName": "Carpeta de la copia",
+      "checkoutHint": "Un solo nombre de carpeta, creada bajo la raíz propia del daemon (FABRIQUE_SELF_HOST_ROOT), nunca tu checkout.",
+      "scope": "Tamaño del sprint",
+      "timeoutMinutes": "Esperar el sprint como máximo (minutos)",
+      "tokenBudget": "Presupuesto de tokens",
+      "urgent": "Marcar el sprint como urgente (no espera la ventana de ejecución)",
+      "review": "Revisar costo y efecto",
+      "oneAtATime": "Hay una ejecución en curso"
+    },
+    "confirm": {
+      "title": "¿Ejecutar {{name}}?",
+      "effect": "Qué hace",
+      "cost": "Qué cuesta",
+      "models": "Modelos que llama",
+      "tokenBudget": "Presupuesto de tokens (se detiene por encima)",
+      "duration": "Duración máxima",
+      "minutes_one": "{{count}} minuto",
+      "minutes_other": "{{count}} minutos",
+      "budgetBetweenCalls": "El presupuesto se comprueba entre llamadas, así que un turno de un modelo puede superarlo.",
+      "audited": "El inicio, una cancelación y el fin quedan en la cadena de auditoría de la empresa a tu nombre.",
+      "run": "Confirmar y ejecutar"
+    },
+    "run": {
+      "label": "Ejecución {{id}}",
+      "stopping": "deteniéndose",
+      "cancel": "Cancelar ejecución",
+      "started": "Iniciada {{at}}",
+      "finished": "terminada {{at}}",
+      "steps": "Pasos hechos: {{steps}}",
+      "sandbox": "Sandbox pedido: {{asked}}; observado por el daemon: {{observed}}.",
+      "observed": "Registrado por la plataforma",
+      "copy": "Copiar ids",
+      "copied": "Copiado"
+    },
+    "ids": {
+      "run": "Ejecución",
+      "company": "Empresa",
+      "sprint": "Sprint",
+      "specification": "Especificación",
+      "architecture": "Arquitectura",
+      "agentRuns": "Ejecuciones de agentes",
+      "checkoutHead": "Commit de la copia",
+      "sourceHead": "Commit de origen",
+      "sandboxObserved": "Sandbox observado",
+      "containerMode": "Modo contenedor",
+      "images": "Imágenes",
+      "tokens": "Tokens observados",
+      "exitStatus": "Código de salida"
+    },
+    "actions": {
+      "self_host_container_run": {
+        "title": "Corrida de autohospedaje en modo contenedor",
+        "description": "Ejecuta una vez el harness de autohospedaje con --container-mode (checkout, company, records, issue, wait, sandbox) y registra los ids de la corrida.",
+        "effect": {
+          "copy": "El daemon copia el repositorio de La Fabrique en la carpeta {{name}} bajo su propia raíz y la confirma como un repositorio nuevo.",
+          "company": "Crea o encuentra la empresa \"La Fabrique\" sobre esa copia, con el sandbox de contenedor.",
+          "sprint": "Publica los registros de La Fabrique y la especificación del issue, planifica un sprint de tamaño {{scope}} y lo inicia (se llaman modelos).",
+          "wait": "Espera hasta {{minutes}} minutos a que el sprint termine.",
+          "sandbox": "Lee qué sandbox informó el daemon para cada ejecución de pruebas, aparte del pedido.",
+          "urgent": "Marca el sprint como urgente, para que la ventana de ejecución no lo retenga."
+        }
+      }
     }
   }
 }

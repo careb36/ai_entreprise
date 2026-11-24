@@ -68,6 +68,7 @@ REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.append(str(HERE))  # spec_source beside this file, whether run or imported
 import sandbox_mode
+import snapshot
 import spec_source
 from sandbox_mode import step_sandbox  # noqa: F401 - a step; re-exported
 from spec_source import revised_architecture, step_measure  # noqa: F401 - a step; re-exported
@@ -222,7 +223,7 @@ def _company_exists(api: Api, company_id) -> bool:
 
 
 def step_company(api, args, state, report):
-    checkout = str(Path(args.checkout).resolve())
+    checkout = getattr(args, "project_path", None) or str(Path(args.checkout).resolve())
     created = False
     if not _company_exists(api, state.get("company_id")):
         result = api.post(
@@ -312,7 +313,7 @@ def _approved_architecture(api: Api, spec_id: int, record: dict) -> dict:
 
 def step_records(api, args, state, report):
     cid = state["company_id"]
-    checkout = Path(args.checkout).resolve()
+    snap = getattr(args, "snapshot", None) or snapshot.Local(Path(args.checkout).resolve(), _git)
     spec_record = _load(REPO / "docs/architecture/specification.json")
     arch_record = _load(REPO / "docs/architecture/architecture.json")
     spec = _approved_spec(api, cid, spec_record)
@@ -321,15 +322,11 @@ def step_records(api, args, state, report):
     document = api.get(f"/v1/architectures/{arch['id']}/document", raw=True)
     first = int(arch_record.get(ADR_FIRST_NUMBER_KEY) or 1)
     adrs = api.get(f"/v1/architectures/{arch['id']}/adrs?first_number={first}")["files"]
-    adr_diffs = [
-        a["path"]
-        for a in adrs
-        if not (checkout / a["path"]).is_file() or (checkout / a["path"]).read_text(encoding="utf-8") != a["markdown"]
-    ]
+    adr_diffs = [a["path"] for a in adrs if snap.read(a["path"]) != a["markdown"]]
     # Only the current version is written; run again after the #535 version
     # superseded it, the file the first run wrote is the one checked.
     written = api.post(f"/v1/architectures/{arch['id']}/write") if arch["status"] == "approved" else arch
-    dirty = _git(checkout, "status", "--porcelain", "--", "docs/ARCHITECTURE.md", "docs/adr").strip()
+    dirty = snap.dirty("docs/ARCHITECTURE.md", "docs/adr")
     report["records"] = {
         "specification_id": spec["id"],
         "specification_status": spec["status"],
@@ -339,7 +336,7 @@ def step_records(api, args, state, report):
         "architecture_blocking": arch["check"]["blocking"],
         "modules": len(arch["modules"]),
         "decisions": len(arch["decisions"]),
-        "document_matches": document == (checkout / "docs/ARCHITECTURE.md").read_text(encoding="utf-8"),
+        "document_matches": document == snap.read("docs/ARCHITECTURE.md"),
         "adrs": [a["path"] for a in adrs],
         "adr_differences": adr_diffs,
         "written_path": written.get("written_path"),

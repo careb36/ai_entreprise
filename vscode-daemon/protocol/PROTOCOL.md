@@ -218,6 +218,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.diff` | request | `git_diff.py`, `git_view.py` | `workspace_root`, `commit`, `base`?, `forge_policy`?; or `view` (`status`, `changed`, `diff`, `log`, `blame`, §5.6) with `base`?, `path`?, `limit`?, `start_line`?, `end_line`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated`; a view: `view` and its fields (§5.6) |
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
+| `workspace.self_host.checkout` | request | `self_host_checkout.py` | `name` (§5.9) | `ok`, `path`, `created`, `head`, `source_head`, `files` |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider`, `forge_policy`? (§5.3) | `ok`, `url`, `comments`, `truncated` |
 | `workspace.git.read_at` | request | `git_read_at.py` | `workspace_root`, `base`?, `commit`?, `paths`?, `folders`?, `list`? | `ok`, `commit`, `base`, `files` (per path `status` and `content_b64`), `folders` (every file under each, sorted), `tree`?, `sandbox_required` (§5.5) |
 | `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
@@ -580,6 +581,27 @@ bytes (`binary: true`), which the backend never shows as text.
 The path rules are a read's: inside the project, symlinks followed, never a
 file that may hold secrets (403). A file over 20 MiB is a 413; another suffix,
 or a file that is not a DOCX, a 415.
+
+### 5.9 The self-hosting snapshot (additive, issue #701)
+
+`workspace.self_host.checkout` makes the snapshot an owner action's
+self-hosting run works on (`docs/design/owner-actions.md`), the harness's
+`checkout` step done by the only component that touches the user's files.
+The request has one field, `name`: one folder name
+(`^[a-z0-9][a-z0-9._-]{0,62}$`), never a path. What is copied and where are
+this machine's settings, never the request's: `FABRIQUE_SELF_HOST_SOURCE`
+(default: the La Fabrique repository the daemon runs from) and
+`FABRIQUE_SELF_HOST_ROOT` (default `~/fabrique-self-host`). The daemon copies
+the files git tracks or would track in the source (ignored files such as
+`.env` stay out; a symlink is skipped, never followed) into `<root>/<name>`
+and commits them as `main` of a fresh repository. It refuses (400) a name that
+is not one folder name, a target that resolves outside the root, the source
+or a folder inside it (or a root inside the source), and a non-empty folder
+that is not an earlier snapshot; an earlier snapshot is answered as it is
+(`created: false`, `files: null`). The reply is what the daemon observed:
+`path`, `created`, `head`, `source_head`, `files`. A git failure is a 409.
+Announced as a subject (§2.1); the backend asks only a daemon that announces
+it, or one that announces nothing.
 
 ## 6. Conformance fixtures
 

@@ -11,6 +11,7 @@ OpenHands with OpenHands (design only, no code taken).
 | `render_docs.py` | Renders `docs/ARCHITECTURE.md` and `docs/adr/0012`… from `docs/architecture/architecture.json`; `--write` writes them. |
 | `fixtures/issue-535-specification.json` | Issue #535 written as a specification, in the PO's shape (EARS-style criteria, after Kiro; design only). It specifies the issue and does not implement it. |
 | `fixtures/issue-535-architecture.json` | The Architect's revision of La Fabrique's architecture for that specification: the covers of #535's requirements, the interfaces and the decision it adds. The product keeps #469's covers (`earlier_covers`). |
+| `snapshot.py` | How the `records` step reads the snapshot: a local folder here, through the daemon when an owner action runs the harness from the app (`docs/design/owner-actions.md`). |
 | `sandbox_mode.py` | `--container-mode` and the `sandbox` step: which sandbox the run's code actually ran in, from the daemon's replies (issue #701). |
 | `spec_source.py` | What the `issue` step runs on: #535 by default, or a `--spec` file checked with the product's `spec_check`; the `measure` step. |
 | `specs/folder-lint-specification.json` | The first manual iteration's finding (`docs/design/rsi-loop.md`, §7): the lint after an edit runs the edited file's folder's linter. EARS-style criteria and its `target_measure`. `folder-lint-architecture.json` beside it is the revision. |
@@ -90,6 +91,13 @@ about what it can honour and never label a run.
 python3 scripts/self_host/self_host.py --api http://localhost:8000 \
   --checkout ~/src/la-fabrique-self --container-mode
 ```
+
+From the app: an Owner runs the same steps as the owner action
+`self_host_container_run` (Company menu, Owner actions; issue #701,
+`docs/design/owner-actions.md`) with no API token: the backend drives the
+steps in-process as her, the daemon makes the snapshot under its own root
+(`FABRIQUE_SELF_HOST_ROOT`), and the run's ids and sandbox report are recorded
+as observations on the run.
 
 ### A finding's specification (`--spec`)
 
