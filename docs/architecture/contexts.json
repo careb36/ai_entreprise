@@ -620,6 +620,10 @@
         "integrations",
         "loop"
       ],
+      "test_change_password.py": [
+        "platform",
+        "repo"
+      ],
       "test_changed_paths.py": [
         "repo"
       ],

@@ -725,6 +725,13 @@
       "access": "public",
       "why": "Ends the session the cookies name, if any."
     },
+    "POST /v1/auth/password": {
+      "access": "authenticated",
+      "allowed_status": [
+        403
+      ],
+      "why": "The caller changes their own password and must give the current one (a wrong one is 403); an API token is refused (403)."
+    },
     "POST /v1/auth/refresh": {
       "access": "public",
       "why": "Needs the refresh cookie and the CSRF header.",

@@ -4929,6 +4929,28 @@
   "account": {
     "title": "Account",
     "subtitle": "Your own settings, whichever company you are working in.",
+    "password": {
+      "title": "Password",
+      "intro": "Enter your current password, then the new one twice. It needs at least {{min}} characters. Your other sessions end; this one stays signed in.",
+      "current": "Current password",
+      "new": "New password",
+      "repeat": "Repeat the new password",
+      "submit": "Change password",
+      "saving": "Changing…",
+      "mismatch": "The two new passwords differ.",
+      "changed_one": "Your password is changed. {{count}} session was ended; this browser stays signed in.",
+      "changed_other": "Your password is changed. {{count}} sessions were ended; this browser stays signed in.",
+      "ssoOnly": "You sign in with single sign-on: this account has no password to change.",
+      "errors": {
+        "wrong_password": "The current password is not right.",
+        "too_short": "The new password needs at least {{min}} characters.",
+        "too_long": "The new password is too long: at most 72 bytes.",
+        "same_password": "The new password must differ from the current one.",
+        "locked": "Too many attempts: wait a little and try again.",
+        "no_password": "This account signs in with single sign-on only: it has no password to change.",
+        "person_only": "Only a signed-in person can change a password."
+      }
+    },
     "sso": {
       "title": "Single sign-on",
       "intro": "Link your account to your company's identity provider so you can sign in with it. The provider's verified email must be this account's email, in a domain the company has verified. Unlinking is possible while you keep another way to sign in.",

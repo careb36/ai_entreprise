@@ -19,6 +19,22 @@ export interface CompanyMembership {
 
 export interface AuthProfile extends AuthUser {
   memberships: CompanyMembership[]
+  /** Whether the account has a password to change (an SSO-only one has none). */
+  has_password?: boolean
+  /** The fewest characters a new password may have (PASSWORD_MIN_LENGTH). */
+  password_min_length?: number
+}
+
+/**
+ * A changed password. Every session of the person ended; a browser session
+ * gets a new one in the answer's cookies, and with it a new CSRF value and
+ * lifetime (absent when the change came with a Bearer token).
+ */
+export interface PasswordChanged {
+  status: 'changed'
+  sessions_ended: number
+  csrf_token?: string
+  session_expires_in?: number
 }
 
 /**
@@ -65,4 +81,12 @@ export const authEndpoints = () => ({
     }),
 
   me: () => fetchApi<AuthProfile>('/v1/auth/me', { method: 'GET' }),
+
+  /** The signed-in person changes their password (docs/design/change-password.md). */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchApi<PasswordChanged>('/v1/auth/password', {
+      method: 'POST',
+      once: true,
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 })

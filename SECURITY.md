@@ -67,6 +67,18 @@ and `docs/archive/design/SSO.md`.
   Login is rate-limited per address and backs off per account
   (`services/platform/login_throttle.py`). Login, registration and
   invitations answer the same for known and unknown emails.
+- **Changing a password:** `POST /v1/auth/password`, for a signed-in person
+  only (an API token gets 403). The current password is checked under the
+  sign-in's backoff; the new one follows the same rule and must differ.
+  Every session of the person ends and the browser that asked gets a new
+  one. Audited as `password_changed`, with no password or hash
+  (`services/platform/password_change.py`).
+- **Forgotten passwords:** no email is sent, so an operator resets the
+  password on the server with `backend/app/reset_password.py` (password read
+  twice with `getpass`, never from argv or the environment). It ends every
+  session and is audited as `password_reset_by_operator` in the person's
+  companies' hash chains (`docs/OPERATIONS.md`, "A person forgot their
+  password"). Writing the hash with SQL leaves no audit row.
 - **Access tokens:** HS256 JWT under `JWT_SECRET_KEY`, 15 minutes by default
   (`backend/app/auth_tokens.py`). Signature, algorithm, `exp`, `iss`, `aud`
   and `typ` are checked. A key shorter than the hash counts as unset.
@@ -83,7 +95,9 @@ and `docs/archive/design/SSO.md`.
 
 **Known gaps.** No DNSSEC validation. A Bearer access token from
 `"token_delivery": "bearer"` cannot be revoked by logout (it lives 15
-minutes). Login limits are per process. Registration is open and unverified.
+minutes), nor by a password change. Login limits are per process.
+Registration is open and unverified. A password change does not revoke API
+tokens: they are not tied to the password.
 
 ### 3.2 API Authorization
 
