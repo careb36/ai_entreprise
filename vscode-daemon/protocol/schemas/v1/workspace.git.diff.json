@@ -36,19 +36,30 @@
             "status",
             "changed",
             "diff",
-            "log"
+            "log",
+            "blame"
           ],
-          "description": "An agent's read-only view instead of the integration diff (git_view.py, PROTOCOL.md section 5.6); announced as the view feature of this subject."
+          "description": "An agent's read-only view instead of the integration diff (git_view.py, PROTOCOL.md section 5.6); announced as the view feature of this subject. The blame view is announced as the blame feature."
         },
         "path": {
           "type": "string",
-          "description": "With view diff: a path relative to workspace_root, inside it, never VCS metadata or a file that may hold secrets."
+          "description": "With view diff or blame: a path relative to workspace_root, inside it, never VCS metadata or a file that may hold secrets."
         },
         "limit": {
           "type": "integer",
           "minimum": 1,
           "maximum": 20,
           "description": "With view log: how many commits (default 10)."
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "With view blame: the first line (default 1)."
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "With view blame: the last line (default start_line + 99; at most 200 lines, never past the end)."
         }
       },
       "required": [
@@ -213,6 +224,75 @@
             "null"
           ],
           "description": "With view diff: the path's diff against the merge base, bounded."
+        },
+        "start_line": {
+          "type": "integer"
+        },
+        "end_line": {
+          "type": "integer"
+        },
+        "file_lines": {
+          "type": "integer"
+        },
+        "groups": {
+          "type": "array",
+          "description": "With view blame: each run of consecutive lines last changed by one commit. Never an author's or committer's name or e-mail.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "start_line": {
+                "type": "integer"
+              },
+              "end_line": {
+                "type": "integer"
+              },
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subject": {
+                "type": "string"
+              },
+              "uncommitted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "commit",
+              "start_line",
+              "end_line",
+              "subject"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "author"
+                  ]
+                },
+                {
+                  "required": [
+                    "author_mail"
+                  ]
+                },
+                {
+                  "required": [
+                    "committer"
+                  ]
+                },
+                {
+                  "required": [
+                    "email"
+                  ]
+                }
+              ]
+            }
+          }
         }
       },
       "required": [

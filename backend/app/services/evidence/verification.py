@@ -17,6 +17,7 @@ from services.evidence import (
     command_runs,
     context_read,
     criteria_tests,
+    doc_links,
     grounding,
     protected_check,
     required_checks,
@@ -497,6 +498,9 @@ def verify_agent_run(
     grounded_check = grounding.check_grounded(evidence, delivered)
     if grounded_check:
         checks.append(grounded_check)
+    # Documentation: its links and cited paths against the delivered tree,
+    # as the daemon listed and read it back (``doc_links``).
+    checks.extend(doc_links.checks(evidence, _declared_files(run.artifact_text)))
     # A console producer's run (``services/producers/console_producer.py``): who ran,
     # how it ended and what the daemon saw it change (``evidence/console_run.py``).
     console_check = check_console_run(evidence)

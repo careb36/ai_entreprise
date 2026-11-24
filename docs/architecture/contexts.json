@@ -762,6 +762,12 @@
       "test_discovery_team_models.py": [
         "planning"
       ],
+      "test_doc_links.py": [
+        "evidence"
+      ],
+      "test_docs_write_policy.py": [
+        "tools"
+      ],
       "test_documentation_export_router.py": [
         "planning"
       ],
@@ -1639,6 +1645,10 @@
       "test_workspace_delete_delivery.py": [
         "workspace"
       ],
+      "test_workspace_git_blame.py": [
+        "tools",
+        "workspace"
+      ],
       "test_workspace_git_tool.py": [
         "tools",
         "workspace"
@@ -1657,6 +1667,10 @@
         "workspace"
       ],
       "test_workspace_navigation.py": [
+        "tools",
+        "workspace"
+      ],
+      "test_workspace_read_document.py": [
         "tools",
         "workspace"
       ],

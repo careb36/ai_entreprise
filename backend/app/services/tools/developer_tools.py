@@ -64,6 +64,7 @@ from services.tools import (
     check_scripts,
     developer_tool_replies,
     developer_tool_schemas,
+    docs_write_policy,
     edit_lint,
     mcp_tools,
     repo_map,
@@ -72,9 +73,9 @@ from services.tools import (
     test_commands,
     test_runs,
     workspace_edits,
-    workspace_git,
     workspace_lint,
     workspace_navigation,
+    workspace_reads,
 )
 from services.tools.developer_tool_schemas import DELETE, MOVE, WRITE_NAMES, WRITES
 from services.workspace import sandbox, stack_image
@@ -169,8 +170,7 @@ class WorkspaceToolbox:
         if self.can_edit:
             schemas.append(developer_tool_schemas.EDIT_SCHEMA)
             schemas += developer_tool_schemas.STRUCTURE_SCHEMAS if self.can_move else []
-        schemas += workspace_navigation.schemas(self)  # Navigation; lint in execution.
-        return schemas + workspace_git.schemas(self)  # Read-only git, when offered.
+        return schemas + workspace_reads.schemas(self)  # Git, documents, navigation.
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -263,10 +263,8 @@ class WorkspaceToolbox:
                 extra["files_scanned"] = reply.get("files_scanned")
                 return developer_tool_replies.search_text(str(pattern), reply)
             return developer_tool_replies.find_text(str(pattern), reply)
-        if tool == workspace_git.TOOL:
-            return workspace_git.run(self, arguments, extra)
-        if tool in workspace_navigation.TOOLS:
-            return workspace_navigation.run(self, tool, arguments, extra)
+        if tool in workspace_reads.TOOLS:
+            return workspace_reads.run(self, tool, arguments, extra)
         if tool == EDIT:
             return workspace_edits.edit(self, arguments, extra)
         if tool in (MOVE, DELETE) and self.can_move:
@@ -554,7 +552,8 @@ def toolbox_for(
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
             workspace_edits.offer_move(workspace)  # Move and delete, or why not.
-            workspace_git.offer(workspace, company_id, engine)  # Read-only git.
+            docs_write_policy.apply(workspace, role)  # Docs only for documentation.
+            workspace_reads.offer(workspace, company_id, engine)  # Git, documents.
             loader = functools.partial(
                 edit_lint.load_profile, _bridge, company_id, root, engine
             )

@@ -192,6 +192,21 @@ What stays with the role, and is not a matter of tools:
       and the sha256 the daemon read, as the pack's `refs.py` does for
       records; a statement with no citation is a claim and is shown as one.
 
+    **Built (2026-11-24, branch `feat/document-project-tools`):** `blame` of a
+    line range on `workspace__git` (commit, date and subject per line group;
+    never an author's name or e-mail); `workspace__read_document` for DOCX
+    text through the daemon (bounded, redacted, the file's sha256 recorded;
+    PDF refused until the daemon has a PDF reader); the Verifier's
+    `docs_links` and `docs_code_paths` checks (links, anchors and cited paths
+    against the daemon's listing and read-back texts); and the docs-only write
+    policy for the edit tools (`services/tools/docs_write_policy.py`).
+    **Still to do:** PDF text; the policy on an answer's own file blocks and
+    wired to the step; anchors into documents the delivery did not change
+    (a daemon read-back of their headings); code names in fenced snippets
+    and through navigation; runnable examples; the docs build; the API
+    surface, configuration and licence extraction; per-statement citations
+    in the written documentation.
+
 ## Threat model (STRIDE, the agent as the adversary)
 
 | Threat | Example | Mitigation |

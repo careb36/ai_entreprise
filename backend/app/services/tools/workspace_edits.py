@@ -29,6 +29,7 @@ from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 from services.tools import (
     developer_tool_replies,
     developer_tool_schemas,
+    docs_write_policy,
     edit_lint,
     mcp_tools,
 )
@@ -66,6 +67,7 @@ def delivery_suffixes() -> set[str]:
 
 def _deliverable(box: Any, path: str) -> None:
     """Refuse a file a delivery would not write: the change would be dropped."""
+    docs_write_policy.check(box, path)  # A documentation task writes docs only.
     suffix = (
         "." + path.rsplit(".", 1)[-1].lower() if "." in path.rsplit("/", 1)[-1] else ""
     )

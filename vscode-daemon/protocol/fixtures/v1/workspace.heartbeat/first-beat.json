@@ -79,7 +79,8 @@
         ],
         "workspace.git.diff": [
           "forge_policy",
-          "view"
+          "view",
+          "blame"
         ],
         "workspace.git.integrate": [
           "forge_policy"
@@ -95,6 +96,9 @@
         ],
         "workspace.git.sync_base": [
           "forge_policy"
+        ],
+        "workspace.read": [
+          "document_text"
         ],
         "workspace.related": [
           "lookup"

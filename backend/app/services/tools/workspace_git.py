@@ -12,9 +12,15 @@ argument list:
   or not, untracked included);
 - ``diff``: one path's diff against that base, bounded;
 - ``log``: the last ``count`` (at most 20) commits of the current branch;
-- ``show_base``: one path's content as the base branch's head has it.
+- ``show_base``: one path's content as the base branch's head has it;
+- ``blame``: one path's line range (at most 200 lines) as groups of lines,
+  each with the commit that last changed it, that commit's date and subject:
+  when and why a part changed, for documenting a project. Never an author's
+  or committer's name or e-mail (the daemon drops them; the reply's groups
+  are rebuilt here from the fields named, so a daemon that sent more would
+  still not reach the model).
 
-The first four are the daemon's views on ``workspace.git.diff``
+The first four and ``blame`` are the daemon's views on ``workspace.git.diff``
 (``vscode-daemon/git_view.py``, PROTOCOL.md §5.6); ``show_base`` is
 ``workspace.git.read_at``. Each operation is offered only when every daemon
 heard announces what it needs (``offer``), so an older daemon is never asked
@@ -57,7 +63,8 @@ READ_AT = "workspace.git.read_at"
 TIMEOUT_SECONDS = 20.0
 MAX_LOG = 20
 SHOW_MAX_CHARS = 40_000
-OPERATIONS = ("status", "changed", "diff", "log", "show_base")
+MAX_BLAME = 200
+OPERATIONS = ("status", "changed", "diff", "log", "show_base", "blame")
 # What each operation needs every daemon to announce (vscode-daemon/abilities.py).
 NEEDS: dict[str, tuple[str, str | None]] = {
     "status": (VIEW_SUBJECT, "view"),
@@ -65,8 +72,10 @@ NEEDS: dict[str, tuple[str, str | None]] = {
     "diff": (VIEW_SUBJECT, "view"),
     "log": (VIEW_SUBJECT, "view"),
     "show_base": (READ_AT, None),
+    "blame": (VIEW_SUBJECT, "blame"),
 }
-WITH_PATH = ("diff", "show_base")
+WITH_PATH = ("diff", "show_base", "blame")
+BLAME_FIELDS = ("commit", "start_line", "end_line", "date", "subject", "uncommitted")
 # The daemon's ``workspace_read.SENSITIVE_*``: never shown, whatever is asked.
 SENSITIVE_NAMES = (
     ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.keystore",
@@ -119,7 +128,9 @@ def schema(operations: tuple[str, ...]) -> dict[str, Any]:
                 "task changed against its base branch, committed or not), "
                 "`diff` (one `path`'s diff against the base), `log` (the last "
                 "`count` commits, at most 20), `show_base` (one `path` as the "
-                "base branch has it). Nothing is written."
+                "base branch has it), `blame` (one `path`'s lines `start_line` "
+                "to `end_line`, at most 200: the commit, date and subject that "
+                "last changed each group of lines). Nothing is written."
             ),
             "parameters": {
                 "type": "object",
@@ -127,7 +138,15 @@ def schema(operations: tuple[str, ...]) -> dict[str, Any]:
                     "operation": {"type": "string", "enum": list(operations)},
                     "path": {
                         "type": "string",
-                        "description": "For diff and show_base: a file, relative to the project root.",
+                        "description": "For diff, show_base and blame: a file, relative to the project root.",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "For blame: the first line (default 1).",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "For blame: the last line (default start_line + 99).",
                     },
                     "count": {
                         "type": "integer",
@@ -215,6 +234,35 @@ def _log_text(reply: dict[str, Any]) -> str:
     return "\n".join([head, *rows]) if rows else "No commits on this branch yet."
 
 
+def _blame_text(reply: dict[str, Any], path: str, extra: dict[str, Any]) -> str:
+    groups = [
+        {key: g.get(key) for key in BLAME_FIELDS}
+        for g in reply.get("groups") or []
+        if isinstance(g, dict)
+    ]
+    for g in groups:  # A subject is the committer's text: redacted as a log line.
+        g["subject"] = redact_secrets("git blame", str(g.get("subject") or ""))
+    extra["blame"] = groups  # Commit, lines, date, subject: no author, ever.
+    head = (
+        f"Blame of {path} lines {reply.get('start_line')}-{reply.get('end_line')} "
+        f"(of {reply.get('file_lines')}):"
+    )
+    rows = []
+    for g in groups:
+        lines = f"{g['start_line']}-{g['end_line']}"
+        if g.get("uncommitted"):
+            rows.append(f"{lines}: not committed yet")
+            continue
+        date = str(g.get("date") or "")[:10]
+        rows.append(f"{lines}: {str(g.get('commit') or '')[:7]} {date} {g['subject']}")
+    tail = ["[range cut at 200 lines]"] if reply.get("truncated") else []
+    return "\n".join([head, *rows, *tail]) if rows else f"{path}: nothing to blame."
+
+
+def _line(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _show_base(box: Any, path: str, extra: dict[str, Any]) -> str:
     request = {"workspace_root": box.workspace_root, "paths": [path]}
     if getattr(box, "git_base", ""):
@@ -262,6 +310,10 @@ def run(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
         count = arguments.get("count")
         ok = isinstance(count, int) and not isinstance(count, bool)
         request["limit"] = max(1, min(count, MAX_LOG)) if ok else 10
+    if operation == "blame":
+        start = max(1, _line(arguments.get("start_line")) or 1)
+        end = _line(arguments.get("end_line")) or start + 99
+        request.update(start_line=start, end_line=max(start, end))
     reply = box.requester(VIEW_SUBJECT, request, TIMEOUT_SECONDS)
     if reply.get("view") != operation:
         # An older daemon answered as an integration diff: never misread.
@@ -275,4 +327,6 @@ def run(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
         return _changed_text(reply)
     if operation == "diff":
         return _diff_text(reply, path or "")
+    if operation == "blame":
+        return _blame_text(reply, path or "", extra)
     return _log_text(reply)
