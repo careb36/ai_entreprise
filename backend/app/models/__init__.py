@@ -50,6 +50,7 @@ from .invitation import CompanyInvitation
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .notification import NotificationPreference, PersonalNotification
+from .owner_action import OwnerActionRun
 from .person_statement import PersonStatement
 from .procedure import Procedure
 from .progress import SprintProgressSnapshot
@@ -128,6 +129,7 @@ __all__ = [
     "McpServer",
     "NotificationPreference",
     "OutboxEvent",
+    "OwnerActionRun",
     "PersonStatement",
     "PersonalNotification",
     "Procedure",

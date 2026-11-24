@@ -25,13 +25,14 @@ queue.
 from auth_policy import current_user_if_required, require_company_role
 from config import settings
 from database import get_session
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
 from services.learning import scrum_master
 from services.loop import run_window_gate, sprint_archive
 from services.loop.carry_over import carried_over, carry_mark
+from services.management import owner_actions
 from services.planning import intake_records
 from services.release import integration
 from services.tasks import task_events, task_projection
@@ -79,6 +80,20 @@ def _run_window_waiting(session: Session, company_id: int, limit: int) -> list[d
             **(run_window_gate.view(session, s) or {}),
         }
         for s in sprints
+    ]
+
+
+def _owner_actions(session: Session, user: User | None, company_id: int) -> list[dict]:
+    """The catalogue's actions, for a signed-in Owner: things she can run from
+    the app (``routers/owner_actions.py``), not decisions waiting."""
+    if user is None or getattr(user, "_api_token_company_id", None) is not None:
+        return []
+    try:
+        require_company_role(session, user, company_id, "Owner")
+    except HTTPException:
+        return []
+    return [
+        {"name": a.name, "issue": a.issue} for a in owner_actions.CATALOGUE.values()
     ]
 
 
@@ -143,6 +158,10 @@ async def inbox(
                 # The Manager agent marked it for the next sprint (issue #394):
                 # the "Plan a sprint" form ticks it; a person may untick it.
                 "marked_for_carry_over": carry_mark(item, records[item.id]) is True,
+                # A step only the owner takes that the app can run (#701).
+                "owner_action": owner_actions.matching(
+                    f"{item.title} {records[item.id].block_reason()}"
+                ),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )
@@ -227,6 +246,8 @@ async def inbox(
         # Sprints whose work waits for the run window (issue #736): shown so
         # a person knows when it starts, not a decision, so not in ``total``.
         "run_window_waiting": _run_window_waiting(session, company_id, limit),
+        # What the Owner can run from the app (#701): not in ``total`` either.
+        "owner_actions": _owner_actions(session, user, company_id),
         "total": blocked_total
         + len(proposals)
         + int(pending_runs or 0)

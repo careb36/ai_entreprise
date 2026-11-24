@@ -491,6 +491,12 @@
       "access": "authenticated",
       "why": "The caller's own preferences per kind of notification."
     },
+    "GET /v1/owner_actions": {
+      "access": "Owner"
+    },
+    "GET /v1/owner_actions/{name}/runs/{run_id}": {
+      "access": "Owner"
+    },
     "GET /v1/procedures": {
       "access": "Viewer"
     },
@@ -982,6 +988,15 @@
     "POST /v1/notifications/{notification_id}/snooze": {
       "access": "authenticated",
       "why": "The caller's own notifications only; another person's is a 404, and an API token is refused."
+    },
+    "POST /v1/owner_actions/{name}/preview": {
+      "access": "Owner"
+    },
+    "POST /v1/owner_actions/{name}/runs": {
+      "access": "Owner"
+    },
+    "POST /v1/owner_actions/{name}/runs/{run_id}/cancel": {
+      "access": "Owner"
     },
     "POST /v1/plan_self_improvement_sprint": {
       "access": "Manager"

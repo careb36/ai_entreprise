@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.self_host.checkout",
+  "title": "workspace.self_host.checkout",
+  "description": "The self-hosting snapshot made on the daemon's computer for an owner action (self_host_checkout.py, issue #701): this machine's FABRIQUE_SELF_HOST_SOURCE copied (the files git tracks or would track) under its FABRIQUE_SELF_HOST_ROOT and committed as main of a fresh repository. The request names a folder, never a path.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.self_host.checkout",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$",
+          "description": "One folder name under the daemon's own root; never a path."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "path": {
+          "type": "string",
+          "description": "The snapshot's absolute path on the daemon's machine."
+        },
+        "created": {
+          "type": "boolean",
+          "description": "false: an earlier snapshot, answered as it is."
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "source_head": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "files": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "The files copied; null for an earlier snapshot."
+        }
+      },
+      "required": [
+        "ok",
+        "path",
+        "created",
+        "head",
+        "source_head",
+        "files"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}
