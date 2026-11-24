@@ -17,6 +17,21 @@ keeps the folder in git when no fragment is waiting.
   way the entries under `[Unreleased]` are written. No heading lines (`#`,
   `##`, `###`): the section comes from the first line.
 
+## Describe the diff, not the plan
+
+A fragment says only what the diff of its change shows. Read the diff first
+(`git diff --stat` against the base; an agent calls `workspace__git` `changed`
+and `diff`), never the plan's or earlier tasks' titles. When La Fabrique's
+agents write a fragment, the Verifier's `changelog_matches_diff` check holds
+them to it (`docs/contexts/evidence.md`):
+
+- every path you cite in backticks must be a file the diff changed, or a
+  folder holding one; to cite unchanged code as context, say so in the same
+  sentence with `already`, `existing`, `unchanged` or `untouched`;
+- under `Added`, cite only names the diff adds: a flag, function or name that
+  already exists on the base must be marked the same way;
+- the issue number is the change's own issue.
+
 ## Example
 
 `changelog.d/731-changelog-fragments.md`:

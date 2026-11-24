@@ -288,7 +288,7 @@ call written as text; the tool budget had run out" if it happens again.
   `extracted` (an older daemon's bytes) is an error, never shown as text.
 - `workspace_facts.py`: what the project declares, read statically by the
   daemon (`workspace.related` with `lookup.kind` set to the tool's name,
-  `vscode-daemon/project_facts.py`, PROTOCOL.md §5.9), family R:
+  `vscode-daemon/project_facts.py`, PROTOCOL.md §5.10), family R:
   `workspace__api_surface` (committed OpenAPI documents with their
   operations, and the routes FastAPI-style decorators declare: method, path,
   function, file:line, an `APIRouter(prefix=…)` of the same module applied,

@@ -12,15 +12,14 @@
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useQuotas } from '../hooks/useQueries'
+import { useSprintBoard, useSprintLiveState, useQuotas } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { ZapOff } from 'lucide-react'
 import { getEventTypes } from './glassroom/format'
 import { groupMessages } from './glassroom/groupMessages'
-import { useAgentPresence, useAutoScroll, useClockTick, useFeedFilters } from './glassroom/useFeed'
-import {
-  useAutonomyTree, useHealthEntries, useQuotaTelemetry, useSprintTasks,
-} from './glassroom/useSprintInsights'
+import { useAutoScroll, useClockTick, useFeedFilters } from './glassroom/useFeed'
+import { activeAgentsFrom, agentsSeen, healthEntries as buildHealthEntries, memoryRetrievals } from './glassroom/liveStatus'
+import { useAutonomyTree, useQuotaTelemetry, useSprintTasks } from './glassroom/useSprintInsights'
 import { TopBar } from './glassroom/TopBar'
 import { LeftSidebar } from './glassroom/LeftSidebar'
 import { MessageFeed } from './glassroom/MessageFeed'
@@ -30,12 +29,14 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const { t } = useTranslation()
   const eventTypes = useMemo(() => getEventTypes(t), [t])
 
-  const { messages, agentStates, isConnected, connectionError, connect, disconnect, memoryHits, lastRetro } = useAgentStore()
+  const { messages, agentStates, isConnected, connectionError, connect, disconnect, lastRetro } = useAgentStore()
   const activeSprintId = useAppStore(s => s.activeSprintId)
   const companyId = useAppStore(s => s.companyId)
 
   const numericId   = propSprintId ? parseInt(propSprintId, 10) : (activeSprintId ?? null)
   const { data: board } = useSprintBoard(isNaN(numericId as number) ? null : numericId)
+  // Who works now and the health tiles: the backend's records, not the stream.
+  const { data: live } = useSprintLiveState(isNaN(numericId as number) ? null : numericId)
   const { data: quotas } = useQuotas(companyId)
   const sprint = board?.sprint
 
@@ -49,11 +50,17 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const filters = useFeedFilters(messages)
   const { filteredMessages, isFiltered } = filters
 
-  const grouped = useMemo(() => groupMessages(filteredMessages), [filteredMessages])
-  const { activeAgents, onlineAgents } = useAgentPresence(messages, clockTick)
+  const closedAt = live?.closed_at ?? null
+  const grouped = useMemo(() => groupMessages(filteredMessages, closedAt), [filteredMessages, closedAt])
+  const activeAgents = useMemo(() => activeAgentsFrom(live, clockTick), [live, clockTick])
+  const onlineAgents = useMemo(() => agentsSeen(messages), [messages])
+  const memoryHits = useMemo(() => memoryRetrievals(messages), [messages])
   const sprintTasks = useSprintTasks(board)
   const quotaTelemetry = useQuotaTelemetry(quotas)
-  const healthEntries = useHealthEntries({ agentStates, clockTick, isConnected, messages, sprintTasks, memoryHits, lastRetro, t })
+  const healthEntries = useMemo(
+    () => buildHealthEntries({ live, isConnected, memoryHits, now: clockTick, t }),
+    [live, isConnected, memoryHits, clockTick, t],
+  )
   const autonomyTree = useAutonomyTree(messages, sprintTasks, t)
 
   return (
@@ -99,6 +106,9 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           sprintId={propSprintId}
           scope={sprint?.scope_size}
           status={sprint?.status}
+          integrationState={sprint?.integration_state}
+          pauseReason={live?.pause_reason ?? sprint?.pause_reason}
+          pauseKind={live?.pause_kind ?? sprint?.pause_kind}
           activeAgents={activeAgents}
           onlineAgents={onlineAgents}
         />
@@ -124,6 +134,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
         <RightPanel
           sprintId={propSprintId}
           agentStates={agentStates}
+          activeAgents={activeAgents}
           messageCount={messages.length}
           isConnected={isConnected}
           sprintTasks={sprintTasks}

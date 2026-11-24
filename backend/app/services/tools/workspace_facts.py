@@ -6,7 +6,7 @@ writes the API reference, the configuration page or the dependency list from
 memory or from a prompt's excerpt invents routes, variables and versions.
 Three read-only tools (family R, ``contracts/tool_steps``) ask the daemon,
 which reads the project statically (``vscode-daemon/project_facts.py``,
-PROTOCOL.md §5.9) through the existing ``workspace.related`` subject with
+PROTOCOL.md §5.10) through the existing ``workspace.related`` subject with
 ``lookup.kind`` set to the tool's name:
 
 - ``workspace__api_surface``: the OpenAPI documents committed in the project

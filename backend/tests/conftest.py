@@ -236,6 +236,7 @@ def when_loaded(name, act):
 # that is neither here nor in its list of safe ones.
 PROCESS_STATE = {
     "services.loop.worker.intake.LAST_AUTONOMOUS_QUEUE_AT": "by task id",
+    "services.loop.in_flight._runs": "agent runs in flight, by registration id",
     "services.management.manager_observe._last_credit_probe": "by company id",
     "services.management.manager_observe._bridge": "a test's NATS, loop, requester",
     # A background integration that an earlier test's event loop dropped
@@ -399,13 +400,13 @@ def no_scrum_master_proxy(monkeypatch):
         monkeypatch.setattr(module, "LLMProxyClient", _NoProxy)
 
     when_loaded("services.learning.scrum_master", no_proxy)
-    # The wiki's compilation at sprint close (#445) asks the same way.
-    when_loaded("services.learning.wiki_compile", no_proxy)
+    when_loaded("services.learning.wiki_compile", no_proxy)  # the wiki at close (#445)
 
 
 SQLModel.metadata.create_all(
     _engine,
     tables=[
+        TaskRelation.metadata.tables["owner_action_runs"],
         Company.__table__,
         User.__table__,
         CompanyMember.__table__,
@@ -566,8 +567,7 @@ class _FakeNATSClient:
 
 @pytest.fixture()
 def test_client(sqlite_session):
-    """
-    FastAPI TestClient with get_session overridden to the in-memory SQLite session.
+    """FastAPI TestClient with get_session overridden to the in-memory SQLite session.
 
     Startup hooks that touch Postgres (prepare_database), NATS, and Neo4j
     are all patched out so no external services are required.

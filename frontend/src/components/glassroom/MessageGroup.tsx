@@ -4,7 +4,8 @@ import { taskPath } from './identity'
 import { formatTime } from './format'
 import type { MessageGroup } from './types'
 import { MessageContent } from './MessageContent'
-import { AgentAvatar, CopyBtn, PreviewCard, TypeBadge } from './atoms'
+import { AgentAvatar, CopyBtn, PreviewCard, StateBadge } from './atoms'
+import { groupState, workingKeys, type ActiveAgent } from './liveStatus'
 
 // ── Message row / group ───────────────────────────────────────────────────────
 
@@ -24,10 +25,14 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   )
 }
 
-export function SlackMessageGroup({ group, sprintId }: { group: MessageGroup; sprintId: string }) {
+export function SlackMessageGroup({ group, sprintId, activeAgents = [] }: {
+  group: MessageGroup; sprintId: string; activeAgents?: ActiveAgent[]
+}) {
   const { identity, messages } = group
   const firstMsg = messages[0]
-  const isError  = firstMsg?.type === 'error'
+  // The badge says where the group ended up (approved, delivered, refused…), not how it began.
+  const state = groupState(messages, workingKeys(activeAgents))
+  const isError  = state === 'error'
 
   return (
     <div className={`flex gap-3 px-4 py-1.5 animate-fade-in transition-colors ${
@@ -39,7 +44,7 @@ export function SlackMessageGroup({ group, sprintId }: { group: MessageGroup; sp
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <span className={`font-bold text-[13px] ${identity.color}`}>{identity.label}</span>
-          <TypeBadge type={firstMsg.type} />
+          {state && <StateBadge state={state} />}
           {firstMsg.task && firstMsg.taskId !== undefined && sprintId ? (
             <Link
               to={taskPath(sprintId, firstMsg.taskId)}

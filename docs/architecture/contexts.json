@@ -27,6 +27,7 @@
         "forge_policy_setting",
         "glassroom",
         "hooks",
+        "in_process_principal",
         "locks",
         "mail",
         "memory_graph",
@@ -93,6 +94,7 @@
         "agent_run_service",
         "app_check",
         "browser_smoke",
+        "changelog_diff",
         "command_runs",
         "company_standards_check",
         "console_run",
@@ -193,6 +195,7 @@
       "public": [
         "arch_author",
         "arch_check",
+        "changelog_order",
         "document_approval",
         "planner_fallback",
         "spec_check",
@@ -240,6 +243,7 @@
         "delivery_checks",
         "preconditions",
         "routines",
+        "live_state",
         "run_review",
         "sod_requesters",
         "sprint_control"
@@ -622,6 +626,13 @@
       "test_changelog_fragments.py": [
         "repo"
       ],
+      "test_changelog_matches_diff.py": [
+        "evidence"
+      ],
+      "test_changelog_observe.py": [
+        "evidence",
+        "loop"
+      ],
       "test_check_architecture_interfaces.py": [
         "repo"
       ],
@@ -952,6 +963,9 @@
       "test_licence_scan.py": [
         "repo"
       ],
+      "test_live_state.py": [
+        "release"
+      ],
       "test_llm_client.py": [
         "models"
       ],
@@ -1072,6 +1086,12 @@
         "release"
       ],
       "test_output_tail.py": ["evidence", "workspace"],
+      "test_owner_action_runner.py": [
+        "management"
+      ],
+      "test_owner_actions_router.py": [
+        "management"
+      ],
       "test_password_rule.py": [
         "platform"
       ],
@@ -1586,6 +1606,9 @@
       ],
       "test_task_events_transitions.py": [
         "management"
+      ],
+      "test_task_hold.py": [
+        "release"
       ],
       "test_task_relations.py": [
         "loop"

@@ -1,7 +1,7 @@
 """The direct dependencies a project's manifests declare (``project_facts``, issue #766).
 
 For ``workspace.related`` with ``lookup.kind: "dependencies"`` (PROTOCOL.md
-§5.9): every ``pyproject.toml``, ``requirements*.txt`` (and ``*.txt`` in a
+§5.10): every ``pyproject.toml``, ``requirements*.txt`` (and ``*.txt`` in a
 ``requirements/`` folder) and ``package.json`` in the project, found with the
 listing's guards, read whole (at most ``MAX_MANIFEST_BYTES``) and hashed.
 Each row is a dependency as declared: the manifest, the ecosystem, the name,

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../services/api'
 import { type GlassroomStream, openGlassroomStream } from '../services/api/stream'
 import i18n from '../i18n'
+import { parseTimestamp } from '../lib/kanban'
 import {
   type AgentEvent,
   type AgentFsmState,
@@ -53,6 +54,25 @@ function taskMetaFromTelemetry(task?: TaskTelemetry) {
   }
 }
 
+/**
+ * *messages* with *message* in the place its own time gives it: the backend
+ * replays a sprint's history task by task, and live events arrive after it,
+ * so the order they arrive in is not the order they happened in. Equal or
+ * unreadable times keep the arrival order.
+ */
+export function insertByTime(messages: AgentMessage[], message: AgentMessage): AgentMessage[] {
+  const at = parseTimestamp(message.timestamp)
+  let index = messages.length
+  if (at !== null) {
+    while (index > 0) {
+      const before = parseTimestamp(messages[index - 1].timestamp)
+      if (before === null || before <= at) break
+      index -= 1
+    }
+  }
+  return [...messages.slice(0, index), message, ...messages.slice(index)]
+}
+
 export interface SprintRetro {
   completionRate: number
   doneTasks: number
@@ -70,7 +90,6 @@ interface AgentStore {
   isConnected: boolean
   connectionError: string | null
   sprintId: string | null
-  memoryHits: number          // times memory context was retrieved this session
   lastRetro: SprintRetro | null
 
   addMessage: (message: AgentMessage) => void
@@ -163,12 +182,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             semanticType: normalized.semanticType,
             source: normalized.source,
             ...taskMeta,
-          }
-
-          // Track memory hit counter.
-          const semType = normalized.semanticType || ''
-          if (semType === 'task.memory_retrieved' || semType === 'kickoff.memory_retrieved') {
-            set((s) => ({ memoryHits: s.memoryHits + 1 }))
           }
 
           get().applyAgentEvent(normalized)
@@ -299,7 +312,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     isConnected: false,
     connectionError: null,
     sprintId: null,
-    memoryHits: 0,
     lastRetro: null,
 
     addMessage: (message) => {
@@ -311,7 +323,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         seenEventIds.add(message.eventId)
       }
       set((state) => {
-        const next = [...state.messages, message]
+        const next = insertByTime(state.messages, message)
         return { messages: next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next }
       })
     },
@@ -409,7 +421,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     setSprintId: (sprintId) => set({ sprintId }),
     clearMessages: () => {
       seenEventIds.clear()
-      set({ messages: [], agentStates: {}, rolePalettes: {}, memoryHits: 0, lastRetro: null })
+      set({ messages: [], agentStates: {}, rolePalettes: {}, lastRetro: null })
     },
 
     connect: (sprintId) => {

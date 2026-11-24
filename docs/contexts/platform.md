@@ -8,8 +8,8 @@ knows nothing of tasks, runs or a company's decisions.
 
 - **Folder:** `backend/app/services/platform/`
 - **May import:** [contracts](contracts.md). Every context but contracts may import it.
-- **Interface:** `acknowledgements`, `agent_service`, `audit_anchors`, `company_limits_setting`, `company_standards_setting`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `hooks`, `locks`, `mail`, `memory_graph`, `notifications`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_window_setting`, `sod`, `standard_exceptions`, `teams`, `wstg_catalogue`.
-- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
+- **Interface:** `acknowledgements`, `agent_service`, `audit_anchors`, `company_limits_setting`, `company_standards_setting`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `hooks`, `in_process_principal`, `locks`, `mail`, `memory_graph`, `notifications`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_window_setting`, `sod`, `standard_exceptions`, `teams`, `wstg_catalogue`.
+- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `in_process_principal`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
 - **HTTP adapters:** `healthcheck` (the LLM proxy's probe), `oidc_client`. `dns_client` is the DNS resolver adapter, held to the same shape (returns data, raises `DnsNameNotFound` or `DnsUnavailable`).
 
 ## How it works
@@ -128,6 +128,13 @@ sprint closes once.
 - **API tokens** (`api_tokens.py`): checked against the creator on every use;
   refusals audited `api_token_refused`. Prefer them to Bearer logins for
   automation.
+- **In-process principal** (`in_process_principal.py`, issue #701): an owner
+  action ([management](management.md#owner-actions)) calls the API in-process
+  as the Owner who started it, with no token: the ASGI scope carries an
+  `InProcessPrincipal`, which `auth_deps` honours only as an instance of that
+  class and only while its run is live. A header cannot forge it; every route
+  still checks the person's current roles. Design:
+  [`owner-actions.md`](../design/owner-actions.md) (boundary B15).
 - **Public routes**: `/health`, the auth and SSO flow endpoints, the signed
   GitHub and chat webhooks, support reporting, `/v1/models`,
   `/v1/capabilities`. Glassroom SSE takes a five-minute ticket for one

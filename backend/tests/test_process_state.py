@@ -35,6 +35,8 @@ SAFE = {
     "services.platform.wstg_catalogue._by_short": "a cache of a file shipped with the code",
     "services.release.integration._SLOTS": "weak, by event loop: gone with the test's loop",
     "services.release.integration._LOCK_ENGINES": "an engine per database URL, holds no row",
+    "services.management.owner_action_runner._TASKS": "a running owner action's task, removed by its own done callback",
+    "services.management.owner_action_runner._LIVE": "the ids of running owner actions, removed by the job when it ends",
     "services.tools.code_graph._SYNCS": "a running background sync, removed by its own thread when it ends; a test that starts one waits for it (wait_for_persists)",
 }
 

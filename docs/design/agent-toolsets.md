@@ -225,7 +225,7 @@ What stays with the role, and is not a matter of tools:
     code graph (`docs_snippet_names`, `services/evidence/doc_snippets.py`; a
     missing name is a finding, never run); and extraction, family R, each
     announced apart on `workspace.related` (`vscode-daemon/project_facts.py`,
-    `manifest_deps.py`, PROTOCOL.md §5.9): `workspace__api_surface`
+    `manifest_deps.py`, PROTOCOL.md §5.10): `workspace__api_surface`
     (committed OpenAPI documents, FastAPI routes read statically),
     `workspace__config_vars` (environment variables the code reads, never a
     `.env` value) and `workspace__dependencies` (manifests' direct

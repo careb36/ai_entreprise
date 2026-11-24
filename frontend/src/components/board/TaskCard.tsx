@@ -8,6 +8,7 @@ import type { AgentRunListItem, BacklogItem } from '../../services/api'
 import { MOVE_TARGETS, adjacentStatus, needsPerson, relativeTime, type BoardStatus } from '../../lib/kanban'
 import type { BoardDensity } from '../../hooks/useBoardPreferences'
 import { ObservedSignals, ReportedSignals } from './CardSignals'
+import { HoldBadge } from './HoldBadge'
 import { RoleAvatar } from './RoleAvatar'
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -19,6 +20,10 @@ const PRIORITY_DOT: Record<string, string> = {
 
 /** The left edge says what needs attention; the words on the card say it too. */
 function accentOf(item: BacklogItem): string {
+  const hold = item.observed?.hold?.kind
+  // Blocked until another task is done, or until the worker retries it: it waits, it is not stuck.
+  if (item.status === 'blocked' && hold === 'dependency') return 'border-l-amber-500'
+  if (item.status === 'blocked' && (hold === 'retry_pending' || hold === 'review_pending')) return 'border-l-sky-500'
   if (item.status === 'blocked') return 'border-l-red-500'
   if (item.status === 'discarded') return 'border-l-surface-600'
   if (needsPerson(item)) return 'border-l-amber-400'
@@ -45,7 +50,9 @@ export function TaskCard({
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id })
   const compact = density === 'compact'
   const titleId = `card-title-${item.id}`
-  const waitingFor = item.waiting_for?.length ?? 0
+  const hold = item.observed?.hold ?? null
+  // The hold names the dependencies itself; the bare count is for a backend without it.
+  const waitingFor = hold ? 0 : item.waiting_for?.length ?? 0
   const waitingLabel = t('kanban.waitsFor', { count: waitingFor, defaultValue: 'Waits for {{count}} tasks' })
   const comments = item.comments?.length ?? 0
   const updated = relativeTime(item.updated_at, i18n.language)
@@ -99,8 +106,9 @@ export function TaskCard({
       <div className={`space-y-1.5 ${compact ? 'mt-1.5' : 'mt-2'} pl-5`}>
         <ObservedSignals item={item} evidenceRun={evidenceRun} compact={compact} />
         <ReportedSignals item={item} compact={compact} />
-        {(waitingFor > 0 || item.kind === 'acceptance_tests') && (
+        {(hold || waitingFor > 0 || item.kind === 'acceptance_tests') && (
           <div className="flex flex-wrap items-center gap-1">
+            <HoldBadge hold={hold} />
             {waitingFor > 0 && (
               <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-900/30 px-1.5 py-0.5 text-[11px] font-medium text-amber-300 ring-1 ring-inset ring-amber-700/40"
                 role="img" aria-label={waitingLabel} title={waitingLabel}>

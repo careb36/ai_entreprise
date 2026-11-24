@@ -8,6 +8,10 @@ Two transports (``docs/archive/design/SESSIONS.md``):
 - The ``fabrique_session`` cookie — a browser session. Its family must still
   be live, and an unsafe method must carry the CSRF header
   (``session_cookies.csrf_ok``).
+
+An owner action's in-process call (``services/platform/in_process_principal``)
+carries no credential: its ASGI scope names the person, and it is honoured
+only while the run is live (``docs/design/owner-actions.md``).
 """
 
 import auth_tokens
@@ -16,7 +20,7 @@ from database import get_session
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from models import User
-from services.platform import api_tokens, sessions
+from services.platform import api_tokens, in_process_principal, sessions
 from sqlmodel import Session
 
 bearer = HTTPBearer(auto_error=False)
@@ -76,7 +80,19 @@ def has_credentials(request: Request) -> bool:
     return bool(
         request.headers.get("Authorization")
         or request.cookies.get(session_cookies.SESSION_COOKIE)
+        or in_process_principal.from_scope(request.scope) is not None
     )
+
+
+def _from_principal(session: Session, principal) -> User:
+    """The person an owner action acts for, while its run is live."""
+    if not principal.live():
+        raise _unauthorized("The owner action is no longer running")
+    user = session.get(User, principal.user_id)
+    if user is None:
+        raise _unauthorized()
+    user._owner_action_run_id = principal.run_id  # type: ignore[attr-defined]
+    return user
 
 
 def get_current_user(
@@ -84,7 +100,11 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),  # noqa: B008
     session: Session = Depends(get_session),  # noqa: B008
 ) -> User:
-    """Resolve the caller: a Bearer token first, else the session cookie."""
+    """Resolve the caller: an owner action's principal, else a Bearer token,
+    else the session cookie."""
+    principal = in_process_principal.from_scope(request.scope)
+    if principal is not None:
+        return _from_principal(session, principal)
     if credentials is not None:
         return _from_bearer(session, credentials.credentials)
     cookie = request.cookies.get(session_cookies.SESSION_COOKIE)

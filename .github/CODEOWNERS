@@ -106,6 +106,8 @@
 /backend/tests/test_browser_image.py             @careb36
 /backend/tests/test_browser_image_backend.py     @careb36
 /backend/tests/test_browser_smoke.py             @careb36
+/backend/tests/test_changelog_matches_diff.py   @careb36
+/backend/tests/test_changelog_observe.py         @careb36
 /backend/tests/test_code_graph.py                @careb36
 /backend/tests/test_command_runs_rewritten_check.py @careb36
 /backend/tests/test_daemon_protocol_client.py    @careb36

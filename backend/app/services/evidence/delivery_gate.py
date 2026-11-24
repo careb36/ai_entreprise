@@ -19,6 +19,7 @@ from sqlmodel import Session, select
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 from services.evidence import (
     app_check,
+    changelog_diff,
     command_runs,
     criteria_tests,
     doc_build,
@@ -48,6 +49,7 @@ _GATE_PROBLEMS = {
     doc_links.CHECK_LINKS: "broken documentation links",
     doc_links.CHECK_CODE_PATHS: "documentation cites missing paths",
     doc_build.CHECK_NAME: "documentation build failed",
+    changelog_diff.CHECK_NAME: "changelog claims what the diff does not show",
 }
 
 # The problems the code itself caused: the Developer fixes the code.

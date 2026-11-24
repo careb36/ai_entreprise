@@ -34,6 +34,7 @@ from sqlmodel import Session, select
 
 from services.evidence import acceptance, delivery_gate
 from services.loop import (
+    in_flight,
     refuted_undo,
     repeat_delivery,
     replicas,
@@ -167,17 +168,20 @@ async def _review_task(
         )
         return
 
-    await qa_review._qa_review(
-        session,
-        nats_client,
-        item,
-        sprint,
-        reviewer_dict,
-        task_record,
-        deliverable,
-        qa_review_failures,
-        quality_gate_blocked_ids,
-    )
+    with in_flight.running(
+        sprint.id, item.id, reviewer_dict.get("role"), in_flight.REVIEW
+    ):
+        await qa_review._qa_review(
+            session,
+            nats_client,
+            item,
+            sprint,
+            reviewer_dict,
+            task_record,
+            deliverable,
+            qa_review_failures,
+            quality_gate_blocked_ids,
+        )
 
 
 def _reviewer_of(session: Session, sprint: Sprint) -> dict[str, Any]:

@@ -145,6 +145,7 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   `workspace.git.diff`: status, changed, one path's diff, log, and blame of
   a line range without names or e-mails; PROTOCOL.md §5.6), `local_merge.py`, `sprint_integration.py`,
   `platform_reviews.py`, `forge_gate.py`.
+- Owner actions: `self_host_checkout.py` (`workspace.self_host.checkout`, PROTOCOL.md §5.9): the self-hosting snapshot copied from this machine's `FABRIQUE_SELF_HOST_SOURCE` into a folder named by the request under its `FABRIQUE_SELF_HOST_ROOT` ([design](../design/owner-actions.md)).
 - Tools and producers: `workspace_read.py`, `document_text.py` (a DOCX's
   text for `workspace.read` with `extract: "text"`, standard library only, no
   DTD accepted; PDF refused for now; PROTOCOL.md §5.8), `workspace_edit.py`,
@@ -155,7 +156,7 @@ Dependencies are `nats-py` and `nkeys`, locked with hashes in
   `manifest_deps.py` (the API surface, the configuration variables and the
   manifests' dependencies, read statically for the same subject's
   `api_surface`, `config_vars` and `dependencies` lookups, each announced
-  apart; no `.env` file read, no server started; PROTOCOL.md §5.9),
+  apart; no `.env` file read, no server started; PROTOCOL.md §5.10),
   `signatures.py` (see
   [tools](tools.md)); `console_run.py`
   (see [producers](producers.md); with `private_git: false` it prepares the

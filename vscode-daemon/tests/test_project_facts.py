@@ -1,4 +1,4 @@
-"""What a project declares, read statically (``project_facts``, PROTOCOL.md §5.9).
+"""What a project declares, read statically (``project_facts``, PROTOCOL.md §5.10).
 
 The API surface (committed OpenAPI documents and FastAPI routes), the
 environment variables the code reads, and the manifests' direct

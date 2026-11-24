@@ -49,7 +49,8 @@
     "notifications": "Notifications",
     "auditTrail": "Audit trail",
     "modelCatalog": "Model catalog",
-    "routines": "Routines"
+    "routines": "Routines",
+    "ownerActions": "Owner actions"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -829,13 +830,14 @@
     "noAgentActivity": "No agent activity yet.",
     "healthLabels": {
       "stream": "Stream",
-      "activeAgents": "Active agents",
-      "agentErrors": "Agent errors",
+      "activeAgents": "Agents with a run in flight",
       "blockedTasks": "Blocked tasks",
-      "openReworks": "Open reworks",
-      "freshestHeartbeat": "Freshest heartbeat",
-      "memoryHits": "Memory hits",
-      "lastSprintCompletion": "Last sprint"
+      "openReworks": "Tasks with an unanswered rework request",
+      "memoryHits": "Memory retrievals seen on this stream",
+      "agentFailures": "Failed agent calls (review or model)",
+      "lastAgentEvent": "Last event an agent recorded",
+      "daemonHeartbeat": "Workspace daemon heartbeat",
+      "previousSprint": "Previous sprint ({{name}})"
     },
     "streamStatus": {
       "live": "Live",
@@ -852,7 +854,11 @@
     },
     "badgeLabels": {
       "working": "working",
+      "started": "started",
+      "approved": "approved",
       "delivered": "delivered",
+      "refused": "rework requested",
+      "blocked": "blocked",
       "error": "error",
       "update": "update",
       "split": "split"
@@ -864,7 +870,7 @@
       "rework": "Rework",
       "done": "Done"
     },
-    "retroTitle": "Last Sprint Retro",
+    "retroTitle": "This sprint's retrospective",
     "retroCompletion": "Completion",
     "retroDone": "Done",
     "retroBlocked": "Blocked",
@@ -956,7 +962,22 @@
       "retrying": "🔄 Retrying blocked task: {{task}}",
       "gate_rework": "↩️ Sent back for rework: {{task}} ({{detail}}).",
       "gate_blocked": "❌ The pre-review gate blocked the deliverable for: {{task}} ({{detail}})."
-    }
+    },
+    "previousSprintValue": "{{done}}/{{total}} done ({{rate}}%)",
+    "daemonState": {
+      "online": "online",
+      "stale": "late",
+      "offline": "offline",
+      "not_observed": "no heartbeat seen"
+    },
+    "agentState": {
+      "working": "working",
+      "reviewing": "reviewing",
+      "idle": "not working"
+    },
+    "agentReviewing": "reviewing the delivery",
+    "lastActivity": "Last activity: {{text}}",
+    "afterClose": "After the sprint closed"
   },
   "governance": {
     "title": "Governance",
@@ -2254,8 +2275,6 @@
   "workControl": {
     "plannedTitle": "This sprint has not started",
     "plannedHint": "The agents start working when you start it.",
-    "pausedTitle": "This sprint is paused",
-    "pausedHint": "Nothing is dispatched, reviewed or retried until it is resumed.",
     "start": "Start",
     "stop": "Stop",
     "stopConfirm": "Stop this sprint for good? Unfinished tasks are blocked and no follow-up sprint opens.",
@@ -2277,7 +2296,38 @@
     "gitError": "Git settings unavailable",
     "loading": "Loading…",
     "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
-    "autonomySaved": "Autonomy level saved"
+    "autonomySaved": "Autonomy level saved",
+    "pauseRecorded": "Recorded reason: {{reason}}",
+    "pauseKind": {
+      "person": {
+        "title": "Paused by a person",
+        "action": "Nothing is dispatched, reviewed or retried until someone resumes it."
+      },
+      "no_credit": {
+        "title": "Paused: a model provider has no credit",
+        "action": "Top up the provider's account, then resume the sprint."
+      },
+      "nothing_done": {
+        "title": "Paused: no task is done and the rest wait for a person",
+        "action": "Unblock, finish or discard the blocked tasks, then resume the sprint."
+      },
+      "budget": {
+        "title": "Paused: the sprint budget",
+        "action": "An Owner raises the sprint budget (or adds the model's price), then resumes the sprint."
+      },
+      "acknowledgement": {
+        "title": "Paused: an Owner's acknowledgement is missing",
+        "action": "An Owner acknowledges the company's settings, then resumes the sprint."
+      },
+      "daemon": {
+        "title": "Paused: the workspace daemon is not answering",
+        "action": "Start the daemon on the computer that holds the projects, then resume the sprint."
+      },
+      "other": {
+        "title": "This sprint is paused",
+        "action": "Read the recorded reason below, then resume the sprint."
+      }
+    }
   },
   "execution": {
     "title": "Execution",
@@ -5113,5 +5163,113 @@
   "commentAuthor": {
     "unidentified": "Unidentified (no signed-in person)",
     "unrecorded": "A person (name not recorded)"
+  },
+  "taskHold": {
+    "person": "Waits for a person",
+    "dependency": "Waits for another task",
+    "dependencyOn": "Waits for {{ids}}",
+    "retry_pending": "Retry pending",
+    "review_pending": "Review pending",
+    "frozen": "Frozen",
+    "risk_hold": "Risk hold",
+    "run_window": "Held for the run window",
+    "hint": {
+      "person": "Blocked: nothing moves it until a person acts.",
+      "dependency": "Not started or held until the tasks it depends on are done; the worker moves it then.",
+      "retry_pending": "Blocked by a failure the worker retries on its own.",
+      "review_pending": "Blocked with a delivery the worker reviews again on its own.",
+      "frozen": "Frozen out of automation by an operator; a person unfreezes it.",
+      "risk_hold": "Approved, held for a person to accept the risk.",
+      "run_window": "Ready, held until the company's run window opens."
+    }
+  },
+  "ownerActions": {
+    "title": "Owner actions",
+    "subtitle": "Steps only you take, run by the platform after you confirm their cost and effect. One run at a time; each start, cancel and finish is in the company's audit chain.",
+    "noCompany": "Pick a company to see its owner actions.",
+    "ownerOnly": "Only the company's Owner can run owner actions.",
+    "loading": "Loading the owner actions…",
+    "loadError": "Could not load the owner actions: {{message}}",
+    "issue": "issue #{{issue}}",
+    "inboxTitle": "Steps you can run from the app",
+    "runFromApp": "Run from the app",
+    "earlierRuns_one": "{{count}} earlier run",
+    "earlierRuns_other": "{{count}} earlier runs",
+    "earlierRun": "Run {{id}}: {{status}}, started {{at}}",
+    "status": {
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "unavailable": {
+      "harness_not_found": "Unavailable: the backend cannot find scripts/self_host (set SELF_HOST_REPOSITORY_DIR).",
+      "daemon_lacks_checkout": "Unavailable: the workspace daemon does not announce workspace.self_host.checkout; update and restart it.",
+      "unknown": "Unavailable."
+    },
+    "form": {
+      "checkoutName": "Snapshot folder",
+      "checkoutHint": "One folder name, created under the daemon's own root (FABRIQUE_SELF_HOST_ROOT), never your checkout.",
+      "scope": "Sprint size",
+      "timeoutMinutes": "Wait for the sprint at most (minutes)",
+      "tokenBudget": "Token budget",
+      "urgent": "Mark the sprint urgent (it does not wait for the run window)",
+      "review": "Review cost and effect",
+      "oneAtATime": "A run is in progress"
+    },
+    "confirm": {
+      "title": "Run {{name}}?",
+      "effect": "What it does",
+      "cost": "What it costs",
+      "models": "Models called",
+      "tokenBudget": "Token budget (the run stops above it)",
+      "duration": "Longest it takes",
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes",
+      "budgetBetweenCalls": "The budget is checked between calls, so one model turn can pass it.",
+      "audited": "The start, a cancel and the finish are recorded in the company's audit chain under your name.",
+      "run": "Confirm and run"
+    },
+    "run": {
+      "label": "Run {{id}}",
+      "stopping": "stopping",
+      "cancel": "Cancel run",
+      "started": "Started {{at}}",
+      "finished": "finished {{at}}",
+      "steps": "Steps done: {{steps}}",
+      "sandbox": "Sandbox asked: {{asked}}; observed by the daemon: {{observed}}.",
+      "observed": "Recorded by the platform",
+      "copy": "Copy ids",
+      "copied": "Copied"
+    },
+    "ids": {
+      "run": "Run",
+      "company": "Company",
+      "sprint": "Sprint",
+      "specification": "Specification",
+      "architecture": "Architecture",
+      "agentRuns": "Agent runs",
+      "checkoutHead": "Snapshot commit",
+      "sourceHead": "Source commit",
+      "sandboxObserved": "Sandbox observed",
+      "containerMode": "Container mode",
+      "images": "Images",
+      "tokens": "Tokens observed",
+      "exitStatus": "Exit status"
+    },
+    "actions": {
+      "self_host_container_run": {
+        "title": "Self-hosting run in container mode",
+        "description": "Runs the self-hosting harness once with --container-mode (checkout, company, records, issue, wait, sandbox) and records the run's ids.",
+        "effect": {
+          "copy": "The daemon copies the La Fabrique repository into the folder {{name}} under its own root and commits it as a fresh repository.",
+          "company": "Creates or finds the \"La Fabrique\" company on that snapshot, with the container sandbox.",
+          "sprint": "Posts La Fabrique's records and the issue's specification, plans a sprint of size {{scope}} and starts it (models are called).",
+          "wait": "Waits up to {{minutes}} minutes for the sprint to complete.",
+          "sandbox": "Reads which sandbox the daemon reported for each test run, apart from the one asked.",
+          "urgent": "Marks the sprint urgent, so the run window does not hold it."
+        }
+      }
+    }
   }
 }

@@ -196,6 +196,12 @@ class Settings(BaseSettings):
     # The checkout whose bench/scorecards the /bench page reads (read-only);
     # empty: the backend's own checkout, when it has one.
     BENCH_REPOSITORY_DIR: str = ""
+    # The checkout whose scripts/self_host an owner action imports (read-only);
+    # empty: the backend's own checkout, else AGENT_WORKSPACE_ROOT's.
+    SELF_HOST_REPOSITORY_DIR: str = ""
+    # Where a company without a discovered project folder writes (compose:
+    # /workspace, the repository); the owner action looks for the harness there.
+    AGENT_WORKSPACE_ROOT: str = ""
     # The Support agent triages new help-desk tickets (suggested severity and
     # category, a first reply to the reporter). Off by default: reporting a
     # bug is public, and each new ticket costs an LLM call.

@@ -31,6 +31,7 @@ import re
 from typing import Any
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
+from services.evidence import doc_snippets
 
 CHECK_NAME = "docs_build"
 KIND = "docs_build"
@@ -99,3 +100,10 @@ def check(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
         result["errors"] = errors
     result.update(outcome=outcome, observation=f"`{command}` {why}{tail}")
     return result
+
+
+def checks(evidence: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The checks of a documentation delivery beyond its links, for the
+    Verifier: ``docs_build`` and ``docs_snippet_names``
+    (``doc_snippets.check``), each only when applicable."""
+    return [c for c in (check(evidence), doc_snippets.check(evidence)) if c]

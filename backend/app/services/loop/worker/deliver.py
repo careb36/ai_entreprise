@@ -28,6 +28,7 @@ from services.contracts.manifest import expected_hashes, parse_file_manifest
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
 from services.loop import (
+    changelog_observe,
     delivery_checks,
     docs_checks,
     folder_baseline,
@@ -283,6 +284,9 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         )
     git_workflow.record_reply(evidence, data)
     evidence["delivered_after_queue"] = True
+    await changelog_observe.observe(
+        nats_client, engine, {"id": sprint_id, "company_id": company_id}, evidence
+    )
 
     written, _ = evaluate_workspace_writes(files, evidence)
     if settings.DELIVERY_TESTS_ENABLED and written == "pass":
@@ -475,6 +479,8 @@ async def _deliver_artifacts(
             _record_tests_not_run(evidence, written)
 
     await _observe_dependencies(evidence, targets)
+    # A changelog fragment against the task's diff (``changelog_observe``).
+    await changelog_observe.observe(nats_client, engine, sprint, evidence)
     await _observe_signatures(nats_client, evidence, targets)
     await _observe_docs(nats_client, sprint, evidence, targets)
     recorded = await asyncio.to_thread(
