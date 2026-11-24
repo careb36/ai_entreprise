@@ -158,3 +158,51 @@ def test_a_failed_record_leaves_it_out_and_the_brief_still_comes(
 
     assert advice == "Use a service layer."
     assert "earlier briefs" not in prompts[0]
+
+
+def test_a_tool_call_typed_as_text_is_no_brief(prompts, sqlite_session, monkeypatch):
+    """Sprint 7 (2026-11-24): offered no tools, the Architect answered with a
+    tool call written as text, and it went to the Developer as its brief."""
+    company = _company(sqlite_session)
+    sprint = _sprint(sqlite_session, company, "active", [])
+    typed = (
+        '<tool_calls>\n<invoke name="exec_command">\n<parameter name="command" '
+        "string=\"true\">find .github -name '*.yml'</parameter>\n</invoke>\n"
+        "</tool_calls>"
+    )
+
+    class _Typing:
+        def __init__(self, base_url=None):
+            self.timeout = None
+
+        def chat(self, messages, model, role, bu_id=None):
+            return {"choices": [{"message": {"content": typed}}]}
+
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Typing)
+
+    advice = worker_execute._consult_architect(
+        {"id": 1, "title": "Update the workflow"},
+        {"role": "DevOps"},
+        {"id": sprint.id, "company_id": company.id, "name": "S"},
+    )
+
+    assert advice == ""
+
+
+def test_markup_written_as_text_is_told_from_an_answer():
+    from services.contracts.tool_calls import written_as_text
+
+    for text in (
+        '<invoke name="read">',
+        "<function_calls><invoke>",
+        "</tool_calls>",
+        "<|tool_call_begin|>read",
+        "<｜tool▁calls▁begin｜>",
+    ):
+        assert written_as_text(text), text
+    for text in (
+        "Use a service layer; keep `tool_calls` in the evidence.",
+        "Edit .github/workflows/bench.yml: drop the extra secret from the loop.",
+        "",
+    ):
+        assert not written_as_text(text), text

@@ -21,6 +21,7 @@ from models import Agent
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
+from services.contracts import tool_calls
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
 from services.loop import edit_plan, sprint_control, task_routing
@@ -450,6 +451,13 @@ def _consult_architect(
         return ""
 
     advice = _llm_content(result)
+    if tool_calls.written_as_text(advice):
+        # Offered no tools, it typed a tool call: that is no brief to pass on.
+        logger.warning(
+            "Architect answered item=%s with a tool call written as text; no brief",
+            item.get("id"),
+        )
+        advice = ""
 
     record_agent_turn(
         company_id=sprint["company_id"],
