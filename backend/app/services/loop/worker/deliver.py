@@ -27,7 +27,13 @@ from services.contracts import roles, tool_steps
 from services.contracts.manifest import expected_hashes, parse_file_manifest
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
-from services.loop import delivery_checks, folder_baseline, refuted_undo, review_digest
+from services.loop import (
+    delivery_checks,
+    docs_checks,
+    folder_baseline,
+    refuted_undo,
+    review_digest,
+)
 from services.loop.worker import board_writes, record, sprint_notes
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
@@ -119,6 +125,17 @@ async def _observe_signatures(
         await signature_lookup.observe(nats_client, evidence, targets)
     except Exception as e:  # noqa: BLE001 - The delivery is not the lookup's hostage.
         logger.warning("Signature lookups failed for a delivery: %s", e)
+
+
+async def _observe_docs(
+    nats_client: NATSClient, sprint: dict[str, Any], evidence: Any, targets: list
+) -> None:
+    """A documentation delivery's build and its snippets' names
+    (``docs_checks``); never blocks."""
+    try:
+        await docs_checks.observe(nats_client, sprint, evidence, targets, engine)
+    except Exception as e:  # noqa: BLE001 - The delivery is not the checks' hostage.
+        logger.warning("Documentation checks failed for a delivery: %s", e)
 
 
 TESTS_DISABLED = (
@@ -459,6 +476,7 @@ async def _deliver_artifacts(
 
     await _observe_dependencies(evidence, targets)
     await _observe_signatures(nats_client, evidence, targets)
+    await _observe_docs(nats_client, sprint, evidence, targets)
     recorded = await asyncio.to_thread(
         record._record_task_run, item, agent, sprint, deliverable, targets, evidence
     )

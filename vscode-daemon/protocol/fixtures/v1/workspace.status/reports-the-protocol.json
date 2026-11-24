@@ -111,7 +111,10 @@
           "document_text"
         ],
         "workspace.related": [
-          "lookup"
+          "lookup",
+          "api_surface",
+          "config_vars",
+          "dependencies"
         ]
       }
     }

@@ -7,8 +7,8 @@ module's docstring has the detail.
 
 - **Folder:** `backend/app/services/evidence/`
 - **May import:** [contracts](contracts.md), [platform](platform.md). Nothing else: it reads the daemon's reply as data and never calls the daemon, the loop, the tools or a producer.
-- **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_links`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
+- **Interface:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_snippets`, `fitness`, `manifests`, `protected_check`, `review_changes`, `risk`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `claimed_paths`, `command_runs`, `company_standards_check`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `doc_build`, `doc_links`, `doc_snippets`, `fitness`, `fitness_checks`, `grounding`, `imports`, `manifests`, `markdown_refs`, `protected_check`, `required_checks`, `review_changes`, `risk`, `secops_checks`, `security_probe`, `signatures`, `sources`, `standards`, `test_baseline`, `tests_removed`, `touched`, `unwritten_code`, `verification`, `wstg_tests`.
 
 ## How it works
 
@@ -144,6 +144,31 @@ outside the project, an anchor into a document not read back, or a document
 whose text was not read back is `unverifiable`. A bare file name not found is
 a finding. Fenced code and absolute URLs are not followed. The risk tier is
 unchanged (prose is `low`) and the checks are not required checks.
+
+Two more checks read what the loop observed for a delivery that writes
+documentation (`loop/docs_checks.py`):
+
+- `doc_build.py`, `docs_build`: the stack profile's `docs_build` command
+  (detected from MkDocs, Sphinx or Docusaurus configuration, or the
+  company's) run by the daemon in the company's sandbox, kept as
+  `evidence["docs_build"]` with the exit status, the first error lines and
+  the sha256 the backend computed over the output. Exit 0 passes; another
+  exit refutes, and the gate sends the delivery back (`documentation build
+  failed`); a builder that is not installed, a run refused, timed out, without
+  a sandbox or with tests off is `unverifiable`. No build command
+  (`applicable: false`) gives no check at all, never a pass.
+- `doc_snippets.py`, `docs_snippet_names`: the project names the delivered
+  documents' fenced Python and JavaScript/TypeScript blocks import (`from pkg
+  import name` with `pkg` in the listing or relative; `import { name } from
+  './x'`) or call (`module.name(…)` after `import module`), parsed by
+  `markdown_refs.fenced_blocks`. A submodule of the listing is found there;
+  the others are looked up by the loop in the daemon's code graph
+  (`workspace.related`, `lookup.kind: "definition"`), each answer kept with
+  the files and sha256 read. A name with no definition is a finding, never a
+  refutation (the parse reads functions, classes and methods, not a module's
+  constants or a re-export); a name the daemon could not settle
+  (unannounced, no answer, a partial reply) makes the check `unverifiable`.
+  At most 30 names. Snippets are never run.
 
 ### Protected paths
 

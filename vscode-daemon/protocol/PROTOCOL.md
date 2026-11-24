@@ -87,7 +87,7 @@ connects), under `abilities` (`vscode-daemon/abilities.py`):
 | --- | --- |
 | `abilities_version` | The announcement's own shape (`abilities.ABILITIES_VERSION`, 1). Adding a subject or a feature keeps it; the backend reads versions up to `daemon_abilities.SUPPORTED_ABILITIES_VERSION` and treats a higher one as no announcement. |
 | `subjects` | Every request subject the daemon serves (kept equal to `daemon.subscriptions` by `test_daemon_protocol.py`). |
-| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6, §5.7, §5.8). |
+| `features` | Per subject, the optional request fields added within version 1 that it honours (§5.1, §5.1.1, §5.1.4, §5.1.5, §5.2, §5.6, §5.7, §5.8, §5.9). |
 
 **A claim, never an observation.** The backend (`daemon_liveness`, with
 `daemon_abilities`) keeps the announcement per daemon under
@@ -207,7 +207,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.edit` | request | `workspace_edit.py`, `workspace_move.py` | `workspace_root`, `session`, `op`? (`edit`, `move`, `delete`, §5.1.4), `path`, lines or `search` / `replace`, or `to_path` / `to_line`? | `path`, `sha256_before`, `sha256_after`, `bytes`, `lines`, `checked`, the window; a move `moved_lines`, `moved_sha256`, `source`, `target`; a delete `deleted` |
 | `workspace.edit.finish` | request | `workspace_edit.py` | `workspace_root`, `session` | `session`, `files` |
 | `workspace.signatures` | request | `signatures.py` | `workspace_root`, `wanted` (`path`, `names`) | `files` (per file `status`, `sha256`, per name `found` / `unknown` / `missing`) |
-| `workspace.related` | request | `code_graph.py`, `code_lookup.py` | `workspace_root`, `seeds`, `hops`?, `max_files`?, `lookup`? (§5.7) | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched`; with `lookup`, `lookup` (§5.7) |
+| `workspace.related` | request | `code_graph.py`, `code_lookup.py`, `project_facts.py`, `manifest_deps.py` | `workspace_root`, `seeds`, `hops`?, `max_files`?, `lookup`? (§5.7, §5.9) | `files` (`path`, `sha256`, `hop`, `seed`, `uses`, `used_by`), `partial`, `seeds_matched`, `seeds_unmatched`; with `lookup`, `lookup` (§5.7, §5.9) |
 | `workspace.graph` | request | `code_graph.py` | `workspace_root`, `known` (path to sha256), `max_files`? | `files` (`path`, `sha256`, `status`, `defs`, `refs`, `truncated`) for the files whose sha256 the backend does not hold, `unchanged`, `removed`, `more`, `partial` |
 | `workspace.console.prepare` | request | `console_run.py` | `workspace_root`, `git`, `private_git`? (§5.1.5) | `ok`, `worktree`, `branch`, `head`, `guard`, `private_git`, … |
 | `workspace.console.collect` | request | `console_run.py` | `workspace_root`, `head`, `guard` | `ok`, `files`, `refused`, `restored`, … |
@@ -580,6 +580,35 @@ bytes (`binary: true`), which the backend never shows as text.
 The path rules are a read's: inside the project, symlinks followed, never a
 file that may hold secrets (403). A file over 20 MiB is a 413; another suffix,
 or a file that is not a DOCX, a 415.
+
+### 5.9 What the project declares (additive, issue #766)
+
+`workspace.related` with `lookup.kind` set to `api_surface`, `config_vars`
+or `dependencies` answers what the project's files declare, read statically,
+for the agents' `workspace__api_surface`, `workspace__config_vars` and
+`workspace__dependencies` (`backend/app/services/tools/workspace_facts.py`).
+Each kind is announced as a feature of its own on `workspace.related` (§2.1),
+and the backend offers a tool only when every daemon announces its kind; a
+daemon from before it answers an empty walk without `lookup` (or, knowing
+only §5.7, refuses the kind with a 400), which the backend reports as "not
+served", never as "nothing found". `lookup.path`, optional, narrows to one
+folder or file; an absolute path or one with `..` is a 400.
+
+| `lookup.kind` | Reply `lookup` (beside `kind`, `path`, empty `definitions` and `references`, `more`) |
+| --- | --- |
+| `api_surface` | `openapi`: each committed `openapi.json`, `openapi.yaml`/`.yml` or `swagger.*` (at most 20, 2 MiB each) with `path`, `sha256`, `spec`, `title`, `version` and `operations` (`method`, `path`, `operation_id`, `summary`), a YAML one read by its indentation; `routes`: the routes FastAPI-style decorators declare (`@x.get("/p")`, `post`, `put`, `patch`, `delete`, `head`, `options`, `trace`, `websocket`, `api_route(methods=…)`), each `method`, `path` (with the same module's `APIRouter(prefix=…)`), `function`, `file`, `line`, `router`; `mounts`: each `include_router` call (`file`, `line`, `router`, `prefix`), whose prefix is not applied. No server is started and nothing is imported. |
+| `config_vars` | `variables`: each read of an environment variable (`os.environ[…]`, `os.environ.get`/`setdefault`, `os.getenv`, a pydantic `BaseSettings` field with its `env_prefix` or alias, `process.env.X`, `import.meta.env.X`), with `name`, `file`, `line`, `source`, `required` (no default) and `default` when it is a literal (at most 120 characters). A name that looks like a secret (`secret`, `token`, `passw`, `key`, `auth`…) never has its default sent: `default_withheld: true`. |
+| `dependencies` | `manifests` (`path`, `sha256`, `ecosystem`, `count`, `error`?) and `dependencies`: each direct dependency of a `pyproject.toml` (`[project]` and its optional groups, `[dependency-groups]`, Poetry's tables), a `requirements*.txt` (or a `.txt` in `requirements/`) or a `package.json`, with `manifest`, `ecosystem` (`pypi`, `npm`), `name`, `version` as declared (`""` when none; `(direct reference)` for a URL, Git or local path, never the URL) and `group`. A `pyproject.toml` needs `tomllib` (Python 3.11+) or `tomli`; without them it is listed with `error: "no TOML reader"`. |
+
+Every kind adds `files` (each file a row came from, with the sha256 of the
+bytes read; at most 100), `files_scanned` and `scanned_sha256` (the sha256
+over every scanned file's `path sha256`, sorted). At most 200 rows; `more`
+counts the rest. The source files are the code graph's candidates and the
+documents and manifests come from a walk with the same guards: never a
+folder a listing skips, a hidden file (so never a `.env`), a file that may
+hold secrets or a symlink out of the project. A source file's extract is
+cached by its sha256 in the repository map's parse cache. `partial` says the
+project was larger than the daemon reads or the deadline passed.
 
 ## 6. Conformance fixtures
 

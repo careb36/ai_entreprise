@@ -212,11 +212,36 @@ What stays with the role, and is not a matter of tools:
     answer's own file blocks follow it too (`loop/worker/deliver.docs_scope`:
     a non-documentation path is not delivered and the run's evidence records
     `docs_write`).
+    **Built (2026-11-24, branch `feat/document-project-tools-2`):** the docs
+    build, as a tool and as a check: the stack profile's `docs_build`
+    (detected from `mkdocs.yml`, a Sphinx `conf.py` or `docusaurus.config.*`,
+    or the company's) runs in the sandbox as `workspace__docs_build` (family
+    X, no argument, `services/tools/workspace_docs_build.py`) and, for a
+    delivery that writes documentation, as the Verifier's `docs_build`
+    (`services/loop/docs_checks.py`, `services/evidence/doc_build.py`: exit 0
+    passes, another exit refutes, not really run is unverifiable, no command
+    is no check); snippet names: the project names fenced Python and
+    JavaScript/TypeScript blocks import or call, looked up in the daemon's
+    code graph (`docs_snippet_names`, `services/evidence/doc_snippets.py`; a
+    missing name is a finding, never run); and extraction, family R, each
+    announced apart on `workspace.related` (`vscode-daemon/project_facts.py`,
+    `manifest_deps.py`, PROTOCOL.md §5.9): `workspace__api_surface`
+    (committed OpenAPI documents, FastAPI routes read statically),
+    `workspace__config_vars` (environment variables the code reads, never a
+    `.env` value) and `workspace__dependencies` (manifests' direct
+    dependencies as declared), with `research__package` giving
+    `license_by_registry`, the registry's claim
+    (`services/tools/workspace_facts.py`).
     **Still to do:** PDF text; anchors into documents the delivery did not change
-    (a daemon read-back of their headings); code names in fenced snippets
-    and through navigation; runnable examples; the docs build; the API
-    surface, configuration and licence extraction; per-statement citations
-    in the written documentation.
+    (a daemon read-back of their headings); runnable examples (snippets are
+    read, never run); snippet names in other languages, a module's constants
+    and re-exports (the parse reads functions, classes and methods only, so a
+    missing name stays a finding); routes of frameworks other than
+    FastAPI-style decorators and `include_router` prefixes applied across
+    modules; a CLI's `--help`; the C4 code view (`c4_code`) as a tool; the
+    docs build and snippet checks on a delivery the daemon wrote from the
+    queue (`_on_delivery_result`); licences per dependency in one call; and
+    per-statement citations in the written documentation.
 
 ## Threat model (STRIDE, the agent as the adversary)
 

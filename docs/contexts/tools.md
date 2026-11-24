@@ -8,7 +8,7 @@ code and the research tools. Read this before changing
 - **Folder:** `backend/app/services/tools/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md).
 - **Interface:** `board_tools`, `code_graph`, `code_level`, `developer_tools`, `mcp_tools`, `registry_lookup`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `workspace_edits`.
-- **Modules:** `board_tools`, `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `docs_write_policy`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_documents`, `workspace_edits`, `workspace_git`, `workspace_lint`, `workspace_navigation`, `workspace_reads`.
+- **Modules:** `board_tools`, `check_scripts`, `code_graph`, `code_graph_neo4j`, `code_graph_store`, `code_level`, `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `docs_write_policy`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_policy`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_http`, `research_registries`, `research_schemas`, `research_tools`, `review_tools`, `signature_lookup`, `task_worktree`, `test_commands`, `test_runs`, `tool_history`, `workspace_docs_build`, `workspace_documents`, `workspace_edits`, `workspace_facts`, `workspace_git`, `workspace_lint`, `workspace_navigation`, `workspace_reads`.
 - **HTTP adapters:** `mcp_client` (the MCP transports), `research_http` (`default_http`, raising `ResearchFetchError`). Only these import an HTTP library; they return data and raise named errors.
 
 ## How it works
@@ -286,6 +286,38 @@ call written as text; the tool budget had run out" if it happens again.
   the file's bytes as the daemon read them) plus `format`, so a statement
   about a document can cite the digest the platform read. A reply without
   `extracted` (an older daemon's bytes) is an error, never shown as text.
+- `workspace_facts.py`: what the project declares, read statically by the
+  daemon (`workspace.related` with `lookup.kind` set to the tool's name,
+  `vscode-daemon/project_facts.py`, PROTOCOL.md §5.9), family R:
+  `workspace__api_surface` (committed OpenAPI documents with their
+  operations, and the routes FastAPI-style decorators declare: method, path,
+  function, file:line, an `APIRouter(prefix=…)` of the same module applied,
+  `include_router` prefixes listed apart; no server started),
+  `workspace__config_vars` (the environment variables the code reads through
+  `os.environ`, `os.getenv`, pydantic `BaseSettings` fields, `process.env`
+  and `import.meta.env`, with file:line and a literal default, withheld by
+  the daemon for a secret-looking name; no `.env` file is ever read) and
+  `workspace__dependencies` (the direct dependencies of `pyproject.toml`,
+  `requirements*.txt` and `package.json` as declared, with their group; a
+  direct reference without its URL). Each is offered only when every daemon
+  announces its kind as a feature of `workspace.related`; a reply without it
+  (an older daemon) is an error. An optional `path` narrows to a folder or
+  file, checked like `workspace__git`'s and again by the daemon. At most 120
+  rows shown, redacted. The observation names every file a row came from with
+  the sha256 the daemon read, plus `files_scanned` and `scanned_sha256` (a
+  digest over every file scanned). Licences are not extracted: the
+  dependencies reply points to `research__package`, whose record carries
+  `license_by_registry`, the registry's claim.
+- `workspace_docs_build.py`: `workspace__docs_build`, family X, offered
+  beside the lint (`workspace_reads.offer_runs`) where the step allows runs
+  and the stack profile names `docs_build` (a company's, or the one detected
+  from `mkdocs.yml`, a Sphinx `conf.py` or `docusaurus.config.*`). No
+  argument: it runs that command through `workspace.execute` in the company's
+  sandbox, under the daemon's command policy, bounded like a test run. The
+  observation's `docs_build` records the command, the exit status,
+  `timed_out`, `available`, the first error lines and the output's sha256;
+  the reply shows the first errors and the redacted tail. The delivery's own
+  build is the evidence (`loop/docs_checks.py`, `evidence/doc_build.py`).
 - `docs_write_policy.py`: the docs-only write policy. Where a turn writes is
   the step table's rule (`contracts/tool_steps.write_scope`): the
   `documentation` step, and the TechWriter in any step that writes (a role's
@@ -300,10 +332,12 @@ call written as text; the tool budget had run out" if it happens again.
   (`loop/worker/deliver.docs_scope`).
 - `workspace_reads.py`: family R beyond the four base reads, in one place:
   `offer` sets read-only Git (`workspace_git`), a document's text
-  (`workspace_documents`) and navigation (`workspace_navigation`) on a box,
-  each when the daemons announce it; `schemas` and `run` list and route them
-  (and the lint's, where `toolbox_for` offered it). Called by every toolbox
-  that reads: the execution turn's and the read-only ones.
+  (`workspace_documents`), navigation (`workspace_navigation`) and what the
+  project declares (`workspace_facts`) on a box, each when the daemons
+  announce it; `offer_runs` sets the lint and the docs build where
+  `toolbox_for` allows family X, from one reading of the stack profile;
+  `schemas` and `run` list and route them all. Called by every toolbox that
+  reads: the execution turn's and the read-only ones.
 - `tool_history.py`: older rounds' results become one line from their
   observation; the evidence keeps them whole. A read still the latest view of
   its lines (no later edit, move or delete of the file, no later read covering

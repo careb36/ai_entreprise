@@ -99,6 +99,8 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
+        "doc_build",
+        "doc_snippets",
         "fitness",
         "manifests",
         "protected_check",
@@ -762,6 +764,10 @@
       ],
       "test_discovery_team_models.py": [
         "planning"
+      ],
+      "test_doc_build_snippets.py": [
+        "evidence",
+        "loop"
       ],
       "test_doc_links.py": [
         "evidence"
@@ -1676,6 +1682,9 @@
       ],
       "test_workspace_isolation.py": [
         "workspace"
+      ],
+      "test_workspace_facts.py": [
+        "tools"
       ],
       "test_workspace_lint.py": [
         "tools"

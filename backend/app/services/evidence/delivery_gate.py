@@ -21,6 +21,7 @@ from services.evidence import (
     app_check,
     command_runs,
     criteria_tests,
+    doc_build,
     doc_links,
     security_probe,
     standards,
@@ -46,6 +47,7 @@ _GATE_PROBLEMS = {
     command_runs.CHECK_NAME: "required command failed",
     doc_links.CHECK_LINKS: "broken documentation links",
     doc_links.CHECK_CODE_PATHS: "documentation cites missing paths",
+    doc_build.CHECK_NAME: "documentation build failed",
 }
 
 # The problems the code itself caused: the Developer fixes the code.

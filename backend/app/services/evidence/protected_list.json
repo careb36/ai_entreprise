@@ -49,6 +49,7 @@
     "backend/tests/test_delivery_tests.py",
     "backend/tests/test_developer_tools_evidence.py",
     "backend/tests/test_developer_tools_limits.py",
+    "backend/tests/test_doc_build_snippets.py",
     "backend/tests/test_doc_links.py",
     "backend/tests/test_edit_blocks.py",
     "backend/tests/test_folder_baseline.py",

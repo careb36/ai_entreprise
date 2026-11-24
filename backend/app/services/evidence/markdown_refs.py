@@ -12,6 +12,8 @@ path (```src/app.py```).
   rule: lower case, punctuation dropped, spaces to hyphens, a repeat numbered
   ``-1``, ``-2``), plus explicit ``id="…"`` and ``name="…"`` anchors.
 - ``code_spans``: the text of every inline code span, with the line.
+- ``fenced_blocks``: every fenced code block's info string (its language)
+  and its lines, for the snippet names check (``doc_snippets``).
 """
 
 from __future__ import annotations
@@ -110,3 +112,27 @@ def code_spans(text: str) -> list[tuple[int, str]]:
         for number, line in _prose_lines(text)
         for match in _INLINE_CODE.finditer(line)
     ]
+
+
+def fenced_blocks(text: str) -> list[tuple[str, list[tuple[int, str]]]]:
+    """``(language, [(line, text), ...])`` of every fenced code block, in
+    order; the language is the info string's first word, lower case."""
+    blocks: list[tuple[str, list[tuple[int, str]]]] = []
+    fence: str | None = None
+    for number, line in enumerate(text.splitlines(), start=1):
+        match = _FENCE.match(line)
+        if fence is None:
+            if match:
+                fence = match.group(1)[0] * len(match.group(1))
+                info = line.strip()[len(match.group(1)) :].strip().split()
+                blocks.append(((info[0] if info else "").lower(), []))
+            continue
+        if (
+            match
+            and match.group(1).startswith(fence)
+            and not line.strip()[len(match.group(1)) :].strip()
+        ):
+            fence = None
+            continue
+        blocks[-1][1].append((number, line))
+    return blocks

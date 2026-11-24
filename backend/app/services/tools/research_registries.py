@@ -17,6 +17,24 @@ VERSIONS_SHOWN = 10
 ADVISORIES_SHOWN = 20
 
 
+# A package's licence as its registry states it: the registry's claim (what
+# the publisher declared), never an observation of the package's files.
+LICENSE = "license_by_registry"
+
+
+def _licence(value: Any, classifiers: Any = None) -> str | None:
+    """The registry's licence field, cut; else a PyPI ``License ::`` classifier."""
+    if isinstance(value, dict):
+        value = value.get("type")
+    text = str(value or "").strip()
+    if text and "\n" not in text[:200]:
+        return text[:120]
+    for item in classifiers or []:
+        if isinstance(item, str) and item.startswith("License ::"):
+            return item.rsplit("::", 1)[-1].strip()[:120]
+    return text.splitlines()[0][:120] if text else None
+
+
 class ResearchError(RuntimeError):
     """A call that could not be served; the message is what the model sees."""
 
@@ -82,6 +100,10 @@ def package_record(
             "versions": [v for v, _d in dated[:VERSIONS_SHOWN]],
             "requires_python": info.get("requires_python"),
             "summary": (info.get("summary") or "")[:300],
+            LICENSE: _licence(
+                info.get("license_expression") or info.get("license"),
+                info.get("classifiers"),
+            ),
             "homepage": info.get("home_page")
             or (info.get("project_urls") or {}).get("Homepage"),
             "yanked_latest": bool(
@@ -126,6 +148,10 @@ def package_record(
             "released": times.get(latest),
             "versions": [v for v, _t in ordered[:VERSIONS_SHOWN]],
             "summary": (doc.get("description") or "")[:300],
+            LICENSE: _licence(
+                ((doc.get("versions") or {}).get(latest) or {}).get("license")
+                or doc.get("license")
+            ),
             "homepage": doc.get("homepage"),
             "deprecated": bool(
                 ((doc.get("versions") or {}).get(latest) or {}).get("deprecated")
@@ -165,6 +191,7 @@ def package_record(
             ),
             "versions": [v.get("num") for v in versions[:VERSIONS_SHOWN]],
             "summary": (crate.get("description") or "")[:300],
+            LICENSE: _licence(versions[0].get("license") if versions else None),
             "homepage": crate.get("homepage") or crate.get("repository"),
         }
         if version is not None:
