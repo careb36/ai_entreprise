@@ -60,24 +60,23 @@ def commit_message(item: dict[str, Any], sprint: dict[str, Any]) -> str:
     return f"{title}\n\nFabrique-Task: {item['id']}\nFabrique-Sprint: {sprint['id']}\n"
 
 
-def delivery_spec(
-    engine: Engine, sprint: dict[str, Any], item: dict[str, Any]
-) -> dict[str, Any] | None:
-    """The ``git`` part of a ``workspace.generate`` request, or ``None`` without the workflow."""
+def task_spec(engine: Engine, company_id: int, item_id: int) -> dict[str, Any] | None:
+    """The task's branch, base, forge policy and done prerequisites' branches,
+    or ``None`` without the workflow: what ``workspace.console.prepare`` makes
+    the task's worktree from (``services/tools/task_worktree.py``)."""
     with Session(engine) as session:
-        company = session.get(Company, sprint["company_id"])
+        company = session.get(Company, company_id)
         if company is None or not company.git_workflow:
             return None
         spec = {
-            "branch": TASK_BRANCH.format(id=item["id"]),
+            "branch": TASK_BRANCH.format(id=item_id),
             "base": company.git_base_branch or "",
-            "message": commit_message(item, sprint),
             # Whether the daemon may fetch the base from its remote (issue #727).
             "forge_policy": forge_policy_setting.effective(session, company.id),
         }
         # The branches of the tasks this one depends on, done: the daemon
         # merges them into the task's worktree, so it builds on their files.
-        row = session.get(BacklogItem, item["id"])
+        row = session.get(BacklogItem, item_id)
         deps = depends_on_of(row) if row is not None else []
         if deps:
             done = session.exec(
@@ -87,6 +86,16 @@ def delivery_spec(
             ).all()
             spec["merge"] = [TASK_BRANCH.format(id=d) for d in deps if d in set(done)]
         return spec
+
+
+def delivery_spec(
+    engine: Engine, sprint: dict[str, Any], item: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The ``git`` part of a ``workspace.generate`` request, or ``None`` without the workflow."""
+    spec = task_spec(engine, sprint["company_id"], item["id"])
+    if spec is not None:
+        spec["message"] = commit_message(item, sprint)
+    return spec
 
 
 def record_reply(evidence: dict[str, Any], reply: Any) -> None:

@@ -68,8 +68,10 @@ SUBJECTS = (
 # §5.1, §5.1.1, §5.2, §5.3), per subject: an older daemon ignores them silently.
 _FORGE = ("forge_policy",)
 FEATURES = {
-    # The forge policy (§5.3, issue #727): enforced by this daemon.
-    "workspace.console.prepare": _FORGE,
+    # The forge policy (§5.3, issue #727): enforced by this daemon; and the
+    # task's worktree without a private repository, for the Developer's tools
+    # (§5.1.5, docs/design/first-attempt-in-task-worktree.md).
+    "workspace.console.prepare": _FORGE + ("private_git",),
     # An emptied file deleted by a delivery (docs/design/move-and-delete-files.md).
     "workspace.generate": _FORGE + ("delete",),
     "workspace.edit": ("delete", "move"),

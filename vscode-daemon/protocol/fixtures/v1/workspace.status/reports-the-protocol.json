@@ -67,7 +67,8 @@
           "security_probe"
         ],
         "workspace.console.prepare": [
-          "forge_policy"
+          "forge_policy",
+          "private_git"
         ],
         "workspace.edit": [
           "delete",

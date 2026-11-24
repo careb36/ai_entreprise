@@ -14,9 +14,10 @@ those texts with the answer's files (``with_tool_edits``) through
 tests and the Verifier see the change as any delivery's. An edit that never
 reaches a delivery never stays on disk.
 
-Where: only the task's own worktree, or a project without the Git workflow
-(where deliveries write anyway); never the person's checkout of a company
-that delivers on branches (``allowed``).
+Where: only the task's own worktree (prepared before the first turn,
+``task_worktree``), or a project without the Git workflow (where deliveries
+write anyway); never the person's checkout of a company that delivers on
+branches (``allowed``).
 """
 
 from __future__ import annotations
@@ -82,7 +83,8 @@ MOVE_ABILITIES = (
 )
 NOT_HERE = (
     "edits are not allowed here: the person's checkout of a company that "
-    "delivers on branches (the task's worktree exists after its first delivery)"
+    "delivers on branches (the task's worktree is prepared before the first "
+    "turn only when every daemon announces it, else made at its first delivery)"
 )
 NOT_ANNOUNCED = (
     "the workspace daemon does not announce move and delete (an older daemon: "

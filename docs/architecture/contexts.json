@@ -148,6 +148,7 @@
         "registry_lookup",
         "research_tools",
         "signature_lookup",
+        "task_worktree",
         "workspace_edits"
       ],
       "modules": []
@@ -799,6 +800,9 @@
       ],
       "test_findings_retry.py": [
         "learning"
+      ],
+      "test_first_attempt_worktree.py": [
+        "loop"
       ],
       "test_forge_policy.py": [
         "release"

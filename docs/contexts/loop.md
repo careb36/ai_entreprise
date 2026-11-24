@@ -15,7 +15,9 @@ detail.
 
 `task_worker.py` is the `task.assign` consumer the lifespan starts; it
 re-exports the stages in `worker/`. `worker/intake` claims a task under its
-lock; `worker/task_run` gathers context, `worker/execute` calls the model,
+lock; `worker/task_run` gathers context, `worker/execute` prepares the task's
+worktree under the Git workflow (`developer_tools.enter_task_worktree`, so a
+first attempt's tools run there) and calls the model,
 `worker/deliver` sends the files to the daemon and `worker/record` ingests the
 run and has the Verifier judge it. `worker/review` runs the review cycle (one
 replica at a time) that sends delivered tasks to QA, and `worker/close`

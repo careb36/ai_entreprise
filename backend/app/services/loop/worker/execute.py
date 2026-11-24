@@ -53,7 +53,7 @@ from services.platform.orchestration_metrics import (
     should_consult_architect,
 )
 from services.tasks import task_projection
-from services.tools import developer_tools, mcp_tools, workspace_edits
+from services.tools import developer_tools, mcp_tools, task_worktree, workspace_edits
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -270,6 +270,11 @@ def _execute_task(
     system_prompt = _developer_system_prompt(agent) + prompt.language_note(
         company_id, engine
     )
+    # The task's worktree before the first turn (Git workflow): the prompt's
+    # map and every tool of this attempt look there (task_worktree).
+    prepared = developer_tools.enter_task_worktree(
+        company_id, item.get("id"), engine=engine
+    )
     user_prompt, _rework_feedback, measure = _developer_prompt(
         item,
         agent,
@@ -327,6 +332,8 @@ def _execute_task(
     # The tools offered (and withheld, with why) go on the evidence; a split
     # is pointed to the move tool when it is offered.
     agent["tools_offered"] = workspace_edits.offered(toolbox)
+    if prepared:  # The daemon's reply: where this attempt's tools ran, or why not.
+        agent["tools_offered"]["task_worktree"] = prepared
     user_prompt += workspace_edits.move_note(agent["tools_offered"])
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
@@ -345,6 +352,7 @@ def _execute_task(
     finally:
         if toolbox is not None:
             toolbox.close()  # The tools' edits come back as files to deliver.
+        task_worktree.leave()
     agent["tool_calls"] = tool_calls
     agent["tool_edits"] = getattr(toolbox, "edited_files", [])
 
