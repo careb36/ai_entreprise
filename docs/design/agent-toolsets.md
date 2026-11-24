@@ -1,6 +1,6 @@
 # The tools each role should have: a design
 
-> **Status: proposed, 2026-11-24.** Written for the owner's review after an
+> **Status: proposed, 2026-11-24; the step/role rule approved by the owner the same day.** Written for the owner's review after an
 > audit of 108 real runs (1460 tool calls). The owner's concern: agents must
 > have the useful, necessary tools to work. Every rule of
 > [`docs/POSITIONING.md`](../POSITIONING.md) applies unchanged.
@@ -48,6 +48,31 @@ found the cost of that:
    command) is recorded as demand and counted per sprint, so a missing tool
    shows up in the retrospective instead of in a failed task.
 
+## The step sets the ceiling, the role narrows
+
+Approved by the owner on 2026-11-24. Tools are decided in two layers:
+
+1. **The step sets the most a turn may do.** An execution turn that delivers
+   files may read, write in the task's worktree and run tests and committed
+   scripts. A brief, a review or a planning turn may only read. A
+   management turn may only read the board. No role goes above its step's
+   ceiling: a QA reviewer cannot edit the delivery it judges, although QA
+   can edit when it executes a task.
+2. **The role may only narrow, never widen.** A role's profile can drop
+   tools it does not need within the step (for example, no `run_tests` for a
+   TechWriter task that changes only documents). It cannot add a tool the
+   step does not allow.
+
+What stays with the role, and is not a matter of tools:
+
+- **The prompt and judgement.** Assigning the right role still matters for
+  quality; the planner's reassignment (`fix/plans-see-repo-and-tools`) stays,
+  as a quality rule, not a permission rule.
+- **Separation of duties.** The run that delivered never reviews itself;
+  that follows who did what, not which tools were offered.
+- **Limits independent of tools.** Protected paths, the risk tier and a
+  person's review of `.github/` apply whatever tools a turn had.
+
 ## The tool families
 
 | Family | Tools | Notes |
@@ -92,7 +117,7 @@ found the cost of that:
 
 ## Next changes
 
-1. **Tools follow the step.** Replace the `FILE_ROLES` gate in
+1. **Tools follow the step** (the ceiling above). Replace the `FILE_ROLES` gate in
    `developer_tools.toolbox_for` with the step: an execution turn gets R and
    X for every role, and W where edits may go. Roles keep their prompts. With
    it, reassigning a task away from a role without tools
