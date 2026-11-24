@@ -105,7 +105,10 @@ written as text; the tool budget had run out".
   brief, `loop/worker/architect_brief`).
 - `developer_tool_schemas.py`: the schemas. `developer_tool_replies.py`: what
   the model sees, after SWE-agent's interface (a numbered window per read, a
-  count instead of a silent cut).
+  count instead of a silent cut). A read without `lines` asks the daemon for
+  400 and shows as many whole lines as fit the model's result budget; the
+  observation's `last_line` is the last one shown. A daemon older than
+  `lines` answers its default 100.
 - `workspace_edits.py`: `workspace__edit`, a line range or one SEARCH/REPLACE
   block, applied by the daemon as a working copy and delivered at the end with
   the answer's files (`tool_edit_files` on the evidence). Beside it, when
@@ -158,7 +161,11 @@ written as text; the tool budget had run out".
   in the reply. The observation carries `check_script` (path, commit, both
   sha256, or `refused` and why).
 - `tool_history.py`: older rounds' results become one line from their
-  observation; the evidence keeps them whole.
+  observation; the evidence keeps them whole. A read still the latest view of
+  its lines (no later edit, move or delete of the file, no later read covering
+  them) stays whole while all the results fit `TOOL_HISTORY_MAX_CHARS`; past
+  it the oldest reads go, each line naming the path, the lines and the
+  `workspace__read` call that shows them again (issue #766).
 
 ### The repository map and the code graph
 
@@ -176,7 +183,7 @@ written as text; the tool budget had run out".
 
 ## See also
 
-- Settings (`MCP_*`, `DEVELOPER_TOOLS_ENABLED`, `REPO_MAP_MAX_CHARS`, `CODE_GRAPH_*`, `EDIT_LINT_*`, `TOOL_HISTORY_KEEP_ROUNDS`, `RESEARCH_*`, `GROUNDING_*`): [configuration](../CONFIGURATION.md).
+- Settings (`MCP_*`, `DEVELOPER_TOOLS_ENABLED`, `REPO_MAP_MAX_CHARS`, `CODE_GRAPH_*`, `EDIT_LINT_*`, `TOOL_HISTORY_KEEP_ROUNDS`, `TOOL_HISTORY_MAX_CHARS`, `RESEARCH_*`, `GROUNDING_*`): [configuration](../CONFIGURATION.md).
 - The daemon side (`vscode-daemon/workspace_read.py`, `workspace_edit.py`, `repo_map.py`, `code_graph.py`, `signatures.py`): [workspace](workspace.md).
 - The evidence side (`context_read`, `grounding`, `sources`, `risk`): [evidence](evidence.md).
 - How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-7-tools).

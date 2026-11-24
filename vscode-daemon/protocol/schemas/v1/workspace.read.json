@@ -23,6 +23,13 @@
             "integer",
             "null"
           ]
+        },
+        "lines": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "How many lines to show: 100 when absent, at most 400 (READ_LINES_CEILING), still bounded by READ_MAX_BYTES."
         }
       },
       "required": [

@@ -200,7 +200,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.hash` | request | `file_hash.py` | `workspace_root`, `paths` | `files` (`present` with `sha256`, `missing`, `rejected`, `workspace_missing`) |
 | `workspace.undo` | request | `delivery_snapshot.py` | `workspace_root`, `snapshot_id` | `ok`, `snapshot`, `restored`, `removed` |
 | `workspace.list` | request | `workspace_read.py` | `workspace_root`, `path`?, `depth`? | `path`, `entries`, `truncated` |
-| `workspace.read` | request | `workspace_read.py` | `workspace_root`, `path`, `start_line`? | `path`, `sha256`, `bytes`, `binary`, `text`, `lines`, `first_line`, `last_line`, `truncated` |
+| `workspace.read` | request | `workspace_read.py` | `workspace_root`, `path`, `start_line`?, `lines`? | `path`, `sha256`, `bytes`, `binary`, `text`, `lines`, `first_line`, `last_line`, `truncated` |
 | `workspace.search` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `matches`, `files_scanned`, `match_count`, `truncated`, … |
 | `workspace.find` | request | `workspace_read.py` | `workspace_root`, `pattern`, `path`? | `pattern`, `path`, `files`, `match_count`, `truncated` |
 | `workspace.map` | request | `repo_map.py` | `workspace_root`, `max_chars`? | `map`, `fingerprint`, `definitions`, `shown`, `partial`, `cached`, … |

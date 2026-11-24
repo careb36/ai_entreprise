@@ -48,8 +48,8 @@ SCHEMAS: list[dict[str, Any]] = [
             "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}read",
             "description": (
                 "Read a file of the project as it is on disk: a window of "
-                "numbered lines from `start_line` (100 by default; `lines` asks "
-                "for up to 400, to read a long file in fewer calls), headed "
+                "numbered lines from `start_line` (by default as many as fit the "
+                "result, up to 400; `lines` asks for fewer or up to 400), headed "
                 "`lines X–Y of N`. Page on with the `start_line` the reply names. "
                 "Read a file before you change it."
             ),
@@ -66,7 +66,7 @@ SCHEMAS: list[dict[str, Any]] = [
                     },
                     "lines": {
                         "type": "integer",
-                        "description": "How many lines to show (default 100, at most 400).",
+                        "description": "How many lines to show (default: as many as fit, at most 400).",
                     },
                 },
                 "required": ["path"],
