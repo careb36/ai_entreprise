@@ -1060,6 +1060,9 @@
       "test_company_limits.py": [
         "loop"
       ],
+      "test_company_admin.py": [
+        "platform"
+      ],
       "test_model_factory.py": [
         "models"
       ],

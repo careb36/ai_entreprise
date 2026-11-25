@@ -5403,5 +5403,22 @@
         "approve_architecture": "approving the architecture"
       }
     }
+  },
+  "companyAdmin": {
+    "title": "Company",
+    "name": "Company name",
+    "rename": "Rename",
+    "renamed": "Name saved.",
+    "deleteTitle": "Delete this company",
+    "deleteHint": "Removes the company and every row it holds: team, sprints, tasks, specifications, evidence and its audit trail. It cannot be undone. The project folder and its branches stay on your computer.",
+    "deleteStart": "Delete company…",
+    "rowsLabel": "Rows that will be deleted",
+    "typeName": "Type {{name}} to confirm",
+    "deleteConfirm": "Delete permanently",
+    "ownerOnly": "Only an Owner can rename or delete the company.",
+    "blocker": {
+      "sprint_running": "A sprint is running: wait for it to finish or stop it first.",
+      "owner_action_running": "An owner action is running: wait for it to finish or cancel it first."
+    }
   }
 }

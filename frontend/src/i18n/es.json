@@ -5403,5 +5403,22 @@
         "approve_architecture": "aprobar la arquitectura"
       }
     }
+  },
+  "companyAdmin": {
+    "title": "Compañía",
+    "name": "Nombre de la compañía",
+    "rename": "Renombrar",
+    "renamed": "Nombre guardado.",
+    "deleteTitle": "Borrar esta compañía",
+    "deleteHint": "Elimina la compañía y todo lo que contiene: equipo, sprints, tareas, especificaciones, evidencia y su registro de auditoría. No se puede deshacer. La carpeta del proyecto y sus ramas quedan en tu computadora.",
+    "deleteStart": "Borrar compañía…",
+    "rowsLabel": "Filas que se borrarán",
+    "typeName": "Escribí {{name}} para confirmar",
+    "deleteConfirm": "Borrar definitivamente",
+    "ownerOnly": "Solo un Owner puede renombrar o borrar la compañía.",
+    "blocker": {
+      "sprint_running": "Hay un sprint en curso: esperá a que termine o detenelo primero.",
+      "owner_action_running": "Hay una acción de owner en curso: esperá a que termine o cancelala primero."
+    }
   }
 }

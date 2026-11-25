@@ -9,7 +9,7 @@ knows nothing of tasks, runs or a company's decisions.
 - **Folder:** `backend/app/services/platform/`
 - **May import:** [contracts](contracts.md). Every context but contracts may import it.
 - **Interface:** `acknowledgements`, `agent_service`, `audit_anchors`, `company_limits_setting`, `company_standards_setting`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `hooks`, `in_process_principal`, `locks`, `mail`, `memory_graph`, `notifications`, `orchestration_metrics`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_window_setting`, `sod`, `standard_exceptions`, `teams`, `wstg_catalogue`.
-- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `in_process_principal`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `password_change`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
+- **Modules:** `access_review`, `acknowledgements`, `agent_service`, `api_tokens`, `audit_anchors`, `capabilities`, `company_limits_setting`, `company_removal`, `company_standards_review`, `company_standards_setting`, `dns_client`, `egress`, `engram_processor`, `forge_policy_setting`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `in_process_principal`, `invitations`, `locks`, `login_throttle`, `mail`, `memory_graph`, `notifications`, `oidc`, `oidc_client`, `orchestration_metrics`, `password_change`, `protected_paths_setting`, `rework_mentions`, `rfc3161`, `run_secrets`, `run_window_setting`, `service_accounts`, `sessions`, `sod`, `sso_connections`, `sso_domains`, `sso_flow`, `sso_group_approvals`, `sso_group_config`, `sso_group_review`, `sso_group_sync`, `sso_groups`, `sso_link`, `sso_metrics`, `sso_team_control`, `standard_exceptions`, `teams`, `token_usage`, `wstg_catalogue`
 - **HTTP adapters:** `healthcheck` (the LLM proxy's probe), `oidc_client`. `dns_client` is the DNS resolver adapter, held to the same shape (returns data, raises `DnsNameNotFound` or `DnsUnavailable`).
 
 ## How it works
@@ -184,6 +184,11 @@ Each is a column read and changed by one module, audited only on a change.
   source). The gate is [loop](loop.md#the-run-window).
 - `company_limits_setting.py`: the Developer's limits within the floors and
   ceilings of `contracts/company_limits`.
+- `company_removal.py`: renaming a company, and deleting it with every row it
+  holds (found from the models' foreign keys, children first, in one
+  transaction); a signed-in Owner types the name back, a running sprint or
+  owner action holds it back, and the deployment's audit row records it.
+  Files and branches are left alone.
 - `acknowledgements.py`: an Owner's time-bound acknowledgement of a weaker
   guarantee (tests off, host sandbox); withdrawing keeps the row.
 

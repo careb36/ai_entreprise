@@ -33,6 +33,7 @@ from routers.board_moves import router as board_moves_router
 from routers.board_notes import router as board_notes_router
 from routers.chat_approvals import router as chat_approvals_router
 from routers.chat_interactions import router as chat_interactions_router
+from routers.company_admin import router as company_admin_router
 from routers.company_architecture import router as company_architecture_router
 from routers.company_export import router as company_export_router
 from routers.company_limits import router as company_limits_router
@@ -248,6 +249,7 @@ app.include_router(acknowledgements_router)
 app.include_router(company_sync_router)
 app.include_router(run_window_router)
 app.include_router(company_limits_router)
+app.include_router(company_admin_router)
 app.include_router(rsi_cycles_router)
 app.include_router(access_review_router)
 app.include_router(teams_router)
