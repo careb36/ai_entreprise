@@ -24,7 +24,8 @@ RESULT_PASS, RESULT_FAIL, RESULT_MISSING = "pass", "fail", "missing"
 # whether it passed. Playwright's list reporter (``✓  1 [project] ›
 # e2e/req_1_2.spec.ts:3:5 › REQ-1.2 title (1.2s)``, ``✘``; ``ok`` and ``x``
 # where the terminal has no UTF-8), pytest ``-v`` (``path::name PASSED``),
-# its short summary (``FAILED path::name - …``), jest and vitest (``✓ name``
+# its short summary (``FAILED path::name - …``), pytest-xdist's ``-v``
+# (``[gw5] [ 45%] PASSED path::name``), jest and vitest (``✓ name``
 # / ``✕ name``, ``×``), go (``--- PASS: Name``), cargo (``test name ...
 # ok``), mocha (``✓``/``N)``).
 _LINE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -36,7 +37,16 @@ _LINE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "playwright",
     ),
     (re.compile(r"^\s*(\S+::\S+)\s+(PASSED|FAILED|ERROR|XPASS|XFAIL)\b"), "pytest"),
-    (re.compile(r"^\s*(PASSED|FAILED|ERROR)\s+(\S+::\S+)"), "pytest-summary"),
+    # pytest-xdist's verbose line (``[gw5] [ 45%] PASSED path::name``), as
+    # the backend's suite prints it since it runs in parallel by default
+    # (#592), reads the same way as the short summary.
+    (
+        re.compile(
+            r"^\s*(?:\[gw\d+\]\s+\[\s*\d+%\]\s+)?(PASSED|FAILED|ERROR|XPASS|XFAIL)"
+            r"\s+(\S+::\S+)"
+        ),
+        "pytest-summary",
+    ),
     (re.compile(r"^\s*[✓✔]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$"), "tick"),
     (re.compile(r"^\s*[✕✗×]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$"), "cross"),
     (re.compile(r"^\s*---\s+(PASS|FAIL):\s+(\S+)"), "go"),
