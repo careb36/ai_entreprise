@@ -60,6 +60,7 @@ SECTION_NAMES = (
     "completed_tasks",
     "sprint_board",
     "architect_brief",
+    "delivery_checklist",
     "review_feedback",
 )
 # Never cut by the budget, and never turned off: without them there is no task.

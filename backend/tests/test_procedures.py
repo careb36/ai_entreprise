@@ -458,10 +458,18 @@ def test_active_procedures_reach_the_role_prompt(db, monkeypatch):
         {"id": 1, "title": "Do it"},
         {"role": "Developer"},
         "S",
+        company_id=company.id,
         procedures_context=context,
     )
-    assert "## Company Procedures" in prompts[0]["prompt"]
-    assert "Dev rule body" in prompts[0]["prompt"]
+    sent = prompts[0]["prompt"]
+    assert "## Company Procedures" in sent and "Dev rule body" in sent
+    # Their titles again, read last: after the task and the brief (run 10).
+    checklist = sent[sent.index("## Before you deliver") :]
+    assert "- Dev rule" in checklist and "- Team rule" in checklist
+    assert "QA rule" not in checklist and sent.index("Dev rule body") < len(sent) - len(
+        checklist
+    )
+    assert procedures.delivery_checklist(db.get_bind(), company.id + 1, "QA") == ""
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
