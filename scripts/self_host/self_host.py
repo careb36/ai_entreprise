@@ -67,6 +67,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.append(str(HERE))  # spec_source beside this file, whether run or imported
+import company_rules
 import sandbox_mode
 import snapshot
 import spec_source
@@ -263,6 +264,7 @@ def step_company(api, args, state, report):
         "every_delivery": [c["command"] for c in profile.get("every_delivery") or []],
         "sandbox": sandbox.get("mode"),
         "host_acknowledged": sandbox_mode.acknowledge_host(api, cid, args.sandbox),
+        "procedures": company_rules.ensure(api, cid),
     }
 
 
