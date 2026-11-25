@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     # wakes at the next window boundary when that comes sooner, and never
     # looks more often than once a minute.
     RUN_WINDOW_RECHECK_SECONDS: int = 300
+    # A task in progress or review this long holds back its sprint (0: off).
+    RUN_WINDOW_STUCK_TASK_SECONDS: int = 3600
     # Empty: the daemon builds the project's own image from its stacks
     # (services/workspace/stack_image.py, issue #766). A value names one image
     # for every project instead, as before.

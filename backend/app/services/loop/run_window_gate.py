@@ -205,9 +205,20 @@ def hold_task(engine: Any, item_id: int, now: datetime | None = None) -> bool:
 def dispatch_or_defer(
     session: Session, sprint: Sprint, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Queue *sprint*'s ready ``todo`` tasks, or hold them for the window."""
+    """Queue *sprint*'s ready ``todo`` tasks, or hold them for the window.
+
+    A stuck async task (``stuck_block_reason``) blocks new dispatch even when
+    the window is open; the block is returned as ``stuck_block_reason``.
+    """
     until = hold_until(session, sprint, now)
+    blocked = stuck_block_reason(session, sprint, now)
     if until is None:
+        if blocked is not None:
+            return {
+                "dispatched": 0,
+                "run_window": None,
+                "stuck_block_reason": blocked,
+            }
         return {
             "dispatched": sprint_control.dispatch_todo(session, sprint),
             "run_window": None,
@@ -222,13 +233,22 @@ def dispatch_or_defer(
     sprint.run_window_wait_until = _naive(until)
     session.add(sprint)
     session.flush()
-    return {"dispatched": 0, "run_window": view(session, sprint)}
+    outcome: dict[str, Any] = {"dispatched": 0, "run_window": view(session, sprint)}
+    if blocked is not None:
+        outcome["stuck_block_reason"] = blocked
+    return outcome
 
 
 def release_sprint(
     session: Session, sprint: Sprint, reason: str, now: datetime | None = None
 ) -> int:
-    """Release *sprint*'s held work: events, the kickoff, its ready tasks; the count."""
+    """Release *sprint*'s held work: events, the kickoff, its ready tasks; the count.
+
+    Nothing is released while a stuck async task blocks new dispatch
+    (``stuck_block_reason``): the sprint keeps waiting and ``0`` is returned.
+    """
+    if stuck_block_reason(session, sprint, now) is not None:
+        return 0
     now = _aware(now or utc_now())
     window = _window(session, sprint)
     zone = window["timezone"] if window else "UTC"
@@ -290,6 +310,8 @@ def _release_one(engine: Any, sprint_id: int, now: datetime) -> bool:
             return False  # planned or paused: its start or resume gates again
         until = hold_until(session, sprint, now)
         if until is None:
+            if stuck_block_reason(session, sprint, now) is not None:
+                return False  # the run may still finish; leave the sprint waiting
             if sprint.urgent:
                 reason = "urgent"
             elif _window(session, sprint) is None:
@@ -422,3 +444,55 @@ def start_new(
     if urgent:
         set_urgent(session, sprint, True, now=now, **actor_fields(actor))
     return hold_until(session, sprint, now)
+
+
+# ---------------------------------------------------------------------------
+# Stuck async-task dispatch gate
+# ---------------------------------------------------------------------------
+
+# Statuses that mean a task's async run may still be working. A task sitting in
+# one of these for longer than ``RUN_WINDOW_STUCK_TASK_SECONDS`` blocks new
+# task dispatch for the same sprint.
+STUCK_TASK_STATUSES = ["in_progress", "in_review"]
+
+
+def _as_naive_utc(value: datetime) -> datetime:
+    """Return *value* as a naive UTC datetime for comparing model values."""
+    if value.tzinfo is not None:
+        return value.astimezone(UTC).replace(tzinfo=None)
+    return value
+
+
+def stuck_block_reason(
+    session: Session, sprint: Sprint, now: datetime | None = None
+) -> str | None:
+    """Why new tasks for *sprint* are blocked by a stuck async task, or ``None``.
+
+    A prior task in ``STUCK_TASK_STATUSES`` whose ``updated_at`` (or
+    ``created_at``) is older than ``RUN_WINDOW_STUCK_TASK_SECONDS`` is stuck:
+    its async run has not reached a terminal state in the configured time.
+    Setting the threshold to 0 disables the gate.
+    """
+    threshold = settings.RUN_WINDOW_STUCK_TASK_SECONDS
+    if threshold <= 0:
+        return None
+    now_naive = _as_naive_utc(now or utc_now())
+    stuck = []
+    for item in session.exec(
+        select(BacklogItem).where(
+            BacklogItem.sprint_id == sprint.id,
+            BacklogItem.status.in_(STUCK_TASK_STATUSES),  # type: ignore[union-attr]
+        )
+    ).all():
+        changed_at = item.updated_at or item.created_at
+        if changed_at is None:
+            continue
+        age = (now_naive - _as_naive_utc(changed_at)).total_seconds()
+        if age > threshold:
+            stuck.append((item.id, item.status, age))
+    if not stuck:
+        return None
+    details = ", ".join(
+        f"task {item_id} ({status}) for {int(age)}s" for item_id, status, age in stuck
+    )
+    return f"Dispatch blocked: prior async task(s) stuck beyond {threshold}s: {details}"
