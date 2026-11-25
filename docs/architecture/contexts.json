@@ -795,6 +795,9 @@
         "loop",
         "tools"
       ],
+      "test_outbox_replay.py": [
+        "integrations"
+      ],
       "test_read_steps_tools.py": [
         "loop",
         "planning",

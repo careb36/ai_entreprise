@@ -1,65 +1,101 @@
 """
-Transactional outbox worker: polls ``outbox_events`` and publishes to NATS.
+Transactional Outbox processor for reliable NATS message delivery.
 
-Responsibilities (one module, one thing): move committed rows from
-``pending`` to ``completed`` (or ``failed``) through the configured
-delivery path, with retries, concurrency-safe claim
-(``FOR UPDATE SKIP LOCKED``) and a stable correlation id carried on every
-attempt.
+Background worker that continuously polls the ``outbox_events`` table for
+pending rows and publishes them to NATS, ensuring at-least-once delivery.
+For durable subjects (``task.assign``) a row is marked completed only after
+JetStream has stored the message, so it reaches the task worker even if the
+worker is down at that moment.
 
-The row's ``event_type`` selects the delivery path the row committed to:
+Why the outbox pattern?
+-----------------------
+A naive approach (publish to NATS inside the HTTP handler) risks data loss if
+the process crashes after the database transaction commits but before the NATS
+message is sent.  The outbox pattern solves this by writing the event to the
+database **in the same transaction** as the domain change, then delivering it
+asynchronously from here.
 
-- ``nats_publish``        — publish the payload to a NATS subject, with the
-  correlation id as a JetStream header and in the message body.
-- ``webhook``             — POST the payload to the committed webhook URL.
-- ``anchor``              — anchor the payload's digest with the audit anchor.
-- ``chat_approval``       — notify the chat channel of a pending approval.
-- ``chat_regression``     — notify the chat channel of a regression.
-- ``person_notice``       — notify a person directly.
+Concurrency safety:
+-------------------
+``SELECT ... FOR UPDATE SKIP LOCKED`` acquires row-level locks so that multiple
+worker replicas running in Kubernetes never process the same event simultaneously.
 
-What this module never does: run domain logic, enqueue new rows, manage the
-JetStream consumer, or recreate the sprint task for a replayed row. A row's
-``correlation_id`` is generated exactly once
-(``OutboxEvent.ensure_correlation_id``) and never rotated by the worker; a
-replay resets only row state, so the same committed payload and id are
-republished under the same ``Nats-Msg-Id``.
+Correlation:
+------------
+Each row carries a ``correlation_id`` (a UUID) generated exactly once at
+enqueue time. It is never regenerated on retry or redelivery, and it is
+distinct from ``Nats-Msg-Id`` which keeps its dedup role. The id rides in the
+published header and payload, so the worker can set the same id on its spans
+and on the ``AgentRun`` it creates.
 
-Interfaces (test-observable):
+Retry policy:
+-------------
+- Up to 5 delivery attempts per event.
+- After 5 failures the row is marked ``"failed"`` and excluded from future polls.
+- A ``retry_count`` column tracks the number of failed attempts.
 
-- ``process_outbox`` — infinite poll loop; one iteration per ``asyncio.sleep``.
-- ``dispatch_event`` — deliver one committed row and persist its outcome.
-- ``replay_event``     — reset a failed/pending row to ``pending`` (admin).
-- ``OutboxReplayError`` — domain error with ``.kind`` and ``.reason``.
-- ``CORRELATION_HEADER`` — the NATS header carrying the correlation id.
+Replay:
+-------
+``replay_event`` (``POST /v1/admin/outbox-events/{id}/replay``, issue #736)
+returns a ``failed`` row, or a ``pending`` row waiting out its backoff, to a
+due ``pending`` row: ``retry_count`` 0 and no ``processed_at``. The payload and
+the correlation id stay as committed, so the poller republishes the same
+message under the same ``Nats-Msg-Id``; nothing that created the row runs again.
 """
 
 import asyncio
 import json
-import logging
-from datetime import UTC, datetime
+import uuid
 from typing import Any
 
 from database import engine
+from logging_config import logger
 from models.sprint import OutboxEvent
-from services.integrations import anchoring
-from services.integrations import chat_approvals
-from services.integrations import chat_regressions
-from services.integrations import person_notices
-from services.integrations import webhooks
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 
-CORRELATION_HEADER = "X-Fabrique-Correlation-Id"
-_MAX_RETRIES = 5
+from services.integrations import (
+    anchoring,
+    chat_approvals,
+    chat_regressions,
+    person_notices,
+    webhooks,
+)
 
-logger = logging.getLogger(__name__)
+# Header name consumed by the task worker (services/loop/worker/intake.py).
+CORRELATION_HEADER = "X-Correlation-Id"
+
+
+def enqueue_outbox_event(
+    session: Session,
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    correlation_id: uuid.UUID | None = None,
+) -> OutboxEvent:
+    """Persist one outbox row and return it, correlation id assigned exactly once.
+
+    Call inside the same transaction as the domain change that triggers the
+    publish, so the two commit atomically. A caller that generated the id
+    upstream (e.g. when a task.assign is produced) keeps its own value;
+    otherwise one is created here.
+    """
+    event = OutboxEvent(
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id or uuid.uuid4(),
+    )
+    session.add(event)
+    session.flush()
+    logger.debug(
+        "Outbox enqueued event_type=%s correlation_id=%s",
+        event_type,
+        event.correlation_id,
+    )
+    return event
 
 
 class OutboxReplayError(Exception):
-    """The requested replay cannot be done: ``kind`` says why.
-
-    ``kind`` is ``not_found`` (row missing) or ``not_replayable`` (completed
-    or due pending); ``reason`` is the operator-facing explanation.
-    """
+    """A replay that cannot be done: ``kind`` is ``not_found`` or ``not_replayable``."""
 
     def __init__(self, kind: str, reason: str) -> None:
         super().__init__(reason)
@@ -67,165 +103,177 @@ class OutboxReplayError(Exception):
         self.reason = reason
 
 
-def _correlation_id(event: OutboxEvent) -> str | None:
-    """Ensure a stable id and return its string form, or None for legacy rows."""
-    return str(event.ensure_correlation_id()) if event.ensure_correlation_id() else None
-
-
-def _publish_message(nats_client, event: OutboxEvent):
-    """Build and return the NATS publish coroutine for a ``nats_publish`` row.
-
-    The message published is the committed ``event.payload`` dict; the
-    correlation id travels as the header so JetStream consumers can trace the
-    run end to end, and is set into the body for consumers that read only the
-    body. The msg id stays ``outbox-<id>``: a replay of an already stored
-    message is a JetStream de-dupe no-op (board note #11), so the same row is
-    never delivered twice for the same payload.
-    """
-    payload = event.payload or {}
-    subject = payload.get("subject", "")
-    message = payload.get("message", payload)
-    corr = _correlation_id(event)
-
-    # The message body is what the worker consumes: keep the correlation id
-    # inside it for consumers that do not read headers.
-    if isinstance(message, dict) and corr:
-        message.setdefault("correlation_id", str(corr))
-
-    if not subject:
-        # A malformed row cannot be published; let dispatch fail the row.
-        raise ValueError("outbox row payload has no subject")
-
-    _publish = getattr(nats_client, "publish", None)
-    if _publish is None:
-        raise RuntimeError("nats client has no publish method")
-
-    headers = {CORRELATION_HEADER: str(corr)} if corr else None
-    return _publish(subject=subject, message=message, msg_id=f"outbox-{event.id}", headers=headers)
-
-
-def _await(publish_call) -> Any:
-    """Return the publish call's result, awaiting it when it is a coroutine.
-
-    The real ``NATSClient.publish`` is async; the test fakes are async too.
-    Some webhook tests may register a synchronous callable, so both shapes
-    are accepted: a plain callable's result is returned, a coroutine is
-    awaited. This keeps the dispatch path single without forcing every fake
-    to be async.
-    """
-    if asyncio.iscoroutine(publish_call):
-        return asyncio.run(publish_call)
-    return publish_call
-
-
-async def dispatch_event(session: Session, event: OutboxEvent, nats_client=None) -> None:
-    """Deliver one committed row and persist its outcome in the session.
-
-    The delivery path is chosen by the row's committed ``event_type``; the
-    caller provides ``nats_client`` for the ``nats_publish`` path.
-    On success the row becomes ``completed`` with ``processed_at`` set; on a
-    delivery failure the row is retried up to ``_MAX_RETRIES`` then ``failed``.
-    Both the poller and any future replay path go through this single code
-    path so delivery semantics are identical everywhere. The caller commits;
-    this function only flushes state onto the session.
-    """
-    try:
-        if event.event_type == "nats_publish":
-            if nats_client is None:
-                raise TypeError("dispatch_event requires nats_client for nats_publish")
-            await _publish_message(nats_client, event)
-        elif event.event_type in webhooks.EVENT_TYPES:
-            _await(webhooks.deliver(session, event))
-        elif event.event_type in anchoring.EVENT_TYPES:
-            _await(anchoring.deliver(session, event))
-        elif event.event_type in chat_approvals.EVENT_TYPES:
-            _await(chat_approvals.deliver(session, event))
-        elif event.event_type in chat_regressions.EVENT_TYPES:
-            _await(chat_regressions.deliver(session, event))
-        elif event.event_type in person_notices.EVENT_TYPES:
-            _await(person_notices.deliver(session, event))
-        else:
-            raise ValueError(f"outbox event type not handled: {event.event_type}")
-    except Exception:
-        event.retry_count += 1
-        if event.retry_count >= _MAX_RETRIES:
-            event.status = "failed"
-            event.processed_at = datetime.now(UTC).replace(tzinfo=None)
-            logger.exception(
-                "Outbox event %d permanently failed after %d attempts",
-                event.id,
-                event.retry_count,
-            )
-        else:
-            event.status = "pending"
-            logger.info(
-                "Outbox event %d retry %d/%d failed; stays pending",
-                event.id,
-                event.retry_count,
-                _MAX_RETRIES,
-            )
-        return
-
-    event.status = "completed"
-    event.processed_at = datetime.now(UTC).replace(tzinfo=None)
-    event.retry_count = 0
-
-
-def _poll_pending(session: Session) -> list[OutboxEvent]:
-    """Claim pending rows with a row lock for concurrency-safe processing."""
-    statement = (
-        select(OutboxEvent)
-        .where(OutboxEvent.status == "pending")
-        .with_for_update(skip_locked=True)
-        .limit(50)
-    )
-    return list(session.exec(statement).all())
-
-
-async def process_outbox(nats_client) -> None:
-    """Infinite poll loop: deliver every committed pending row.
-
-    One body iteration delivers all currently pending rows. The loop is
-    intentionally infinite and sleeps between iterations; an ``asyncio.sleep``
-    is the test seam that stops one iteration deterministically (the replay
-    test patches it to raise). The loop never catches ``KeyboardInterrupt``
-    or ``SystemExit``: the infrastructure stops it by killing the process.
-    """
-    while True:
-        with Session(engine) as session:
-            events = _poll_pending(session)
-            for event in events:
-                await dispatch_event(session, event, nats_client)
-            session.commit()
-        await asyncio.sleep(2.0)
-
-
 def replay_event(session: Session, event_id: int) -> OutboxEvent:
-    """Reset a failed or stuck row to ``pending`` so the poller redelivers it.
+    """Make outbox row *event_id* due again, commit, and return it.
 
-    The row keeps its committed payload and correlation id; only
-    ``status``, ``retry_count`` and ``processed_at`` are reset. A completed
-    row (already delivered) or a pending row that is not due is refused with
-    ``not_replayable``: there is nothing for a reset to change. A missing row
-    is ``not_found``. The caller commits — the function only mutates the row.
+    A ``failed`` row, or a ``pending`` row that has failed before (so it waits
+    for its backoff), becomes ``pending`` with ``retry_count`` 0 and no
+    ``processed_at``. A ``completed`` row, or a ``pending`` row that is due
+    already, raises ``OutboxReplayError("not_replayable")``.
     """
-    event = session.get(OutboxEvent, event_id)
+    event = session.exec(
+        select(OutboxEvent).where(OutboxEvent.id == event_id).with_for_update()
+    ).first()
     if event is None:
-        raise OutboxReplayError("not_found", f"outbox event {event_id} not found")
-
-    if event.status == "completed":
+        raise OutboxReplayError("not_found", f"Outbox event {event_id} not found")
+    stuck = event.status == "pending" and (event.retry_count or 0) > 0
+    if event.status != "failed" and not stuck:
         raise OutboxReplayError(
             "not_replayable",
-            f"outbox event {event_id} is completed; nothing to replay",
+            f"Outbox event {event_id} is {event.status} and due: nothing to replay",
         )
-    if event.status == "pending" and event.processed_at is not None:
-        # A pending row already being processed by another poller iteration.
-        raise OutboxReplayError(
-            "not_replayable",
-            f"outbox event {event_id} is already pending and not due",
-        )
-
+    event.ensure_correlation_id()
     event.status = "pending"
     event.retry_count = 0
     event.processed_at = None
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    logger.info(
+        "Outbox event_id=%s replayed correlation_id=%s", event.id, event.correlation_id
+    )
     return event
+
+
+async def process_outbox(nats_client) -> None:
+    """
+    Background coroutine that drains the ``outbox_events`` table into NATS.
+
+    Intended to run for the entire application lifetime as an ``asyncio.Task``
+    (started in ``main.startup``).
+
+    Args:
+        nats_client: Active ``NATSClient`` instance used for publishing.
+                     The loop sleeps and retries until the client is available.
+    """
+    while True:
+        # Wait until the NATS client is ready (e.g. after application startup).
+        if not nats_client:
+            await asyncio.sleep(2)
+            continue
+
+        try:
+            with Session(engine) as session:
+                # Fetch up to 10 pending events; SKIP LOCKED prevents worker conflicts.
+                # Select the row objects, not raw tuples, so correlation_id is
+                # available to the publish step without a second round-trip.
+                rows = session.exec(
+                    select(OutboxEvent)
+                    .where(
+                        OutboxEvent.status == "pending",
+                        (
+                            (OutboxEvent.retry_count == 0)
+                            | (OutboxEvent.processed_at.is_(None))
+                            | (
+                                OutboxEvent.processed_at
+                                < text(
+                                    "NOW() - (retry_count * retry_count) * INTERVAL '10 seconds'"
+                                )
+                            )
+                        ),
+                    )
+                    .order_by(OutboxEvent.created_at)
+                    .with_for_update(skip_locked=True)
+                    .limit(10)
+                ).all()
+
+                if rows:
+                    logger.debug("Outbox: processing %d pending event(s)", len(rows))
+
+                for event in rows:
+                    try:
+                        payload = (
+                            json.loads(event.payload)
+                            if isinstance(event.payload, str)
+                            else event.payload
+                        )
+                        correlation_id = event.ensure_correlation_id()
+
+                        if event.event_type == "nats_publish":
+                            subject = payload["subject"]
+                            message = payload["message"]
+                            # Stable id travels with the message so the worker
+                            # can set it on spans and AgentRun. Never regenerate.
+                            message["correlation_id"] = str(correlation_id)
+                            logger.info(
+                                "Outbox dispatching event_id=%s subject=%s sprint_id=%s item_id=%s correlation_id=%s",
+                                event.id,
+                                subject,
+                                message.get("sprint_id"),
+                                message.get("backlog_item_id"),
+                                correlation_id,
+                            )
+                            # Publish the inner message to the specified NATS subject.
+                            # Durable subjects return only once JetStream has
+                            # stored the message; the id makes a retry after a
+                            # lost acknowledgement a no-op.
+                            await nats_client.publish(
+                                subject,
+                                message,
+                                msg_id=f"outbox-{event.id}",
+                                headers={CORRELATION_HEADER: str(correlation_id)},
+                            )
+                        elif event.event_type == webhooks.EVENT_TYPE:
+                            await webhooks.deliver(session, payload, event.id)
+                        elif event.event_type in anchoring.EVENT_TYPES:
+                            # Audit anchors (issue #542): taken, posted or timestamped.
+                            await anchoring.deliver(
+                                session,
+                                event.event_type,
+                                payload,
+                                event.id,
+                                event.retry_count,
+                            )
+                        elif event.event_type in chat_approvals.EVENT_TYPES:
+                            await chat_approvals.deliver(
+                                session, event.event_type, payload, event.id
+                            )
+                        elif event.event_type in chat_regressions.EVENT_TYPES:
+                            # Regressions, information only (issue #682).
+                            await chat_regressions.deliver(session, payload, event.id)
+                        elif event.event_type in person_notices.EVENT_TYPES:
+                            # A personal notification's email copy (issue #683).
+                            await person_notices.deliver_email(session, payload)
+
+                        # Mark the event as successfully delivered.
+                        event.status = "completed"
+                        event.processed_at = None  # SQL NOW() below fills it
+                        session.exec(
+                            text(
+                                "UPDATE outbox_events SET status = 'completed', processed_at = NOW() WHERE id = :id"
+                            ).bindparams(id=event.id)
+                        )
+                        logger.debug(
+                            "Outbox event_id=%s correlation_id=%s marked completed",
+                            event.id,
+                            correlation_id,
+                        )
+                    except Exception as row_e:  # noqa: BLE001 - Retain failed rows for retry without stopping delivery.
+                        logger.error(
+                            "Failed to process outbox event_id=%s correlation_id=%s (retry=%d): %s",
+                            event.id,
+                            event.ensure_correlation_id(),
+                            event.retry_count,
+                            row_e,
+                            exc_info=True,
+                        )
+                        # Increment retry counter; mark as failed after 5 attempts.
+                        session.exec(
+                            text(
+                                """
+                                UPDATE outbox_events
+                                SET retry_count = retry_count + 1,
+                                    status = CASE WHEN retry_count >= 5 THEN 'failed' ELSE 'pending' END,
+                                    processed_at = NOW()
+                                WHERE id = :id
+                                """
+                            ).bindparams(id=event.id)
+                        )
+
+                session.commit()
+
+        except Exception as e:  # noqa: BLE001 - Keep the outbox polling loop alive across failures.
+            logger.error(f"Outbox processor error: {e}")
+
+        # Poll every 2 seconds — keeps end-to-end NATS latency low.
+        await asyncio.sleep(2)
