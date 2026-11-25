@@ -285,6 +285,7 @@ def record_publication(
     reply: dict[str, Any],
     *,
     published_by: str,
+    agent_id: str | None = None,
 ) -> SprintIntegration:
     how = reply.get("how")
     if not reply.get("ok") or how not in PUBLISH_HOW or not reply.get("commit"):
@@ -304,7 +305,7 @@ def record_publication(
         session=session,
         company_id=row.company_id,
         interaction_id=f"sprint:{row.sprint_id}:integration",
-        agent_id=f"human:{published_by}",
+        agent_id=agent_id or f"human:{published_by}",
         action="sprint_published",
         details={
             "company_id": str(row.company_id),

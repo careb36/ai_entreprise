@@ -1,0 +1,3 @@
+Added
+
+* **A closed sprint's passed integration opens as a draft pull request on its own, with the DevOps agent's account (issue #701).** When the integration ends `tests_passed` and the company's `forge_policy` is `publish`, the branch is pushed and the request opened as a draft, as a Manager's "Publish as one request" does: the description is the platform's record (observed), and a DevOps agent on the team adds what changes, how to test it and the risks under a heading that names it a claim. A person still merges. Why a request did not open (forge policy, a failed suite, the daemon) shows on the sprint's integration.

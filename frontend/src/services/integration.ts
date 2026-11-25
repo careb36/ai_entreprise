@@ -62,7 +62,8 @@ export interface IntegrationRow {
   branch: string
   base: string
   publication?: IntegrationPublication | null
-  details?: { local_merge?: IntegrationLocalMerge } | null
+  /** ``auto_publish``: whether the sprint's draft request opened on its own after the close, and why not. */
+  details?: { local_merge?: IntegrationLocalMerge; auto_publish?: { status: string; reason: string } } | null
 }
 
 /** A push and the daemon's suite take time: as long as the backend waits for the daemon, plus a margin. */

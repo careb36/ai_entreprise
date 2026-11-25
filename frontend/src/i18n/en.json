@@ -4515,7 +4515,8 @@
     "published": "Published by {{name}} at {{commit}} onto {{base}}.",
     "openRequest": "Open the request",
     "newTab": "(opens in a new tab)",
-    "merged": "Merged locally by {{name}}, {{when}}."
+    "merged": "Merged locally by {{name}}, {{when}}.",
+    "autoNotPublished": "No draft request was opened after the sprint closed: {{reason}}."
   },
   "promptWeight": {
     "none": "No prompt measure recorded for these runs.",
