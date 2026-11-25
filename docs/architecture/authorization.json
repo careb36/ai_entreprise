@@ -42,6 +42,10 @@
       "access": "authenticated",
       "why": "The caller unlinks their own identity; another person's is a 404."
     },
+    "DELETE /v1/companies/{company_id}": {
+      "access": "Owner",
+      "why": "A signed-in Owner, never an API token; the name typed back; refused while a sprint or an owner action runs."
+    },
     "DELETE /v1/companies/{company_id}/acknowledgements/{acknowledgement_id}": {
       "access": "Owner"
     },
@@ -259,6 +263,10 @@
     },
     "GET /v1/companies/{company_id}/console_producers": {
       "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/deletion": {
+      "access": "Owner",
+      "why": "What deleting the company would remove, for a signed-in Owner (never an API token)."
     },
     "GET /v1/companies/{company_id}/doc_language": {
       "access": "Viewer"
@@ -610,6 +618,9 @@
     },
     "PATCH /v1/backlog/{item_id}": {
       "access": "Manager"
+    },
+    "PATCH /v1/companies/{company_id}": {
+      "access": "Owner"
     },
     "PATCH /v1/companies/{company_id}/providers/{provider_id}": {
       "access": "Manager"
