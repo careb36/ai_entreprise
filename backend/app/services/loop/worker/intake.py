@@ -16,6 +16,11 @@ when JetStream is on), then runs the review cycle every 30 seconds
 - ``_record_failure``: a provider out of credit pauses the sprint and puts
   the task back to ``todo``; any other failure blocks it with the error.
 
+Every assignment carries a ``correlation_id`` generated once when the outbox
+(or the dispatcher) enqueued it. This module reads it and passes it to the run
+unchanged; it never generates a new one for a message it received, so a
+redelivery keeps the same id end to end (issue: task-run observability).
+
 The handler records its own failures, so the consumer acknowledges a message
 once the handler returns. ``_dispatch_todo_items`` (called by the review cycle)
 queues the ``todo`` tasks that can start, once per cooldown
@@ -94,6 +99,20 @@ def _clear_queue_marker(item_id: int) -> None:
     LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
 
 
+def _correlation_id_of(data: dict[str, Any]) -> str | None:
+    """The correlation id an assignment was enqueued with, read once and kept.
+
+    A message that arrives without one (an older publisher, a hand-published
+    event) is run under a generated id so its logs still line up, but a
+    message that carries one keeps it byte for byte across redeliveries: the
+    consumer never regenerates an id it received.
+    """
+    raw = data.get("correlation_id")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
 async def process_backlog_tasks(nats_client: NATSClient) -> None:
     """
     Background coroutine that subscribes to ``task.assign`` and processes
@@ -167,7 +186,8 @@ async def _on_task_assign(
     data: dict[str, Any] = {}
     try:
         data = data_from_nats or json.loads(msg.data.decode())
-        ctx = await _claim(data, nats_client)
+        correlation_id = _correlation_id_of(data) or str(uuid4())
+        ctx = await _claim(data, nats_client, correlation_id)
         if not ctx:
             return
         # In flight while it runs: what the Live page's "working" reads.
@@ -182,7 +202,9 @@ async def _on_task_assign(
 
 
 async def _claim(
-    data: dict[str, Any], nats_client: NATSClient | None = None
+    data: dict[str, Any],
+    nats_client: NATSClient | None = None,
+    correlation_id: str | None = None,
 ) -> dict[str, Any] | None:
     """The task's context once this replica claimed it, else nothing."""
     backlog_item_id = data.get("backlog_item_id")
@@ -192,11 +214,17 @@ async def _claim(
         logger.warning("task.assign message missing backlog_item_id: %s", data)
         return None
 
-    logger.info("Received task.assign: item=%s sprint=%s", backlog_item_id, sprint_id)
+    logger.info(
+        "Received task.assign: item=%s sprint=%s correlation_id=%s",
+        backlog_item_id,
+        sprint_id,
+        correlation_id,
+    )
 
     ctx = await asyncio.to_thread(task_run._load_task_context, backlog_item_id)
     if not ctx:
         return None
+    ctx["correlation_id"] = correlation_id
 
     item = ctx["item"]
     _clear_queue_marker(item["id"])
@@ -339,8 +367,9 @@ async def _record_failure(
     """No credit pauses the sprint; a transient model failure queues the task
     again (a few times); any other failure blocks the task with the error."""
     logger.exception(
-        "Error processing task.assign (item=%s): %s",
+        "Error processing task.assign (item=%s, correlation_id=%s): %s",
         data.get("backlog_item_id", "?"),
+        data.get("correlation_id", "?"),
         e,
     )
 
@@ -397,6 +426,7 @@ async def _record_failure(
                 "source": "task_worker",
                 "task_id": data.get("backlog_item_id"),
                 "task_status": "blocked",
+                "correlation_id": data.get("correlation_id"),
                 "message": f"❌ Task failed: {str(e)[:200]}",
                 "message_key": "glassroom.events.failed",
                 "message_params": {"error": str(e)[:200]},
@@ -476,7 +506,11 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
 
             # Durable: one stored assignment per todo state of the item, even
             # though this runs every review cycle while the worker is busy.
+            # The correlation id is generated here, once, and travels with the
+            # message so the consumer, the daemon call, verification and the
+            # AgentRun it produces all share it.
             updated = normalize_utc(item.updated_at)
+            correlation_id = str(uuid4())
             await nats_client.publish(
                 "task.assign",
                 {
@@ -484,6 +518,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "sprint_id": item.sprint_id,
                     "interaction_id": str(uuid4()),
                     "backlog_item_id": item.id,
+                    "correlation_id": correlation_id,
                 },
                 msg_id=f"assign-{item.id}-{updated.isoformat() if updated else '-'}",
             )
@@ -500,6 +535,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "task_id": item.id,
                     "task_status": "todo",
                     "phase": "queued",
+                    "correlation_id": correlation_id,
                     "task": item.title,
                     "message": f"📬 Task queued for autonomous execution: {item.title} → {item.assignee or 'Dev'}",
                     "message_key": "glassroom.events.queued",

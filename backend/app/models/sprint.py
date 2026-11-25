@@ -10,14 +10,19 @@ Tables:
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Text
+from sqlalchemy import JSON, Text, Uuid
 from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _new_correlation_id() -> UUID:
+    return uuid4()
 
 
 class CommentList(MutableList):
@@ -135,6 +140,11 @@ class OutboxEvent(SQLModel, table=True):
 
     Using ``FOR UPDATE SKIP LOCKED`` in the worker query prevents duplicate
     processing when multiple worker replicas run concurrently (e.g. in K8s).
+
+    ``correlation_id`` is generated once when the row is created and never
+    rewritten by the worker. It is the stable id carried from publish through
+    JetStream consume, daemon call, verification and AgentRun, distinct from
+    ``Nats-Msg-Id``, which remains for dedup only.
     """
 
     __tablename__ = "outbox_events"
@@ -152,3 +162,20 @@ class OutboxEvent(SQLModel, table=True):
     processed_at: datetime | None = (
         None  # Set when status transitions to completed/failed
     )
+    # Stable id for end-to-end tracing of this async run; nullable for legacy
+    # rows and backfilled once by migration when NULL.
+    correlation_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), index=True),
+    )
+
+    def ensure_correlation_id(self) -> UUID:
+        """Return the stable id, generating it exactly once.
+
+        Generation happens only for rows that predate a migration or an
+        enqueue path not using ``correlation_id``; a caller that already
+        assigned one gets it back unchanged so a retry can never rotate it.
+        """
+        if self.correlation_id is None:
+            self.correlation_id = uuid4()
+        return self.correlation_id

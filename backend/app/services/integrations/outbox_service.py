@@ -20,6 +20,14 @@ Concurrency safety:
 ``SELECT ... FOR UPDATE SKIP LOCKED`` acquires row-level locks so that multiple
 worker replicas running in Kubernetes never process the same event simultaneously.
 
+Correlation:
+------------
+Each row carries a ``correlation_id`` (a UUID) generated exactly once at
+enqueue time. It is never regenerated on retry or redelivery, and it is
+distinct from ``Nats-Msg-Id`` which keeps its dedup role. The id rides in the
+published header and payload, so the worker can set the same id on its spans
+and on the ``AgentRun`` it creates.
+
 Retry policy:
 -------------
 - Up to 5 delivery attempts per event.
@@ -29,10 +37,13 @@ Retry policy:
 
 import asyncio
 import json
+import uuid
+from typing import Any
 
 from database import engine
 from logging_config import logger
-from sqlmodel import Session, text
+from models.sprint import OutboxEvent
+from sqlmodel import Session, select, text
 
 from services.integrations import (
     anchoring,
@@ -41,6 +52,38 @@ from services.integrations import (
     person_notices,
     webhooks,
 )
+
+# Header name consumed by the task worker (services/loop/worker/intake.py).
+CORRELATION_HEADER = "X-Correlation-Id"
+
+
+def enqueue_outbox_event(
+    session: Session,
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    correlation_id: uuid.UUID | None = None,
+) -> OutboxEvent:
+    """Persist one outbox row and return it, correlation id assigned exactly once.
+
+    Call inside the same transaction as the domain change that triggers the
+    publish, so the two commit atomically. A caller that generated the id
+    upstream (e.g. when a task.assign is produced) keeps its own value;
+    otherwise one is created here.
+    """
+    event = OutboxEvent(
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id or uuid.uuid4(),
+    )
+    session.add(event)
+    session.flush()
+    logger.debug(
+        "Outbox enqueued event_type=%s correlation_id=%s",
+        event_type,
+        event.correlation_id,
+    )
+    return event
 
 
 async def process_outbox(nats_client) -> None:
@@ -63,79 +106,105 @@ async def process_outbox(nats_client) -> None:
         try:
             with Session(engine) as session:
                 # Fetch up to 10 pending events; SKIP LOCKED prevents worker conflicts.
+                # Select the row objects, not raw tuples, so correlation_id is
+                # available to the publish step without a second round-trip.
                 rows = session.exec(
-                    text(
-                        """
-                        SELECT id, event_type, payload, retry_count
-                        FROM outbox_events
-                        WHERE status = 'pending'
-                          AND (retry_count = 0 OR processed_at IS NULL
-                               OR processed_at < NOW() - retry_count * retry_count * INTERVAL '10 seconds')
-                        ORDER BY created_at ASC
-                        FOR UPDATE SKIP LOCKED
-                        LIMIT 10
-                        """
+                    select(OutboxEvent)
+                    .where(
+                        OutboxEvent.status == "pending",
+                        (
+                            (OutboxEvent.retry_count == 0)
+                            | (OutboxEvent.processed_at.is_(None))
+                            | (
+                                OutboxEvent.processed_at
+                                < text(
+                                    "NOW() - (retry_count * retry_count) * INTERVAL '10 seconds'"
+                                )
+                            )
+                        ),
                     )
+                    .order_by(OutboxEvent.created_at)
+                    .with_for_update(skip_locked=True)
+                    .limit(10)
                 ).all()
 
                 if rows:
                     logger.debug("Outbox: processing %d pending event(s)", len(rows))
 
-                for event_id, event_type, payload_str, retries in rows:
+                for event in rows:
                     try:
                         payload = (
-                            json.loads(payload_str)
-                            if isinstance(payload_str, str)
-                            else payload_str
+                            json.loads(event.payload)
+                            if isinstance(event.payload, str)
+                            else event.payload
                         )
+                        correlation_id = event.ensure_correlation_id()
 
-                        if event_type == "nats_publish":
+                        if event.event_type == "nats_publish":
                             subject = payload["subject"]
                             message = payload["message"]
+                            # Stable id travels with the message so the worker
+                            # can set it on spans and AgentRun. Never regenerate.
+                            message["correlation_id"] = str(correlation_id)
                             logger.info(
-                                "Outbox dispatching event_id=%s subject=%s sprint_id=%s item_id=%s",
-                                event_id,
+                                "Outbox dispatching event_id=%s subject=%s sprint_id=%s item_id=%s correlation_id=%s",
+                                event.id,
                                 subject,
                                 message.get("sprint_id"),
                                 message.get("backlog_item_id"),
+                                correlation_id,
                             )
                             # Publish the inner message to the specified NATS subject.
                             # Durable subjects return only once JetStream has
                             # stored the message; the id makes a retry after a
                             # lost acknowledgement a no-op.
                             await nats_client.publish(
-                                subject, message, msg_id=f"outbox-{event_id}"
+                                subject,
+                                message,
+                                msg_id=f"outbox-{event.id}",
+                                headers={CORRELATION_HEADER: str(correlation_id)},
                             )
-                        elif event_type == webhooks.EVENT_TYPE:
-                            await webhooks.deliver(session, payload, event_id)
-                        elif event_type in anchoring.EVENT_TYPES:
+                        elif event.event_type == webhooks.EVENT_TYPE:
+                            await webhooks.deliver(session, payload, event.id)
+                        elif event.event_type in anchoring.EVENT_TYPES:
                             # Audit anchors (issue #542): taken, posted or timestamped.
                             await anchoring.deliver(
-                                session, event_type, payload, event_id, retries
+                                session,
+                                event.event_type,
+                                payload,
+                                event.id,
+                                event.retry_count,
                             )
-                        elif event_type in chat_approvals.EVENT_TYPES:
+                        elif event.event_type in chat_approvals.EVENT_TYPES:
                             await chat_approvals.deliver(
-                                session, event_type, payload, event_id
+                                session, event.event_type, payload, event.id
                             )
-                        elif event_type in chat_regressions.EVENT_TYPES:
+                        elif event.event_type in chat_regressions.EVENT_TYPES:
                             # Regressions, information only (issue #682).
-                            await chat_regressions.deliver(session, payload, event_id)
-                        elif event_type in person_notices.EVENT_TYPES:
+                            await chat_regressions.deliver(session, payload, event.id)
+                        elif event.event_type in person_notices.EVENT_TYPES:
                             # A personal notification's email copy (issue #683).
                             await person_notices.deliver_email(session, payload)
 
                         # Mark the event as successfully delivered.
+                        event.status = "completed"
+                        event.processed_at = None  # SQL NOW() below fills it
                         session.exec(
                             text(
                                 "UPDATE outbox_events SET status = 'completed', processed_at = NOW() WHERE id = :id"
-                            ).bindparams(id=event_id)
+                            ).bindparams(id=event.id)
                         )
-                        logger.debug("Outbox event_id=%s marked completed", event_id)
+                        logger.debug(
+                            "Outbox event_id=%s correlation_id=%s marked completed",
+                            event.id,
+                            correlation_id,
+                        )
                     except Exception as row_e:  # noqa: BLE001 - Retain failed rows for retry without stopping delivery.
                         logger.error(
-                            "Failed to process outbox event_id=%s (retry=%d): %s",
-                            event_id,
-                            retries,
+                            "Failed to process outbox event_id=%s correlation_id=%s (retry=%d): %s",
+                            event.id,
+                            event.ensure_correlation_id(),
+                            event.retry_count,
                             row_e,
                             exc_info=True,
                         )
@@ -149,7 +218,7 @@ async def process_outbox(nats_client) -> None:
                                     processed_at = NOW()
                                 WHERE id = :id
                                 """
-                            ).bindparams(id=event_id)
+                            ).bindparams(id=event.id)
                         )
 
                 session.commit()
