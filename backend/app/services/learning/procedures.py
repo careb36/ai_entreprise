@@ -128,6 +128,34 @@ def prompt_context(engine: Any, company_id: int | None, role: str | None) -> str
         return ""
 
 
+def delivery_checklist(engine: Any, company_id: int | None, role: str | None) -> str:
+    """The titles of the company's active procedures for *role*, as the last
+    words before the agent delivers.
+
+    The procedures themselves open the prompt, where the providers' prefix
+    cache bills them at the cached rate; that is also where a model forgets
+    them by the time it writes its answer (self-hosting run 10: every rule in
+    the prompt, uncut, and the first delivery still broke one). A line per
+    title at the end costs little and is read last. Empty without procedures.
+    """
+    if company_id is None:
+        return ""
+    try:
+        with Session(engine) as session:
+            titles = [p.title for p in active_procedures(session, company_id, role)]
+    except Exception as exc:  # noqa: BLE001 - Procedures are context; the task goes on without them.
+        logger.debug("Procedures fetch failed for company=%s: %s", company_id, exc)
+        return ""
+    if not titles:
+        return ""
+    return (
+        "\n\n## Before you deliver\n"
+        "Check your delivery against each of this company's procedures for your "
+        "role (the Company Procedures section above says how):\n"
+        + "\n".join(f"- {t}" for t in titles)
+    )
+
+
 def procedures_prompt(procedures: list[Procedure]) -> str:
     if not procedures:
         return ""

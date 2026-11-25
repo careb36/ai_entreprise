@@ -22,6 +22,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.contracts import tool_calls
+from services.learning import procedures
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
 from services.loop import edit_plan, sprint_control, task_routing
@@ -201,6 +202,8 @@ def _developer_prompt(
         Section("architect_brief", edit_plan.prompt_section(architect_advice))
     )
 
+    checklist = procedures.delivery_checklist(engine, company_id, agent.get("role"))
+    sections.append(Section("delivery_checklist", checklist, 1))  # read last, cut last
     rework_feedback = task_projection.record_from_dict(item).pending_rework_feedback()
     if rework_feedback:
         sections.append(

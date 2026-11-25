@@ -38,6 +38,9 @@ measured and kept or reverted, and the wiki is compiled.
 of [the sprint loop](../SPRINT_LOOP.md)). `board_metrics` includes
 `claim_gap_rate`, the tasks claimed delivered and not verified; `evaluate`
 reverts a procedure under which it grew by more than `GAP_TOLERANCE`.
+A role's active procedures open its task prompt (`prompt_context`) and their
+titles close it (`delivery_checklist`, the prompt section of the same name), so
+they are read again just before the agent delivers.
 
 ### The retrospective and triage
 
