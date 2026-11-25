@@ -1,0 +1,3 @@
+Fixed
+
+* **A `workspace.execute` reply always fits one NATS message (issue #701).** A verbose suite (`pytest -v` over the whole backend) printed more than the broker's payload limit, so the daemon's reply raised `MaxPayloadError` and was never sent; the backend recorded "the workspace daemon did not reply (TimeoutError)" and sent the task back without its exit (self-hosting run 4, tasks 42 and 43). The daemon now cuts `stdout` and `stderr` to fit, keeping each stream's start and end, says how much it left out, and names the cut streams in `output_truncated`; the full log, when asked, still holds everything.

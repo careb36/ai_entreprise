@@ -17,6 +17,7 @@ or not the request named a sandbox, so the daemon's
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -223,3 +224,47 @@ def run_on_host(command: str, cwd: str, seconds: int, keep_full: bool = False) -
         }, keep_full)
     except Exception as e:  # noqa: BLE001 - a command that cannot start must not kill the daemon
         return {"success": False, "error": str(e)}
+
+
+# What a fitted stream keeps from its start; the rest of the room goes to its
+# end, where a test runner prints its failures and its summary.
+FIT_HEAD_CHARS = 4096
+FIT_MARK = "\n[... {cut} characters left out: the reply must fit one NATS message ...]\n"
+
+
+def fit_result(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
+    """*result* with ``stdout`` and ``stderr`` cut to fit one NATS message of *max_bytes*.
+
+    A reply over the server's payload limit is never delivered: the backend
+    would only see a daemon that did not answer (``TimeoutError``) and never
+    the exit it waits for. Each cut stream keeps its start and its end, says
+    how much was left out, and is named in ``output_truncated``; the whole
+    output still goes to the full log when the request asked for one.
+    """
+    def size(r: dict[str, Any]) -> int:
+        return len(json.dumps(r).encode())
+
+    if max_bytes <= 0 or size(result) <= max_bytes:
+        return result
+    streams = [k for k in ("stdout", "stderr") if isinstance(result.get(k), str) and result[k]]
+    whole = {k: result[k] for k in streams}
+
+    def cut(keep: int) -> dict[str, Any]:
+        fitted = dict(result, output_truncated=streams)
+        for k in streams:
+            text = whole[k]
+            if len(text) <= keep:
+                continue
+            head = min(FIT_HEAD_CHARS, keep // 4)
+            tail = keep - head
+            fitted[k] = text[:head] + FIT_MARK.format(cut=len(text) - head - tail) + (text[-tail:] if tail else "")
+        return fitted
+
+    low, high = 0, max((len(v) for v in whole.values()), default=0)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if size(cut(middle)) <= max_bytes:
+            low = middle
+        else:
+            high = middle - 1
+    return cut(low)
