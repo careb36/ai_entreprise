@@ -80,6 +80,13 @@ def test_new_dispatch_refused_while_an_older_run_is_stuck(
     assert f"task {older.id}" in reason
     assert "in_progress" in reason
 
+    # The dispatch path uses the same reason and refuses to queue the backlog.
+    refused = gate.dispatch_or_defer(sqlite_session, sprint, now)
+    assert refused["dispatched"] == 0
+    assert refused.get("stuck_block_reason") == reason
+    sqlite_session.refresh(waiting_todo)
+    assert waiting_todo.status == "todo"
+
     existing_outbox = len(sqlite_session.exec(select(OutboxEvent)).all())
     dispatched = gate.release_sprint(sqlite_session, sprint, "window_open", now)
 

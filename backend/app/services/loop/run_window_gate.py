@@ -290,6 +290,8 @@ def _release_one(engine: Any, sprint_id: int, now: datetime) -> bool:
             return False  # planned or paused: its start or resume gates again
         until = hold_until(session, sprint, now)
         if until is None:
+            if stuck_block_reason(session, sprint, now) is not None:
+                return False  # the run may still finish; leave the sprint waiting
             if sprint.urgent:
                 reason = "urgent"
             elif _window(session, sprint) is None:
