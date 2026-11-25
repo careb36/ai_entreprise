@@ -23,6 +23,9 @@ from services.loop.worker import review as worker_review
 from sqlmodel import Session, select
 
 DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120
+# The same answer with the file declared as agents declare it (``path=``): an
+# approval of a delivery that wrote no file waits for a person (review_hold).
+WITH_FILE = "```python path=src/a.py\nprint('a')\n```\n" + "word " * 120
 
 
 class _FakeNATS:
@@ -329,6 +332,10 @@ def test_rework_prompt_carries_the_review_feedback(monkeypatch):
 
 def test_another_companys_run_cannot_gate_this_task(db, monkeypatch):
     item_id = _item_in_review(db, None)
+    item = db.get(BacklogItem, item_id)
+    item.comments = [{"author": "Dev", "text": WITH_FILE, "created_at": ""}]
+    db.add(item)
+    db.commit()
     intruder = Company(company_name="Intruder", autonomy_level=1)
     db.add(intruder)
     db.commit()

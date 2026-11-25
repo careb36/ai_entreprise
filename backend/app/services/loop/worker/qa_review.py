@@ -4,8 +4,9 @@ The review cycle (``review``) hands ``_qa_review`` each ``in_review`` task that
 passed its checks and the delivery gate: the review prompt (``review_prompt.build``),
 the QA model's answer after its reads (``_call_llm_for_review``; only ``APPROVED:``
 or ``NEEDS WORK:`` is a verdict), the hold for a person on an approved delivery
-(``_person_hold``: a high risk tier, or the company's autonomy level), the
-rework budget (``_rework_budget``), the verdict's events, messages and
+(``_person_hold``: a high risk tier, the company's autonomy level, or a
+delivery that wrote no file), the rework budget (``_rework_budget``), the
+verdict's events, messages and
 escalation (``_record_verdict``) and what it leads to on Glassroom and at the
 sprint's close (``_announce_verdict``). A review that fails is recorded for a
 retry, or pauses the sprint when the provider has no credit (``_review_failed``).
@@ -22,21 +23,20 @@ from config import settings
 from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
-from models import AgentMessage, BacklogItem, Company, Sprint
+from models import AgentMessage, BacklogItem, Sprint
 from nats_client import NATSClient
 from sqlmodel import Session
 
 from services.contracts import company_limits
-from services.contracts.manifest import parse_file_manifest
-from services.evidence import risk
 from services.loop import sprint_control
 from services.loop.answers import REVIEW_MAX_TOKENS
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
-from services.loop.worker import close, execute, messages, record, review_prompt
+from services.loop.worker import close, execute, messages, review_prompt
 from services.loop.worker.qa_review_reads import answer as review_answer
+from services.loop.worker.review_hold import person_hold as _person_hold
 from services.models import model_routing
-from services.platform import company_limits_setting, protected_paths_setting
+from services.platform import company_limits_setting
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW,
@@ -205,49 +205,6 @@ async def _qa_review(
 
     except Exception as e:  # noqa: BLE001 - Isolate review failures to the affected item.
         await _review_failed(session, nats_client, item, sprint, reviewer_dict, e)
-
-
-async def _person_hold(
-    session: Session,
-    item: BacklogItem,
-    sprint: Sprint,
-    deliverable: str,
-    needs_work: bool,
-) -> tuple[bool, dict[str, Any] | None]:
-    """Whether an approved delivery waits for a person, and the check that says why."""
-    # Approved, but a high-risk delivery waits for a person at
-    # every autonomy level (services/risk.py).
-    risk_check = (
-        None
-        if needs_work
-        else await asyncio.to_thread(record._delivery_risk, sprint.company_id, item.id)
-    )
-    if risk_check is None and not needs_work:
-        # No recorded check (the run was not recorded): unknown is
-        # not low, so the paths the deliverable declares decide; a
-        # claim, which can only raise the tier.
-        risk_check = risk.classify(
-            [f["path"] for f in parse_file_manifest(deliverable)]
-        )
-    if not needs_work and protected_paths_setting.enabled(session, sprint.company_id):
-        # The company hosts the factory under the setting as it is now, which
-        # may postdate the verification: the recorded run's paths and the
-        # deliverable's are matched again (record._protected_reasons).
-        grader = await asyncio.to_thread(
-            record._protected_reasons, sprint.company_id, item.id, deliverable
-        )
-        if grader:
-            earlier = (risk_check or {}).get("reasons") or []
-            risk_check = {"tier": risk.RISK_HIGH, "reasons": [*grader, *earlier][:10]}
-    risk_hold = risk_check is not None and risk.is_high(risk_check.get("tier"))
-    company = session.get(Company, sprint.company_id)
-    person_reason = sprint_control.person_acceptance_reason(
-        company.autonomy_level, engine, sprint.company_id, item.id
-    )
-    if not needs_work and not risk_hold and person_reason:
-        risk_hold = True
-        risk_check = {"reasons": [person_reason]}
-    return risk_hold, risk_check
 
 
 def _rework_budget(

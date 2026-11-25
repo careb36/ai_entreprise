@@ -129,7 +129,7 @@ async def _review_task(
     quality_gate_blocked_ids: set[int],
 ) -> None:
     """One delivered task: the checks before QA, the delivery gate, then QA's review."""
-    reviewer_dict = _reviewer_of(session, sprint)
+    reviewer_dict = _reviewer_of(session, sprint, item)
 
     task_record = task_projection.record_of(session, item, histories)
     if task_record.frozen():
@@ -193,22 +193,39 @@ async def _review_task(
         )
 
 
-def _reviewer_of(session: Session, sprint: Sprint) -> dict[str, Any]:
-    """The company's QA agent as the reviewer, with the model it runs."""
-    # Find QA agent for this company (fallback to any reviewer)
+def _reviewer_role(session: Session, sprint: Sprint, item: BacklogItem | None) -> str:
+    """QA, or the Architect when QA wrote the task: no role reviews its own work.
+
+    A company with no Architect keeps QA (nobody else is hired to review).
+    """
+    if item is None or (item.assignee or "") != "QA":
+        return "QA"
+    architect = session.exec(
+        select(Agent.id).where(
+            Agent.company_id == sprint.company_id, Agent.role == "Architect"
+        )
+    ).first()
+    return "Architect" if architect is not None else "QA"
+
+
+def _reviewer_of(
+    session: Session, sprint: Sprint, item: BacklogItem | None = None
+) -> dict[str, Any]:
+    """The company's reviewer for *item* (``_reviewer_role``), with the model it runs."""
+    role = _reviewer_role(session, sprint, item)
     reviewer = session.exec(
         select(Agent).where(
             Agent.company_id == sprint.company_id,
-            Agent.role == "QA",
+            Agent.role == role,
         )
     ).first()
     qa_model = getattr(reviewer, "model", None) or model_routing.company_model(
-        session, sprint.company_id, "QA"
+        session, sprint.company_id, role
     )
     return {
-        "role": reviewer.role if reviewer else "QA",
-        "name": reviewer.name if reviewer else "QA",
-        "model": model_routing.resolve_agent_model({"model": qa_model, "role": "QA"}),
+        "role": reviewer.role if reviewer else role,
+        "name": reviewer.name if reviewer else role,
+        "model": model_routing.resolve_agent_model({"model": qa_model, "role": role}),
         "seniority": reviewer.seniority if reviewer else "Senior",
         "system_prompt": reviewer.system_prompt if reviewer else None,
     }

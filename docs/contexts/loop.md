@@ -9,7 +9,7 @@ detail.
 - **Folder:** `backend/app/services/loop/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md). Imported by [release](release.md) and [management](management.md).
 - **Interface:** `carry_over`, `delivery_checks`, `run_review`, `sod_requesters`, `sprint_control`.
-- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `changelog_observe`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `docs_checks`, `edit_plan`, `folder_baseline`, `foundation_setup`, `in_flight`, `live_state`, `platform_hold`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/changelog_prompt`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
+- **Modules:** `agent_config_history`, `answers`, `board_moves`, `carry_over`, `changelog_observe`, `company_service`, `console_host`, `daemon_gate`, `delivery_checks`, `delivery_suites`, `docs_checks`, `edit_plan`, `folder_baseline`, `foundation_setup`, `in_flight`, `live_state`, `platform_hold`, `preconditions`, `refuted_undo`, `repeat_delivery`, `replicas`, `review_digest`, `routine_revisions`, `routines`, `run_review`, `run_window_gate`, `sod_requesters`, `sprint_archive`, `sprint_budget`, `sprint_close`, `sprint_control`, `task_edit`, `task_routing`, `task_worker`, `wiki_close`, `worker/architect_brief`, `worker/board_record`, `worker/board_writes`, `worker/changelog_prompt`, `worker/close`, `worker/close_listing`, `worker/deliver`, `worker/execute`, `worker/execute_tools`, `worker/intake`, `worker/messages`, `worker/procedures_round`, `worker/prompt`, `worker/prompt_budget`, `worker/qa_review`, `worker/qa_review_reads`, `worker/quality_gate`, `worker/record`, `worker/related`, `worker/review`, `worker/review_evidence`, `worker/review_hold`, `worker/review_prompt`, `worker/sprint_notes`, `worker/task_run`, `worker/triage_reads`, `worker/wiki_section`.
 
 ## How it works
 
@@ -330,9 +330,13 @@ instead, stays readable by id, and an Owner may unarchive it.
   sees: every file within a fixed size, the agent's message labelled as a
   claim, the platform's observations marked as ones a review does not settle.
   The `changelog_matches_diff` check is listed first and whole.
-- `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`), the hold
-  for a person, and the one rework budget per task (`MAX_REWORKS`, or the
-  company's `max_reworks`).
+- `worker/qa_review`: the verdict (only `APPROVED:` or `NEEDS WORK:`) and the
+  one rework budget per task (`MAX_REWORKS`, or the company's `max_reworks`).
+  A task assigned to QA is reviewed by the Architect, so no role reviews its
+  own work (`worker/review._reviewer_role`; QA when no Architect is hired).
+- `worker/review_hold`: whether an approved delivery waits for a person: a high
+  risk tier or a protected path, the company's autonomy level, or a delivery
+  that wrote no file (nothing the Verifier could check).
 - `worker/qa_review_reads`: before the verdict, QA may read the delivery with
   the read-only workspace tools (`tools/review_tools`) through the Developer's
   tool loop, for `QA_REVIEW_TOOL_ROUNDS` rounds. The verdict keeps the same

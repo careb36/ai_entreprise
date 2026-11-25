@@ -56,6 +56,19 @@ def _protected_reasons(company_id: int, item_id: int, deliverable: str) -> list[
     return [f"{risk.GRADER_AREA}: {p}" for p in dict.fromkeys(paths)]
 
 
+def _delivered_files(company_id: int, item_id: int, deliverable: str) -> list[str]:
+    """The files the task's delivery wrote or declared: its manifest's paths and
+    the ``files`` its latest recorded run claims (tool edits included)."""
+    paths = [f["path"] for f in parse_file_manifest(deliverable)]
+    verification = delivery_gate.latest_verification(engine, company_id, item_id)
+    if verification is not None:
+        with Session(engine) as session:
+            run = session.get(AgentRun, verification.agent_run_id)
+            if run is not None:
+                paths += list((run.claims or {}).get("files") or [])
+    return list(dict.fromkeys(p for p in paths if p))
+
+
 def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
     return delivery_gate.latest_verification(engine, company_id, item_id)
 
