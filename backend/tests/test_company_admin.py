@@ -47,7 +47,9 @@ def _company(session, name="Acme"):
 
 
 def test_an_owner_renames_and_a_manager_cannot(
-    sqlite_session, test_client, enforcement
+    sqlite_session,
+    test_client,
+    enforcement,  # noqa: F811
 ):
     company, _ = _company(sqlite_session)
     owner = _member(sqlite_session, company.id, "Owner")
@@ -72,10 +74,12 @@ def test_an_owner_renames_and_a_manager_cannot(
 
 
 def test_the_owner_deletes_everything_the_company_holds_and_nothing_else(
-    sqlite_session, test_client, enforcement
+    sqlite_session,
+    test_client,
+    enforcement,  # noqa: F811
 ):
     company, sprint = _company(sqlite_session)
-    other, other_sprint = _company(sqlite_session, "Other")
+    _, other_sprint = _company(sqlite_session, "Other")
     company_id, sprint_id, other_sprint_id = company.id, sprint.id, other_sprint.id
     owner = _member(sqlite_session, company.id, "Owner")
     url = f"/v1/companies/{company.id}"
@@ -113,7 +117,9 @@ def test_the_owner_deletes_everything_the_company_holds_and_nothing_else(
 
 
 def test_a_running_sprint_holds_the_delete_back(
-    sqlite_session, test_client, enforcement
+    sqlite_session,
+    test_client,
+    enforcement,  # noqa: F811
 ):
     company, sprint = _company(sqlite_session)
     sprint.status = "active"
@@ -132,7 +138,9 @@ def test_a_running_sprint_holds_the_delete_back(
 
 
 def test_a_manager_or_an_api_token_cannot_delete(
-    sqlite_session, test_client, enforcement
+    sqlite_session,
+    test_client,
+    enforcement,  # noqa: F811
 ):
     company, _ = _company(sqlite_session)
     manager = _member(sqlite_session, company.id, "Manager")
