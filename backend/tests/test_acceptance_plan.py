@@ -248,3 +248,26 @@ def test_a_criterion_verified_without_an_observed_run_is_illegal():
         )["observed_test_run"]
         is False
     )
+
+
+def test_pytest_xdist_verbose_lines_are_read():
+    """The backend's suite runs under pytest-xdist by default (#592): its
+    ``-v`` lines put the outcome before the test, behind the worker. Read
+    as the short summary, or every backend criterion was ``missing``
+    (self-hosting run 7, task 49, whose test passed)."""
+    output = (
+        "tests/test_saved_views_acceptance.py::test_req_2_1_done_tasks_agree \n"
+        "[gw5] [ 45%] PASSED tests/test_saved_views_acceptance.py::test_req_2_1_done_tasks_agree \n"
+        "[gw12] [100%] FAILED tests/test_req_1.py::test_req_1_2_and_group \n"
+        "========== 1 failed, 7568 passed in 216.42s ==========\n"
+    )
+    assert criteria_tests.results_from_output(
+        output, ["REQ-1.2", "REQ-2.1", "REQ-3.1"]
+    ) == {
+        "REQ-1.2": "fail",
+        "REQ-2.1": "pass",
+        "REQ-3.1": "missing",
+    }
+    assert criteria_tests.failing_tests(output) == [
+        "tests/test_req_1.py::test_req_1_2_and_group"
+    ]
