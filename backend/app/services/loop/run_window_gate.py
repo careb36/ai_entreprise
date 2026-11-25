@@ -205,9 +205,20 @@ def hold_task(engine: Any, item_id: int, now: datetime | None = None) -> bool:
 def dispatch_or_defer(
     session: Session, sprint: Sprint, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Queue *sprint*'s ready ``todo`` tasks, or hold them for the window."""
+    """Queue *sprint*'s ready ``todo`` tasks, or hold them for the window.
+
+    A stuck async task (``stuck_block_reason``) blocks new dispatch even when
+    the window is open; the block is returned as ``stuck_block_reason``.
+    """
     until = hold_until(session, sprint, now)
+    blocked = stuck_block_reason(session, sprint, now)
     if until is None:
+        if blocked is not None:
+            return {
+                "dispatched": 0,
+                "run_window": None,
+                "stuck_block_reason": blocked,
+            }
         return {
             "dispatched": sprint_control.dispatch_todo(session, sprint),
             "run_window": None,
@@ -222,7 +233,10 @@ def dispatch_or_defer(
     sprint.run_window_wait_until = _naive(until)
     session.add(sprint)
     session.flush()
-    return {"dispatched": 0, "run_window": view(session, sprint)}
+    outcome: dict[str, Any] = {"dispatched": 0, "run_window": view(session, sprint)}
+    if blocked is not None:
+        outcome["stuck_block_reason"] = blocked
+    return outcome
 
 
 def release_sprint(
