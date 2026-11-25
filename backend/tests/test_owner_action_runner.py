@@ -394,3 +394,19 @@ def test_the_wait_step_ends_when_the_sprint_is_cancelled(monkeypatch):
     HARNESS.step_wait(Api(), args, {"company_id": 3, "sprint_id": 10}, report)
     assert report["wait"]["status"] == "cancelled"
     assert report["wait"]["board"] == ["t=blocked"]
+
+
+def test_a_sprint_still_running_at_the_timeout_is_stopped(sqlite_session, monkeypatch):
+    """Run 7: the wait reached the timeout with sprint 12 still active, and the
+    run left it running. The run now stops it and says why it failed."""
+    job, world, _ = _job(sqlite_session, monkeypatch)
+    world["sprint_status"] = "active"
+    clock = itertools.count(step=400)  # one poll, then past the 600 s timeout
+    monkeypatch.setattr(HARNESS.time, "monotonic", lambda: next(clock))
+    finished = asyncio.run(runner.run(job))
+    assert (finished.status, finished.reason) == (
+        "failed",
+        "sprint_not_completed: active",
+    )
+    assert ("POST", "/v1/sprints/42/stop", {}) in world["calls"]
+    assert finished.observations["sprint_stopped"] is True

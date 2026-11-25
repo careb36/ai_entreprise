@@ -274,3 +274,26 @@ def test_without_container_mode_the_defaults_are_unchanged():
         "folders",
         False,
     )
+
+
+def test_the_folders_suites_report_their_sandbox_on_each_record():
+    """Self-hosting runs 4 to 7: La Fabrique's root has no suite, so the test
+    run is the folders' summary and carries no sandbox; each suite's reply,
+    on its ``command_runs`` record, does. Read there, the run is observed."""
+    host_install = {"kind": "install", "folder": "backend", "sandbox": HOST_REPLY}
+    suite = {"kind": "test", "folder": "backend", "sandbox": CONTAINER_REPLY}
+    verification = {
+        "id": 7,
+        "evidence": {
+            "test_run": {"summary_of": "command_runs"},
+            "command_runs": [host_install, suite],
+        },
+    }
+    seen = sandbox_mode.applied(verification)
+    assert seen["mode"] == "container"  # the suite's reply before an install's
+    assert (
+        sandbox_mode.applied(
+            {"id": 8, "evidence": {"test_run": {}, "command_runs": [{"kind": "test"}]}}
+        )
+        is None
+    )

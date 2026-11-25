@@ -256,6 +256,13 @@ async def run(job: Job) -> OwnerActionRun | None:
         exit_status = job.harness.sandbox_mode.exit_status(job.report, True)
         status = "succeeded" if exit_status == 0 else "failed"
         reason = None if exit_status == 0 else "not_container_mode"
+        waited = (job.report.get("wait") or {}).get("status")
+        if waited != "completed":
+            # The wait reached the run's timeout (or the sprint was stopped):
+            # the run did not finish its sprint, and leaves none running.
+            status, reason = "failed", f"sprint_not_completed: {waited or 'unknown'}"
+            if waited != "cancelled":
+                await asyncio.to_thread(job.stop_sprint, job.make_api(lambda: None))
     except owner_action_sod.Blocked:
         reason = owner_action_sod.BLOCKED  # the facts are in ``observations.sod``
     except Stop as stop:
