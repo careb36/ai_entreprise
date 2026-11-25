@@ -235,7 +235,7 @@ async def handle_msg(nc, msg):
             await _publish_glassroom_status(nc, sprint_id, shell_exec.summarize_command_result(cmd, result))
 
         if reply_to:
-            await nc.publish(reply_to, json.dumps(result).encode())
+            await nc.publish(reply_to, json.dumps(shell_exec.fit_result(result, int(getattr(nc, "max_payload", 0) or 0))).encode())
 
 def _configured_assistant_commands(data: Dict[str, Any]) -> list[str]:
     """Assistant commands to look for: the request's list, else the env default."""
