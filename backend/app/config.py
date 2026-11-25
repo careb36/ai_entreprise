@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     # wakes at the next window boundary when that comes sooner, and never
     # looks more often than once a minute.
     RUN_WINDOW_RECHECK_SECONDS: int = 300
+    # A prior task (in_progress or in_review) whose updated_at is older than
+    # this many seconds blocks the run-window gate from dispatching new tasks
+    # for the same sprint (run_window_gate.stuck_block_reason). 0 disables it.
+    RUN_WINDOW_STUCK_TASK_SECONDS: int = 3600
     # Empty: the daemon builds the project's own image from its stacks
     # (services/workspace/stack_image.py, issue #766). A value names one image
     # for every project instead, as before.
