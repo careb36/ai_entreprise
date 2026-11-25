@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import JSON, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Column, Field, SQLModel
 
 # Runs the company produces itself. The review loop already decides them: the
@@ -38,6 +40,12 @@ class AgentRun(SQLModel, table=True):
     finished_at: datetime | None = None
     ingested_at: datetime = Field(default_factory=_utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
+    # The outbox correlation id that started the async run this record belongs
+    # to; nullable for runs that came from paths without an outbox event. It is
+    # set once and never overwritten.
+    correlation_id: UUID | None = Field(
+        default=None, sa_column=Column(PGUUID(as_uuid=True), index=True)
+    )
     # The Reviewer agent's suggestion: a claim kept apart from the approval a
     # person records (``AgentRunApproval``). ``reviewed_at`` with no decision
     # means its answer was unusable and the run is left to people.

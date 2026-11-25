@@ -7,11 +7,20 @@ project's test command ran on the result. Every field below the request is
 an observation: what git and the daemon answered, never what an agent said.
 ``publication`` is the daemon's answer when a Manager published the branch
 as one pull or merge request for the sprint.
+
+``OutboxEvent`` is the transactional outbox row (``services/integrations/
+outbox_service.py``): the domain change and its NATS delivery write in one
+database transaction, then a background loop drains pending rows. Its
+``correlation_id`` is generated once at enqueue time and never regenerated
+on retry or redelivery; it is distinct from ``Nats-Msg-Id`` which stays for
+dedup only (Harden async task-worker observability and failure replay).
 """
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Column
+from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel
 
 # untested says nothing about the tests; incomplete: a done task's branch was
@@ -36,6 +45,42 @@ PUBLISHABLE = ("tests_passed", "tests_failed", "untested")
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+class OutboxEvent(SQLModel, table=True):
+    """One transactional outbox row, drained into NATS by ``process_outbox``.
+
+    ``correlation_id`` is generated exactly once, at enqueue time, and never
+    regenerated on retry or redelivery. It flows from here through JetStream
+    consume, daemon call, verification and ``AgentRun`` so every async run is
+    traceable end-to-end in logs and spans. It is distinct from ``Nats-Msg-Id``,
+    which keeps its dedup role.
+    """
+
+    __tablename__ = "outbox_events"
+
+    id: int | None = Field(default=None, primary_key=True)
+    event_type: str
+    payload: dict | None = Field(default=None, sa_column=Column(JSON))
+    correlation_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(UUID(as_uuid=True), index=True),
+    )
+    status: str = Field(default="pending", index=True)
+    retry_count: int = Field(default=0)
+    created_at: datetime = Field(default_factory=_utcnow)
+    processed_at: datetime | None = None
+
+    def ensure_correlation_id(self) -> uuid.UUID:
+        """Return the stable id, generating it exactly once.
+
+        Generation happens only for rows that predate a migration or an
+        enqueue path not using ``new_correlation_id``; a caller that already
+        assigned one gets it back unchanged so a retry can never rotate it.
+        """
+        if self.correlation_id is None:
+            self.correlation_id = uuid.uuid4()
+        return self.correlation_id
 
 
 class SprintIntegration(SQLModel, table=True):
