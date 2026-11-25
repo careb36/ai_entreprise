@@ -1,10 +1,10 @@
 """
- SQLModel ORM models for sprint management and the transactional outbox.
+SQLModel ORM models for sprint management and the transactional outbox.
 
- Tables:
- - ``Sprint``       — a time-boxed iteration for a company.
- - ``BacklogItem``  — a single task on the sprint board (Kanban card).
- - ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
+Tables:
+- ``Sprint``       — a time-boxed iteration for a company.
+- ``BacklogItem``  — a single task on the sprint board (Kanban card).
+- ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
 """
 
 import json
@@ -12,8 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Text
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import JSON, Text, Uuid
 from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
 
@@ -167,7 +166,7 @@ class OutboxEvent(SQLModel, table=True):
     # rows and backfilled once by migration when NULL.
     correlation_id: UUID | None = Field(
         default=None,
-        sa_column=Column(PGUUID(as_uuid=True), index=True),
+        sa_column=Column(Uuid(), index=True),
     )
 
     def ensure_correlation_id(self) -> UUID:

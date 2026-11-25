@@ -2,8 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import JSON, UniqueConstraint, Uuid
 from sqlmodel import Column, Field, SQLModel
 
 # Runs the company produces itself. The review loop already decides them: the
@@ -44,7 +43,7 @@ class AgentRun(SQLModel, table=True):
     # to; nullable for runs that came from paths without an outbox event. It is
     # set once and never overwritten.
     correlation_id: UUID | None = Field(
-        default=None, sa_column=Column(PGUUID(as_uuid=True), index=True)
+        default=None, sa_column=Column(Uuid(), index=True)
     )
     # The Reviewer agent's suggestion: a claim kept apart from the approval a
     # person records (``AgentRunApproval``). ``reviewed_at`` with no decision

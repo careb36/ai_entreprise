@@ -1,14 +1,3 @@
-Correlation id on task runs
-===========================
+Added
 
-Every ``task.assign`` now carries a stable ``correlation_id`` generated once at
-enqueue time (outbox publish or ``_dispatch_todo_items``). The task worker reads
-it, passes it unchanged to ``task_run._run_claimed_task`` (so it reaches the
-daemon call and verification), and stores it on ``AgentRun.correlation_id`` and
-``OutboxEvent.correlation_id``. It is propagated as an OpenTelemetry span
-attribute ``task.correlation_id`` and appears in structured worker logs.
-
-The id is distinct from ``Nats-Msg-Id`` (deduplication only) and is never
-regenerated on a redelivery: a message that arrives without one is run under a
-freshly generated id so its trace still lines up, but one that carries an id
-keeps it byte for byte from publish to AgentRun.
+* **Each task assignment carries a correlation id from the outbox to the worker's logs.** Outbox rows get a `correlation_id` (a UUID) once, when they are enqueued, and keep it on every retry; the outbox sends it in the message and as a header, and the board's own dispatch adds one to each `task.assign`. The task worker reads it, keeps it in the task's context and names it in its log lines and in the failure it records; a message that arrives without one is run under a new id. It is separate from `Nats-Msg-Id`, which stays for deduplication. `agent_runs` gains a `correlation_id` column (migration 0065) for the later tasks of this sprint to fill; existing outbox rows are given an id on PostgreSQL.

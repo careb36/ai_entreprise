@@ -221,11 +221,10 @@ async def _claim(
         correlation_id,
     )
 
-    ctx = await asyncio.to_thread(
-        task_run._load_task_context, backlog_item_id, correlation_id
-    )
+    ctx = await asyncio.to_thread(task_run._load_task_context, backlog_item_id)
     if not ctx:
         return None
+    ctx["correlation_id"] = correlation_id
 
     item = ctx["item"]
     _clear_queue_marker(item["id"])

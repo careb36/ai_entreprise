@@ -9,9 +9,10 @@ from publish through JetStream consume, daemon call, verification and
 AgentRun. Nullable with backfill for existing rows; distinct from
 Nats-Msg-Id which remains for dedup only.
 """
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0065"
 down_revision = "0064"
@@ -24,16 +25,20 @@ def upgrade() -> None:
         "outbox_events",
         sa.Column(
             "correlation_id",
-            postgresql.UUID(as_uuid=True),
+            sa.Uuid(),
             nullable=True,
         ),
     )
     # Backfill existing rows with a fresh UUID; one per row is fine because
     # the marker only needs to be stable from this point forward for the
     # messages it has not yet delivered (completed ones are done anyway).
-    op.execute(
-        "UPDATE outbox_events SET correlation_id = gen_random_uuid() WHERE correlation_id IS NULL"
-    )
+    # gen_random_uuid() is PostgreSQL's (13+); elsewhere the worker assigns
+    # one on first use (``OutboxEvent.ensure_correlation_id``).
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute(
+            "UPDATE outbox_events SET correlation_id = gen_random_uuid() "
+            "WHERE correlation_id IS NULL"
+        )
     op.create_index(
         "ix_outbox_events_correlation_id",
         "outbox_events",
@@ -44,7 +49,7 @@ def upgrade() -> None:
         "agent_runs",
         sa.Column(
             "correlation_id",
-            postgresql.UUID(as_uuid=True),
+            sa.Uuid(),
             nullable=True,
         ),
     )
