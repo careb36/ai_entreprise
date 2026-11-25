@@ -439,6 +439,10 @@
       "test_agent_run_approval.py": [
         "management"
       ],
+      "test_agent_run_correlation.py": [
+        "evidence",
+        "loop"
+      ],
       "test_agent_runs.py": [
         "management"
       ],

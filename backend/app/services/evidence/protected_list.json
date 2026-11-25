@@ -36,6 +36,7 @@
     "CLAUDE.md",
     "AGENTS.md",
     "backend/tests/test_acceptance_plan.py",
+    "backend/tests/test_agent_run_correlation.py",
     "backend/tests/test_agent_tools_delivery.py",
     "backend/tests/test_app_check.py",
     "backend/tests/test_board_moves_carry.py",

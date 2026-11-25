@@ -158,6 +158,9 @@ async def _run_claimed_task(
     item = ctx["item"]
     agent = ctx["agent"]
     sprint = ctx["sprint"]
+    # The assignment's correlation id rides with the agent to the run record.
+    if ctx.get("correlation_id"):
+        agent["correlation_id"] = ctx["correlation_id"]
 
     await _announce_claim(nats_client, item, agent, sprint)
     context = await _gather_context(nats_client, item, agent, sprint)

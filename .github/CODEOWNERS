@@ -98,6 +98,7 @@
 # Los tests que importan la evidencia (contexto evidence en tests.files de
 # docs/architecture/contexts.json).
 /backend/tests/test_acceptance_plan.py           @careb36
+/backend/tests/test_agent_run_correlation.py     @careb36
 /backend/tests/test_agent_tools_delivery.py      @careb36
 /backend/tests/test_move_tool.py                 @careb36
 /backend/tests/test_app_check.py                 @careb36
