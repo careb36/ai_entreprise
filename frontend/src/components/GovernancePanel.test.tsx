@@ -151,8 +151,13 @@ describe('GovernancePanel', () => {
     expect(buttons).toHaveLength(1)
 
     fireEvent.click(buttons[0])
+    // A reason first: it is the agent's rework feedback.
+    const confirm = within(blocked).getByRole('button', { name: 'Send back with this reason' })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(blocked).getByRole('textbox'), { target: { value: '  keep the old test  ' } })
+    fireEvent.click(confirm)
 
-    expect(mutate).toHaveBeenCalledWith({ itemId: 7, data: { status: 'todo', comment: 'Sent back to work by a person.' } })
+    expect(mutate).toHaveBeenCalledWith({ itemId: 7, data: { status: 'todo', comment: 'Sent back to work by a person: keep the old test' } })
   })
 
   it('lets a Manager accept an approved high-risk delivery, or send it back', () => {

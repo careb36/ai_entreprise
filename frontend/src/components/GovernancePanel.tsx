@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshCw, ShieldAlert, ShieldCheck, Undo2 } from 'lucide-react'
@@ -13,8 +14,9 @@ import { IntakeQueue } from './IntakeQueue'
 
 // The note written on the task when a person sends it back to work. Not
 // translated: the backend recognises it (services/tasks/board.py SEND_BACK_MARKER)
-// and restarts the rework budgets after it.
-const SEND_BACK_COMMENT = 'Sent back to work by a person.'
+// and restarts the rework budgets after it. The reason after the colon is the
+// agent's rework feedback (services/tasks/board.py send_back_reason).
+const SEND_BACK_PREFIX = 'Sent back to work by a person: '
 // The note written when a person accepts an approved high-risk delivery.
 const ACCEPT_COMMENT = 'High-risk delivery accepted by a person.'
 
@@ -39,9 +41,11 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask & { suggestio
   const { t } = useTranslation()
   const update = useUpdateBacklogItem()
   const accept = useUpdateBacklogItem()
+  const [asking, setAsking] = useState(false)
+  const [reason, setReason] = useState('')
   const sendBack = () => update.mutate({
     itemId: task.id,
-    data: { status: 'todo', comment: SEND_BACK_COMMENT },
+    data: { status: 'todo', comment: SEND_BACK_PREFIX + reason.trim() },
   })
   const acceptDelivery = () => accept.mutate({
     itemId: task.id,
@@ -103,11 +107,39 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask & { suggestio
               {t('inbox.accept', { defaultValue: 'Accept' })}
             </button>
           )}
-          <button type="button" onClick={sendBack} disabled={pending} className="btn btn-secondary btn-sm">
-            {update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
-            {t('inbox.sendBack', { defaultValue: 'Send back to work' })}
-          </button>
+          {!asking && (
+            <button type="button" onClick={() => setAsking(true)} disabled={pending} className="btn btn-secondary btn-sm">
+              <Undo2 size={14} />
+              {t('inbox.sendBack', { defaultValue: 'Send back to work' })}
+            </button>
+          )}
         </div>
+      )}
+      {canManage && !task.frozen && asking && (
+        <form
+          className="flex w-full flex-col gap-2 sm:max-w-md"
+          onSubmit={(e) => { e.preventDefault(); if (reason.trim()) sendBack() }}
+        >
+          <label className="text-xs text-gray-400">
+            {t('inbox.sendBackReason', { defaultValue: 'What should the agent change? It reads this before its next attempt.' })}
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              maxLength={1500}
+              className="input mt-1 w-full text-sm"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={pending || !reason.trim()} className="btn btn-secondary btn-sm">
+              {update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+              {t('inbox.sendBackConfirm', { defaultValue: 'Send back with this reason' })}
+            </button>
+            <button type="button" onClick={() => { setAsking(false); setReason('') }} disabled={pending} className="btn btn-ghost btn-sm">
+              {t('common.cancel')}
+            </button>
+          </div>
+        </form>
       )}
     </article>
   )
