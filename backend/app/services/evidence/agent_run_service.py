@@ -1,5 +1,6 @@
 import hashlib
 import json
+from uuid import UUID
 
 from models.agent_run import AgentRun
 from schemas import AgentRunCreate
@@ -12,6 +13,21 @@ MAX_ARTIFACT_SIZE_BYTES = 2 * 1024 * 1024
 
 class ArtifactTooLargeError(ValueError):
     pass
+
+
+def _correlation_id(payload: AgentRunCreate) -> UUID | None:
+    """The async run's outbox correlation id (an extra field), or ``None``.
+
+    The task worker passes the id the assignment carried; a value that is not
+    a UUID is left out rather than refusing the run.
+    """
+    raw = getattr(payload, "correlation_id", None)
+    if not raw:
+        return None
+    try:
+        return raw if isinstance(raw, UUID) else UUID(str(raw))
+    except ValueError:
+        return None
 
 
 def ingest_agent_run(
@@ -55,6 +71,7 @@ def ingest_agent_run(
         artifact_size=artifact_size,
         started_at=payload.started_at,
         finished_at=payload.finished_at,
+        correlation_id=_correlation_id(payload),
     )
     session.add(run)
     session.flush()

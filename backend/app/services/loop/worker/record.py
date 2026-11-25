@@ -110,6 +110,8 @@ def _record_task_run(
         },
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
+        # The id the outbox gave the task.assign that started this run (intake).
+        correlation_id=agent.get("correlation_id"),
     )
     # Tool calls and edited files: observations beside the daemon's, not claims.
     evidence = observe_tools(evidence, agent)
