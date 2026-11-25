@@ -71,3 +71,32 @@ def test_the_execute_handler_publishes_a_reply_under_the_limit(monkeypatch, tmp_
     subject, body = nc.sent[-1]
     assert subject == "_INBOX.1" and body["exit_code"] == 0
     assert body["output_truncated"] == ["stdout"]
+
+
+def test_the_lines_naming_a_criterion_or_a_failure_survive_the_cut():
+    """Run 7, task 48: ``test_req_1_1_… PASSED`` sat in the middle of a
+    verbose suite of 7500 tests, the cut left it out, and the backend's
+    criteria check reported "no test ran for REQ-1.1"."""
+    before = "tests/test_a.py::test_x PASSED\n" * 30000
+    mine = (
+        "tests/test_req_1_filter.py::test_req_1_1_field_outside_allowlist PASSED\n"
+        "tests/test_req_1_filter.py::test_req_1_2_and_group FAILED\n"
+        "tests/test_b.py::test_y ERROR\n"
+    )
+    after = "tests/test_z.py::test_w PASSED\n" * 30000 + "== 1 failed, 1 error, 60001 passed ==\n"
+    result = {"success": False, "stdout": before + mine + after, "stderr": "", "exit_code": 1}
+    fitted = shell_exec.fit_result(result, 1024 * 1024)
+    assert _size(fitted) <= 1024 * 1024
+    out = fitted["stdout"]
+    assert "test_req_1_1_field_outside_allowlist PASSED" in out
+    assert "test_req_1_2_and_group FAILED" in out and "test_y ERROR" in out
+    assert out.endswith("60001 passed ==\n")
+    assert out.count("test_req_1_1_field_outside_allowlist") == 1  # kept once, not twice
+
+
+def test_too_many_kept_lines_are_bounded():
+    flood = "tests/test_req_9.py::test_req_9_1_%d PASSED\n"
+    stdout = "".join(flood % i for i in range(80000)) + "== done ==\n"
+    fitted = shell_exec.fit_result({"success": True, "stdout": stdout, "stderr": "", "exit_code": 0}, 1024 * 1024)
+    assert _size(fitted) <= 1024 * 1024
+    assert fitted["stdout"].endswith("== done ==\n")
