@@ -5287,6 +5287,8 @@
       "specification": "Especificación",
       "architecture": "Arquitectura",
       "agentRuns": "Ejecuciones de agentes",
+      "checkoutRefreshed": "Copia actualizada desde el origen",
+      "previousHead": "Commit de la copia antes de actualizarla",
       "checkoutHead": "Commit de la copia",
       "sourceHead": "Commit de origen",
       "sandboxObserved": "Sandbox observado",

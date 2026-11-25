@@ -238,7 +238,16 @@ async def run(job: Job) -> OwnerActionRun | None:
             owner_actions.CHECKOUT_SECONDS,
         )
         job.report["checkout"] = {
-            k: reply.get(k) for k in ("path", "created", "head", "source_head", "files")
+            k: reply.get(k)
+            for k in (
+                "path",
+                "created",
+                "refreshed",
+                "previous_head",
+                "head",
+                "source_head",
+                "files",
+            )
         }
         job.report["steps_done"] = ["checkout"]
         await asyncio.to_thread(job.save)

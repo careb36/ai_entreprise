@@ -47,8 +47,15 @@ COPY_TIMEOUT_SECONDS = 300
 MESSAGE = "La Fabrique, as the self-hosting company's project"
 
 
+TRAILER = "Source-Commit"
+
+
 class Refused(ValueError):
     """A request this daemon will not carry out, and why (a 400)."""
+
+
+class Conflict(RuntimeError):
+    """An earlier snapshot that cannot be refreshed without losing work (a 409)."""
 
 
 def source_repository() -> Path:
@@ -87,19 +94,10 @@ def _head(root: Path) -> str:
     return run_git([*IDENTITY, "rev-parse", "HEAD"], root).stdout.strip()
 
 
-def checkout(name: Any) -> Dict[str, Any]:
-    source = source_repository()
-    root = snapshots_root()
-    target = target_for(name, root, source)
-    if (target / ".git").is_dir() and not (target / ".git").is_symlink():
-        return {"ok": True, "path": str(target), "created": False, "head": _head(target),
-                "source_head": _head(source), "files": None}
-    if target.exists() and (target.is_symlink() or not target.is_dir() or any(target.iterdir())):
-        raise Refused(f"{target} exists and is not an earlier snapshot")
+def _copy_source(source: Path, target: Path) -> int:
+    """Copy what git tracks or would track in *source* into *target*; never a link."""
     listed = run_git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], source)
     copied = 0
-    root.mkdir(parents=True, exist_ok=True)
-    target.mkdir(exist_ok=True)
     for relative in filter(None, listed.stdout.split("\0")):
         origin = source / relative
         if origin.is_symlink() or not origin.is_file():
@@ -110,11 +108,64 @@ def checkout(name: Any) -> Dict[str, Any]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(origin, destination, follow_symlinks=False)
         copied += 1
-    run_git([*IDENTITY, "init", "-q", "-b", "main"], target)
+    return copied
+
+
+def _commit(target: Path, message: str, source_head: str) -> None:
     run_git([*IDENTITY, "add", "-A"], target, timeout=COPY_TIMEOUT_SECONDS)
-    run_git([*IDENTITY, "commit", "-q", "-m", MESSAGE], target, timeout=COPY_TIMEOUT_SECONDS)
-    return {"ok": True, "path": str(target), "created": True, "head": _head(target),
-            "source_head": _head(source), "files": copied}
+    run_git([*IDENTITY, "commit", "-q", "-m", message, "-m", f"{TRAILER}: {source_head}"],
+            target, timeout=COPY_TIMEOUT_SECONDS)
+
+
+def _refreshable(target: Path) -> str | None:
+    """The source commit the snapshot's ``main`` holds (``None``: not recorded), or ``Conflict``."""
+    if run_git(["rev-parse", "--abbrev-ref", "HEAD"], target).stdout.strip() != "main":
+        raise Conflict(f"{target} is not on main: the snapshot is not refreshed")
+    if run_git(["status", "--porcelain"], target).stdout.strip():
+        raise Conflict(f"{target} has changes or untracked files: the snapshot is not refreshed")
+    author = run_git(["log", "-1", "--format=%ae"], target).stdout.strip()
+    if author != IDENTITY[-1].split("=", 1)[1]:
+        raise Conflict(f"main in {target} has commits the source does not: land them or use a new name")
+    recorded = run_git(["log", "-1", f"--format=%(trailers:key={TRAILER},valueonly)"], target)
+    return recorded.stdout.strip() or None
+
+
+def _refresh(target: Path, source: Path, source_head: str) -> Dict[str, Any]:
+    previous = _head(target)
+    reply = {"ok": True, "path": str(target), "created": False, "refreshed": False,
+             "previous_head": previous, "head": previous, "source_head": source_head, "files": None}
+    if _refreshable(target) == source_head:
+        return reply
+    tracked = run_git(["ls-files", "-z"], target).stdout.split("\0")
+    for relative in filter(None, tracked):
+        path = target / relative
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+    copied = _copy_source(source, target)
+    run_git([*IDENTITY, "add", "-A"], target, timeout=COPY_TIMEOUT_SECONDS)
+    if not run_git(["status", "--porcelain"], target).stdout.strip():
+        return {**reply, "files": copied}  # the same files: nothing to commit
+    _commit(target, f"{MESSAGE}, refreshed from the source", source_head)
+    return {**reply, "refreshed": True, "head": _head(target), "files": copied}
+
+
+def checkout(name: Any) -> Dict[str, Any]:
+    source = source_repository()
+    root = snapshots_root()
+    target = target_for(name, root, source)
+    source_head = _head(source)
+    if (target / ".git").is_dir() and not (target / ".git").is_symlink():
+        return _refresh(target, source, source_head)
+    if target.exists() and (target.is_symlink() or not target.is_dir() or any(target.iterdir())):
+        raise Refused(f"{target} exists and is not an earlier snapshot")
+    root.mkdir(parents=True, exist_ok=True)
+    target.mkdir(exist_ok=True)
+    copied = _copy_source(source, target)
+    run_git([*IDENTITY, "init", "-q", "-b", "main"], target)
+    _commit(target, MESSAGE, source_head)
+    return {"ok": True, "path": str(target), "created": True, "refreshed": False,
+            "previous_head": None, "head": _head(target), "source_head": source_head,
+            "files": copied}
 
 
 async def handle_checkout(nc, msg, reply, request_body) -> None:
@@ -124,7 +175,7 @@ async def handle_checkout(nc, msg, reply, request_body) -> None:
         body = await asyncio.to_thread(checkout, data.get("name"))
     except Refused as e:
         body = {"error": {"status": 400, "message": str(e)}}
-    except GitError as e:
+    except (Conflict, GitError) as e:
         body = {"error": {"status": 409, "message": str(e)}}
     except OSError as e:
         body = {"error": {"status": 500, "message": f"{type(e).__name__}: {e}"}}

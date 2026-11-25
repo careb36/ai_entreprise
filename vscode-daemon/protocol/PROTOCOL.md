@@ -218,7 +218,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.diff` | request | `git_diff.py`, `git_view.py` | `workspace_root`, `commit`, `base`?, `forge_policy`?; or `view` (`status`, `changed`, `diff`, `log`, `blame`, §5.6) with `base`?, `path`?, `limit`?, `start_line`?, `end_line`? | `ok`, `base_commit`, `merge_base`, `commit`, `files` (per file the hunks, `sha256_old`, `sha256_new`), `truncated`; a view: `view` and its fields (§5.6) |
 | `workspace.git.base_status` | request | `git_base.py`, `git_local.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `is_repo`, and how the base stands against its remote, `forge_policy`, `remote_contacted`; read locally whatever the policy: `current_branch`, `clean`, `operation_in_progress`, `remote_url` (without credentials) |
 | `workspace.git.sync_base` | request | `git_sync.py` | `workspace_root`, `base`?, `forge_policy`? (§5.3) | `ok`, `outcome` (`updated`, `up_to_date`, `ahead`, or the refusal: `forge_disabled`, `dirty`, `operation_in_progress`, `diverged`, `remote_unreachable`…), `reason`, `base`, `remote`, `remote_url`, `before`, `after`, `behind`, `ahead`, `forge_policy`, `remote_contacted` (§5.4) |
-| `workspace.self_host.checkout` | request | `self_host_checkout.py` | `name` (§5.9) | `ok`, `path`, `created`, `head`, `source_head`, `files` |
+| `workspace.self_host.checkout` | request | `self_host_checkout.py` | `name` (§5.9) | `ok`, `path`, `created`, `refreshed`, `previous_head`, `head`, `source_head`, `files` |
 | `workspace.self_host.git` | request | `self_host_git.py` | `view` (`branches`, `land_preview` with `branch`, `origin`, `push_preview`, `fix_commit` with `issue`; §5.11) | `ok`, `view` and its fields |
 | `workspace.self_host.land` | request | `self_host_git.py` | `branch`, `expected_head`, `land_owner`? (§5.11) | `ok`, `exit_code`, `outcome`, `landed`, `main_before`, `main_after`, `record`, `output_tail` |
 | `workspace.self_host.push` | request | `self_host_git.py` | `main`, `origin_main` (§5.11) | `ok`, `before`, `after`, `main`, `pushed`, `notes_ref`, `refspecs`, `remote_url` |
@@ -600,9 +600,16 @@ the files git tracks or would track in the source (ignored files such as
 and commits them as `main` of a fresh repository. It refuses (400) a name that
 is not one folder name, a target that resolves outside the root, the source
 or a folder inside it (or a root inside the source), and a non-empty folder
-that is not an earlier snapshot; an earlier snapshot is answered as it is
-(`created: false`, `files: null`). The reply is what the daemon observed:
-`path`, `created`, `head`, `source_head`, `files`. A git failure is a 409.
+that is not an earlier snapshot. Each snapshot commit records the source
+commit it copied (a `Source-Commit:` trailer). An earlier snapshot whose
+source has moved on is refreshed: the source's files replace the tracked
+files of its `main` in one new commit (`refreshed: true`; deletions carried,
+task branches kept); the same source is answered as it is (`refreshed:
+false`, `files: null`). A `main` whose head is not a snapshot commit, a
+checkout off `main` and a working tree with changes or untracked files are a
+409, never overwritten. The reply is what the daemon observed: `path`,
+`created`, `refreshed`, `previous_head`, `head`, `source_head`, `files`. A
+git failure is a 409.
 Announced as a subject (§2.1); the backend asks only a daemon that announces
 it, or one that announces nothing.
 

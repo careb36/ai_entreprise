@@ -1,0 +1,3 @@
+Fixed
+
+* **A reused self-hosting snapshot is refreshed from the source (issue #701).** `workspace.self_host.checkout` answered an earlier snapshot as it was, so a run with the same checkout name worked on the code of the first run (run 4 started on a snapshot of `317d35b` while `main` was at `dc97262`). Each snapshot commit now records its source commit (`Source-Commit:` trailer); when the source has moved on, the source's files replace the snapshot's `main` in one new commit, and the reply says `refreshed` and `previous_head`. Work on that `main` the source lacks, a checkout off `main` and a dirty working tree are a 409, never overwritten. The run panel shows both fields.

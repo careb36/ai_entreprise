@@ -160,6 +160,8 @@ async def _daemon(world, subject, payload, timeout):
             "ok": True,
             "path": SNAPSHOT,
             "created": True,
+            "refreshed": False,
+            "previous_head": None,
             "head": "a" * 40,
             "source_head": "b" * 40,
             "files": 3,
@@ -246,6 +248,8 @@ def test_the_run_records_what_the_platform_observed(sqlite_session, monkeypatch)
     assert seen["checkout"] == {
         "path": SNAPSHOT,
         "created": True,
+        "refreshed": False,
+        "previous_head": None,
         "head": "a" * 40,
         "source_head": "b" * 40,
         "files": 3,
