@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -230,6 +231,23 @@ def run_on_host(command: str, cwd: str, seconds: int, keep_full: bool = False) -
 # end, where a test runner prints its failures and its summary.
 FIT_HEAD_CHARS = 4096
 FIT_MARK = "\n[... {cut} characters left out: the reply must fit one NATS message ...]\n"
+FIT_KEPT_MARK = "[... lines kept from the part left out: criteria and failures ...]\n"
+# Lines kept from the part left out: a test named after a criterion
+# (``test_req_1_2_…``, read back by the backend's criteria check) and a
+# runner's failure lines. Bounded, so they never crowd out the end.
+FIT_KEEP_LINE = re.compile(r"(?i:req[_-]?\d)|\b(?:FAILED|ERROR)\b")
+FIT_KEPT_MAX_CHARS = 262144
+
+
+def _kept_lines(middle: str) -> str:
+    kept, used = [], 0
+    for line in middle.splitlines(keepends=True):
+        if FIT_KEEP_LINE.search(line):
+            if used + len(line) > FIT_KEPT_MAX_CHARS:
+                break
+            kept.append(line)
+            used += len(line)
+    return FIT_KEPT_MARK + "".join(kept) if kept else ""
 
 
 def fit_result(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
@@ -237,9 +255,12 @@ def fit_result(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
 
     A reply over the server's payload limit is never delivered: the backend
     would only see a daemon that did not answer (``TimeoutError``) and never
-    the exit it waits for. Each cut stream keeps its start and its end, says
-    how much was left out, and is named in ``output_truncated``; the whole
-    output still goes to the full log when the request asked for one.
+    the exit it waits for. Each cut stream keeps its start, the lines of the
+    part left out that name a criterion or a failure (a verbose suite prints
+    ``test_req_1_1_… PASSED`` somewhere in its middle, and the backend reads
+    the criteria from those lines), and its end; it says how much was left
+    out and is named in ``output_truncated``. The whole output still goes to
+    the full log when the request asked for one.
     """
     def size(r: dict[str, Any]) -> int:
         return len(json.dumps(r).encode())
@@ -249,7 +270,7 @@ def fit_result(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
     streams = [k for k in ("stdout", "stderr") if isinstance(result.get(k), str) and result[k]]
     whole = {k: result[k] for k in streams}
 
-    def cut(keep: int) -> dict[str, Any]:
+    def cut(keep: int, with_kept: bool) -> dict[str, Any]:
         fitted = dict(result, output_truncated=streams)
         for k in streams:
             text = whole[k]
@@ -257,14 +278,21 @@ def fit_result(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
                 continue
             head = min(FIT_HEAD_CHARS, keep // 4)
             tail = keep - head
-            fitted[k] = text[:head] + FIT_MARK.format(cut=len(text) - head - tail) + (text[-tail:] if tail else "")
+            middle = text[head:len(text) - tail]
+            kept = _kept_lines(middle) if with_kept else ""
+            fitted[k] = (text[:head] + FIT_MARK.format(cut=len(middle)) + kept
+                         + (text[-tail:] if tail else ""))
         return fitted
 
-    low, high = 0, max((len(v) for v in whole.values()), default=0)
-    while low < high:
-        middle = (low + high + 1) // 2
-        if size(cut(middle)) <= max_bytes:
-            low = middle
-        else:
-            high = middle - 1
-    return cut(low)
+    for with_kept in (True, False):  # without the kept lines only if they alone do not fit
+        if size(cut(0, with_kept)) > max_bytes and with_kept:
+            continue
+        low, high = 0, max((len(v) for v in whole.values()), default=0)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if size(cut(middle, with_kept)) <= max_bytes:
+                low = middle
+            else:
+                high = middle - 1
+        return cut(low, with_kept)
+    return cut(0, False)
