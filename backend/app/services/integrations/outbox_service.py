@@ -33,6 +33,14 @@ Retry policy:
 - Up to 5 delivery attempts per event.
 - After 5 failures the row is marked ``"failed"`` and excluded from future polls.
 - A ``retry_count`` column tracks the number of failed attempts.
+
+Replay:
+-------
+``replay_event`` (``POST /v1/admin/outbox-events/{id}/replay``, issue #736)
+returns a ``failed`` row, or a ``pending`` row waiting out its backoff, to a
+due ``pending`` row: ``retry_count`` 0 and no ``processed_at``. The payload and
+the correlation id stay as committed, so the poller republishes the same
+message under the same ``Nats-Msg-Id``; nothing that created the row runs again.
 """
 
 import asyncio
@@ -82,6 +90,47 @@ def enqueue_outbox_event(
         "Outbox enqueued event_type=%s correlation_id=%s",
         event_type,
         event.correlation_id,
+    )
+    return event
+
+
+class OutboxReplayError(Exception):
+    """A replay that cannot be done: ``kind`` is ``not_found`` or ``not_replayable``."""
+
+    def __init__(self, kind: str, reason: str) -> None:
+        super().__init__(reason)
+        self.kind = kind
+        self.reason = reason
+
+
+def replay_event(session: Session, event_id: int) -> OutboxEvent:
+    """Make outbox row *event_id* due again, commit, and return it.
+
+    A ``failed`` row, or a ``pending`` row that has failed before (so it waits
+    for its backoff), becomes ``pending`` with ``retry_count`` 0 and no
+    ``processed_at``. A ``completed`` row, or a ``pending`` row that is due
+    already, raises ``OutboxReplayError("not_replayable")``.
+    """
+    event = session.exec(
+        select(OutboxEvent).where(OutboxEvent.id == event_id).with_for_update()
+    ).first()
+    if event is None:
+        raise OutboxReplayError("not_found", f"Outbox event {event_id} not found")
+    stuck = event.status == "pending" and (event.retry_count or 0) > 0
+    if event.status != "failed" and not stuck:
+        raise OutboxReplayError(
+            "not_replayable",
+            f"Outbox event {event_id} is {event.status} and due: nothing to replay",
+        )
+    event.ensure_correlation_id()
+    event.status = "pending"
+    event.retry_count = 0
+    event.processed_at = None
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    logger.info(
+        "Outbox event_id=%s replayed correlation_id=%s", event.id, event.correlation_id
     )
     return event
 

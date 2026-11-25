@@ -640,6 +640,10 @@
     "PATCH /v1/support/tickets/{ticket_num}": {
       "access": "support_admin"
     },
+    "POST /v1/admin/outbox-events/{event_id}/replay": {
+      "access": "support_admin",
+      "why": "Returns a failed or stuck outbox event to the queue (issue #736)."
+    },
     "POST /v1/agent_runs": {
       "access": "Manager"
     },

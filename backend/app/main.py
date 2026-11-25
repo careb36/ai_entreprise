@@ -61,6 +61,7 @@ from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.model_settings import router as model_settings_router
 from routers.notifications import router as notifications_router
+from routers.outbox_admin import router as outbox_admin_router
 from routers.owner_actions import router as owner_actions_router
 from routers.person_sections import router as person_sections_router
 from routers.procedures import router as procedures_router
@@ -210,6 +211,7 @@ app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)
 app.include_router(inbox_router)
+app.include_router(outbox_admin_router)
 app.include_router(owner_actions_router)
 app.include_router(intake_router)
 app.include_router(integration_router)
