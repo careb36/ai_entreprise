@@ -193,7 +193,9 @@ def _drain_once(sqlite_session, monkeypatch, nats_client) -> None:
     """Run one iteration of ``process_outbox`` against the test session.
 
     The loop is infinite; ``asyncio.sleep`` is patched to stop it after the
-    first body so the test observes exactly one pass with determinism.
+    first body so the test observes exactly one pass with determinism. The
+    session factory is patched so the poller claims rows from the shared test
+    session and its commit is observable here.
     """
 
     class _Stop(Exception):
