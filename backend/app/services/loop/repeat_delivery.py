@@ -10,7 +10,13 @@ blocks the task anyway.
 ``repeated`` compares the task's latest delivery with the one before it on
 the backend's own record of what it sent: ``evidence["expected"]``, the sha256
 of each file's content computed by the backend (``manifest.expected_hashes``),
-never a hash the agent reported. When both hold the same files with the same
+never a hash the agent reported, together with the files the daemon read back
+after writing them (``evidence["workspace_writes"]``, each with the sha256 the
+daemon computed over the bytes on disk). An edit (search and replace, a moved
+block) has no expected content, so without the read-back a rework that only
+edited a file looked like the attempt before it (sprint 11, task 46: the edit
+of ``contexts.json`` was not counted and the task was blocked as a repeat).
+When both hold the same files with the same
 digests, the worker blocks the task for a person at once
 (``worker/review._send_back_from_delivery_gate``) and says which run it
 repeats. A delivery the daemon never confirmed is not a code problem: sending
@@ -31,19 +37,28 @@ from sqlmodel import Session, select
 
 
 def _expected(session: Session, run: AgentRun) -> dict[str, str]:
+    """What the run delivered: the backend's expected digests, then the
+    daemon's read-back of each file it wrote (edits included)."""
     verification = session.exec(
         select(Verification)
         .where(Verification.agent_run_id == run.id)
         .order_by(Verification.id.desc())
     ).first()
-    expected = ((verification.evidence or {}) if verification else {}).get("expected")
-    if not isinstance(expected, dict):
-        return {}
-    return {
+    evidence = (verification.evidence or {}) if verification else {}
+    expected = evidence.get("expected")
+    delivered = {
         str(path): str(digest)
-        for path, digest in expected.items()
+        for path, digest in (expected if isinstance(expected, dict) else {}).items()
         if isinstance(digest, str) and digest
     }
+    writes = evidence.get("workspace_writes")
+    for write in writes if isinstance(writes, list) else []:
+        if not isinstance(write, dict) or write.get("status") != "written":
+            continue
+        path, digest = write.get("path"), write.get("sha256")
+        if isinstance(path, str) and isinstance(digest, str) and digest:
+            delivered[path] = digest
+    return delivered
 
 
 def repeated(session: Session, company_id: int, item_id: int) -> dict[str, Any] | None:

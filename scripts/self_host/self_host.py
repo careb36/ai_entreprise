@@ -103,7 +103,8 @@ LA_FABRIQUE_FOLDERS = {
         "install": "poetry install --no-interaction --no-root && poetry run pip install -q -r requirements-dev.txt",
         "test": "poetry run python -m pytest -q -p no:cacheprovider",
     },
-    "vscode-daemon": {"stack": "python", "install": "", "test": "python -m pytest tests -q -p no:cacheprovider"},
+    # In the backend's venv, as CI runs it (backend-tests.yml): the system python has no nats.
+    "vscode-daemon": {"stack": "python", "install": "cd ../backend && poetry install --no-interaction", "test": "cd ../backend && poetry run python -m pytest ../vscode-daemon/tests -q -p no:cacheprovider"},
 }
 # What CI checks on every change, whatever it touched.
 EVERY_DELIVERY = (

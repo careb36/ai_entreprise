@@ -61,7 +61,7 @@ def _item(session):
     return company, item
 
 
-def _delivery(session, company, item, version, digests, checks):
+def _delivery(session, company, item, version, digests, checks, writes=None):
     run = AgentRun(
         company_id=company.id,
         external_ref=f"task-{item.id}",
@@ -80,7 +80,10 @@ def _delivery(session, company, item, version, digests, checks):
             agent_run_id=run.id,
             verdict="refuted",
             checks=checks,
-            evidence={"expected": digests},
+            evidence={
+                "expected": digests,
+                **({"workspace_writes": writes} if writes else {}),
+            },
         )
     )
     session.commit()
@@ -140,3 +143,31 @@ def test_what_counts_as_the_same(db):
     _delivery(db, company, item, 4, {}, [WRITTEN])
     _delivery(db, company, item, 5, {}, [WRITTEN])
     assert repeat_delivery.repeated(db, company.id, item.id) is None  # no files
+
+
+def test_an_edit_the_daemon_read_back_counts_as_a_change(db):
+    """Sprint 11, task 46: the rework kept the test file and edited
+    ``contexts.json``; the edit has no expected digest, but the daemon read it
+    back, so the delivery is not the same as the one before."""
+    company, item = _item(db)
+    test_file = {"backend/tests/test_req_3.py": "d81e"}
+    written = {
+        "path": "backend/tests/test_req_3.py",
+        "status": "written",
+        "sha256": "d81e",
+    }
+    _delivery(db, company, item, 1, test_file, [WRITTEN], [written])
+    edit = {
+        "path": "docs/architecture/contexts.json",
+        "status": "written",
+        "sha256": "8fce",
+    }
+    _delivery(db, company, item, 2, test_file, [WRITTEN], [edit])
+    assert repeat_delivery.repeated(db, company.id, item.id) is None
+    # The same edit again, read back with the same bytes: a repeat.
+    _delivery(db, company, item, 3, test_file, [WRITTEN], [edit])
+    assert repeat_delivery.repeated(db, company.id, item.id)["files"] == 2
+    # A write the daemon did not confirm is not counted.
+    failed = {"path": "docs/x.md", "status": "failed", "sha256": "ffff"}
+    _delivery(db, company, item, 4, test_file, [WRITTEN], [edit, failed])
+    assert repeat_delivery.repeated(db, company.id, item.id)["files"] == 2
