@@ -1,0 +1,78 @@
+{
+  "$comment": "A sprint for La Fabrique to run on itself: the pages use the width of today's screens. Written in the PO's shape (requirements with Given/When/Then criteria); load it with POST /v1/specifications adding the company_id, or through the Specifications page. Narrow on purpose: the page widths, the task page and the dashboard. A visual review of each page comes in a later specification.",
+  "title": "Pages that use the width of wide screens",
+  "summary": "On a 17-inch screen, and more on the 24- and 27-inch screens most people use, La Fabrique's pages sit in a narrow column in the middle: the shared .page-container (frontend/src/styles/index.css) caps every page at max-w-7xl (1280px), and 45 of the 49 pages narrow it further with their own max-w-2xl to max-w-6xl (672px to 1152px). A page should take the width its content needs: a form or a document stays readable, a list, a table or a dashboard grows with the screen, and the task page puts its secondary panels beside the main column instead of under it. Frontend only (frontend/src); no backend change, and every user-facing string stays in en.json and es.json.",
+  "requirements": [
+    {
+      "title": "Named page widths instead of a width per page",
+      "description": "A page chooses one of three widths defined once in frontend/src/styles/index.css: page-container-reading for forms and documents (at most 56rem), page-container for lists, tables and dashboards (at most 112rem, 1792px), and page-container-full for the sprint board and workspaces (no cap). The horizontal padding stays as today. No page sets its own max-w-* on its page container.",
+      "criteria": [
+        {
+          "given": "every page module under frontend/src/pages that is not a test",
+          "when": "a Vitest test reads each file's source",
+          "then": "no file contains the text 'page-container max-w-', and each page that renders a page container uses exactly one of page-container-reading, page-container or page-container-full"
+        },
+        {
+          "given": "frontend/src/styles/index.css",
+          "when": "a Vitest test reads the rules for the three classes",
+          "then": "page-container is capped at max-w-[112rem], page-container-reading at max-w-[56rem], and page-container-full has no max-w, all three keeping mx-auto and the current padding"
+        }
+      ]
+    },
+    {
+      "title": "The task page puts its secondary panels beside the main column",
+      "description": "On screens of 1280px (Tailwind xl) and wider, frontend/src/pages/TaskDetails.tsx shows two columns: the main column with the task's story, its evidence (TaskEvidence) and its comments (TaskComments), and a side column (an aside element) with its relations (TaskRelations), its cost (TaskCostCard), its run secrets (RunSecretsPanel) and its event log (TaskEventLog). Below xl the columns stack, main column first.",
+      "criteria": [
+        {
+          "given": "a task with evidence, comments and relations rendered by TaskDetails in a Vitest test",
+          "when": "the page is queried by role",
+          "then": "a complementary landmark contains the relations, the cost and the event log, the evidence and the comments are outside it, and the two-column wrapper carries an xl:grid-cols class whose second track is between 20rem and 28rem"
+        },
+        {
+          "given": "the task page",
+          "when": "its page container is read",
+          "then": "it uses page-container, not page-container-reading, so the two columns have the room"
+        }
+      ]
+    },
+    {
+      "title": "The dashboard grows with the screen",
+      "description": "frontend/src/pages/Dashboard.tsx keeps its order (KPI strip, alert banner, main grid, quick launch) and adds columns on wide screens: the KPI strip shows every KPI in one row from 1536px (Tailwind 2xl), and the main grid goes from three columns at lg to four at 2xl.",
+      "criteria": [
+        {
+          "given": "the Dashboard rendered in a Vitest test with a company selected",
+          "when": "the KPI strip's container and the main grid's container are read",
+          "then": "the KPI strip carries a 2xl:grid-cols class equal to its number of KPIs, and the main grid carries lg:grid-cols-3 and 2xl:grid-cols-4"
+        },
+        {
+          "given": "the Dashboard",
+          "when": "its page container is read",
+          "then": "it uses page-container"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "Accessibility",
+      "target": "0 new axe violations in the frontend's accessibility tests; at 200% zoom on a 1280px-wide window the task page and the dashboard show no horizontal scroll"
+    },
+    {
+      "attribute": "Performance",
+      "target": "The production bundle (npm run build) grows by at most 2 kB gzipped; no new dependency"
+    },
+    {
+      "attribute": "Reliability",
+      "target": "100% of the existing frontend tests pass (npm run test:run), with no test removed or skipped"
+    },
+    {
+      "attribute": "Security",
+      "target": "0 changes outside frontend/src and docs; 0 new network calls (only services/api/client.ts and stream.ts use the network)"
+    }
+  ],
+  "constraints": [
+    "Tailwind classes only; no new CSS framework or layout library.",
+    "Every user-facing string in both frontend/src/i18n/en.json and es.json.",
+    "Each file stays at or under 600 lines; frontend/src keeps its layers (scripts/check_frontend_architecture.py)."
+  ]
+}
