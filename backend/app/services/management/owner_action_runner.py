@@ -55,6 +55,19 @@ DAEMON_SECONDS = 60.0
 EXIT_API_ERROR = 1
 
 
+def sprint_tasks(board: list[str] | None) -> dict[str, int] | None:
+    """How many of the sprint's tasks ended in each status, read from the
+    harness's ``title=status`` board lines. A run succeeds when the sprint ran
+    in container mode; this says how much of its work got done."""
+    if board is None:
+        return None
+    counts: dict[str, int] = {}
+    for line in board:
+        status = line.rsplit("=", 1)[-1]
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
 class Stop(Exception):
     """The run stops between two calls: ``reason`` is ``cancelled`` or ``budget_exceeded``."""
 
@@ -159,6 +172,7 @@ class Job:
             "sprint_id": self.state.get("sprint_id"),
             "sprint_status": wait.get("status"),
             "integration_state": wait.get("integration_state"),
+            "sprint_tasks": sprint_tasks(wait.get("board")),
             "sandbox": r.get("sandbox"),
             "steps_done": [s for s in r.get("steps_done", [])],
             "state": dict(self.state),

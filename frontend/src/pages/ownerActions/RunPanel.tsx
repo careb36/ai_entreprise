@@ -22,6 +22,9 @@ export function recordedIds(run: OwnerActionRun): [string, string][] {
     ['sandboxObserved', o.sandbox?.observed],
     ['containerMode', o.sandbox ? String(o.sandbox.container_mode) : null],
     ['images', o.sandbox?.images?.length ? o.sandbox.images.join(', ') : null],
+    ['tasksDone', o.sprint_tasks ? o.sprint_tasks.done ?? 0 : null],
+    ['tasksBlocked', o.sprint_tasks ? o.sprint_tasks.blocked ?? 0 : null],
+    ['tasksOther', o.sprint_tasks ? Object.entries(o.sprint_tasks).filter(([k]) => k !== 'done' && k !== 'blocked').reduce((n, [, v]) => n + v, 0) : null],
     ['tokens', o.tokens_observed],
     ['exitStatus', run.exit_status],
     ['mainBefore', str(o.main_before ?? '') || null],
@@ -48,6 +51,7 @@ function StatusLine({ run }: { run: OwnerActionRun }) {
       {t(`ownerActions.status.${run.status}`)}
       {run.cancel_requested_at && run.status === 'running' && ` · ${t('ownerActions.run.stopping')}`}
       {run.reason && ` · ${run.reason}`}
+      {!!run.observations.sprint_tasks?.blocked && ` · ${t('ownerActions.run.tasksBlocked', { count: run.observations.sprint_tasks.blocked })}`}
     </p>
   )
 }
