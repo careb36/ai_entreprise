@@ -426,8 +426,8 @@ def step_wait(api, args, state, report):
     sprint: dict = {}
     while time.monotonic() < deadline:
         sprint = _sprint(api, cid, sid)
-        if sprint.get("status") == "completed":
-            break
+        if sprint.get("status") in ("completed", "cancelled"):
+            break  # a stopped sprint runs nothing more: waiting would only reach the timeout
         time.sleep(3)
     board = api.get(f"/v1/sprints/{sid}/board")
     report["wait"] = {

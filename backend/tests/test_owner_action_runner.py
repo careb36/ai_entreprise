@@ -374,3 +374,23 @@ def test_the_in_process_principal_is_honoured_only_while_live(
         path, headers={"fabrique.in_process_principal": str(owner.id)}
     )
     assert forged.status_code == 401
+
+
+def test_the_wait_step_ends_when_the_sprint_is_cancelled(monkeypatch):
+    """A sprint a person stopped runs nothing more: the wait ends at once,
+    not at the run's timeout (self-hosting run 4 waited an hour)."""
+    calls = []
+
+    class Api:
+        def get(self, path):
+            calls.append(path)
+            if path.startswith("/v1/sprints?"):
+                return [{"id": 10, "status": "cancelled", "integration_state": None}]
+            return {"columns": {"blocked": [{"title": "t", "status": "blocked"}]}}
+
+    monkeypatch.setattr(HARNESS.time, "sleep", lambda s: pytest.fail("waited"))
+    report: dict = {}
+    args = SimpleNamespace(timeout=3600)
+    HARNESS.step_wait(Api(), args, {"company_id": 3, "sprint_id": 10}, report)
+    assert report["wait"]["status"] == "cancelled"
+    assert report["wait"]["board"] == ["t=blocked"]
