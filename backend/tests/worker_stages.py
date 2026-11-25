@@ -26,6 +26,7 @@ from services.loop.worker import (
     qa_review,
     record,
     review,
+    review_hold,
     task_run,
 )
 
@@ -41,6 +42,7 @@ STAGES = (
     procedures_round,
     review,
     qa_review,
+    review_hold,
     intake,
     task_run,
 )

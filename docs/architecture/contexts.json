@@ -1287,6 +1287,9 @@
       "test_review_gate.py": [
         "loop"
       ],
+      "test_review_self_and_empty.py": [
+        "loop"
+      ],
       "test_review_sync.py": [
         "release"
       ],

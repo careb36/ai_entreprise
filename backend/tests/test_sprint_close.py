@@ -29,7 +29,7 @@ from services.tasks import board
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
-from test_review_gate import DELIVERABLE, _FakeNATS
+from test_review_gate import WITH_FILE, _FakeNATS
 
 llm = llm_fixture  # the fake proxy client from test_llm_routing, as a fixture here
 
@@ -246,7 +246,7 @@ def test_approving_the_last_open_task_closes_the_sprint_in_that_cycle(db, monkey
         db,
         sprint,
         "in_review",
-        comments=[{"author": "Dev", "text": DELIVERABLE, "created_at": ""}],
+        comments=[{"author": "Dev", "text": WITH_FILE, "created_at": ""}],
     )
     monkeypatch.setattr(
         qa_review, "_call_llm_for_review", lambda *a, **k: "APPROVED: complete"
