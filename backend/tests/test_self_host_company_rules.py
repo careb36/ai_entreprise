@@ -38,6 +38,11 @@ class Api:
 def test_the_rule_on_test_files_reaches_qa_and_the_developer():
     roles = {p["role"] for p in company_rules.PROCEDURES}
     assert roles == {"QA", "Developer"}
+    titles = {p["title"] for p in company_rules.PROCEDURES}
+    assert (
+        len(company_rules.PROCEDURES) == 2 * len(titles) == 4
+    )  # each rule for both roles
+    assert any("evidence" in t for t in titles)
     for rule in company_rules.PROCEDURES:
         assert "docs/architecture/contexts.json" in rule["body"]
         assert len(rule["title"]) <= 120 and len(rule["body"]) <= 2000
@@ -46,12 +51,12 @@ def test_the_rule_on_test_files_reaches_qa_and_the_developer():
 def test_missing_procedures_are_written_and_existing_ones_left_alone():
     api = Api(refuse={"Developer": 409})
     seen = company_rules.ensure(api, 3)
-    assert [path for path, _ in api.posts] == ["/v1/procedures", "/v1/procedures"]
+    assert {path for path, _ in api.posts} == {"/v1/procedures"} and len(api.posts) == 4
     assert all(body["company_id"] == 3 for _, body in api.posts)
     assert [(s["role"], s["created"]) for s in seen] == [
         ("QA", True),
         ("Developer", False),
-    ]
+    ] * 2
 
 
 def test_another_refusal_is_raised():
