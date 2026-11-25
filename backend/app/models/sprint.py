@@ -1,23 +1,29 @@
 """
-SQLModel ORM models for sprint management and the transactional outbox.
+ SQLModel ORM models for sprint management and the transactional outbox.
 
-Tables:
-- ``Sprint``       — a time-boxed iteration for a company.
-- ``BacklogItem``  — a single task on the sprint board (Kanban card).
-- ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
+ Tables:
+ - ``Sprint``       — a time-boxed iteration for a company.
+ - ``BacklogItem``  — a single task on the sprint board (Kanban card).
+ - ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
 """
 
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _new_correlation_id() -> UUID:
+    return uuid4()
 
 
 class CommentList(MutableList):
@@ -135,6 +141,11 @@ class OutboxEvent(SQLModel, table=True):
 
     Using ``FOR UPDATE SKIP LOCKED`` in the worker query prevents duplicate
     processing when multiple worker replicas run concurrently (e.g. in K8s).
+
+    ``correlation_id`` is generated once when the row is created and never
+    rewritten by the worker. It is the stable id carried from publish through
+    JetStream consume, daemon call, verification and AgentRun, distinct from
+    ``Nats-Msg-Id``, which remains for dedup only.
     """
 
     __tablename__ = "outbox_events"
@@ -151,4 +162,10 @@ class OutboxEvent(SQLModel, table=True):
     created_at: datetime | None = Field(default_factory=_utcnow)
     processed_at: datetime | None = (
         None  # Set when status transitions to completed/failed
+    )
+    # Stable id for end-to-end tracing of this async run; nullable for legacy
+    # rows and backfilled once by migration when NULL.
+    correlation_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(PGUUID(as_uuid=True), index=True),
     )
