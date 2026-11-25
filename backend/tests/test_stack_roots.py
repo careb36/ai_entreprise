@@ -378,8 +378,12 @@ def test_the_harness_sets_la_fabrique_s_folders_and_every_delivery_checks():
     assert "pytest" in folders["llm-proxy"]["test"]
     # Its pytest is in requirements-dev.txt, not in Poetry (issue #766).
     assert "requirements-dev.txt" in folders["llm-proxy"]["install"]
-    # The daemon runs its own suite, not the backend's a second time.
-    assert "../backend" not in folders["vscode-daemon"]["test"]
+    # The daemon runs its own suite, not the backend's a second time (#766),
+    # in the backend's venv as CI does: the sandbox's python has no nats.
+    daemon_suite = folders["vscode-daemon"]["test"]
+    assert "pytest ../vscode-daemon/tests" in daemon_suite
+    assert "pytest tests" not in daemon_suite
+    assert "poetry install" in folders["vscode-daemon"]["install"]
     assert profile["test"] == ""
     checks = [c["command"] for c in profile["every_delivery"]]
     assert checks == [

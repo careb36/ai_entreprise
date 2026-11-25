@@ -1,0 +1,3 @@
+Fixed
+
+* **Self-hosting run 6: two platform causes of blocked tasks (issue #701).** The daemon's suite ran on the sandbox's system python, which has neither pytest's plugins nor `nats`, so every delivery that ran it failed collecting (`No module named 'nats'`); the harness now runs it in the backend's venv, as CI does. And a rework that only edited a file (search and replace) was taken for a repeat of the attempt before, because edits have no expected digest: the repeat check now also counts the files the daemon read back after writing them, with the sha256 it computed (task 46 was blocked for a person although its rework edited `contexts.json`).
