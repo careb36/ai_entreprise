@@ -13,6 +13,10 @@ instead of the whole file::
     >>>>>>> REPLACE
     ```
 
+A block whose body is nothing but well-formed edits is read as edits even
+without the flag (Aider reads its blocks the same way): a whole file never
+consists of edits alone, and written as one it would not parse.
+
 The daemon applies them to the file on disk (``vscode-daemon/file_edits.py``):
 each search text must appear exactly once, and the result must still parse.
 A block that holds no well-formed edit, or text outside its edits (a block

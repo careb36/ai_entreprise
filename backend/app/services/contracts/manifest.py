@@ -92,6 +92,11 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
         files[rel] = {"path": rel, "content": block.group("body")}
         if edit_blocks.is_edit_block(block.group("info"), match):
             files[rel]["edits"] = edit_blocks.parse(block.group("body"))
+        elif edits := edit_blocks.parse(block.group("body")):
+            # Only well-formed SEARCH/REPLACE edits and nothing else, the
+            # ``edit`` flag left out: no whole file is made of edits alone,
+            # and written as one it would never parse (run 9, task 56).
+            files[rel]["edits"] = edits
     return list(files.values())
 
 

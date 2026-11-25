@@ -185,3 +185,26 @@ def test_the_verifier_names_the_daemons_reason():
         observation
         == "src/app.py rejected_edit: edit 1: the search text is not in the file"
     )
+
+
+def test_a_block_made_only_of_edits_is_read_as_edits_without_the_flag():
+    """Run 9, task 56: the agent left out ``edit`` after the path; the block
+    went to the daemon as the whole of contexts.json and failed to parse."""
+    body = (
+        '<<<<<<< SEARCH\n      "test_required_checks.py": [\n=======\n'
+        '      "test_req_1.py": [\n        "loop"\n      ],\n'
+        '      "test_required_checks.py": [\n>>>>>>> REPLACE\n'
+    )
+    files = parse_file_manifest(
+        f"```json path=docs/architecture/contexts.json\n{body}```\n"
+    )
+    assert files[0]["edits"] == [
+        {
+            "search": '      "test_required_checks.py": [\n',
+            "replace": '      "test_req_1.py": [\n        "loop"\n      ],\n'
+            '      "test_required_checks.py": [\n',
+        }
+    ]
+    # Text beside the markers keeps the block a whole file, as before.
+    mixed = parse_file_manifest(f"```json path=a.json\n{{}}\n{body}```\n")
+    assert "edits" not in mixed[0]
