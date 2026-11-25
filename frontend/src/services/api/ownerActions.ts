@@ -20,7 +20,7 @@ export interface OwnerActionSandbox {
 }
 
 export interface OwnerActionObservations {
-  checkout?: { path: string; created: boolean; head: string; source_head: string; files: number | null } | null
+  checkout?: { path: string; created: boolean; refreshed?: boolean; previous_head?: string | null; head: string; source_head: string; files: number | null } | null
   company_id?: number | null
   sprint_id?: number | null
   specification_id?: number | null

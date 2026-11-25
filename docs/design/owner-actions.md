@@ -104,8 +104,12 @@ repository, as the harness's `checkout` step does. It refuses a name with a
 separator or `..`, a target that resolves outside the root (a symlinked
 root or folder), the source itself or a folder inside it, and a non-empty
 folder that is not an earlier snapshot; a symlink in the source is not
-followed out of it. It answers the path, both commits and the file count it
-observed. Why a new subject: `workspace.generate` would make the backend read
+followed out of it. An earlier snapshot is refreshed when the source has
+moved on (each snapshot commit records its source commit), so a reused
+checkout name never runs a sprint on stale code; work on the snapshot's
+`main` that the source lacks, or a dirty working tree, is a 409 rather than
+overwritten. It answers the path, whether it refreshed, the commits and the
+file count it observed. Why a new subject: `workspace.generate` would make the backend read
 the source to send its bytes (crossing the boundary the other way, thousands
 of files), and `workspace.execute` would be a free command (`git clone …`),
 which rule 1 forbids. The broker's permissions already give the backend

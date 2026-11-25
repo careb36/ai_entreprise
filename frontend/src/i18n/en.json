@@ -5287,6 +5287,8 @@
       "specification": "Specification",
       "architecture": "Architecture",
       "agentRuns": "Agent runs",
+      "checkoutRefreshed": "Snapshot refreshed from the source",
+      "previousHead": "Snapshot commit before the refresh",
       "checkoutHead": "Snapshot commit",
       "sourceHead": "Source commit",
       "sandboxObserved": "Sandbox observed",

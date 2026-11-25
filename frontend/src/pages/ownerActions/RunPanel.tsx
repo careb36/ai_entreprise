@@ -15,6 +15,8 @@ export function recordedIds(run: OwnerActionRun): [string, string][] {
     ['specification', o.issue_specification_id],
     ['architecture', o.issue_architecture_id],
     ['agentRuns', o.agent_run_ids && o.agent_run_ids.length ? o.agent_run_ids.join(', ') : null],
+    ['checkoutRefreshed', typeof o.checkout?.refreshed === 'boolean' ? String(o.checkout.refreshed) : null],
+    ['previousHead', o.checkout?.previous_head],
     ['checkoutHead', o.checkout?.head],
     ['sourceHead', o.checkout?.source_head],
     ['sandboxObserved', o.sandbox?.observed],
