@@ -206,6 +206,7 @@ Model choice, most specific first: an agent's own model, the company's model for
 | `INTEGRATION_RETRY_SECONDS` | `60` | How often a sprint's integration the daemon could not take is retried. |
 | `INTEGRATION_MAX_CONCURRENT` | `2` | Integrations at once per process (at least 1). |
 | `RUN_WINDOW_RECHECK_SECONDS` | `300` | Longest sleep of the run-window worker (at least 60). The window itself is a company setting. |
+| `RUN_WINDOW_STUCK_TASK_SECONDS` | `3600` | A task in progress or in review longer than this holds back its sprint: no new task is queued and a run-window wait is not released. `0` turns it off. |
 | `WORKSPACE_WRITE_TIMEOUT_SECONDS` | `30` | How long the task worker waits for the daemon to confirm writes. |
 | `ARCHITECT_CONSULT_ENABLED` | `true` | Consult the Architect before high-priority, design-sensitive or reworked tasks. |
 | `ARCHITECT_TOOL_ROUNDS` | `6` | Rounds of read-only workspace tools (list, read, search, find_file; read-only Git and a document's text when announced) the Architect may use before its brief, with the research tools (when `RESEARCH_TOOLS_ENABLED`) and the task's record tools beside them. `0` asks in one call without tools. Also the reading rounds of the Architect writing or revising an architecture (step `arch_author`), beside its research tools, which keep their own `RESEARCH_TOOL_ROUNDS`; `0`, or no daemon or project path: the research tools alone. |

@@ -242,7 +242,13 @@ def dispatch_or_defer(
 def release_sprint(
     session: Session, sprint: Sprint, reason: str, now: datetime | None = None
 ) -> int:
-    """Release *sprint*'s held work: events, the kickoff, its ready tasks; the count."""
+    """Release *sprint*'s held work: events, the kickoff, its ready tasks; the count.
+
+    Nothing is released while a stuck async task blocks new dispatch
+    (``stuck_block_reason``): the sprint keeps waiting and ``0`` is returned.
+    """
+    if stuck_block_reason(session, sprint, now) is not None:
+        return 0
     now = _aware(now or utc_now())
     window = _window(session, sprint)
     zone = window["timezone"] if window else "UTC"
@@ -467,8 +473,6 @@ def stuck_block_reason(
     its async run has not reached a terminal state in the configured time.
     Setting the threshold to 0 disables the gate.
     """
-    from config import settings
-
     threshold = settings.RUN_WINDOW_STUCK_TASK_SECONDS
     if threshold <= 0:
         return None
@@ -489,28 +493,6 @@ def stuck_block_reason(
     if not stuck:
         return None
     details = ", ".join(
-        f"task {item_id} ({status}) for {int(age)}s"
-        for item_id, status, age in stuck
+        f"task {item_id} ({status}) for {int(age)}s" for item_id, status, age in stuck
     )
-    return (
-        f"Dispatch blocked: prior async task(s) stuck beyond "
-        f"{threshold}s: {details}"
-    )
-
-
-_original_release_sprint = release_sprint
-
-
-def release_sprint(
-    session: Session,
-    sprint: Sprint,
-    reason: str,
-    now: datetime | None = None,
-) -> int:
-    """Release *sprint* unless a stuck async task blocks new dispatch."""
-    blocked = stuck_block_reason(session, sprint, now)
-    if blocked is not None:
-        # The caller commits; nothing was queued, so the reason is the only
-        # outward signal and upstream code keeps the sprint waiting.
-        return 0
-    return _original_release_sprint(session, sprint, reason, now)
+    return f"Dispatch blocked: prior async task(s) stuck beyond {threshold}s: {details}"

@@ -1376,6 +1376,9 @@
       "test_run_window.py": [
         "management"
       ],
+      "test_run_window_stuck_gate.py": [
+        "management"
+      ],
       "test_run_log_ranges.py": [
         "workspace"
       ],
