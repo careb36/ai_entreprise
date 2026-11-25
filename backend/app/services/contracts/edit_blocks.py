@@ -14,7 +14,8 @@ instead of the whole file::
     ```
 
 A block whose body is nothing but well-formed edits is read as edits even
-without the flag (Aider reads its blocks the same way): a whole file never
+without the flag (Aider reads its blocks the same way), and ``edit`` alone on
+the block's first line counts as the flag: a whole file never
 consists of edits alone, and written as one it would not parse.
 
 The daemon applies them to the file on disk (``vscode-daemon/file_edits.py``):
@@ -54,6 +55,16 @@ def is_edit_block(info: str, path_match: re.Match) -> bool:
     """Whether the opening line marks the block as edits (``edit`` outside the path)."""
     rest = info[: path_match.start()] + " " + info[path_match.end() :]
     return bool(_EDIT_FLAG.search(rest))
+
+
+_FLAG_LINE = re.compile(r"\A[ \t]*edit[ \t]*\n")
+
+
+def split_flag_line(body: str) -> tuple[bool, str]:
+    """``edit`` written alone on the block's first line instead of after the
+    path (run 10, task 62): whether it was, and the body without that line."""
+    match = _FLAG_LINE.match(body or "")
+    return (True, body[match.end() :]) if match else (False, body or "")
 
 
 def parse(body: str) -> list[dict[str, str]]:

@@ -208,3 +208,16 @@ def test_a_block_made_only_of_edits_is_read_as_edits_without_the_flag():
     # Text beside the markers keeps the block a whole file, as before.
     mixed = parse_file_manifest(f"```json path=a.json\n{{}}\n{body}```\n")
     assert "edits" not in mixed[0]
+
+
+def test_the_flag_alone_on_the_first_line_is_the_flag():
+    """Run 10, task 62: ``edit`` on the line after the opening fence."""
+    body = 'edit\n<<<<<<< SEARCH\n  "b": 1\n=======\n  "a": 0,\n  "b": 1\n>>>>>>> REPLACE\n'
+    files = parse_file_manifest(f"```json path=x.json\n{body}```\n")
+    assert files[0]["edits"] == [
+        {"search": '  "b": 1\n', "replace": '  "a": 0,\n  "b": 1\n'}
+    ]
+    # A malformed body after the flag line is still refused whole, not written.
+    bad = parse_file_manifest("```json path=x.json\nedit\nnot an edit\n```\n")
+    assert bad[0]["edits"] == []
+    assert edit_blocks.split_flag_line("editor = 1\n") == (False, "editor = 1\n")

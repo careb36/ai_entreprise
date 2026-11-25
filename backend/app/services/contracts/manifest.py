@@ -90,9 +90,10 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
         if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
             continue
         files[rel] = {"path": rel, "content": block.group("body")}
-        if edit_blocks.is_edit_block(block.group("info"), match):
-            files[rel]["edits"] = edit_blocks.parse(block.group("body"))
-        elif edits := edit_blocks.parse(block.group("body")):
+        flagged, body = edit_blocks.split_flag_line(block.group("body"))
+        if flagged or edit_blocks.is_edit_block(block.group("info"), match):
+            files[rel]["edits"] = edit_blocks.parse(body)
+        elif edits := edit_blocks.parse(body):
             # Only well-formed SEARCH/REPLACE edits and nothing else, the
             # ``edit`` flag left out: no whole file is made of edits alone,
             # and written as one it would never parse (run 9, task 56).
