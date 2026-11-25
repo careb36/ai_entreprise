@@ -2186,6 +2186,8 @@
     "triagePerson": "ScrumMaster: que lo decida una persona.",
     "triageBrief": "Consigna: {{brief}}",
     "sendBack": "Mandar de vuelta al trabajo",
+    "sendBackReason": "¿Qué debe cambiar el agente? Lo lee antes de su próximo intento.",
+    "sendBackConfirm": "Mandar de vuelta con este motivo",
     "riskHold": "QA la aprobó, pero es de riesgo alto: una persona la acepta o la manda de vuelta.",
     "accept": "Aceptar",
     "acceptError": "No se pudo aceptar: {{message}}",

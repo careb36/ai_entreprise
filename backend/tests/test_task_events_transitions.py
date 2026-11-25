@@ -424,3 +424,25 @@ def test_a_persons_change_on_the_board_is_an_event(test_client, db, signing_key)
     assert event.event_type == "sent_back" and event.actor == "person"
     assert response.json()["comments"][-1]["event_id"] == event.id
     assert_projection_agrees(db, item.id)
+    # The person's reason is the agent's rework feedback (run 10, task 61).
+    assert task_projection.pending_rework_feedback(
+        db, db.get(BacklogItem, item.id)
+    ) == ["A person who sent it back: retry it"]
+
+
+def test_a_bare_send_back_gives_the_agent_no_feedback():
+    assert board.send_back_reason(f"{board.SEND_BACK_MARKER} by a person.") == ""
+    assert board.send_back_reason("NEEDS WORK: x") == ""
+    assert (
+        board.send_back_reason(
+            f"{board.SEND_BACK_MARKER} by Ana via chat: keep the old test"
+        )
+        == "keep the old test"
+    )
+    comments = [
+        {"author": "QA", "text": "the deliverable"},
+        {"author": "user", "text": f"{board.SEND_BACK_MARKER} by a person: keep it"},
+    ]
+    assert board.pending_rework_feedback(comments) == [
+        "A person who sent it back: keep it"
+    ]

@@ -9,10 +9,7 @@ their kind, actor, verdict and flags, never by reading comment text.
 
 The events answer only for a task whose thread they cover: every comment
 carries one of its events' ids, and no ``legacy`` event. Any other task is
-read from its comments, so a task never gets a half-informed answer.
-
-``TaskRecord`` is what a decision reads: the task's comments and events, the
-source picked once, every question answered from it; a loop over many tasks
+read from its comments, so a task never gets a half-informed answer. ``TaskRecord`` is what a decision reads: the task's comments and events, the source picked once, every question answered from it; a loop over many tasks
 loads their events in one query (``records_for``). An event may be a ``TaskEvent`` row or its
 ``task_events.as_dict`` form (the worker carries the latter in its task dict).
 The ``*_from_events`` functions are the projections themselves.
@@ -164,6 +161,8 @@ def pending_rework_from_events(events: list[Event]) -> list[str]:
             continue
         if _needs_work(event):
             feedback.append(f"{_author(event) or 'Reviewer'}: {_text(event)}")
+        elif _is_person_send_back(event) and board.send_back_reason(_text(event)):
+            feedback.append(board.send_back_feedback(_text(event)))  # run 10, task 61
         elif _kind(event) == "delivered":
             break
     return list(reversed(feedback))

@@ -130,6 +130,19 @@ def is_send_back(comment: dict[str, Any]) -> bool:
     )
 
 
+def send_back_reason(text: str) -> str:
+    """The person's reason in a send-back note (``SEND_BACK_MARKER ...: <reason>``),
+    or ``""`` for the bare note, which tells the agent nothing."""
+    if not text.startswith(SEND_BACK_MARKER) or ":" not in text:
+        return ""
+    return text.split(":", 1)[1].strip()
+
+
+def send_back_feedback(text: str) -> str:
+    """A send-back's reason as a line of the agent's rework feedback."""
+    return f"A person who sent it back: {send_back_reason(text)}"
+
+
 def is_rework_request(comment: dict[str, Any]) -> bool:
     return _text(comment).upper().startswith("NEEDS WORK:")
 
@@ -249,6 +262,9 @@ def pending_rework_feedback(comments: Any) -> list[str]:
         text = _text(comment)
         if is_rework_request(comment):
             feedback.append(f"{comment.get('author') or 'Reviewer'}: {text}")
+            continue
+        if is_send_back(comment) and send_back_reason(text):
+            feedback.append(send_back_feedback(text))
             continue
         author = _author(comment)
         if (

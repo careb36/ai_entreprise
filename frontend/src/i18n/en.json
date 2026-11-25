@@ -2186,6 +2186,8 @@
     "triagePerson": "ScrumMaster: leave it for a person.",
     "triageBrief": "Brief: {{brief}}",
     "sendBack": "Send back to work",
+    "sendBackReason": "What should the agent change? It reads this before its next attempt.",
+    "sendBackConfirm": "Send back with this reason",
     "riskHold": "Approved by QA, but high risk: a person accepts it or sends it back.",
     "accept": "Accept",
     "acceptError": "Could not accept it: {{message}}",
