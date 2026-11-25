@@ -4515,7 +4515,8 @@
     "published": "Publicado por {{name}} en {{commit}} sobre {{base}}.",
     "openRequest": "Abrir la solicitud",
     "newTab": "(se abre en una pestaña nueva)",
-    "merged": "Fusionado localmente por {{name}}, {{when}}."
+    "merged": "Fusionado localmente por {{name}}, {{when}}.",
+    "autoNotPublished": "No se abrió un PR en borrador al cerrar el sprint: {{reason}}."
   },
   "promptWeight": {
     "none": "No hay medida del prompt registrada para estas corridas.",

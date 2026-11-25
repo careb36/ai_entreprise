@@ -27,7 +27,7 @@ from models.integration import SprintIntegration
 from sqlmodel import Session, select
 
 from services.platform import hooks
-from services.release import integration
+from services.release import auto_publish, integration
 from services.release.integration import (
     IntegrationRefused,
     _audit,
@@ -136,7 +136,13 @@ async def _after_close(nats_client: Any, engine: Any, sprint_id: int) -> bool:
         except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
             logger.warning("Integration of sprint %s failed: %s", sprint_id, exc)
             _hold(engine, job.id, "error", f"{type(exc).__name__}: {exc}"[:300])
-        return True
+            return True
+    # Outside the sprint's lock: a passed integration opens its draft request.
+    try:
+        await auto_publish.after_integration(nats_client, engine, sprint_id)
+    except Exception as exc:  # noqa: BLE001 - Publishing never holds an integration back.
+        logger.warning("Draft request of sprint %s failed: %s", sprint_id, exc)
+    return True
 
 
 def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:

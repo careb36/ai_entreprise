@@ -35,6 +35,7 @@ export function IntegrationActions({ plan, companyId, canManage }: {
   const latest = plan.latest
   const publication = latest?.publication ?? null
   const localMerge = latest?.details?.local_merge ?? null
+  const auto = latest?.details?.auto_publish ?? null
   const forgeAllows = forge.data?.effective === 'publish'
   const reviewHolds = Boolean(plan.review?.required && !plan.review?.approved)
   const busy = integrate.isPending || publish.isPending || merge.isPending
@@ -52,6 +53,9 @@ export function IntegrationActions({ plan, companyId, canManage }: {
             </a>
           )}
         </p>
+      )}
+      {auto && auto.status !== 'published' && !publication && (
+        <p className="text-xs text-gray-400">{t('integrationActions.autoNotPublished', { reason: auto.reason })}</p>
       )}
       {localMerge && (
         <p className="text-xs text-gray-400">{t('integrationActions.merged', { name: localMerge.merged_by, when: formatWhen(localMerge.merged_at, i18n.language) })}</p>

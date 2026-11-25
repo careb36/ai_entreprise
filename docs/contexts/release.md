@@ -8,7 +8,7 @@ detail.
 - **Folder:** `backend/app/services/release/`
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [planning](planning.md), [loop](loop.md).
 - **Interface:** `delivery_undo`, `git_publish`, `integration`, `integration_review`, `local_merge`, `protected_merge`, `self_change`.
-- **Modules:** `base_sync`, `delivery_undo`, `folder_check`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `integration_state`, `local_merge`, `protected_merge`, `review_sync`, `self_change`.
+- **Modules:** `auto_publish`, `base_sync`, `delivery_undo`, `folder_check`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `integration_review`, `integration_state`, `local_merge`, `protected_merge`, `review_sync`, `self_change`.
 
 ## How it works
 
@@ -16,8 +16,10 @@ Release starts when the loop has closed work, through an event, never from
 inside the loop. When a sprint closes, the task worker emits `sprint.closed`;
 `integration_jobs.py` records a `running` integration and asks the daemon to
 merge the done task branches into `fabrique/sprint-<id>` and run the suite.
-A person reviews that integration, then merges it locally or publishes it to
-the forge. Every git operation runs on the daemon; the backend records what
+When that integration passes its suite and the company's `forge_policy` is
+`publish`, `auto_publish.py` opens it as a draft pull or merge request on its
+own; otherwise a person publishes it. Either way a person reviews it, then
+merges it locally or on the forge. Every git operation runs on the daemon; the backend records what
 the daemon observed.
 
 ## Rules
@@ -46,6 +48,12 @@ the daemon observed.
 - `git_publish.py`: publishes a task's branch as a pull or merge request
   through the daemon, with the person's own credentials; the description is the
   run's evidence. `require_forge` holds the forge policy.
+- `auto_publish.py`: after a closed sprint's integration ends `tests_passed`,
+  publishes it as a draft with `integration_publish.publish_spec`, as
+  `La Fabrique, after the sprint closed` (audited `system:auto_publish`). A
+  DevOps agent on the team adds its account (what changes, how to test it,
+  risks) under a heading that names it a claim; it reads only the platform's
+  record. Why a request did not open is kept in `details["auto_publish"]`.
 - `local_merge.py`: merges a task's or the integration's branch into a local
   base branch, with no remote. A conflict changes nothing.
 - `review_sync.py`: brings a published request's comments back as
