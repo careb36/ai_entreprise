@@ -30,9 +30,28 @@ _REGISTER_TESTS = {
         "sent back."
     ),
 }
+# Run 9, task 57: the suggestion named ``evidence`` for an acceptance test of
+# the task views, which made the file a protected path (CODEOWNERS and the
+# shipped protected list, both reviewed by a person) and failed three tests.
+_EVIDENCE_CONTEXT = {
+    "title": "Name the evidence context only for a test that imports it",
+    "body": (
+        "A test file whose entry in docs/architecture/contexts.json names the "
+        "\"evidence\" context becomes a protected path: it then needs a CODEOWNERS "
+        "line and a regenerated backend/app/services/evidence/protected_list.json, "
+        "which a person reviews, and tests/test_protected_paths.py fails without "
+        "them. Name \"evidence\" only when the test imports services.evidence; "
+        "otherwise drop it from what scripts/affected_tests.py --suggest proposes "
+        "and keep the contexts the test really exercises (its sibling tests' ones)."
+    ),
+}
 # The roles that write test files: QA writes the acceptance tests, the
 # Developer the tests beside an implementation.
-PROCEDURES = [{"role": role, **_REGISTER_TESTS} for role in ("QA", "Developer")]
+PROCEDURES = [
+    {"role": role, **rule}
+    for rule in (_REGISTER_TESTS, _EVIDENCE_CONTEXT)
+    for role in ("QA", "Developer")
+]
 
 
 def ensure(api: Any, company_id: int) -> list[dict[str, Any]]:
