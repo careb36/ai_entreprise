@@ -1,0 +1,3 @@
+Added
+
+* **Each task assignment carries a correlation id from the outbox to the worker's logs.** Outbox rows get a `correlation_id` (a UUID) once, when they are enqueued, and keep it on every retry; the outbox sends it in the message and as a header, and the board's own dispatch adds one to each `task.assign`. The task worker reads it, keeps it in the task's context and names it in its log lines and in the failure it records; a message that arrives without one is run under a new id. It is separate from `Nats-Msg-Id`, which stays for deduplication. `agent_runs` gains a `correlation_id` column (migration 0065) for the later tasks of this sprint to fill; existing outbox rows are given an id on PostgreSQL.
