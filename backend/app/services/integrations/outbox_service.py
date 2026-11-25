@@ -1,39 +1,39 @@
 """
-Transactional Outbox processor for reliable NATS message delivery.
-
-Background worker that continuously polls the ``outbox_events`` table for
-pending rows and publishes them to NATS, ensuring at-least-once delivery.
-For durable subjects (``task.assign``) a row is marked completed only after
-JetStream has stored the message, so it reaches the task worker even if the
-worker is down at that moment.
-
-Why the outbox pattern?
------------------------
-A naive approach (publish to NATS inside the HTTP handler) risks data loss if
-the process crashes after the database transaction commits but before the NATS
-message is sent.  The outbox pattern solves this by writing the event to the
-database **in the same transaction** as the domain change, then delivering it
-asynchronously from here.
-
-Concurrency safety:
--------------------
-``SELECT ... FOR UPDATE SKIP LOCKED`` acquires row-level locks so that multiple
-worker replicas running in Kubernetes never process the same event simultaneously.
-
-Correlation:
-------------
-Each row carries a ``correlation_id`` (a UUID) generated exactly once at
-enqueue time. It is never regenerated on retry or redelivery, and it is
-distinct from ``Nats-Msg-Id`` which keeps its dedup role. The id rides in the
-published header and payload, so the worker can set the same id on its spans
-and on the ``AgentRun`` it creates.
-
-Retry policy:
--------------
-- Up to 5 delivery attempts per event.
-- After 5 failures the row is marked ``"failed"`` and excluded from future polls.
-- A ``retry_count`` column tracks the number of failed attempts.
-"""
+ Transactional Outbox processor for reliable NATS message delivery.
+ 
+ Background worker that continuously polls the ``outbox_events`` table for
+ pending rows and publishes them to NATS, ensuring at-least-once delivery.
+ For durable subjects (``task.assign``) a row is marked completed only after
+ JetStream has stored the message, so it reaches the task worker even if the
+ worker is down at that moment.
+ 
+ Why the outbox pattern?
+ -----------------------
+ A naive approach (publish to NATS inside the HTTP handler) risks data loss if
+ the process crashes after the database transaction commits but before the NATS
+ message is sent.  The outbox pattern solves this by writing the event to the
+ database **in the same transaction** as the domain change, then delivering it
+ asynchronously from here.
+ 
+ Concurrency safety:
+ -------------------
+ ``SELECT ... FOR UPDATE SKIP LOCKED`` acquires row-level locks so that multiple
+ worker replicas running in Kubernetes never process the same event simultaneously.
+ 
+ Correlation:
+ ------------
+ Each row carries a ``correlation_id`` (a UUID) generated exactly once at
+ enqueue time. It is never regenerated on retry or redelivery, and it is
+ distinct from ``Nats-Msg-Id`` which keeps its dedup role. The id rides in the
+ published header and payload, so the worker can set the same id on its spans
+ and on the ``AgentRun`` it creates.
+ 
+ Retry policy:
+ -------------
+ - Up to 5 delivery attempts per event.
+ - After 5 failures the row is marked ``"failed"`` and excluded from future polls.
+ - A ``retry_count`` column tracks the number of failed attempts.
+ """
 
 import asyncio
 import json
@@ -44,7 +44,7 @@ from database import engine
 from logging_config import logger
 from sqlmodel import Session, select, text
 
-from models.integration import OutboxEvent
+from models.sprint import OutboxEvent
 
 from services.integrations import (
     anchoring,

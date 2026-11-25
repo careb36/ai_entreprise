@@ -169,3 +169,14 @@ class OutboxEvent(SQLModel, table=True):
         default=None,
         sa_column=Column(PGUUID(as_uuid=True), index=True),
     )
+
+    def ensure_correlation_id(self) -> UUID:
+        """Return the stable id, generating it exactly once.
+
+        Generation happens only for rows that predate a migration or an
+        enqueue path not using ``correlation_id``; a caller that already
+        assigned one gets it back unchanged so a retry can never rotate it.
+        """
+        if self.correlation_id is None:
+            self.correlation_id = uuid4()
+        return self.correlation_id

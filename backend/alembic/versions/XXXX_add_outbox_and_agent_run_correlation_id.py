@@ -1,26 +1,20 @@
 """Add correlation_id to outbox_events and agent_runs.
 
-Revision ID: a1b2c3d4e5f6
-Revises: the migration this branch was cut from (set by alembic chain)
-
+Revision ID: 0065
+Revises: 0064
 Create Date: 2026-01-23
 
 A stable UUID generated once when an outbox event is enqueued, carried
 from publish through JetStream consume, daemon call, verification and
 AgentRun. Nullable with backfill for existing rows; distinct from
 Nats-Msg-Id which remains for dedup only.
-
-The revision id in the task branch previously collided with an existing
-revision key on this chain, registering ``outbox_events`` twice against the
-shared metadata and raising InvalidRequestError. A fresh id and a chain to
-the real previous head fixes that.
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "a1b2c3d4e5f6"
-down_revision = "c41d0b3f2a01"  # set by alembic chain
+revision = "0065"
+down_revision = "0064"
 branch_labels = None
 depends_on = None
 
