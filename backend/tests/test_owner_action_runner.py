@@ -257,6 +257,7 @@ def test_the_run_records_what_the_platform_observed(sqlite_session, monkeypatch)
     assert ("POST", "/v1/init_company", {"project_path": SNAPSHOT}) in world["calls"]
     assert seen["company_id"] == world["company_id"] and seen["sprint_id"] == 42
     assert seen["agent_run_ids"] == [11, 12]
+    assert seen["sprint_tasks"] == {"done": 1}
     assert (
         seen["records_document_matches"] is True
         and seen["records_written_unchanged_in_git"] is True
@@ -410,3 +411,9 @@ def test_a_sprint_still_running_at_the_timeout_is_stopped(sqlite_session, monkey
     )
     assert ("POST", "/v1/sprints/42/stop", {}) in world["calls"]
     assert finished.observations["sprint_stopped"] is True
+
+
+def test_sprint_tasks_count_each_status():
+    board = ["a=done", "b=blocked", "x=y=blocked", "c=todo"]
+    assert runner.sprint_tasks(board) == {"done": 1, "blocked": 2, "todo": 1}
+    assert runner.sprint_tasks(None) is None and runner.sprint_tasks([]) == {}

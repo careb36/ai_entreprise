@@ -5278,7 +5278,8 @@
       "sandbox": "Sandbox asked: {{asked}}; observed by the daemon: {{observed}}.",
       "observed": "Recorded by the platform",
       "copy": "Copy ids",
-      "copied": "Copied"
+      "copied": "Copied",
+      "tasksBlocked": "{{count}} task(s) blocked"
     },
     "ids": {
       "run": "Run",
@@ -5294,6 +5295,9 @@
       "sandboxObserved": "Sandbox observed",
       "containerMode": "Container mode",
       "images": "Images",
+      "tasksDone": "Tasks done",
+      "tasksBlocked": "Tasks blocked",
+      "tasksOther": "Tasks not finished",
       "tokens": "Tokens observed",
       "exitStatus": "Exit status",
       "mainBefore": "main before",

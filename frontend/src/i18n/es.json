@@ -5278,7 +5278,8 @@
       "sandbox": "Sandbox pedido: {{asked}}; observado por el daemon: {{observed}}.",
       "observed": "Registrado por la plataforma",
       "copy": "Copiar ids",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "tasksBlocked": "{{count}} tarea(s) bloqueada(s)"
     },
     "ids": {
       "run": "Ejecución",
@@ -5294,6 +5295,9 @@
       "sandboxObserved": "Sandbox observado",
       "containerMode": "Modo contenedor",
       "images": "Imágenes",
+      "tasksDone": "Tareas terminadas",
+      "tasksBlocked": "Tareas bloqueadas",
+      "tasksOther": "Tareas sin terminar",
       "tokens": "Tokens observados",
       "exitStatus": "Código de salida",
       "mainBefore": "main antes",

@@ -29,6 +29,8 @@ export interface OwnerActionObservations {
   issue_architecture_id?: number | null
   agent_run_ids?: number[]
   sandbox?: OwnerActionSandbox | null
+  /** Tasks per status at the end of the sprint (the harness's board). */
+  sprint_tasks?: Record<string, number> | null
   tokens_observed?: number
   exit_status?: number | null
   steps_done?: string[]
