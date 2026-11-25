@@ -11,6 +11,7 @@ import ModelConnections from '../components/ModelConnections'
 import RoutingPolicy from '../components/RoutingPolicy'
 import RunWindowPanel from '../components/RunWindowPanel'
 import CompanyLimitsPanel from '../components/CompanyLimitsPanel'
+import CompanyAdminPanel from '../components/CompanyAdminPanel'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { modelsApi } from '../services/models'
@@ -64,6 +65,7 @@ export default function Models() {
           <CompanyLimitsPanel companyId={companyId} isOwner={role === 'Owner'} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
           <CapabilitiesPanel />
+          <CompanyAdminPanel key={`admin-${companyId}`} companyId={companyId} isOwner={role === 'Owner'} />
         </>
       )}
     </div>

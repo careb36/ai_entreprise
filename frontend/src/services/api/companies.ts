@@ -120,6 +120,13 @@ export interface DiscoverTeamResponse {
 
 export type CompanyRole = 'Owner' | 'Manager' | 'Viewer'
 
+/** `GET /v1/companies/{id}/deletion`: rows per table, and why it cannot be deleted now. */
+export interface CompanyDeletionPreview {
+  rows: Record<string, number>
+  /** sprint_running | owner_action_running */
+  blockers: string[]
+}
+
 export const companyEndpoints = (api: Http) => ({
   initCompany: (data: InitCompanyRequest) =>
     api.post<InitCompanyResponse>('/v1/init_company', data),
@@ -127,4 +134,17 @@ export const companyEndpoints = (api: Http) => ({
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
   // Inviting members: ./invitations.ts.
+
+  /** Rename the company (Owner; audited). */
+  renameCompany: (companyId: number, companyName: string) =>
+    api.patch<{ id: number; company_name: string }>(`/v1/companies/${companyId}`, { company_name: companyName }),
+
+  /** What deleting the company would remove, and what holds it back (signed-in Owner). */
+  companyDeletion: (companyId: number) =>
+    api.get<CompanyDeletionPreview>(`/v1/companies/${companyId}/deletion`),
+
+  /** Delete the company with every row it holds; the name is typed back (signed-in Owner). */
+  deleteCompany: (companyId: number, confirmName: string) =>
+    api.delete<{ company_id: number; company_name: string; rows: Record<string, number> }>(
+      `/v1/companies/${companyId}`, { confirm_name: confirmName }),
 })

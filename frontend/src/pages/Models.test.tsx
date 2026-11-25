@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Models from './Models'
 import { queryClient } from '../lib/queryClient'
@@ -61,7 +62,7 @@ function renderAs(role: 'Owner' | 'Manager' | 'Viewer') {
   useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
   return render(
     <QueryClientProvider client={queryClient}>
-      <Models />
+      <MemoryRouter><Models /></MemoryRouter>
     </QueryClientProvider>,
   )
 }
