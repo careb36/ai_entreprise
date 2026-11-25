@@ -109,9 +109,20 @@ def apply(
 def applied(verification: dict[str, Any]) -> dict[str, Any] | None:
     """The sandbox the daemon's reply to a verification's test run reported,
     or ``None`` when it reported none (an older daemon, or nothing ran)."""
-    run = (verification.get("evidence") or {}).get("test_run") or {}
-    reply = run.get("sandbox")
+    evidence = verification.get("evidence") or {}
+    reply = (evidence.get("test_run") or {}).get("sandbox")
     if not isinstance(reply, dict) or not isinstance(reply.get("mode"), str):
+        # The folders' suites (a repository whose root has no suite): the
+        # test run is their summary, and each suite's reply is on its record,
+        # a suite's before an install's.
+        records = [r for r in evidence.get("command_runs") or [] if isinstance(r, dict)]
+        records.sort(key=lambda r: r.get("kind") != "test")
+        replies = [r.get("sandbox") for r in records]
+        reply = next(
+            (x for x in replies if isinstance(x, dict) and isinstance(x.get("mode"), str)),
+            None,
+        )
+    if reply is None:
         return None
     identity = (
         reply.get("image_identity")
