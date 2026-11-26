@@ -95,6 +95,20 @@ def test_checks_read_what_an_edit_adds_not_what_it_removes():
     assert research_tools.packages_in(manifest)["npm"] == {"react", "left-pad"}
 
 
+def test_a_missing_search_text_names_the_closest_line_and_is_not_applied():
+    original = "def a():\n    return 1\n\n\ndef b():\n    return 2\n"
+    with pytest.raises(file_edits.EditError) as excinfo:
+        file_edits.apply_edits(
+            original, [{"search": "def bb():\n    return 2\n", "replace": "x"}]
+        )
+    assert str(excinfo.value) == (
+        "edit 1: the search text is not in the file; the closest line is 5: 'def b():'"
+    )
+    with pytest.raises(file_edits.EditError) as excinfo:
+        file_edits.apply_edits(original, [{"search": "zzz qqq", "replace": "x"}])
+    assert str(excinfo.value) == "edit 1: the search text is not in the file"
+
+
 def test_apply_edits_needs_one_exact_match():
     assert (
         file_edits.apply_edits("a\nb\nc\n", [{"search": "b\n", "replace": "B\n"}])

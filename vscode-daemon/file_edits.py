@@ -18,6 +18,7 @@ reaches the disk.
 
 from __future__ import annotations
 
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,20 @@ def occurrences(text: str, search: str) -> int:
     return count
 
 
+def closest_line(text: str, search: str) -> str:
+    """A pointer to where the missing *search* text was likely meant: the file's
+    line closest to the search's first non-blank line, with its number. A hint
+    for the next attempt, never applied; empty when nothing is close."""
+    first = next((line.strip() for line in search.splitlines() if line.strip()), "")
+    lines = text.splitlines()
+    stripped = [line.strip() for line in lines]
+    near = difflib.get_close_matches(first, stripped, n=1, cutoff=0.6) if first else []
+    if not near:
+        return ""
+    number = stripped.index(near[0]) + 1
+    return f"; the closest line is {number}: {lines[number - 1].strip()[:160]!r}"
+
+
 def apply_edits(original: str, edits: Any) -> str:
     """Apply SEARCH/REPLACE *edits* to *original*, in order."""
     if not isinstance(edits, list) or not edits:
@@ -51,7 +66,9 @@ def apply_edits(original: str, edits: Any) -> str:
             raise EditError(f"edit {number} has an empty search text")
         count = occurrences(text, search)
         if count == 0:
-            raise EditError(f"edit {number}: the search text is not in the file")
+            raise EditError(
+                f"edit {number}: the search text is not in the file{closest_line(text, search)}"
+            )
         if count > 1:
             raise EditError(
                 f"edit {number}: the search text appears {count} times; "
