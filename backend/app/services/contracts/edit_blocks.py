@@ -75,7 +75,8 @@ _FLAG_ONLY = re.compile(
     flags=re.IGNORECASE,
 )
 _NEXT_FENCE = re.compile(
-    r"\A\s*(?:-{3,}\s*)?```[^\n`]*\n(?P<body>.*?)^```[ \t]*$", flags=re.DOTALL | re.MULTILINE
+    r"\A\s*(?:-{3,}\s*)?```[^\n`]*\n(?P<body>.*?)^```[ \t]*$",
+    flags=re.DOTALL | re.MULTILINE,
 )
 
 
