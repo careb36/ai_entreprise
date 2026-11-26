@@ -186,7 +186,7 @@ class BoardToolbox:
     ) -> tuple[dict[str, Any], str]:
         """Run one call: the observation to record and the text the model sees."""
         function = tool_call.get("function") or {}
-        full_name = str(function.get("name") or "")
+        requested, full_name = mcp_tools.call_name(function, self.tools)
         tool = full_name.partition(mcp_tools.TOOL_NAME_SEP)[2]
         raw = function.get("arguments")
         try:
@@ -200,11 +200,13 @@ class BoardToolbox:
         if full_name not in self.tools:
             observation = self._observation(tool, arguments, round_no)
             observation.update(
-                is_error=True, reason="unknown tool", requested=full_name[:200]
+                is_error=True, reason="unknown tool", requested=requested[:200]
             )
-            return observation, mcp_tools.unknown_tool_note(full_name, self.tools)
+            return observation, mcp_tools.unknown_tool_note(requested, self.tools)
         started = time.monotonic()
         observation = self._observation(tool, arguments, round_no)
+        if requested != full_name:
+            observation["resolved_from"] = requested[:200]
         text = self._run(tool, arguments, observation)
         observation["duration_ms"] = int((time.monotonic() - started) * 1000)
         text = redact_secrets("board record", text)
