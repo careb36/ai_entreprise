@@ -36,6 +36,9 @@ CHANGES = ("edit", "move", "delete")
 PREFIX = (
     "[Earlier result, summarized to save space; call the tool again for all of it] "
 )
+# How the tool loop's budget note opens (``mcp_tools.round_note``): stale once
+# its round is old, so an old result loses it whether or not it is summarized.
+ROUND_NOTE = "\n\n[Tool round "
 
 
 def _short(value: Any, limit: int = 80) -> str:
@@ -145,14 +148,17 @@ def _shrink(
     history: list[dict[str, Any]], index: int, observation: dict[str, Any], note: str
 ) -> int:
     message = history[index]
-    content = str(message.get("content") or "")
-    if content.startswith(PREFIX):
+    whole = str(message.get("content") or "")
+    if whole.startswith(PREFIX):
         return 0
+    content = whole.split(ROUND_NOTE, 1)[0] if ROUND_NOTE in whole else whole
     line = PREFIX + summary_line(observation) + note
     if len(line) >= len(content):
-        return 0
+        if content != whole:  # Short enough to stay; only the stale note goes.
+            history[index] = {**message, "content": content}
+        return len(whole) - len(content)
     history[index] = {**message, "content": line}
-    return len(content) - len(line)
+    return len(whole) - len(line)
 
 
 def compress(

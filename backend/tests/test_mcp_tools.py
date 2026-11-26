@@ -25,7 +25,7 @@ from services.evidence import risk
 from services.evidence.verification import check_risk_tier, check_tools_used
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import record as worker_record
-from services.tools import mcp_config, mcp_tools
+from services.tools import mcp_config, mcp_tools, tool_history
 
 SECRET = "s3cret-token-value"
 
@@ -178,7 +178,36 @@ def test_a_long_result_is_cut_for_the_model_and_the_record_says_so(toolbox):
     assert observations[0]["truncated"] is True
     assert observations[0]["result_chars"] == 10_000
     content = model.requests[1]["messages"][-1]["content"]
-    assert len(content) < 600 and content.endswith("[result cut here]")
+    result, note = content.split(tool_history.ROUND_NOTE)
+    assert len(result) < 600 and result.endswith("[result cut here]")
+    assert note.startswith("1 of ")
+
+
+def test_the_last_result_of_each_round_says_where_the_budget_stands(toolbox):
+    model = _Model(
+        [
+            _answer_with_calls(_call("tracker__create_issue", title="a")),
+            _answer_with_calls(
+                _call("tracker__create_issue", title="b"),
+                _call("tracker__create_issue", title="c"),
+            ),
+            _answer("ok"),
+        ]
+    )
+    mcp_tools.chat_with_tools(model, [], "m", "Developer", toolbox, max_rounds=3)
+    tools = [m for m in model.requests[2]["messages"] if m.get("role") == "tool"]
+    # One note per round, on its last result: round 2's first result has none.
+    assert tool_history.ROUND_NOTE not in tools[1]["content"]
+    assert tools[2]["content"].endswith(
+        "[Tool round 2 of 3: 1 left. Read only what the answer still needs, "
+        "then give the complete deliverable.]"
+    )
+
+
+def test_the_round_note_warns_as_the_budget_closes():
+    assert "When you have what you need" in mcp_tools.round_note(1, 15)
+    assert "2 left" in mcp_tools.round_note(13, 15)
+    assert "this was the last one" in mcp_tools.round_note(15, 15)
 
 
 def test_a_failing_tool_an_unknown_tool_and_bad_arguments_are_error_results(toolbox):

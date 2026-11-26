@@ -55,6 +55,32 @@ ROUNDS_EXHAUSTED_NOTE = (
     "The tool budget for this task is spent; answer now with the complete "
     "deliverable from what you already know."
 )
+# How many rounds before the end the budget note warns that it is closing.
+ROUNDS_CLOSING = 2
+
+
+def round_note(round_no: int, rounds: int) -> str:
+    """The line the last tool result of a round ends with: where the model is
+    in its tool budget. Without it the model never knew it had one, read on
+    until the budget was spent and answered from compressed memory (every
+    run of sprints 2 to 5 used all 15 rounds)."""
+    left = rounds - round_no
+    if left <= 0:
+        return (
+            f"{tool_history.ROUND_NOTE}{round_no} of {rounds}: this was the last one; "
+            "answer now with the complete deliverable.]"
+        )
+    if left <= ROUNDS_CLOSING:
+        return (
+            f"{tool_history.ROUND_NOTE}{round_no} of {rounds}: {left} left. Read only what "
+            "the answer still needs, then give the complete deliverable.]"
+        )
+    return (
+        f"{tool_history.ROUND_NOTE}{round_no} of {rounds}. When you have what you need, "
+        "stop calling tools and give the complete deliverable.]"
+    )
+
+
 # How much of a failed call's text its observation keeps as ``error``.
 ERROR_EXCERPT_CHARS = 300
 TOOL_CALL_AS_TEXT = "the model's last answer was a tool call written as text"
@@ -424,12 +450,14 @@ def chat_with_tools(
         if on_round is not None:
             on_round(result, calls)
         history.append(result["choices"][0]["message"])
-        for call in calls:
+        for index, call in enumerate(calls, 1):
             observation, text = toolbox.call(call, round_no)
             if observation.get("is_error") and "error" not in observation:
                 observation["error"] = error_excerpt(text)
             observations.append(observation)
             results.append((len(history), round_no, observation))
+            if index == len(calls):  # Appended once, never changed after.
+                text = f"{text}{round_note(round_no, rounds)}"
             history.append(
                 {
                     "role": "tool",
