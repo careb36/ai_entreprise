@@ -440,6 +440,13 @@ def test_edit_formats_sh_runs_each_format_per_model_and_writes_the_rows(tmp_path
         text=True,
         env={
             **os.environ,
+            # The scorecard imports the backend's own readers (services.tasks):
+            # pytest's pythonpath setting does not reach this subprocess.
+            "PYTHONPATH": os.pathsep.join(
+                p
+                for p in (str(REPO / "backend" / "app"), os.environ.get("PYTHONPATH"))
+                if p
+            ),
             "BENCH_PYTHON": sys.executable,
             "STUB_LOG": str(log),
             "BENCH_MODELS": "model-a,model-b",
