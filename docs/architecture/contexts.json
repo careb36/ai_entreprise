@@ -1701,6 +1701,9 @@
       "test_tool_history.py": [
         "tools"
       ],
+      "test_tool_name_resolution.py": [
+        "tools"
+      ],
       "test_tool_observability.py": [
         "loop"
       ],

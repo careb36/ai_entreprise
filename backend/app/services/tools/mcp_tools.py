@@ -94,6 +94,43 @@ def loop_record(
     return result
 
 
+# Names models use for an offered tool under its own name (``workspace__search``
+# called ``grep``): read only when the call names no offered tool.
+TOOL_ALIASES = {
+    "grep": "search",
+    "read_file": "read",
+    "cat": "read",
+    "ls": "list",
+    "list_files": "list",
+}
+
+
+def resolve_tool_name(name: str, offered: Any) -> str:
+    """*name* when it is offered; else the one offered tool it plainly means.
+
+    A model often drops the server prefix (``read`` for ``workspace__read``),
+    keeps it on a tool's common alias (``workspace__grep``) or both. When
+    exactly one offered name has that tool part, the call goes to it instead
+    of costing a round on "unknown tool"; otherwise *name* comes back
+    unchanged and the caller answers with ``unknown_tool_note``.
+    """
+    names = [str(n) for n in offered or []]
+    if name in names:
+        return name
+    part = str(name or "").strip().rpartition(TOOL_NAME_SEP)[2]
+    part = TOOL_ALIASES.get(part, part)
+    if not part:
+        return name
+    matches = [n for n in names if n.partition(TOOL_NAME_SEP)[2] == part]
+    return matches[0] if len(matches) == 1 else name
+
+
+def call_name(function: dict[str, Any], offered: Any) -> tuple[str, str]:
+    """The name a tool call asked for and the offered name it goes to."""
+    requested = str(function.get("name") or "")
+    return requested, resolve_tool_name(requested, offered)
+
+
 def unknown_tool_note(name: str, offered: Any) -> str:
     """The reply to a call of a tool that is not offered: the name it used
     (or that it named none), the nearest offered name and every offered name,
@@ -264,11 +301,13 @@ class Toolbox:
             observation = self._observation(full_name, arguments, round_no, True, 0, "")
             observation["reason"] = f"malformed arguments: {exc}"
             return observation, f"Error: malformed arguments ({exc})."
+        requested = full_name
+        full_name = resolve_tool_name(full_name, self.tools)
         tool = self.tools.get(full_name)
         if tool is None:
             observation = self._observation(full_name, arguments, round_no, True, 0, "")
-            observation.update(reason="unknown tool", requested=full_name[:200])
-            return observation, unknown_tool_note(full_name, self.tools)
+            observation.update(reason="unknown tool", requested=requested[:200])
+            return observation, unknown_tool_note(requested, self.tools)
         started = time.monotonic()
         try:
             self._starting(self.specs[tool["server"]], f"call {tool['name']}")

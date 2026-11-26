@@ -177,7 +177,7 @@ class WorkspaceToolbox:
     ) -> tuple[dict[str, Any], str]:
         """Run one call: the observation to record and the text the model sees."""
         function = tool_call.get("function") or {}
-        full_name = str(function.get("name") or "")
+        requested, full_name = mcp_tools.call_name(function, self.tools)
         tool = full_name.partition(mcp_tools.TOOL_NAME_SEP)[2]
         raw = function.get("arguments")
         try:
@@ -192,8 +192,8 @@ class WorkspaceToolbox:
             return observation, f"Error: malformed arguments ({exc})."
         if full_name not in self.tools:
             observation = self._observation(tool, arguments, round_no, True, 0, "")
-            observation.update(reason="unknown tool", requested=full_name[:200])
-            return observation, mcp_tools.unknown_tool_note(full_name, self.tools)
+            observation.update(reason="unknown tool", requested=requested[:200])
+            return observation, mcp_tools.unknown_tool_note(requested, self.tools)
         started = time.monotonic()
         extra: dict[str, Any] = {}
         try:

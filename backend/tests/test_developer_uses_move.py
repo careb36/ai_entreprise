@@ -114,9 +114,13 @@ def test_a_split_is_pointed_to_the_move_tool_only_when_it_is_offered(
 
 def test_an_unknown_tool_reply_names_what_was_asked_and_what_exists(project):
     box = _box(project, can_edit=False)
-    bare, text = box.call(_call("read", path="backend/tests/contexts.json"), 5)
-    assert bare["tool"] == "" and bare["requested"] == "read"
-    assert text.startswith("Unknown tool 'read'. Did you mean workspace__read?")
+    bare, text = box.call(
+        _call("workspace__reed", path="backend/tests/contexts.json"), 5
+    )
+    assert bare["tool"] == "reed" and bare["requested"] == "workspace__reed"
+    assert text.startswith(
+        "Unknown tool 'workspace__reed'. Did you mean workspace__read?"
+    )
     assert "workspace__find_file" in text
     nameless, text = box.call(_call("", path="x"), 5)
     assert nameless["requested"] == "" and text.startswith("The call named no tool.")
