@@ -102,8 +102,7 @@ def test_a_missing_search_text_names_the_closest_line_and_is_not_applied():
             original, [{"search": "def bb():\n    return 2\n", "replace": "x"}]
         )
     assert str(excinfo.value) == (
-        "edit 1: the search text is not in the file; "
-        "the closest line is 5: 'def b():'"
+        "edit 1: the search text is not in the file; the closest line is 5: 'def b():'"
     )
     with pytest.raises(file_edits.EditError) as excinfo:
         file_edits.apply_edits(original, [{"search": "zzz qqq", "replace": "x"}])
