@@ -248,5 +248,7 @@ def test_an_edit_marker_body_is_never_written_as_the_whole_file():
     [alone] = parse_file_manifest("```json path=src/es.json\nedit: true\n```\n")
     assert alone["edits"] == []
     # An ordinary small JSON file stays a whole file.
-    [whole] = parse_file_manifest('```json path=src/flags.json\n{"editor": true}\n```\n')
+    [whole] = parse_file_manifest(
+        '```json path=src/flags.json\n{"editor": true}\n```\n'
+    )
     assert "edits" not in whole
