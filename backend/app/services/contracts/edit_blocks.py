@@ -67,6 +67,34 @@ def split_flag_line(body: str) -> tuple[bool, str]:
     return (True, body[match.end() :]) if match else (False, body or "")
 
 
+# A body that only says "these are edits" (run 19, task 20 wrote
+# ``{"edit": true}`` as en.json's whole body, then its edits in the next,
+# pathless block): never a file's content.
+_FLAG_ONLY = re.compile(
+    r"""\A\s*\{?\s*["']?edit["']?\s*(?:[:=]\s*(?:true|yes|1)\s*)?,?\s*\}?\s*\Z""",
+    flags=re.IGNORECASE,
+)
+_NEXT_FENCE = re.compile(
+    r"\A\s*(?:-{3,}\s*)?```[^\n`]*\n(?P<body>.*?)^```[ \t]*$", flags=re.DOTALL | re.MULTILINE
+)
+
+
+def is_flag_only(body: str) -> bool:
+    """Whether *body* is nothing but an ``edit`` marker (``edit``, ``{"edit": true}``)."""
+    return bool(_FLAG_ONLY.match(body or ""))
+
+
+def following_edits(text: str) -> tuple[list[dict[str, str]], int]:
+    """The edits of the pathless block that opens *text* (after blank lines),
+    and how far into *text* that block ends; ``([], 0)`` when *text* does not
+    open with a block holding nothing but edits."""
+    match = _NEXT_FENCE.match(text or "")
+    if not match or "path=" in text[: match.start("body")]:
+        return [], 0
+    edits = parse(match.group("body"))
+    return (edits, match.end()) if edits else ([], 0)
+
+
 def parse(body: str) -> list[dict[str, str]]:
     """The edits in *body*; ``[]`` when any text lies outside them."""
     matches = list(_EDIT.finditer(body or ""))

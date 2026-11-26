@@ -91,7 +91,16 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
             continue
         files[rel] = {"path": rel, "content": block.group("body")}
         flagged, body = edit_blocks.split_flag_line(block.group("body"))
-        if flagged or edit_blocks.is_edit_block(block.group("info"), match):
+        if edit_blocks.is_flag_only(block.group("body")):
+            # Only an ``edit`` marker: the edits, if any, are in the next
+            # pathless block; never written over the file (run 19, task 20).
+            edits, _ = edit_blocks.following_edits(deliverable[block.end() :])
+            files[rel]["edits"] = edits
+            files[rel]["content"] = "\n".join(
+                f"<<<<<<< SEARCH\n{e['search']}=======\n{e['replace']}>>>>>>> REPLACE"
+                for e in edits
+            )
+        elif flagged or edit_blocks.is_edit_block(block.group("info"), match):
             files[rel]["edits"] = edit_blocks.parse(body)
         elif edits := edit_blocks.parse(body):
             # Only well-formed SEARCH/REPLACE edits and nothing else, the

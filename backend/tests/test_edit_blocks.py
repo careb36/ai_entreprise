@@ -235,3 +235,18 @@ def test_the_flag_alone_on_the_first_line_is_the_flag():
     bad = parse_file_manifest("```json path=x.json\nedit\nnot an edit\n```\n")
     assert bad[0]["edits"] == []
     assert edit_blocks.split_flag_line("editor = 1\n") == (False, "editor = 1\n")
+
+
+def test_an_edit_marker_body_is_never_written_as_the_whole_file():
+    deliverable = (
+        '```json path=src/en.json\n{\n  "edit": true\n}\n```\n'
+        "```\n<<<<<<< SEARCH\n  \"a\": 1\n=======\n  \"a\": 2\n>>>>>>> REPLACE\n```\n"
+    )
+    [entry] = parse_file_manifest(deliverable)
+    assert entry["edits"] == [{"search": '  "a": 1\n', "replace": '  "a": 2\n'}]
+    # A marker with no edits after it is refused by the daemon, not written.
+    [alone] = parse_file_manifest('```json path=src/es.json\nedit: true\n```\n')
+    assert alone["edits"] == []
+    # An ordinary small JSON file stays a whole file.
+    [whole] = parse_file_manifest('```json path=src/flags.json\n{"editor": true}\n```\n')
+    assert "edits" not in whole
